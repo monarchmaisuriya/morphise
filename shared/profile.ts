@@ -201,6 +201,8 @@ const viewSchema = z
     // Archive workspaces marked done `days` ago. Off when unset. Never archives work git could
     // lose. Merged pull requests are Paseo's own "Archive merged PR workspaces" setting.
     autoArchive: z.strictObject({ days: z.int().min(1).max(90) }).optional(),
+    // The open chat's steps card at the foot of the view (shown when unset).
+    stepsCard: z.boolean().optional(),
     subAgentRows: z.int().min(1).max(50).optional(),
   })
   .prefault({});

@@ -1,0 +1,47 @@
+import { describe, expect, it } from "vitest";
+import { attentionOrder, reduceAttention, waitingChildren } from "./attention";
+
+// Shaped like Paseo's daemon agent records: the parent is a label, permission waits are a list.
+const agent = (id: string, extra: Record<string, unknown> = {}) => ({ id, title: `Chat ${id}`, workspaceId: "w1", status: "idle", labels: {}, pendingPermissions: [], requiresAttention: false, attentionReason: null, attentionTimestamp: "2026-11-12T10:00:00Z", ...extra });
+const childOf = (parent: string) => ({ labels: { "paseo.parent-agent-id": parent } });
+const waiting = { status: "running", pendingPermissions: [{ id: "perm-1" }] };
+const upsert = (value: unknown) => ({ message: { type: "agent_update", payload: { kind: "upsert", agent: value } } });
+
+describe("attention", () => {
+  it("keeps agents waiting on the user, and only those", () => {
+    const list = reduceAttention(new Map(), {
+      snapshot: [
+        { agent: agent("p", waiting) },
+        { agent: agent("e", { status: "error", requiresAttention: true, attentionReason: "error" }) },
+        { agent: agent("seenError", { status: "error", attentionReason: "error" }) },
+        { agent: agent("f", { requiresAttention: true, attentionReason: "finished" }) },
+        { agent: agent("seen", { attentionReason: "finished" }) },
+        { agent: agent("arch", { archivedAt: "x", ...waiting }) },
+        { agent: agent("bg", { background: true, ...waiting }) },
+      ],
+    });
+    expect([...list.keys()].sort()).toEqual(["e", "f", "p"]);
+    expect(list.get("e")?.reason).toBe("failed");
+  });
+
+  it("follows updates: an opened chat leaves the list, an unchanged one keeps the same map", () => {
+    const start = reduceAttention(new Map(), { snapshot: [{ agent: agent("f", { requiresAttention: true, attentionReason: "finished" }) }] });
+    expect(reduceAttention(start, upsert(agent("f", { requiresAttention: true, attentionReason: "finished" })))).toBe(start);
+    expect(reduceAttention(start, upsert(agent("f"))).size).toBe(0);
+    expect(reduceAttention(start, { message: { type: "agent_update", payload: { kind: "remove", agentId: "f" } } }).size).toBe(0);
+  });
+
+  it("orders permission, failures, then finished, newest first, and counts blocked sub-agents", () => {
+    const list = reduceAttention(new Map(), {
+      snapshot: [
+        { agent: agent("f", { requiresAttention: true, attentionReason: "finished", attentionTimestamp: "2026-11-12T12:00:00Z" }) },
+        { agent: agent("e1", { status: "error", requiresAttention: true, attentionReason: "error", attentionTimestamp: "2026-11-12T09:00:00Z", ...childOf("boss") }) },
+        { agent: agent("e2", { status: "error", requiresAttention: true, attentionReason: "error", attentionTimestamp: "2026-11-12T11:00:00Z" }) },
+        { agent: agent("p", { ...waiting, ...childOf("boss") }) },
+        { agent: agent("done", { requiresAttention: true, attentionReason: "finished", ...childOf("boss") }) },
+      ],
+    });
+    expect(attentionOrder(list).map((item) => item.id)).toEqual(["p", "e2", "e1", "f", "done"]);
+    expect(waitingChildren(list, "boss")).toBe(2);
+  });
+});

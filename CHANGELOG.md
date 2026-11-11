@@ -2,6 +2,34 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.9.0 - 2026-11-12
+
+- **Steps card:**
+  - The open chat's plan (its to-do list) sits at the foot of the sidebar: done, in progress (pulsing), to do, with a progress bar.
+  - It appears while the plan has unfinished steps, says "All done" for a moment when it finishes, then hides. × hides it until the plan changes.
+  - Turn it off under Display, Show.
+- **Inbox** (a new row in Paseo's sidebar header, with a count):
+  - Every chat and sub-agent waiting on you, across workspaces: waiting for permission, failed, or finished but not seen yet.
+  - Answering or opening one clears it, as Paseo already does. It uses Paseo's own status rule, so every device agrees.
+- **Sub-agents:** a parent chat shows how many of its sub-agents are waiting on you. Paseo itself already tells a parent agent when a sub-agent it started finishes, fails or needs permission, so Morphise does not send a second message.
+- **Bookmarks:**
+  - Type /bookmark (with an optional note), or use the Command Center, to keep a chat's last answer.
+  - Find them in the Inbox's Bookmarks tab, with the excerpt, their chat, Open and Remove.
+  - They are shared by every app on the host.
+- **Checks panel** (a workspace tab): the pull request's state, review, merge conflicts and every check with its link. "Ask the agent to fix" puts a message naming what failed into the open chat's message box, for you to read and send.
+- **Not added: batched diff comments.** Paseo already has them. Comment on lines in its Changes view, and they go to the agent as one review.
+- **Status fixes (also in 0.8):**
+  - A chat or sub-agent waiting for permission now shows as waiting.
+  - A failure stops counting as failed once you have seen it, as in Paseo.
+  - Sub-agents are recognised by Paseo's parent label, so they no longer appear as top-level chats in the task and reminder lists.
+- **Bookmarks during an answer:** a chat that is still answering asks you to wait, so a half-written answer is never saved.
+
+Rolling back to 0.8.0: `paseo plugin update morphise --ref v0.8.0`.
+- **Settings that 0.8.0 cannot read:**
+  - Turning the steps card off.
+  - With it off, 0.8.0 reports the profile as invalid and keeps the data. Turn it back on first.
+- **Bookmarks:** they stay stored, unused.
+
 ## 0.8.0 - 2026-11-12
 
 - **Chats no longer vanish.** Chats and sub-agents whose agent process stopped ("closed") stay listed while Paseo still has them. Before, a workspace whose chats had closed showed none, even with their tabs open. Archived ones stay out, as in Paseo.

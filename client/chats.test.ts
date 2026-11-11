@@ -9,12 +9,22 @@ const agent = (id: string, extra: Record<string, unknown> = {}) => ({
   status: "idle",
   requiresAttention: false,
   attentionReason: null,
-  parentAgentId: null,
+  // Shaped like Paseo's daemon agent records: the parent is a label.
+  labels: {} as Record<string, string>,
+  pendingPermissions: [] as unknown[],
   ...extra,
 });
 const upsert = (value: ReturnType<typeof agent>) => ({ message: { type: "agent_update", payload: { kind: "upsert", agent: value } } });
 
 describe("reduceChats", () => {
+  it("leaves sub-agents out by their parent label, and waits on a pending permission", () => {
+    const { chats } = reduceChats(new Map(), {
+      snapshot: [{ agent: agent("sub", { labels: { "paseo.parent-agent-id": "boss" } }) }, { agent: agent("top", { status: "running", pendingPermissions: [{ id: "p1" }] }) }],
+    });
+    expect([...chats.keys()]).toEqual(["top"]);
+    expect(chats.get("top")?.indicator).toBe("needs_input");
+  });
+
   it("keeps the chat's provider and model as Paseo's agent config writes them", () => {
     const { chats } = reduceChats(new Map(), { snapshot: [{ agent: agent("a", { model: "opus" }) }] });
     expect(chats.get("a")?.model).toBe("claude/opus");

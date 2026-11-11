@@ -16,7 +16,7 @@ import {
 import type { PluginAgentSnapshot, PluginWorkspaceSnapshot } from "@getpaseo/plugin";
 import { copyText, Icon, useToast } from "@getpaseo/plugin/client/ui";
 import { type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Easing, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { Animated, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import {
   capRows,
   compareWorkspaces,
@@ -32,6 +32,7 @@ import {
 import { attentionOrder, NEEDS_ME, needsAttention, needsMeOn, nextAttention } from "../shared/attention";
 import { chatGroupKey, chatIndicator, chatMatches, chatName, compareChats, isSidebarChat } from "../shared/chat-status";
 import { INDICATORS, type Indicator, type Profile } from "../shared/profile";
+import { type AttentionList, waitingChildren } from "./attention";
 import { chatTree, DEFAULT_CHAT_ROWS, effectiveIndicator, MARK_KEY, markApplies, owningRowKey, type RowShows, rowShows, rowTitle, statusLine, visibleChats } from "../shared/row-meta";
 import { newTaskId } from "./board/card-editor";
 import { isDue, type Reminder } from "../shared/reminders";
@@ -44,6 +45,9 @@ import { type PickerDeps, ReminderPicker, type ReminderTarget } from "./reminder
 import { followUpTask, followUpWorkspaceTask } from "../shared/task-ops";
 import { type ApplyTaskOperations, type TaskStore, tasksOf } from "./task-store";
 import { Button, Dropdown, Field, IconButton, MenuItem, PopoverHost, Tag, type Tokens, useTokens } from "./ui/kit";
+import { BLUE, PURPLE } from "./ui/hues";
+import { usePulse } from "./ui/pulse";
+import { StepsCard } from "./steps-card";
 import type { PullRequestInfo, ServiceInfo, WorkspaceInfo, WorkspaceList } from "./workspaces";
 import { viewPresence } from "./view-presence";
 import { cannotHover } from "./web";
@@ -51,9 +55,7 @@ import { cannotHover } from "./web";
 type ViewConfig = Profile["sidebar"]["view"];
 type Theme = PluginSidebarViewProps["theme"];
 
-// Paseo themes have no blue or purple, so these two hues are fixed; both read on light and dark.
-const BLUE = "#4c8dff";
-const PURPLE = "#a371f7";
+
 
 const DEFAULT_VIEW_STATE: ViewState = { collapsed: [], statusFilter: [], projectFilter: [], hideDone: false, changedOnly: false, pinnedOnly: false, showBackground: false };
 // Touch screens get finger-sized rows and always-visible row buttons. Paseo reports its sidebar as
@@ -168,6 +170,7 @@ interface Shared {
   shows: RowShows;
   // Pull requests, checks and services, which Paseo's workspace hooks do not carry.
   workspaces: ValueStore<WorkspaceList>;
+  attention: ValueStore<AttentionList>;
   hosts: readonly PluginHostSummary[];
   // Every label in use, for the row menu's Labels list.
   labels: readonly string[];
@@ -213,30 +216,6 @@ function RowShell({ selected, child, grandchild, twoLine, label, onPress, onLong
       {actionsShown ? <View style={{ flexDirection: "row", alignItems: "center" }}>{actions}</View> : null}
     </View>
   );
-}
-
-const NATIVE_DRIVER = Platform.OS !== "web";
-
-// A slow fade between full and faint, for running work and loading placeholders (Paseo spins a
-// ring for running work and pulses its loading placeholders).
-function usePulse(on: boolean): Animated.Value {
-  const value = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    if (!on) {
-      value.setValue(1);
-      return;
-    }
-    const ease = Easing.inOut(Easing.ease);
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(value, { toValue: 0.25, duration: 750, easing: ease, useNativeDriver: NATIVE_DRIVER }),
-        Animated.timing(value, { toValue: 1, duration: 750, easing: ease, useNativeDriver: NATIVE_DRIVER }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [on, value]);
-  return value;
 }
 
 // One colour per status: waiting on you amber, failed red, running white, finished but unread
@@ -315,7 +294,11 @@ function AgentRow({ reference, sub, subs = [], shared }: { reference: AgentRef; 
   const { props, styles, now } = shared;
   const chat = useAgent(reference, (item) => ({ name: chatName(item), indicator: chatIndicator(item), workspaceId: item.workspaceId, last: item.lastActivityAt }));
   const remind = useRemindToggle();
+  const attention = useValue(shared.attention);
+  // Sub-agents of this chat blocked on the user (permission or failed).
+  const waiting = waitingChildren(attention, reference.id);
   if (!chat) return null;
+  const indicator = withPermission(chat.indicator, attention, reference.id);
   const elapsed = shared.shows.lastActivity ? formatElapsed(chat.last, now) : null;
   return (
     <View>
@@ -323,16 +306,21 @@ function AgentRow({ reference, sub, subs = [], shared }: { reference: AgentRef; 
         child={!sub}
         grandchild={sub}
         selected={props.active.agent?.key === reference.key}
-        label={`Open chat ${chat.name}, ${STATUS_TITLES[chat.indicator]}`}
+        label={`Open chat ${chat.name}, ${STATUS_TITLES[indicator]}`}
         onPress={() => props.navigation.openAgent(reference)}
         onLongPress={remind.toggle}
         showActions={shared.chatReminders.has(reference.id)}
         main={
           <>
-            <StatusMark indicator={chat.indicator} shared={shared} />
+            <StatusMark indicator={indicator} shared={shared} />
             <Text style={styles.childLabel} numberOfLines={1}>
               {chat.name}
             </Text>
+            {waiting && !sub ? (
+              <Text accessibilityLabel={`${waiting} sub-agents waiting on you`} style={[styles.meta, { color: props.theme.colors.statusWarning }]}>
+                {waiting} waiting
+              </Text>
+            ) : null}
           </>
         }
         trailing={elapsed ? <Text style={styles.time}>{elapsed}</Text> : null}
@@ -992,7 +980,9 @@ function ChatRow({ reference, shared }: { reference: AgentRef; shared: Shared })
   }));
   const workspace = useWorkspace(chat?.workspaceId ?? "", (item) => item.title ?? item.name);
   const remind = useRemindToggle();
+  const attention = useValue(shared.attention);
   if (!chat) return null;
+  const indicator = withPermission(chat.indicator, attention, reference.id);
   const selected = props.active.agent?.key === reference.key;
   const elapsed = shared.shows.lastActivity ? formatElapsed(chat.last, now) : null;
   const groupedByWorkspace = config.groupBy !== "status" && config.groupBy !== "none";
@@ -1000,13 +990,13 @@ function ChatRow({ reference, shared }: { reference: AgentRef; shared: Shared })
     <View>
       <RowShell
         selected={selected}
-        label={`Open chat ${chat.name}, ${STATUS_TITLES[chat.indicator]}`}
+        label={`Open chat ${chat.name}, ${STATUS_TITLES[indicator]}`}
         onPress={() => props.navigation.openAgent(reference)}
         onLongPress={remind.toggle}
         showActions={shared.chatReminders.has(reference.id)}
         main={
           <>
-            <StatusMark indicator={chat.indicator} shared={shared} />
+            <StatusMark indicator={indicator} shared={shared} />
             <Text style={styles.label} numberOfLines={1}>
               {chat.name}
             </Text>
@@ -1202,7 +1192,7 @@ function ViewMenu({ update, state, saveState, shared }: { update(patch: Partial<
   const chatsFor = config.showAgents ? config.agentsFor ?? "active" : "off";
   const chatRows = config.chatRows ?? DEFAULT_CHAT_ROWS;
   const subAgentRows = config.subAgentRows ?? DEFAULT_CHAT_ROWS;
-  const toggles: [keyof RowShows | "timeInStatus" | "counts", string, boolean, () => void][] = [
+  const toggles: [keyof RowShows | "timeInStatus" | "counts" | "stepsCard", string, boolean, () => void][] = [
     ["branch", "Branch", shows.branch, () => update({ details: { ...config.details, branch: !shows.branch } })],
     ["project", "Project", shows.project, () => update({ details: { ...config.details, project: !shows.project } })],
     ["host", "Host", shows.host, () => update({ show: { ...config.show, host: !shows.host } })],
@@ -1214,6 +1204,8 @@ function ViewMenu({ update, state, saveState, shared }: { update(patch: Partial<
     ["lastActivity", "Last activity", shows.lastActivity, () => update({ show: { ...config.show, lastActivity: !shows.lastActivity } })],
     ["timeInStatus", "Time in status, not since last prompt", config.details.timeInStatus, () => update({ details: { ...config.details, timeInStatus: !config.details.timeInStatus } })],
     ["counts", "Counts in headings", config.counts, () => update({ counts: !config.counts })],
+    // Back to the default removes the key, so a profile nobody changed stays readable by 0.8.
+    ["stepsCard", "Steps card for the open chat", config.stepsCard !== false, () => update({ stepsCard: config.stepsCard === false ? undefined : false })],
   ];
   return (
     <>
@@ -1274,6 +1266,7 @@ export interface ViewDeps extends PickerDeps {
   workspaces: ValueStore<WorkspaceList>;
   // False until the first workspace list arrives, while the view shows loading placeholders.
   workspacesReady: ValueStore<boolean>;
+  attention: ValueStore<AttentionList>;
 }
 
 interface RowSource {
@@ -1295,6 +1288,12 @@ type Where<Snapshot> = (item: Snapshot) => boolean;
 function withHidden<Ref extends { key: string }>(shown: readonly Ref[], all: readonly Ref[]): Ref[] {
   const keys = new Set(shown.map((ref) => ref.key));
   return [...shown, ...all.filter((ref) => !keys.has(ref.key))];
+}
+
+// Paseo's plugin snapshots carry no pending permission requests, so a chat's "waiting for
+// permission" comes from the attention store, read from the daemon's agent records.
+function withPermission(indicator: Indicator, attention: AttentionList, agentId: string): Indicator {
+  return attention.get(agentId)?.reason === "permission" ? "needs_input" : indicator;
 }
 
 // The group key for top-level agents when agents are grouped by parent; agent ids are UUIDs, so it
@@ -1482,6 +1481,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
       later,
       shows: rowShows(config),
       workspaces: deps.workspaces,
+      attention: deps.attention,
       hosts,
       labels,
       isExpanded: (key) => expanded.has(key),
@@ -1554,6 +1554,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
           );
         })}
       </ScrollView>
+          {config.stepsCard !== false ? <StepsCard agentId={props.active.agent?.id ?? null} t={t} /> : null}
           {ui.selecting && config.list === "workspaces" ? <BulkBar shownIds={new Set(sections.flatMap((section) => section.items.map((item) => (item as WorkspaceRef).id)))} shared={shared} /> : null}
           <Dropdown t={t} open={menu !== null} onClose={() => setMenu(null)} anchor={headerRef} width={420} maxHeight={560}>
             {menu === "filter" ? <FilterMenu state={state} save={saveState} projects={projects} shared={shared} /> : <ViewMenu update={updateView} state={state} saveState={saveState} shared={shared} />}

@@ -3,6 +3,8 @@ import { Icon, SidebarRow, useToast } from "@getpaseo/plugin/client/ui";
 import { useEffect, useRef } from "react";
 import { Text, View } from "react-native";
 import type { z } from "zod";
+import type { AttentionList } from "./attention";
+import type { ApplyBookmark, BookmarkStore } from "./bookmark-store";
 import { dueCount } from "../shared/board";
 import type { Profile } from "../shared/profile";
 import { parseQuickAdd } from "../shared/quick-add";
@@ -32,6 +34,11 @@ export interface SurfaceDeps extends BoardDeps {
   updateView(patch: Partial<Profile["sidebar"]["view"]>): Promise<void>;
   // False until the first workspace list arrives.
   workspacesReady: ValueStore<boolean>;
+  // Chats and sub-agents waiting on the user.
+  attention: ValueStore<AttentionList>;
+  bookmarks: BookmarkStore;
+  applyBookmark: ApplyBookmark;
+  bookmarkLastAnswer(agentId: string, workspaceId: string | null, note: string): Promise<void>;
 }
 
 function message(error: unknown) {

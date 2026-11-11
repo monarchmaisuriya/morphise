@@ -6,17 +6,29 @@ export interface ChatStatusFields {
   readonly status: "initializing" | "idle" | "running" | "error" | "closed";
   readonly requiresAttention: boolean;
   readonly attentionReason: "finished" | "error" | "permission" | null;
+  // Open permission requests. Daemon agent records carry them; Paseo's plugin snapshots do not, so
+  // views reading snapshots take the permission state from the attention store.
+  readonly pendingPermissionCount?: number;
 }
 
-// The same five statuses Paseo shows for workspaces, for one chat.
+// The same five statuses Paseo shows for workspaces, for one chat, by Paseo's own rule
+// (protocol agent-state-bucket.ts): a pending permission request waits on the user; an error
+// counts as failed only until it is seen, like a finished turn.
 export function chatIndicator(chat: ChatStatusFields): Indicator {
-  // A closed agent has no process left to wait on or fail, whatever attention it last carried.
-  if (chat.status === "closed") return "done";
-  if (chat.attentionReason === "permission") return "needs_input";
-  if (chat.attentionReason === "error" || chat.status === "error") return "failed";
+  if ((chat.pendingPermissionCount ?? 0) > 0 || chat.attentionReason === "permission") return "needs_input";
+  if (chat.requiresAttention && chat.attentionReason === "error") return "failed";
   if (chat.status === "running" || chat.status === "initializing") return "running";
-  if (chat.requiresAttention && chat.attentionReason === "finished") return "attention";
+  if (chat.requiresAttention) return "attention";
   return "done";
+}
+
+// Daemon agent records keep a sub-agent's parent in a label, as Paseo writes it (protocol
+// agent-labels.ts); Paseo's plugin snapshots resolve it into `parentAgentId` already.
+export const PARENT_AGENT_ID_LABEL = "paseo.parent-agent-id";
+
+export function parentFromLabels(labels: unknown): string | null {
+  const value = typeof labels === "object" && labels !== null ? (labels as Record<string, unknown>)[PARENT_AGENT_ID_LABEL] : undefined;
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 // Open top-level chats, for automation rules and follow-up titles: a chat that closes leaves

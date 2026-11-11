@@ -19,6 +19,9 @@ Settings are split into tabs: Layouts, Sidebar, Look, Buttons, Commands, Prompts
   - Colours say what each row needs: needs permission amber, failed red, running white (pulsing), finished but unread blue, done dim grey-green; uncommitted branches amber, unpushed commits blue, merged pull requests purple.
   - Mark a workspace done or unread yourself, set a reminder on it, add it to tasks, or select several for bulk actions (pin, mark done, label, archive).
   - Auto-archive (off by default) archives workspaces marked done some days ago, never a worktree with uncommitted, unpushed or unknown changes. Merged pull requests use Paseo's own "Archive merged PR workspaces" setting.
+- **Inbox:** every chat and sub-agent waiting on you (permission, failed, finished unread) in one list, plus your bookmarked answers (/bookmark).
+- **Steps card:** the open chat's plan at the foot of the sidebar, shown while it runs.
+- **Checks panel:** a workspace tab with the pull request's checks, review and conflicts, and "Ask the agent to fix".
 - **Dispatch:** start several agents at once. Pick a project and an agent your chats use, then write one prompt per new workspace.
 - **Theme:** a light or dark palette from eight colours, listed under Settings, Appearance.
 - **Buttons:** sidebar header and footer rows, workspace header buttons or menus, pills above the message box, and message box controls (a button, an on/off switch saved on the chat, or a model, mode or thinking picker).

@@ -28,7 +28,7 @@ describe("workspace info", () => {
           labels: ["urgent"],
           diffStat: { additions: 4, deletions: 1 },
           gitRuntime: { currentBranch: "fix/login", isDirty: true, aheadBehind: { ahead: 9, behind: 9 }, aheadOfOrigin: 2, behindOfOrigin: 1, isPaseoOwnedWorktree: true },
-          githubRuntime: { pullRequest: { number: 12, url: "https://github.com/a/b/pull/12", title: "Fix login", state: "OPEN", isMerged: false, isDraft: true, checksStatus: "failure", reviewDecision: "approved", baseRefName: "main", headRefName: "fix/login" } },
+          githubRuntime: { pullRequest: { number: 12, url: "https://github.com/a/b/pull/12", title: "Fix login", state: "OPEN", isMerged: false, isDraft: true, checksStatus: "failure", reviewDecision: "approved", baseRefName: "main", headRefName: "fix/login", mergeable: "CONFLICTING", checks: [{ name: "lint", status: "failure", url: "https://ci/1", workflow: "CI" }, { name: "odd", status: "weird" }] } },
           scripts: [{ scriptName: "web", type: "service", hostname: "localhost", port: 3000, lifecycle: "running", health: "unhealthy" }, { scriptName: "lint", type: "script", hostname: "", port: null, lifecycle: "stopped", health: null }],
         }),
       ],
@@ -42,7 +42,7 @@ describe("workspace info", () => {
       paseoWorktree: true,
       diff: { additions: 4, deletions: 1 },
       labels: ["urgent"],
-      pullRequest: { number: 12, url: "https://github.com/a/b/pull/12", state: "draft", checks: "failure", review: "approved" },
+      pullRequest: { number: 12, url: "https://github.com/a/b/pull/12", state: "draft", checks: "failure", review: "approved", mergeable: "conflicting", checkRuns: [{ name: "lint", status: "failure", url: "https://ci/1", workflow: "CI", duration: null }] },
       services: [{ name: "web", port: 3000, running: true, healthy: false }],
     });
   });

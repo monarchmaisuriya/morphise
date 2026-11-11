@@ -1,6 +1,7 @@
 import { defineSubscription } from "@getpaseo/plugin";
 import { z } from "zod";
 import { documentSchema } from "./document";
+import { bookmarkDocumentSchema } from "./bookmarks";
 import { taskDocumentSchema } from "./tasks";
 
 export const profileEventSchema = z.discriminatedUnion("status", [
@@ -29,4 +30,18 @@ export const tasksWatch = defineSubscription({
   name: "tasks.watch",
   input: z.object({}),
   event: tasksEventSchema,
+});
+
+export const bookmarksEventSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("ready"), revision: z.string(), document: bookmarkDocumentSchema }),
+  z.object({ status: z.literal("invalid"), revision: z.string(), error: z.string() }),
+]);
+
+export type BookmarksEvent = z.infer<typeof bookmarksEventSchema>;
+
+// The bookmark document, streamed like the profile.
+export const bookmarksWatch = defineSubscription({
+  name: "bookmarks.watch",
+  input: z.object({}),
+  event: bookmarksEventSchema,
 });

@@ -1,4 +1,4 @@
-import { chatIndicator, type ChatStatusFields, isListedChat } from "../shared/chat-status";
+import { chatIndicator, type ChatStatusFields, isListedChat, parentFromLabels } from "../shared/chat-status";
 import type { Indicator } from "../shared/profile";
 import type { ChatTransition } from "../shared/rules";
 
@@ -25,11 +25,12 @@ function readChat(value: unknown): { id: string; info: ChatInfo | null } | null 
   const agent = record(value);
   if (!agent || typeof agent.id !== "string") return null;
   const status = agent.status as ChatStatusFields["status"];
-  if (!isListedChat({ status, parentAgentId: typeof agent.parentAgentId === "string" ? agent.parentAgentId : null })) return { id: agent.id, info: null };
+  if (!isListedChat({ status, parentAgentId: parentFromLabels(agent.labels) })) return { id: agent.id, info: null };
   const indicator = chatIndicator({
     status,
     requiresAttention: agent.requiresAttention === true,
     attentionReason: (agent.attentionReason ?? null) as ChatStatusFields["attentionReason"],
+    pendingPermissionCount: Array.isArray(agent.pendingPermissions) ? agent.pendingPermissions.length : 0,
   });
   const title = typeof agent.title === "string" && agent.title ? agent.title : typeof agent.provider === "string" ? agent.provider : "Chat";
   const provider = typeof agent.provider === "string" ? agent.provider : "";

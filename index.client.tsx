@@ -11,6 +11,8 @@ import { ButtonsTab, CommandsTab, LayoutsTab, LookTab, PromptsTab, SidebarTab } 
 import { type ActionDeps, EDITOR_SCREEN_ID, JSON_SCREEN_ID } from "./client/run-action";
 import { createSections } from "./client/sections";
 import { chimeWav } from "./client/chime";
+import { type AttentionList, reduceAttention } from "./client/attention";
+import { ANSWER_TAIL, bookmarkLastAnswer, createBookmarkStore, createBookmarkWriter } from "./client/bookmark-store";
 import { type Chats, reduceChats } from "./client/chats";
 import { reduceWorkspaceInfo, type WorkspaceList } from "./client/workspaces";
 import { type AlertEntry, remindersOf, startReminderAlerts } from "./client/reminder-alerts";
@@ -25,8 +27,9 @@ import { REMINDER_KEY } from "./shared/reminders";
 import { dueForArchive } from "./shared/auto-archive";
 import { archiveOldDone, rulesForTransitions } from "./shared/rules";
 import type { TaskOperation } from "./shared/task-ops";
+import { bookmarkSettings } from "./shared/bookmarks";
 import { taskSettings } from "./shared/tasks";
-import { profileWatch, tasksWatch } from "./shared/watch";
+import { bookmarksWatch, profileWatch, tasksWatch } from "./shared/watch";
 
 interface ListSubscription<Snapshot> {
   subscribe(observer: { snapshot(snapshot: Snapshot): void; update(message: { type: string; payload?: unknown }): void }): () => void;
@@ -38,6 +41,11 @@ export default function contribute(client: PluginClientContext) {
   const problems = createValueStore<Problem[]>([]);
   const taskStore = createTaskStore();
   const chats = createValueStore<Chats>(new Map());
+  const attention = createValueStore<AttentionList>(new Map());
+  const changeAttention = (change: Parameters<typeof reduceAttention>[1]) => {
+    const next = reduceAttention(attention.get(), change);
+    if (next !== attention.get()) attention.set(next);
+  };
   const workspaceList = createValueStore<WorkspaceList>(new Map());
   const workspacesReady = createValueStore(false);
   const changeWorkspaceList = (change: Parameters<typeof reduceWorkspaceInfo>[1]) => {
@@ -46,6 +54,18 @@ export default function contribute(client: PluginClientContext) {
   };
   const profileRpc = settingsRpc(profileSettings.id);
   const taskRpc = settingsRpc(taskSettings.id);
+  const bookmarkRpc = settingsRpc(bookmarkSettings.id);
+  const bookmarkStore = createBookmarkStore();
+  const applyBookmark = createBookmarkWriter({
+    read: () => client.rpc(bookmarkRpc.read, {}),
+    write: (input) => client.rpc(bookmarkRpc.write, input),
+  });
+  const bookmarkCapture = {
+    isRunning: (agentId: string) => chats.get().get(agentId)?.indicator === "running",
+    readTail: (agentId: string) => client.paseo.agents.ref(agentId).timeline.refetch({ direction: "tail" as const, limit: ANSWER_TAIL }),
+    chatTitle: (agentId: string) => chats.get().get(agentId)?.title ?? "Chat",
+    apply: applyBookmark,
+  };
 
   // Switching layout is one save of `activeLayout`, against the revision this app last received.
   async function switchLayout(id: string) {
@@ -100,6 +120,10 @@ export default function contribute(client: PluginClientContext) {
     chats,
     workspaces: workspaceList,
     workspacesReady,
+    attention,
+    bookmarks: bookmarkStore,
+    applyBookmark,
+    bookmarkLastAnswer: (agentId, workspaceId, note) => bookmarkLastAnswer(bookmarkCapture, agentId, workspaceId, note),
     announcements,
     updateView,
     reminderSettings: () => profileOf(store.get()).reminders,
@@ -123,6 +147,10 @@ export default function contribute(client: PluginClientContext) {
   const taskStream = connectStream(
     (onEvent, onClosed) => client.subscribe(tasksWatch, {}, onEvent, { onClosed: ({ error }) => onClosed(error) }),
     taskStore,
+  );
+  const bookmarkStream = connectStream(
+    (onEvent, onClosed) => client.subscribe(bookmarksWatch, {}, onEvent, { onClosed: ({ error }) => onClosed(error) }),
+    bookmarkStore,
   );
 
   // Automatic changes (rules, archiving, the 0.2 migration) are logged, not toasted: no one
@@ -288,6 +316,7 @@ export default function contribute(client: PluginClientContext) {
     snapshot: (snapshot) => {
       profile.reopen();
       taskStream.reopen();
+      bookmarkStream.reopen();
       openKeeper();
       changeWorkspaceList({ snapshot: snapshot.entries });
       workspacesReady.set(true);
@@ -306,10 +335,12 @@ export default function contribute(client: PluginClientContext) {
       lastAgentEntries = snapshot.entries;
       migrateLegacy(snapshot.entries);
       changeChats({ snapshot: snapshot.entries });
+      changeAttention({ snapshot: snapshot.entries });
       setDirectory({ ...directory, agents: reduceAgents(directory.agents, { snapshot: snapshot.entries }) });
     },
     update: (message) => {
       changeChats({ message });
+      changeAttention({ message });
       const agents = reduceAgents(directory.agents, { message });
       if (agents !== directory.agents) setDirectory({ ...directory, agents });
     },
@@ -320,6 +351,7 @@ export default function contribute(client: PluginClientContext) {
     releases.forEach((release) => release());
     profile.stop();
     taskStream.stop();
+    bookmarkStream.stop();
     reconciler.dispose();
   };
 }

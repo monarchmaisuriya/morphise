@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chatIndicator, isListedChat, isSidebarChat } from "./chat-status";
+import { chatIndicator, isListedChat, isSidebarChat, parentFromLabels } from "./chat-status";
 
 const chat = (overrides: Partial<Parameters<typeof chatIndicator>[0]> = {}) => ({
   status: "idle" as const,
@@ -12,7 +12,8 @@ describe("chatIndicator", () => {
   it("maps a chat to Paseo's five statuses", () => {
     expect(chatIndicator(chat({ requiresAttention: true, attentionReason: "permission", status: "running" }))).toBe("needs_input");
     expect(chatIndicator(chat({ requiresAttention: true, attentionReason: "error" }))).toBe("failed");
-    expect(chatIndicator(chat({ status: "error" }))).toBe("failed");
+    // An error already seen is no longer failed, as in Paseo.
+    expect(chatIndicator(chat({ status: "error" }))).toBe("done");
     expect(chatIndicator(chat({ status: "running" }))).toBe("running");
     expect(chatIndicator(chat({ status: "initializing" }))).toBe("running");
     expect(chatIndicator(chat({ requiresAttention: true, attentionReason: "finished" }))).toBe("attention");
@@ -20,10 +21,19 @@ describe("chatIndicator", () => {
   });
 });
 
-describe("chatIndicator for closed chats", () => {
-  it("is done once the agent closed, even with stale attention", () => {
-    expect(chatIndicator({ status: "closed", requiresAttention: true, attentionReason: "permission" })).toBe("done");
-    expect(chatIndicator({ status: "closed", requiresAttention: true, attentionReason: "error" })).toBe("done");
+describe("chatIndicator follows Paseo's own status rule", () => {
+  it("waits on a pending permission, fails only on an unseen error, and is done once seen", () => {
+    expect(chatIndicator({ status: "running", requiresAttention: false, attentionReason: null, pendingPermissionCount: 1 })).toBe("needs_input");
+    expect(chatIndicator({ status: "error", requiresAttention: true, attentionReason: "error" })).toBe("failed");
+    expect(chatIndicator({ status: "error", requiresAttention: false, attentionReason: "error" })).toBe("done");
+    expect(chatIndicator({ status: "idle", requiresAttention: true, attentionReason: "finished" })).toBe("attention");
+    expect(chatIndicator({ status: "closed", requiresAttention: false, attentionReason: null })).toBe("done");
+  });
+
+  it("reads a sub-agent's parent from its label", () => {
+    expect(parentFromLabels({ "paseo.parent-agent-id": " boss " })).toBe("boss");
+    expect(parentFromLabels({})).toBeNull();
+    expect(parentFromLabels(null)).toBeNull();
   });
 });
 

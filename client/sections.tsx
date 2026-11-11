@@ -23,7 +23,9 @@ import {
 } from "./task-surfaces";
 import { NotesPanel } from "./notes-panel";
 import { createPromptPicker } from "./prompt-picker";
+import { createChecksPanel } from "./checks-panel";
 import { createDispatchScreen, DISPATCH_SCREEN_ID, DispatchSidebarItem } from "./dispatch";
+import { createInboxScreen, createInboxSidebarItem, INBOX_SCREEN_ID } from "./inbox";
 import { createSidebarView } from "./sidebar-view";
 import { applyStyleSheet } from "./web";
 
@@ -146,7 +148,30 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
       register(_input, track) {
         track(client.addScreen({ id: TASKS_SCREEN_ID, title: "Tasks", Component: createTasksScreen(tasks) }));
         track(client.addWorkspacePanel({ id: "tasks", title: "Tasks", icon: "ListTodo", context: "workspace", Component: createWorkspaceTasksPanel(tasks) }));
+        track(client.addWorkspacePanel({ id: "checks", title: "Checks", icon: "GitPullRequest", context: "workspace", Component: createChecksPanel(tasks) }));
+        track(
+          client.addCommandCenterItem({
+            id: "morphise-checks",
+            title: "Open this workspace's pull request checks",
+            icon: "GitPullRequest",
+            keywords: ["checks", "ci", "pull request", "pr", "review", "fix"],
+            context: "workspace",
+            onSelect: ({ openPanel }) => openPanel("checks"),
+          }),
+        );
         track(client.addSidebarHeaderItem({ id: "tasks", title: "Tasks", Component: createTasksSidebarItem(tasks) }));
+        track(client.addScreen({ id: INBOX_SCREEN_ID, title: "Inbox", Component: createInboxScreen(tasks) }));
+        track(client.addSidebarHeaderItem({ id: "inbox", title: "Inbox", Component: createInboxSidebarItem(tasks) }));
+        track(
+          client.addCommandCenterItem({
+            id: "morphise-inbox",
+            title: "Open the inbox: chats waiting on you",
+            icon: "Inbox",
+            keywords: ["inbox", "waiting", "permission", "failed", "finished", "attention"],
+            context: "global",
+            onSelect: ({ openScreen }) => openScreen({ screenId: INBOX_SCREEN_ID }),
+          }),
+        );
         track(client.addScreen({ id: DISPATCH_SCREEN_ID, title: "Dispatch", Component: createDispatchScreen(tasks) }));
         track(client.addSidebarHeaderItem({ id: "dispatch", title: "Dispatch", Component: DispatchSidebarItem }));
         track(
@@ -297,6 +322,35 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
             argumentHint: "45m, 17:30, tomorrow 9am or clear",
             context: "agent",
             onSubmit: ({ agent, workspace, args }) => runRemindCommand(tasks, agent.id, workspace.id, args),
+          }),
+        );
+        track(
+          client.addSlashCommand({
+            name: "bookmark",
+            description: "Bookmark this chat's last answer",
+            argumentHint: "an optional note",
+            context: "agent",
+            onSubmit: ({ agent, workspace, args }) => tasks.bookmarkLastAnswer(agent.id, workspace.id, args),
+          }),
+        );
+        track(
+          client.addCommandCenterItem({
+            id: "morphise-bookmark",
+            title: "Bookmark this chat's last answer",
+            icon: "Bookmark",
+            keywords: ["bookmark", "save", "answer", "keep"],
+            context: "agent",
+            onSelect: ({ agent, workspace }) => tasks.bookmarkLastAnswer(agent.id, workspace.id, ""),
+          }),
+        );
+        track(
+          client.addCommandCenterItem({
+            id: "morphise-bookmarks",
+            title: "Open bookmarks",
+            icon: "Bookmark",
+            keywords: ["bookmarks", "saved", "answers"],
+            context: "global",
+            onSelect: ({ openScreen }) => openScreen({ screenId: INBOX_SCREEN_ID, params: { tab: "bookmarks" } }),
           }),
         );
         track(

@@ -12,6 +12,29 @@ export interface PullRequestInfo {
   state: "open" | "draft" | "merged" | "closed";
   checks: "success" | "pending" | "failure" | "none";
   review: "pending" | "approved" | "changes_requested" | null;
+  // Each check Paseo reports, and whether the branch merges cleanly ("unknown" until GitHub says).
+  checkRuns: readonly CheckRun[];
+  mergeable: "mergeable" | "conflicting" | "unknown";
+}
+
+export interface CheckRun {
+  name: string;
+  status: "success" | "failure" | "pending" | "skipped" | "cancelled";
+  url: string | null;
+  workflow: string | null;
+  duration: string | null;
+}
+
+const CHECK_STATUSES = ["success", "failure", "pending", "skipped", "cancelled"] as const;
+
+function readCheckRuns(value: unknown): CheckRun[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const run = record(item);
+    const status = CHECK_STATUSES.find((known) => known === run?.status);
+    if (!run || !status || typeof run.name !== "string") return [];
+    return [{ name: run.name, status, url: text(run.url), workflow: text(run.workflow), duration: text(run.duration) }];
+  });
 }
 
 export interface ServiceInfo {
@@ -84,7 +107,8 @@ function readPullRequest(value: unknown): PullRequestInfo | null {
   const state = pr.isMerged === true ? "merged" : pr.isDraft === true ? "draft" : raw === "closed" ? "closed" : "open";
   const checks = ["success", "pending", "failure"].includes(String(pr.checksStatus)) ? (pr.checksStatus as PullRequestInfo["checks"]) : "none";
   const review = ["pending", "approved", "changes_requested"].includes(String(pr.reviewDecision)) ? (pr.reviewDecision as PullRequestInfo["review"]) : null;
-  return { number: typeof pr.number === "number" ? pr.number : null, url, title: text(pr.title) ?? "", state, checks, review };
+  const mergeable = pr.mergeable === "MERGEABLE" ? "mergeable" : pr.mergeable === "CONFLICTING" ? "conflicting" : "unknown";
+  return { number: typeof pr.number === "number" ? pr.number : null, url, title: text(pr.title) ?? "", state, checks, review, checkRuns: readCheckRuns(pr.checks), mergeable };
 }
 
 function readServices(value: unknown): ServiceInfo[] {
