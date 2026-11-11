@@ -13,13 +13,13 @@ What each section does and its limits: [OVERVIEW.md](OVERVIEW.md).
 Requires Paseo 0.16.0-beta.1 or later.
 
 ```bash
-paseo plugin install github:monarchmaisuriya/morphise --ref v0.5.0
+paseo plugin install github:monarchmaisuriya/morphise --ref v0.6.0
 ```
 
 To update from an earlier version, keeping your settings:
 
 ```bash
-paseo plugin update morphise --ref v0.5.0
+paseo plugin update morphise --ref v0.6.0
 ```
 
 ## Develop

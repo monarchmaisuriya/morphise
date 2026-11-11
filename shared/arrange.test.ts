@@ -30,6 +30,9 @@ function workspace(overrides: Partial<ArrangeWorkspace> & { id: string }): Arran
     project: { key: "project:app" },
     archivingAt: null,
     background: false,
+    createdAt: null,
+    statusEnteredAt: null,
+    diffStat: null,
     ...overrides,
   };
 }
@@ -113,6 +116,42 @@ describe("matchesFilter", () => {
   });
 });
 
+describe("more sorts", () => {
+  it("sorts by newest workspace, by most recent status change, or by most changed lines", () => {
+    const items = [
+      workspace({ id: "a", createdAt: "2026-11-01T00:00:00Z", statusEnteredAt: "2026-11-11T09:00:00Z", diffStat: { additions: 5, deletions: 0 } }),
+      workspace({ id: "b", createdAt: "2026-11-10T00:00:00Z", statusEnteredAt: "2026-11-11T08:00:00Z", diffStat: { additions: 50, deletions: 20 } }),
+      workspace({ id: "c" }),
+    ];
+    expect(sorted(items, view({ orderBy: "created", pinnedFirst: false }))).toEqual(["b", "a", "c"]);
+    expect(sorted(items, view({ orderBy: "statusChanged", pinnedFirst: false }))).toEqual(["a", "b", "c"]);
+    expect(sorted(items, view({ orderBy: "changes", pinnedFirst: false }))).toEqual(["b", "a", "c"]);
+  });
+});
+
+describe("ties", () => {
+  it("breaks ties with the newest workspace first, as Paseo's own list does", () => {
+    const items = [workspace({ id: "old", name: "a", createdAt: "2026-11-01T00:00:00Z" }), workspace({ id: "new", name: "b", createdAt: "2026-11-10T00:00:00Z" })];
+    expect(sorted(items, view({ orderBy: "activity", pinnedFirst: false }))).toEqual(["new", "old"]);
+  });
+});
+
+describe("more filters", () => {
+  const changed = workspace({ id: "x", indicator: "running", project: { key: "p1" }, diffStat: { additions: 3, deletions: 1 }, pinnedAt: "2026-11-01T00:00:00Z" });
+  const finished = workspace({ id: "y", indicator: "done", project: { key: "p2" } });
+
+  it("keeps chosen projects only", () => {
+    expect([changed, finished].filter((item) => matchesFilter(item, { statuses: [], search: "", projects: ["p2"] })).map((item) => item.id)).toEqual(["y"]);
+  });
+
+  it("hides done, keeps only changed, or keeps only pinned workspaces", () => {
+    const pick = (filter: Parameters<typeof matchesFilter>[1]) => [changed, finished].filter((item) => matchesFilter(item, filter)).map((item) => item.id);
+    expect(pick({ statuses: [], search: "", hideDone: true })).toEqual(["x"]);
+    expect(pick({ statuses: [], search: "", changedOnly: true })).toEqual(["x"]);
+    expect(pick({ statuses: [], search: "", pinnedOnly: true })).toEqual(["x"]);
+  });
+});
+
 describe("isProtected", () => {
   it("protects workspaces that need permission or failed, and nothing else", () => {
     expect(["needs_input", "failed", "running", "attention", "done"].map((indicator) => isProtected(workspace({ id: indicator, indicator: indicator as ArrangeWorkspace["indicator"] })))).toEqual([
@@ -135,6 +174,28 @@ describe("groupKeys", () => {
       { key: "label:ui", title: "ui" },
     ]);
     expect(groupKeys(view({ groupBy: "label" }), workspace({ id: "x" }))).toEqual({ key: "label:", title: "Unlabelled" });
+  });
+});
+
+describe("activity groups", () => {
+  const now = new Date("2026-11-11T15:00:00");
+  const at = (iso: string | null) => workspace({ id: iso ?? "never", lastPromptAt: iso });
+
+  it("groups by when a workspace was last used", () => {
+    const titles = [at("2026-11-11T09:00:00"), at("2026-11-10T09:00:00"), at("2026-11-07T09:00:00"), at("2026-10-01T09:00:00"), at(null)].map((item) => (groupKeys(view({ groupBy: "activity" }), item, now) as { title: string }).title);
+    expect(titles).toEqual(["Today", "Yesterday", "This week", "Earlier", "Never used"]);
+  });
+
+  it("counts calendar days, so midnight today is Today and late yesterday is Yesterday", () => {
+    const title = (iso: string) => (groupKeys(view({ groupBy: "activity" }), at(iso), now) as { title: string }).title;
+    expect(title("2026-11-11T00:00:00")).toBe("Today");
+    expect(title("2026-11-10T23:59:00")).toBe("Yesterday");
+    expect(title("2026-11-09T00:30:00")).toBe("This week");
+  });
+
+  it("orders activity groups from newest to oldest whatever order they arrived in", () => {
+    const groups = ["activity:4", "activity:0", "activity:2"].map((key) => ({ key }));
+    expect(orderGroups(groups, view({ groupBy: "activity" })).map((group) => group.key)).toEqual(["activity:0", "activity:2", "activity:4"]);
   });
 });
 

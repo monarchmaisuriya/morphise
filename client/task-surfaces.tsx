@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { Text, View } from "react-native";
 import type { z } from "zod";
 import { dueCount } from "../shared/board";
+import type { Profile } from "../shared/profile";
 import { parseQuickAdd } from "../shared/quick-add";
 import { reminderAt } from "../shared/reminders";
 import type { reminderRowSchema } from "../shared/reminder-contracts";
@@ -28,6 +29,7 @@ export interface Announcement {
 
 export interface SurfaceDeps extends BoardDeps {
   announcements: ValueStore<Announcement>;
+  updateView(patch: Partial<Profile["sidebar"]["view"]>): Promise<void>;
 }
 
 function message(error: unknown) {

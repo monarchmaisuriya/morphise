@@ -170,6 +170,7 @@ function viewFields(form: Form): { [Key in keyof ViewConfig]: ReactNode } {
           { value: "project", label: "Project" },
           { value: "status", label: "Status" },
           { value: "label", label: "Label" },
+          { value: "activity", label: "Last used (Today, Yesterday…)" },
           { value: "none", label: "No groups" },
         ]}
         onChange={(value) => set("groupBy", value)}
@@ -183,6 +184,9 @@ function viewFields(form: Form): { [Key in keyof ViewConfig]: ReactNode } {
           { value: "status", label: "Status" },
           { value: "activity", label: "Last prompt" },
           { value: "name", label: "Name" },
+          { value: "created", label: "Newest workspace" },
+          { value: "statusChanged", label: "Latest status change" },
+          { value: "changes", label: "Most changed lines" },
         ]}
         onChange={(value) => set("orderBy", value)}
       />
@@ -204,7 +208,7 @@ function viewFields(form: Form): { [Key in keyof ViewConfig]: ReactNode } {
     rowLimit: (
       <>
         <SwitchField
-          label="Shorten long groups"
+          label="Show a few per group, then Show more"
           hint="Workspaces that need permission or failed always show"
           value={view.rowLimit.enabled}
           onChange={(value) => form.updateProfile((profile) => void (profile.sidebar.view.rowLimit.enabled = value))}
@@ -212,7 +216,7 @@ function viewFields(form: Form): { [Key in keyof ViewConfig]: ReactNode } {
         {view.rowLimit.enabled ? (
           <NumberField
             form={form}
-            label="Rows before Show more"
+            label="Rows per group"
             value={view.rowLimit.rows}
             onChange={(rows) => form.updateProfile((profile) => void (profile.sidebar.view.rowLimit.rows = rows))}
             error={form.profileError("sidebar.view.rowLimit.rows")}
@@ -239,7 +243,18 @@ function viewFields(form: Form): { [Key in keyof ViewConfig]: ReactNode } {
     filterBar: (
       <SwitchField label="Search, status chips and Next button" value={view.filterBar} onChange={(value) => set("filterBar", value)} />
     ),
-    showAgents: <SwitchField label="Show each workspace's chats" value={view.showAgents} onChange={(value) => set("showAgents", value)} />,
+    showAgents: <SwitchField label="Show chats under workspaces" value={view.showAgents} onChange={(value) => set("showAgents", value)} />,
+    agentsFor: view.showAgents ? (
+      <SelectField
+        label="Under which workspaces"
+        value={view.agentsFor ?? "active"}
+        options={[
+          { value: "active", label: "Only the open workspace" },
+          { value: "all", label: "Every workspace" },
+        ]}
+        onChange={(value) => set("agentsFor", value)}
+      />
+    ) : null,
   };
 }
 

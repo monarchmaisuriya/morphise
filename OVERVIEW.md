@@ -6,8 +6,10 @@ Settings are split into tabs: Layouts, Sidebar, Look, Buttons, Commands, Prompts
 
 - **Layouts:** keep several whole setups and switch between them in settings or from the Command Center ("Morphise layout: …"). Your 0.1 profile becomes the layout "Default".
 - **Sidebar view:** a replacement for the workspace list. Pick "Morphise" in Paseo's Settings, Sidebar, Sidebar view (Morphise's settings remind you while Paseo still shows its own). It lists workspaces or chats.
-  - Sort by status (needs permission, failed, running, finished unread, done; the order is yours), by last prompt or by name, with pinned workspaces first.
-  - Group by project, status, label, or not at all, with counts in the headers. Groups you fold stay folded on that device.
+  - Sort by status (the order is yours), last prompt, name, newest, latest status change or most changed lines, with pinned workspaces first.
+  - Group by project, status, last used (Today, Yesterday, This week…), label, or not at all, with counts in the headers. Groups you fold stay folded on that device.
+  - Each group shows 5 workspaces by default, then "Show more"; change the number in settings or in the View options menu.
+  - Filter by status, project, hide done, only changed, or only pinned, from the Filter menu; active filters show as tags.
   - It looks like Paseo's own sidebar: a "Workspaces" header with search, a status filter menu (with "Needs me") and a Next button that opens the next workspace waiting for you; a Pinned section; project groups with letter tiles and a "+" for a new workspace in that project.
   - Rows show their buttons on hover: rename, archive (press twice), pin, and remind me on chats.
   - Shorten long groups with "Show more"; workspaces that need permission or failed always show.

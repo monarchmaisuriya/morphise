@@ -2,6 +2,42 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.6.0 - 2026-11-11
+
+Morphise sidebar view, cleaner and with more ways to arrange it. Inspired by the "distill" and "quieter" rules of the Impeccable and Hallmark design skills: say things once, colour only what needs you, and hide complexity until asked.
+
+- **Matches Paseo exactly:** measured against Paseo's own sidebar.
+  - Tiles and status dots share one column; text starts at the same place.
+  - 36px rows, the same colours, and times on every row (last prompt, or when created).
+  - Paseo's newest-first order when times tie.
+- **Less clutter:**
+  - A row no longer repeats its project's name inside its own project group.
+  - Status dots take colour only when a workspace needs you or is running.
+  - Chats under workspaces show only under the open workspace, unless you choose every workspace.
+  - Headings get more space above than below.
+- **A fixed header:** search, Filter, View options and Next. Menus float over the list instead of pushing it down.
+- **Filter:**
+  - Statuses (with "Needs me").
+  - Projects.
+  - Hide done.
+  - Only workspaces with changed lines.
+  - Only pinned.
+  - Active filters show as removable tags. Filters are kept per device.
+- **View options** (shared with the settings screen and every app):
+  - Group by: project, status, last used (Today, Yesterday, This week, This month, Earlier), label, or none.
+  - Sort by: last prompt, status, name, newest, latest status change, or most changed lines.
+  - Per group: 5, 10, 20 or all.
+  - Chats under workspaces.
+  - Row height and row details.
+- **Next:** it still reaches workspaces that a filter hides.
+- **Your view stays put:** the menu, search and "Show more" stay as they were when you change a view option.
+- **Per-group limit:** groups show 5 workspaces by default (change it in settings or View options), then "Show more" and "Show less". Workspaces that need permission or failed always show.
+
+Rolling back to 0.5.0: `paseo plugin update morphise --ref v0.5.0`.
+- **Settings that 0.5.0 cannot read:**
+  - Grouping by "last used", the new sorts, and "Chats under workspaces: Every workspace". With any of these chosen, 0.5.0 reports the profile as invalid and keeps the data. Switch them back first.
+  - A profile where none of them were chosen stays readable by 0.5.0.
+
 ## 0.5.0 - 2026-11-11
 
 - Tasks and workspaces:

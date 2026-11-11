@@ -23,7 +23,7 @@ describe("profileSchema", () => {
           statusOrder: ["needs_input", "failed", "running", "attention", "done"],
           pinnedFirst: true,
           counts: true,
-          rowLimit: { enabled: false, rows: 8 },
+          rowLimit: { enabled: true, rows: 5 },
           density: "compact",
           details: { branch: false, diff: false, timeInStatus: false, project: false },
           rowActions: ["pin"],

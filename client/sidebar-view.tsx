@@ -32,7 +32,7 @@ import { INDICATORS, type Indicator, type Profile } from "../shared/profile";
 import { isDue, type Reminder } from "../shared/reminders";
 import { formatDue, formatElapsed } from "../shared/time-text";
 import { type ViewState, viewStateSettings } from "../shared/view-state";
-import { type ValueStore, useValue } from "./profile-store";
+import { createValueStore, type ValueStore, useValue } from "./profile-store";
 import { useReminderClock } from "./reminder-clock";
 import { type AlertEntry, remindersOf } from "./reminder-alerts";
 import { type PickerDeps, ReminderPicker } from "./reminder-picker";
@@ -53,7 +53,7 @@ const INDICATOR_TOKEN = {
   done: "statusSuccess",
 } as const;
 
-const DEFAULT_VIEW_STATE: ViewState = { collapsed: [], statusFilter: [] };
+const DEFAULT_VIEW_STATE: ViewState = { collapsed: [], statusFilter: [], projectFilter: [], hideDone: false, changedOnly: false, pinnedOnly: false };
 // Touch screens get finger-sized rows and always-visible row buttons. Paseo reports its sidebar as
 // "compact" on desktop too, so the input decides this (no hover), not the layout.
 const TOUCH = cannotHover();
@@ -66,34 +66,61 @@ function tileColor(name: string): string {
 }
 const REMINDERS_GROUP = "reminders";
 
+// Search text, the open menu and expanded groups live outside the view, so they survive the view
+// being rebuilt when its options change.
+const viewUi = createValueStore<{ search: string; searching: boolean; menu: "filter" | "view" | null; expanded: readonly string[] }>({ search: "", searching: false, menu: null, expanded: [] });
+
 // Sizes match Paseo's own sidebar (measured on 0.16.0-beta.1): 36px rows inset 8px with an 8px
 // radius, 14px titles, 12px muted section labels and dimmer 12px times; the selected row uses
-// surface2. "Compact" density trims rows to 30px.
+// surface2. "Comfortable" density adds 4px to each row.
 function viewStyles(theme: Theme, config: ViewConfig) {
   const c = theme.colors;
-  const height = TOUCH ? 44 : config.density === "compact" ? 30 : 36;
+  // "Compact" is Paseo's own 36px row; "comfortable" adds air.
+  const height = TOUCH ? 44 : config.density === "compact" ? 36 : 40;
   return {
     scroll: { flex: 1 },
     header: { flexDirection: "row" as const, alignItems: "center" as const, minHeight: 36, paddingLeft: 16, paddingRight: 8, gap: 2 },
     headerText: { color: c.foregroundMuted, fontSize: 12, flex: 1 },
-    tools: { paddingHorizontal: 8, paddingBottom: 4, gap: 6 },
-    heading: { flexDirection: "row" as const, alignItems: "center" as const, gap: 6, minHeight: 32, paddingLeft: 16, paddingRight: 12, marginTop: 6 },
+    tools: { paddingHorizontal: 8, paddingBottom: 6, gap: 6 },
+    // Floats over the list below the header, with the platform's usual shadow.
+    menu: {
+      position: "absolute" as const,
+      top: 0,
+      left: 8,
+      right: 8,
+      // Bounded by the list area, so it never runs off a short screen; short menus stay short.
+      maxHeight: "95%" as const,
+      padding: 4,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.surface1,
+      shadowColor: "#000000",
+      shadowOpacity: 0.35,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 12,
+    },
+    // More space above a heading than below it: the heading belongs to the rows that follow.
+    heading: { flexDirection: "row" as const, alignItems: "center" as const, gap: 6, minHeight: 28, paddingLeft: 16, paddingRight: 12, marginTop: 14 },
     headingText: { color: c.foregroundMuted, fontSize: 12, flexShrink: 1 },
     count: { color: c.foregroundMuted, fontSize: 12, opacity: 0.6 },
-    project: { flexDirection: "row" as const, alignItems: "center" as const, minHeight: TOUCH ? 44 : 36, marginHorizontal: 8, marginTop: 8, paddingLeft: 8, paddingRight: 4, borderRadius: 8, gap: 2 },
-    projectMain: { flex: 1, minWidth: 0, flexDirection: "row" as const, alignItems: "center" as const, gap: 10, minHeight: TOUCH ? 44 : 36 },
+    // Paseo's measured columns: tiles and status dots share a 16px slot at x=16; text starts at x=40.
+    project: { flexDirection: "row" as const, alignItems: "center" as const, minHeight: TOUCH ? 44 : 40, marginHorizontal: 8, marginTop: 10, paddingLeft: 8, paddingRight: 4, borderRadius: 8, gap: 2 },
+    projectMain: { flex: 1, minWidth: 0, flexDirection: "row" as const, alignItems: "center" as const, gap: 8, minHeight: TOUCH ? 44 : 40 },
     tile: { width: 16, height: 16, borderRadius: 4, alignItems: "center" as const, justifyContent: "center" as const },
     tileText: { color: "#ffffff", fontSize: 10, fontWeight: "700" as const },
     projectText: { color: c.foregroundMuted, fontSize: 14, flexShrink: 1 },
-    row: { minHeight: height, marginHorizontal: 8, paddingLeft: 12, paddingRight: 4, borderRadius: 8, flexDirection: "row" as const, alignItems: "center" as const, gap: 2 },
-    rowMain: { flex: 1, minWidth: 0, minHeight: height, flexDirection: "row" as const, alignItems: "center" as const, gap: 10 },
-    child: { paddingLeft: 30, minHeight: TOUCH ? 40 : 30 },
+    row: { minHeight: height, marginHorizontal: 8, paddingLeft: 8, paddingRight: 6, borderRadius: 8, flexDirection: "row" as const, alignItems: "center" as const, gap: 2 },
+    rowMain: { flex: 1, minWidth: 0, minHeight: height, flexDirection: "row" as const, alignItems: "center" as const, gap: 8 },
+    slot: { width: 16, alignItems: "center" as const, justifyContent: "center" as const },
+    child: { paddingLeft: 32, minHeight: TOUCH ? 40 : 30 },
     selected: { backgroundColor: c.surface2 },
     hovered: { backgroundColor: c.surface1 },
     label: { color: c.foreground, fontSize: config.density === "compact" ? 13 : 14, flexShrink: 1 },
     childLabel: { color: c.foregroundMuted, fontSize: 13, flexShrink: 1 },
     secondary: { color: c.foregroundMuted, fontSize: 12, flexShrink: 1, opacity: 0.75 },
-    time: { color: c.foregroundMuted, fontSize: 12, opacity: 0.6, marginLeft: "auto" as const },
+    time: { color: c.foregroundMuted, fontSize: 12, opacity: 0.7, marginLeft: "auto" as const },
     due: { color: c.statusWarning, fontSize: 12, marginLeft: "auto" as const },
     added: { color: c.statusSuccess, fontSize: 12 },
     removed: { color: c.statusDanger, fontSize: 12 },
@@ -147,6 +174,18 @@ function RowShell({ selected, child, label, onPress, onLongPress, main, actions,
         {main}
       </Pressable>
       {actions && (hovered || showActions || TOUCH) ? <View style={{ flexDirection: "row", alignItems: "center" }}>{actions}</View> : null}
+    </View>
+  );
+}
+
+// A 6px status dot in the same 16px column as project tiles, as Paseo draws it. It takes colour
+// only when the status needs the user or is in motion; finished work is plain, done work dim.
+function StatusDot({ indicator, shared }: { indicator: Indicator; shared: Shared }) {
+  const c = shared.props.theme.colors;
+  const color = indicator === "done" ? c.foregroundMuted : indicator === "attention" ? c.foreground : c[INDICATOR_TOKEN[indicator]];
+  return (
+    <View style={shared.styles.slot}>
+      <View accessibilityLabel={STATUS_TITLES[indicator]} style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color, opacity: indicator === "done" ? 0.6 : 1 }} />
     </View>
   );
 }
@@ -271,6 +310,8 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
     project: item.projectDisplayName,
     diff: item.diffStat,
     since: item.statusEnteredAt,
+    // A workspace never prompted shows the time it was created, as Paseo's list does.
+    lastPrompt: item.lastPromptAt ?? item.createdAt,
     pinned: item.pinnedAt !== null,
   }));
   if (!workspace) return null;
@@ -306,9 +347,11 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
         <Field t={t} plain autoFocus value={renaming} onChangeText={setRenaming} onSubmit={rename} onBlur={rename} accessibilityLabel={`New name for ${workspace.name}`} placeholder="Workspace name" />
       </View>
     );
-  const elapsed = details.timeInStatus ? formatElapsed(workspace.since, now) : null;
+  // Like Paseo's rows: time since the last prompt, or time in the current status when chosen.
+  const elapsed = formatElapsed(details.timeInStatus ? workspace.since : workspace.lastPrompt, now);
   const reminder = shared.workspaceReminders.get(reference.id) ?? null;
-  const details2 = [details.project ? workspace.project : null, details.branch ? workspace.branch : null].filter(Boolean).join(" · ");
+  // Inside its own project group a row never repeats the project's name.
+  const details2 = [details.project && config.groupBy !== "project" ? workspace.project : null, details.branch ? workspace.branch : null].filter(Boolean).join(" · ");
   return (
     <View>
       {renameField ?? (
@@ -319,7 +362,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
         showActions={confirmArchive}
         main={
           <>
-          <View style={[styles.dot, { backgroundColor: props.theme.colors[INDICATOR_TOKEN[workspace.indicator]] }]} />
+          <StatusDot indicator={workspace.indicator} shared={shared} />
           <Text style={styles.label} numberOfLines={1}>
             {workspace.name}
           </Text>
@@ -365,7 +408,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
         shared={shared}
       />
       )}
-      {config.showAgents ? <WorkspaceAgents reference={reference} shared={shared} /> : null}
+      {config.showAgents && ((config.agentsFor ?? "active") === "all" || selected) ? <WorkspaceAgents reference={reference} shared={shared} /> : null}
     </View>
   );
 }
@@ -383,7 +426,7 @@ function ChatRow({ reference, shared }: { reference: AgentRef; shared: Shared })
   const remind = useRemindToggle();
   if (!chat) return null;
   const selected = props.active.agent?.key === reference.key;
-  const elapsed = config.details.timeInStatus ? formatElapsed(chat.last, now) : null;
+  const elapsed = formatElapsed(chat.last, now);
   const groupedByWorkspace = config.groupBy !== "status" && config.groupBy !== "none";
   return (
     <View>
@@ -395,7 +438,7 @@ function ChatRow({ reference, shared }: { reference: AgentRef; shared: Shared })
         showActions={shared.chatReminders.has(reference.id)}
         main={
           <>
-            <View style={[styles.dot, { backgroundColor: props.theme.colors[INDICATOR_TOKEN[chat.indicator]] }]} />
+            <StatusDot indicator={chat.indicator} shared={shared} />
             <Text style={styles.label} numberOfLines={1}>
               {chat.name}
             </Text>
@@ -455,69 +498,157 @@ function ProjectHeading({ title, first, count, collapsed, onToggle, shared }: { 
   );
 }
 
-interface FilterBarProps {
+type Menu = "filter" | "view" | null;
+
+interface HeaderProps {
+  menu: Menu;
+  setMenu(menu: Menu): void;
+  searching: boolean;
+  setSearching(on: boolean): void;
   search: string;
   onSearch(text: string): void;
-  statuses: readonly Indicator[];
-  onStatuses(next: Indicator[]): void;
+  filters: number;
   // Opens the next item that needs the user; null when nothing does.
   onNext: (() => void) | null;
-  placeholder: string;
   shared: Shared;
 }
 
-// The view's header, like Paseo's "Workspaces" heading: the list name and icon buttons for
-// search, the status filter and Next. Search opens a field; the filter opens a menu; active status
-// filters stay visible as removable tags.
-function FilterBar({ search, onSearch, statuses, onStatuses, onNext, placeholder, shared }: FilterBarProps) {
+// The view's header, like Paseo's "Workspaces" heading: the list's name, then icon buttons for
+// search, filters, view options and Next. Menus open over the list instead of pushing it down.
+function Header({ menu, setMenu, searching, setSearching, search, onSearch, filters, onNext, shared }: HeaderProps) {
   const { styles, props, t, config } = shared;
-  const [menu, setMenu] = useState(false);
-  const [searching, setSearching] = useState(false);
-  const needsMe = needsMeOn(statuses);
-  const active = needsMe ? 1 : statuses.length;
-  const toggleStatus = (indicator: Indicator) => {
-    const on = !needsMe && statuses.includes(indicator);
-    onStatuses(on ? statuses.filter((item) => item !== indicator) : [...(needsMe ? [] : statuses), indicator]);
-  };
   const showSearch = searching || search !== "";
+  const toggle = (next: Exclude<Menu, null>) => setMenu(menu === next ? null : next);
   return (
-    <View>
-      <View style={styles.header}>
-        <Text style={styles.headerText}>{config.list === "chats" ? "Chats" : "Workspaces"}</Text>
-        <IconButton t={t} size="sm" icon="Search" tone={showSearch ? props.theme.colors.foreground : undefined} label={showSearch ? "Close search" : "Search"} onPress={() => (showSearch ? (onSearch(""), setSearching(false)) : setSearching(true))} />
-        <View>
-          <IconButton t={t} size="sm" icon="ListFilter" tone={active ? props.theme.colors.accent : undefined} label={active ? `Status filter, ${active} on` : "Filter by status"} onPress={() => setMenu(!menu)} />
-          {active ? <View pointerEvents="none" style={{ position: "absolute", top: 2, right: 2, width: 6, height: 6, borderRadius: 3, backgroundColor: props.theme.colors.accent }} /> : null}
-        </View>
-        <IconButton t={t} size="sm" icon="SkipForward" label={onNext ? "Open the next one that needs you" : "Nothing needs you"} disabled={onNext === null} onPress={() => onNext?.()} />
+    <View style={styles.header}>
+      <Text style={styles.headerText}>{config.list === "chats" ? "Chats" : "Workspaces"}</Text>
+      <IconButton t={t} size="sm" icon="Search" tone={showSearch ? props.theme.colors.foreground : undefined} label={showSearch ? "Close search" : "Search"} onPress={() => (showSearch ? (onSearch(""), setSearching(false)) : setSearching(true))} />
+      <View>
+        <IconButton t={t} size="sm" icon="ListFilter" tone={filters || menu === "filter" ? props.theme.colors.foreground : undefined} label={filters ? `Filters, ${filters} on` : "Filter"} onPress={() => toggle("filter")} />
+        {filters ? <View pointerEvents="none" style={{ position: "absolute", top: 2, right: 2, width: 6, height: 6, borderRadius: 3, backgroundColor: props.theme.colors.accent }} /> : null}
       </View>
-      {showSearch || menu || active ? (
-        <View style={styles.tools}>
-          {showSearch ? <Field t={t} plain autoFocus={searching && search === ""} icon="Search" value={search} onChangeText={onSearch} placeholder={placeholder} accessibilityLabel={placeholder} /> : null}
-          {menu ? (
-            <View style={{ padding: 4, borderRadius: 10, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1 }}>
-              <MenuItem t={t} role="checkbox" icon="Hand" label="Needs me" hint="permission or failed" checked={needsMe} onPress={() => onStatuses(needsMe ? [] : [...NEEDS_ME])} />
-              {INDICATORS.map((indicator) => (
-                <MenuItem key={indicator} t={t} role="checkbox" dot={props.theme.colors[INDICATOR_TOKEN[indicator]]} label={STATUS_TITLES[indicator]} checked={!needsMe && statuses.includes(indicator)} onPress={() => toggleStatus(indicator)} />
-              ))}
-              {active ? <MenuItem t={t} icon="X" label="Show all" onPress={() => onStatuses([])} /> : null}
-            </View>
-          ) : active ? (
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4 }}>
-              {needsMe ? (
-                <Tag t={t} label="Needs me" color={props.theme.colors.statusWarning} onRemove={() => onStatuses([])} />
-              ) : (
-                statuses.map((indicator) => <Tag key={indicator} t={t} label={STATUS_TITLES[indicator]} color={props.theme.colors[INDICATOR_TOKEN[indicator]]} onRemove={() => toggleStatus(indicator)} />)
-              )}
-            </View>
-          ) : null}
-        </View>
-      ) : null}
+      <IconButton t={t} size="sm" icon="SlidersHorizontal" tone={menu === "view" ? props.theme.colors.foreground : undefined} label="View options: grouping, sorting, rows per group" onPress={() => toggle("view")} />
+      <IconButton t={t} size="sm" icon="SkipForward" label={onNext ? "Open the next one that needs you" : "Nothing needs you"} disabled={onNext === null} onPress={() => onNext?.()} />
     </View>
   );
 }
 
-export type ViewDeps = PickerDeps;
+// A titled block inside a menu.
+function MenuSection({ title, children, shared }: { title: string; children: ReactNode; shared: Shared }) {
+  return (
+    <View style={{ paddingVertical: 4 }}>
+      <Text style={[shared.styles.headingText, { paddingHorizontal: 8, paddingBottom: 2 }]}>{title}</Text>
+      {children}
+    </View>
+  );
+}
+
+interface FilterMenuProps {
+  state: ViewState;
+  save(next: Partial<ViewState>): void;
+  projects: readonly { key: string; title: string }[];
+  shared: Shared;
+}
+
+// Statuses, projects and quick toggles; each choice applies at once and is kept on this device.
+function FilterMenu({ state, save, projects, shared }: FilterMenuProps) {
+  const { t, props, config } = shared;
+  const statuses = state.statusFilter;
+  const needsMe = needsMeOn(statuses);
+  const toggleStatus = (indicator: Indicator) => {
+    const on = !needsMe && statuses.includes(indicator);
+    save({ statusFilter: on ? statuses.filter((item) => item !== indicator) : [...(needsMe ? [] : statuses), indicator] });
+  };
+  const toggleProject = (key: string) => save({ projectFilter: state.projectFilter.includes(key) ? state.projectFilter.filter((item) => item !== key) : [...state.projectFilter, key] });
+  return (
+    <>
+      <MenuSection title="Status" shared={shared}>
+        <MenuItem t={t} role="checkbox" icon="Hand" label="Needs me" hint="permission or failed" checked={needsMe} onPress={() => save({ statusFilter: needsMe ? [] : [...NEEDS_ME] })} />
+        {INDICATORS.map((indicator) => (
+          <MenuItem key={indicator} t={t} role="checkbox" dot={indicator === "done" ? props.theme.colors.foregroundMuted : indicator === "attention" ? props.theme.colors.foreground : props.theme.colors[INDICATOR_TOKEN[indicator]]} label={STATUS_TITLES[indicator]} checked={!needsMe && statuses.includes(indicator)} onPress={() => toggleStatus(indicator)} />
+        ))}
+      </MenuSection>
+      <MenuSection title="Show only" shared={shared}>
+        <MenuItem t={t} role="checkbox" icon="EyeOff" label="Hide done" checked={state.hideDone} onPress={() => save({ hideDone: !state.hideDone })} />
+        {config.list === "workspaces" ? (
+          <>
+            <MenuItem t={t} role="checkbox" icon="FileDiff" label="With changed lines" checked={state.changedOnly} onPress={() => save({ changedOnly: !state.changedOnly })} />
+            <MenuItem t={t} role="checkbox" icon="Pin" label="Pinned" checked={state.pinnedOnly} onPress={() => save({ pinnedOnly: !state.pinnedOnly })} />
+          </>
+        ) : null}
+      </MenuSection>
+      {config.list === "workspaces" && projects.length > 1 ? (
+        <MenuSection title="Projects" shared={shared}>
+          {projects.map((project) => (
+            <MenuItem key={project.key} t={t} role="checkbox" dot={tileColor(project.title)} label={project.title} checked={state.projectFilter.includes(project.key)} onPress={() => toggleProject(project.key)} />
+          ))}
+        </MenuSection>
+      ) : null}
+      <View style={{ borderTopWidth: 1, borderTopColor: t.c.border, paddingTop: 4 }}>
+        <MenuItem t={t} icon="X" label="Clear filters" onPress={() => save({ statusFilter: [], projectFilter: [], hideDone: false, changedOnly: false, pinnedOnly: false })} />
+      </View>
+    </>
+  );
+}
+
+// Grouping, sorting, rows per group and row details, saved to the active layout so every app
+// shows the same list.
+function ViewMenu({ update, shared }: { update(patch: Partial<ViewConfig>): void; shared: Shared }) {
+  const { t, config } = shared;
+  const radio = <Value extends string>(value: Value, current: Value, label: string, apply: () => void, hint?: string) => <MenuItem key={value} t={t} role="radio" label={label} hint={hint} checked={value === current} onPress={apply} />;
+  const perGroup = config.rowLimit.enabled ? config.rowLimit.rows : 0;
+  return (
+    <>
+      <MenuSection title="Group by" shared={shared}>
+        {(
+          [
+            ["project", "Project"],
+            ["status", "Status"],
+            ["activity", "Last used"],
+            ["label", "Label"],
+            ["none", "No groups"],
+          ] as const
+        ).map(([value, label]) => radio(value, config.groupBy, label, () => update({ groupBy: value })))}
+      </MenuSection>
+      <MenuSection title="Sort by" shared={shared}>
+        {(
+          [
+            ["activity", "Last prompt"],
+            ["status", "Status"],
+            ["name", "Name"],
+            ["created", "Newest"],
+            ["statusChanged", "Latest status change"],
+            ["changes", "Most changed lines"],
+          ] as const
+        ).map(([value, label]) => radio(value, config.orderBy, label, () => update({ orderBy: value })))}
+      </MenuSection>
+      <MenuSection title="Per group" shared={shared}>
+        {[...new Set([5, 10, 20, ...(perGroup && ![5, 10, 20].includes(perGroup) ? [perGroup] : []), 0])].map((rows) =>
+          radio(String(rows), String(perGroup), rows === 0 ? "Show all" : `${rows}, then Show more`, () => update({ rowLimit: rows === 0 ? { ...config.rowLimit, enabled: false } : { enabled: true, rows } })),
+        )}
+      </MenuSection>
+      {config.list === "workspaces" ? (
+        <MenuSection title="Chats under workspaces" shared={shared}>
+          {radio("off", config.showAgents ? config.agentsFor ?? "active" : "off", "Hidden", () => update({ showAgents: false }))}
+          {radio("active", config.showAgents ? config.agentsFor ?? "active" : "off", "Open workspace only", () => update({ showAgents: true, agentsFor: "active" }))}
+          {radio("all", config.showAgents ? config.agentsFor ?? "active" : "off", "Every workspace", () => update({ showAgents: true, agentsFor: "all" }))}
+        </MenuSection>
+      ) : null}
+      <MenuSection title="Rows" shared={shared}>
+        <MenuItem t={t} role="checkbox" label="Comfortable height" checked={config.density === "comfortable"} onPress={() => update({ density: config.density === "comfortable" ? "compact" : "comfortable" })} />
+        <MenuItem t={t} role="checkbox" label="Branch" checked={config.details.branch} onPress={() => update({ details: { ...config.details, branch: !config.details.branch } })} />
+        <MenuItem t={t} role="checkbox" label="Changed lines" checked={config.details.diff} onPress={() => update({ details: { ...config.details, diff: !config.details.diff } })} />
+        <MenuItem t={t} role="checkbox" label="Time in status" checked={config.details.timeInStatus} onPress={() => update({ details: { ...config.details, timeInStatus: !config.details.timeInStatus } })} />
+        <MenuItem t={t} role="checkbox" label="Counts in headings" checked={config.counts} onPress={() => update({ counts: !config.counts })} />
+      </MenuSection>
+    </>
+  );
+}
+
+export interface ViewDeps extends PickerDeps {
+  // Saves the view's group, sort and limit options to the active layout.
+  updateView(patch: Partial<ViewConfig>): Promise<void>;
+}
 
 interface RowSource {
   sections: { key: string; title: string | null; items: readonly { key: string }[] }[];
@@ -532,6 +663,13 @@ interface RowSource {
 }
 
 type Where<Snapshot> = (item: Snapshot) => boolean;
+
+// Next visits what needs the user in the order the view shows it, then anything a filter hides,
+// so a filter never makes Next say "Nothing needs you" while something does.
+function withHidden<Ref extends { key: string }>(shown: readonly Ref[], all: readonly Ref[]): Ref[] {
+  const keys = new Set(shown.map((ref) => ref.key));
+  return [...shown, ...all.filter((ref) => !keys.has(ref.key))];
+}
 
 function workspaceRows(config: ViewConfig) {
   const compare = compareWorkspaces(config);
@@ -548,8 +686,8 @@ function workspaceRows(config: ViewConfig) {
     const grouped = useSections((workspace) => shown(workspace) && !(pinnedApart && workspace.pinnedAt !== null));
     const sections = pinnedApart && pinned.length ? [{ key: "pinned", title: "Pinned", items: pinned }, ...grouped] : grouped;
     const protectedKeys = new Set(useWorkspaces({ where: (workspace) => shown(workspace) && isProtected(workspace) }).map((ref) => ref.key));
-    const waiting = new Set(useWorkspaces({ where: (workspace) => isVisible(workspace) && needsAttention(workspace.indicator) }).map((ref) => ref.key));
-    const next = nextAttention(attentionOrder(sections, waiting), props.active.workspace?.key ?? null);
+    const waitingRefs = useWorkspaces({ where: (workspace) => isVisible(workspace) && needsAttention(workspace.indicator), orderBy: compare });
+    const next = nextAttention(withHidden(attentionOrder(sections, new Set(waitingRefs.map((ref) => ref.key))), waitingRefs), props.active.workspace?.key ?? null);
     return {
       sections,
       protectedKeys,
@@ -573,8 +711,8 @@ function chatRows(config: ViewConfig) {
     const sections = useSections(shown);
     const isProtectedChat = (chat: PluginAgentSnapshot) => ["needs_input", "failed"].includes(chatIndicator(chat));
     const protectedKeys = new Set(useAgents({ where: (chat) => shown(chat) && isProtectedChat(chat) }).map((ref) => ref.key));
-    const waiting = new Set(useAgents({ where: (chat) => isListedChat(chat) && needsAttention(chatIndicator(chat)) }).map((ref) => ref.key));
-    const next = nextAttention(attentionOrder(sections, waiting), props.active.agent?.key ?? null);
+    const waitingRefs = useAgents({ where: (chat) => isListedChat(chat) && needsAttention(chatIndicator(chat)), orderBy: compare });
+    const next = nextAttention(withHidden(attentionOrder(sections, new Set(waitingRefs.map((ref) => ref.key))), waitingRefs), props.active.agent?.key ?? null);
     return {
       sections,
       protectedKeys,
@@ -600,11 +738,20 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     const styles = useMemo(() => viewStyles(props.theme, config), [props.theme]);
     const t = useTokens(props.theme, TOUCH);
     const reminders = remindersOf(tasksOf(useValue(deps.tasks)));
-    const now = useReminderClock(reminders.map((entry) => entry.reminder), config.details.timeInStatus);
+    // Rows show times, so the clock ticks every minute.
+    const now = useReminderClock(reminders.map((entry) => entry.reminder), true);
     const viewState = useSettings(viewStateSettings);
     const state = viewState.status === "ready" ? viewState.values : DEFAULT_VIEW_STATE;
-    const [search, setSearch] = useState("");
-    const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+    const ui = useValue(viewUi);
+    const setUi = (patch: Partial<typeof ui>) => viewUi.set({ ...viewUi.get(), ...patch });
+    const { search, searching, menu } = ui;
+    const expanded = new Set(ui.expanded);
+    const setSearch = (text: string) => setUi({ search: text });
+    const setSearching = (on: boolean) => setUi({ searching: on });
+    const setMenu = (next: Menu) => setUi({ menu: next });
+    const setExpanded = (next: ReadonlySet<string>) => setUi({ expanded: [...next] });
+    // Project names for the Projects filter, from the same visible workspaces.
+    const projects = useWorkspaces({ where: isVisible, groupBy: (workspace) => ({ key: workspace.project.key, title: workspace.projectDisplayName }) }).map((group) => ({ key: group.key, title: group.title ?? "Project" }));
     const toast = useToast();
     // Tells the settings screen that Paseo is showing this view.
     useEffect(() => viewPresence.set(true), []);
@@ -616,7 +763,18 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
       });
     };
 
-    const filter: Filter = { statuses: config.filterBar ? state.statusFilter : [], search: config.filterBar ? search : "" };
+    const on = config.filterBar;
+    const filter: Filter = {
+      statuses: on ? state.statusFilter : [],
+      search: on ? search : "",
+      // Projects, changed lines and pins exist on workspaces only; the chat list ignores them.
+      projects: on && config.list === "workspaces" ? state.projectFilter : [],
+      hideDone: on && state.hideDone,
+      changedOnly: on && config.list === "workspaces" && state.changedOnly,
+      pinnedOnly: on && config.list === "workspaces" && state.pinnedOnly,
+    };
+    const filters = filter.statuses.length + (filter.projects?.length ?? 0) + Number(filter.hideDone) + Number(filter.changedOnly) + Number(filter.pinnedOnly);
+    const updateView = (patch: Partial<ViewConfig>) => void deps.updateView(patch).catch(report(toast, "change the view"));
     const source = useRows(filter, props);
     const { sections, protectedKeys } = source;
 
@@ -646,29 +804,47 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     const nothing = sections.every((section) => section.items.length === 0) && dueEntries.length === 0;
     const remindersFolded = collapsed.has(REMINDERS_GROUP);
 
+    const placeholder = config.list === "chats" ? "Search chats" : "Search name, branch or project";
+    const activeTags = [
+      ...(needsMeOn(filter.statuses) ? [{ key: "needs", label: "Needs me", color: props.theme.colors.statusWarning, remove: () => saveState({ statusFilter: [] }) }] : filter.statuses.map((indicator) => ({ key: indicator, label: STATUS_TITLES[indicator], color: props.theme.colors[INDICATOR_TOKEN[indicator]], remove: () => saveState({ statusFilter: state.statusFilter.filter((item) => item !== indicator) }) }))),
+      ...(filter.projects ?? []).map((key) => ({ key, label: projects.find((project) => project.key === key)?.title ?? "Project", color: tileColor(projects.find((project) => project.key === key)?.title ?? ""), remove: () => saveState({ projectFilter: state.projectFilter.filter((item) => item !== key) }) })),
+      ...(filter.hideDone ? [{ key: "hideDone", label: "Done hidden", color: undefined, remove: () => saveState({ hideDone: false }) }] : []),
+      ...(filter.changedOnly ? [{ key: "changed", label: "Changed", color: undefined, remove: () => saveState({ changedOnly: false }) }] : []),
+      ...(filter.pinnedOnly ? [{ key: "pinned", label: "Pinned", color: undefined, remove: () => saveState({ pinnedOnly: false }) }] : []),
+    ];
+
     return (
-      <ScrollView style={styles.scroll}>
-        {config.filterBar ? (
-          <FilterBar
-            search={search}
-            onSearch={setSearch}
-            statuses={state.statusFilter}
-            onStatuses={(statusFilter) => saveState({ statusFilter })}
-            onNext={source.onNext}
-            placeholder={config.list === "chats" ? "Search chats" : "Search name, branch or project"}
-            shared={shared}
-          />
+      <View style={styles.scroll}>
+        {on ? (
+          <Header menu={menu} setMenu={setMenu} searching={searching} setSearching={setSearching} search={search} onSearch={setSearch} filters={filters} onNext={source.onNext} shared={shared} />
         ) : null}
+        {on && (searching || search !== "" || activeTags.length) ? (
+          <View style={styles.tools}>
+            {searching || search !== "" ? <Field t={t} plain autoFocus={searching && search === ""} icon="Search" value={search} onChangeText={setSearch} placeholder={placeholder} accessibilityLabel={placeholder} /> : null}
+            {activeTags.length ? (
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4 }}>
+                {activeTags.map((tag) => (
+                  <Tag key={tag.key} t={t} label={tag.label} color={tag.color} onRemove={tag.remove} />
+                ))}
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+        <View style={{ flex: 1 }}>
+      <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 12 }}>
         {dueEntries.length > 0 ? (
           <View>
             <GroupHeading title="Reminders" count={dueEntries.length} collapsed={remindersFolded} onToggle={() => toggleCollapsed(REMINDERS_GROUP)} shared={shared} />
             {remindersFolded ? null : dueEntries.map((entry) => <ReminderRow key={`${entry.taskId}:${entry.reminder.setAt}`} entry={entry} chat={entry.agentId ? dueChats.get(entry.agentId) ?? null : null} shared={shared} />)}
           </View>
         ) : null}
-        {nothing ? <Text style={styles.empty}>{filter.search || filter.statuses.length ? `No ${source.noun} match` : `No ${source.noun} yet`}</Text> : null}
+        {nothing ? <Text style={styles.empty}>{filter.search || filters ? `No ${source.noun} match` : `No ${source.noun} yet`}</Text> : null}
         {sections.map((section) => {
           const folded = section.title !== null && collapsed.has(section.key);
-          const { rows, hidden } = capRows(section.items, protectedKeys, config.rowLimit, expanded.has(section.key));
+          // The Pinned section is never shortened: pins are few by choice.
+          const limit = section.key === "pinned" ? { ...config.rowLimit, enabled: false } : config.rowLimit;
+          const { rows, hidden } = capRows(section.items, protectedKeys, limit, expanded.has(section.key));
+          const collapsible = expanded.has(section.key) && capRows(section.items, protectedKeys, limit, false).hidden > 0;
           const heading =
             section.title === null ? null : source.groupsAreWorkspaces ? (
               <WorkspaceGroupHeading workspaceId={section.title} count={section.items.length} collapsed={folded} onToggle={() => toggleCollapsed(section.key)} shared={shared} />
@@ -693,10 +869,34 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
                   <Text style={styles.count}>{hidden}</Text>
                 </Pressable>
               ) : null}
+              {!folded && collapsible ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Show fewer ${source.noun}`}
+                  onPress={() => setExpanded(new Set([...expanded].filter((key) => key !== section.key)))}
+                  style={styles.more}
+                >
+                  <Icon name="ChevronUp" size={14} color={props.theme.colors.foregroundMuted} />
+                  <Text style={styles.moreText}>Show less</Text>
+                </Pressable>
+              ) : null}
             </View>
           );
         })}
       </ScrollView>
+          {menu ? (
+            <>
+              {/* Tapping outside the menu closes it. */}
+              <Pressable accessibilityRole="button" accessibilityLabel="Close menu" onPress={() => setMenu(null)} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
+              <View style={styles.menu}>
+                <ScrollView>
+                  {menu === "filter" ? <FilterMenu state={state} save={saveState} projects={projects} shared={shared} /> : <ViewMenu update={updateView} shared={shared} />}
+                </ScrollView>
+              </View>
+            </>
+          ) : null}
+        </View>
+      </View>
     );
   };
 }

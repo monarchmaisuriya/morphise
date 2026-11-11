@@ -11,6 +11,11 @@ export const viewStateSettings = defineSettings({
   schema: z.object({
     collapsed: z.array(z.string().max(300)).max(500).default([]),
     statusFilter: z.array(z.enum(INDICATORS)).max(INDICATORS.length).default([]),
+    // Project keys to show; none means every project.
+    projectFilter: z.array(z.string().max(300)).max(200).default([]),
+    hideDone: z.boolean().default(false),
+    changedOnly: z.boolean().default(false),
+    pinnedOnly: z.boolean().default(false),
   }),
 });
 

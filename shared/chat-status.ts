@@ -1,4 +1,4 @@
-import { type Filter, STATUS_TITLES } from "./arrange";
+import { ACTIVITY_GROUPS, activityGroup, type Filter, STATUS_TITLES } from "./arrange";
 import type { Indicator, Profile } from "./profile";
 
 // The fields of a Paseo chat (agent) snapshot that decide its status.
@@ -37,6 +37,7 @@ export const chatName = (chat: Pick<ListedChat, "title" | "provider">) => chat.t
 
 export function chatMatches(chat: ListedChat, filter: Filter): boolean {
   if (filter.statuses.length > 0 && !filter.statuses.includes(chatIndicator(chat))) return false;
+  if (filter.hideDone && chatIndicator(chat) === "done") return false;
   const query = filter.search.trim().toLowerCase();
   return query === "" || chatName(chat).toLowerCase().includes(query);
 }
@@ -46,7 +47,8 @@ export function compareChats(config: View) {
   const byStatus = (left: ListedChat, right: ListedChat) => (rank.get(chatIndicator(left)) ?? 0) - (rank.get(chatIndicator(right)) ?? 0);
   const byActivity = (left: ListedChat, right: ListedChat) => right.lastActivityAt.localeCompare(left.lastActivityAt);
   const byName = (left: ListedChat, right: ListedChat) => chatName(left).localeCompare(chatName(right));
-  const primary = { status: byStatus, activity: byActivity, name: byName }[config.orderBy];
+  // Chats carry no creation or diff data here; those orders fall back to recent activity.
+  const primary = { status: byStatus, activity: byActivity, name: byName, created: byActivity, statusChanged: byActivity, changes: byActivity }[config.orderBy];
   const rules = [primary, config.thenBy === "name" ? byName : byActivity, (left: ListedChat, right: ListedChat) => left.id.localeCompare(right.id)];
   return (left: ListedChat, right: ListedChat) => {
     for (const rule of rules) {
@@ -63,6 +65,10 @@ export function chatGroupKey(config: View, chat: ListedChat): { key: string; tit
   if (config.groupBy === "status") {
     const indicator: Indicator = chatIndicator(chat);
     return { key: `status:${indicator}`, title: STATUS_TITLES[indicator] };
+  }
+  if (config.groupBy === "activity") {
+    const index = activityGroup(chat.lastActivityAt, new Date());
+    return { key: `activity:${index}`, title: ACTIVITY_GROUPS[index] };
   }
   return { key: `workspace:${chat.workspaceId}`, title: chat.workspaceId };
 }

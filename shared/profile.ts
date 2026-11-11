@@ -146,15 +146,18 @@ const viewSchema = z
     enabled: z.boolean().default(false),
     // What the view lists: workspaces, or every chat on its own row.
     list: z.enum(["workspaces", "chats"]).default("workspaces"),
-    groupBy: z.enum(["project", "label", "status", "none"]).default("project"),
-    orderBy: z.enum(["status", "activity", "name"]).default("activity"),
+    // "activity" groups by when a workspace was last used: Today, Yesterday, This week, Earlier.
+    groupBy: z.enum(["project", "label", "status", "activity", "none"]).default("project"),
+    // "created" newest first; "statusChanged" most recent status change first; "changes" most
+    // changed lines first.
+    orderBy: z.enum(["status", "activity", "name", "created", "statusChanged", "changes"]).default("activity"),
     // Breaks ties left by orderBy.
     thenBy: z.enum(["activity", "name"]).default("activity"),
     statusOrder: statusOrderSchema,
     pinnedFirst: z.boolean().default(true),
     counts: z.boolean().default(true),
     // Off by `enabled`, never by a zero row count.
-    rowLimit: z.strictObject({ enabled: z.boolean().default(false), rows: z.int().min(3).max(100).default(8) }).prefault({}),
+    rowLimit: z.strictObject({ enabled: z.boolean().default(true), rows: z.int().min(3).max(100).default(5) }).prefault({}),
     density: z.enum(["compact", "comfortable"]).default("compact"),
     details: z
       .strictObject({
@@ -170,6 +173,9 @@ const viewSchema = z
       .default(["pin"]),
     filterBar: z.boolean().default(true),
     showAgents: z.boolean().default(false),
+    // Which workspaces list their chats when showAgents is on: only the open one (when unset), or
+    // all. No default, so documents nobody changed stay readable by 0.5, which rejects new keys.
+    agentsFor: z.enum(["active", "all"]).optional(),
   })
   .prefault({});
 

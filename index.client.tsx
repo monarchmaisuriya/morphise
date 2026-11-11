@@ -19,6 +19,7 @@ import { createTaskStore, createTaskWriter, tasksOf } from "./client/task-store"
 import type { Announcement, SurfaceDeps } from "./client/task-surfaces";
 import { isWindowVisible, showNotification } from "./client/web";
 import { profileSettings } from "./shared/document";
+import type { Profile } from "./shared/profile";
 import { remindersKeeper } from "./shared/reminder-contracts";
 import { REMINDER_KEY } from "./shared/reminders";
 import { archiveOldDone, rulesForTransitions } from "./shared/rules";
@@ -53,6 +54,28 @@ export default function contribute(client: PluginClientContext) {
     if (result.status === "conflict") throw new Error("Another app saved the profile at the same moment; try again");
     if (result.status === "invalid") throw new Error(result.error);
   }
+  // The sidebar view's own options menu changes the active layout's view settings, the same
+  // document the settings screen edits. It reads the newest saved document and applies the change
+  // to it, again when another app saved first, so quick taps and other apps' saves both survive.
+  // Only the given keys are written; everything else stays as stored.
+  async function updateView(patch: Partial<Profile["sidebar"]["view"]>) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const state = await client.rpc(profileRpc.read, {});
+      if (state.status !== "ready") throw new Error(`The saved profile is invalid: ${state.error}`);
+      const document = state.values as { activeLayout?: string; layouts?: { id: string; profile?: Record<string, unknown> }[] };
+      const layouts = (document.layouts ?? []).map((layout) => {
+        if (layout.id !== document.activeLayout) return layout;
+        const profile = layout.profile ?? {};
+        const sidebar = (profile.sidebar ?? {}) as Record<string, unknown>;
+        const view = (sidebar.view ?? {}) as Record<string, unknown>;
+        return { ...layout, profile: { ...profile, sidebar: { ...sidebar, view: { ...view, ...patch } } } };
+      });
+      const result = await client.rpc(profileRpc.write, { revision: state.revision, values: { ...document, layouts } as typeof state.values });
+      if (result.status === "saved") return;
+      if (result.status === "invalid") throw new Error(result.error);
+    }
+    throw new Error("Other apps kept saving the profile at the same moment; try again");
+  }
   const announcements = createValueStore<Announcement>({ seq: 0, entries: [] });
   let directory: Directory = EMPTY_DIRECTORY;
   let stopped = false;
@@ -75,6 +98,7 @@ export default function contribute(client: PluginClientContext) {
     chats,
     workspaces: workspaceList,
     announcements,
+    updateView,
     reminderSettings: () => profileOf(store.get()).reminders,
   };
   const reconciler = createReconciler(createSections(client, deps, surfaces, switchLayout), (list) => problems.set(list));
