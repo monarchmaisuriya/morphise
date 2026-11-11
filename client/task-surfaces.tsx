@@ -1,7 +1,7 @@
 import type { PluginButtonContentProps, PluginSidebarItemProps, PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { Icon, SidebarRow, useToast } from "@getpaseo/plugin/client/ui";
 import { useEffect, useRef } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import type { z } from "zod";
 import { dueCount } from "../shared/board";
 import { parseQuickAdd } from "../shared/quick-add";
@@ -18,6 +18,7 @@ import type { AlertEntry } from "./reminder-alerts";
 import { useReminderClock } from "./reminder-clock";
 import { ReminderPicker } from "./reminder-picker";
 import { tasksOf } from "./task-store";
+import { Button, MenuItem, useTokens } from "./ui/kit";
 import { requestNotifications } from "./web";
 
 export interface Announcement {
@@ -92,15 +93,17 @@ export function createTasksSidebarItem(deps: SurfaceDeps) {
 // The popover behind a chat's "Remind me" pill: the reminder picker, and adding the chat as a task.
 export function createChatPopover(deps: BoardDeps) {
   return function ChatReminderPopover(props: PluginButtonContentProps) {
-    const { workspaceId, theme, close } = props;
+    const { workspaceId, theme, layout, close } = props;
+    const t = useTokens(theme, layout.compact);
     const toast = useToast();
     const chats = useValue(deps.chats);
     // A pill belongs to one chat; a header button to a workspace, so it uses that workspace's chat.
     const chatId = props.context === "agent" ? props.agentId : chatForWorkspace(chats, workspaceId, null);
     if (!chatId) {
       return (
-        <View style={{ padding: 12, maxWidth: 300 }}>
-          <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12 }}>This workspace has no open chat to remind you about.</Text>
+        <View style={{ padding: 16, width: 300, maxWidth: "100%", alignItems: "center", gap: 8 }}>
+          <Icon name="AlarmClockOff" size={20} color={t.c.foregroundMuted} />
+          <Text style={[t.text.meta, { textAlign: "center" }]}>This workspace has no open chat to remind you about.</Text>
         </View>
       );
     }
@@ -108,18 +111,28 @@ export function createChatPopover(deps: BoardDeps) {
     const addTask = () =>
       void runTaskCommand(deps, chatId, workspaceId, "").then(
         () => {
-          toast.show(`Added "${title}" to your tasks`, { variant: "success" });
+          toast.show(`Added “${title}” to your tasks`, { variant: "success" });
           close();
         },
         (error: unknown) => toast.error(`Could not add the task: ${message(error)}`),
       );
     return (
-      <View>
-        <ReminderPicker deps={deps} target={{ kind: "chat", agentId: chatId, workspaceId, title }} title={title} theme={theme} onDone={close} />
-        <Pressable accessibilityRole="button" accessibilityLabel="Add this chat to your tasks" onPress={addTask} style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingBottom: 12 }}>
-          <Icon name="ListPlus" size={14} color={theme.colors.accent} />
-          <Text style={{ color: theme.colors.accent, fontSize: 12 }}>Add this chat to your tasks</Text>
-        </Pressable>
+      <View style={{ width: 340, maxWidth: "100%" }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingTop: 14 }}>
+          <View style={{ width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: t.c.surface2 }}>
+            <Icon name="AlarmClock" size={15} color={t.c.statusWarning} />
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={t.text.heading}>Remind me</Text>
+            <Text style={t.text.small} numberOfLines={1}>
+              {title}
+            </Text>
+          </View>
+        </View>
+        <ReminderPicker deps={deps} target={{ kind: "chat", agentId: chatId, workspaceId, title }} title={title} theme={theme} compact={layout.compact} embedded onDone={close} />
+        <View style={{ borderTopWidth: 1, borderTopColor: t.c.border, padding: 6 }}>
+          <MenuItem t={t} icon="ListPlus" label="Add this chat to your tasks" onPress={addTask} />
+        </View>
       </View>
     );
   };
@@ -127,10 +140,11 @@ export function createChatPopover(deps: BoardDeps) {
 
 type ReminderRowData = z.infer<typeof reminderRowSchema>;
 
-// The row the daemon writes into a chat when a task's reminder comes due. It stays actionable
-// while that reminder is still the task's current one.
+// The row the daemon writes into a chat when a task's reminder comes due: a small card that stays
+// actionable while that reminder is still the task's current one.
 export function createReminderRow(deps: BoardDeps) {
-  return function ReminderTimelineRow({ item, theme }: PluginTimelineItemProps<ReminderRowData>) {
+  return function ReminderTimelineRow({ item, theme, layout }: PluginTimelineItemProps<ReminderRowData>) {
+    const t = useTokens(theme, layout.compact);
     const document = tasksOf(useValue(deps.tasks));
     const toast = useToast();
     const task = item.data.taskId ? document.tasks.find((entry) => entry.id === item.data.taskId) ?? null : null;
@@ -138,31 +152,28 @@ export function createReminderRow(deps: BoardDeps) {
     const finished = task === null || task.archivedAt !== null || task.column === done?.id;
     const open = !finished && task.reminder?.setAt === item.data.setAt;
     // Snoozed or changed since this row was written: it points at the newer time, not "done".
-    const later = !finished && !open && task.reminder ? ` (moved to ${formatDue(task.reminder, new Date())})` : "";
+    const status = open ? "Due now" : !finished && task.reminder ? `Moved to ${formatDue(task.reminder, new Date())}` : "Done";
     const run = (...operations: Parameters<typeof deps.apply>) => void deps.apply(...operations).catch((error: unknown) => toast.error(`Could not change the reminder: ${message(error)}`));
-    const button = (label: string, onPress: () => void) => (
-      <Pressable key={label} accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: theme.colors.border }}>
-        <Text style={{ color: theme.colors.foreground, fontSize: 12 }}>{label}</Text>
-      </Pressable>
-    );
     return (
-      <View style={{ gap: 4, paddingVertical: 6 }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <Icon name="AlarmClock" size={14} color={open ? theme.colors.statusWarning : theme.colors.foregroundMuted} />
-          <Text style={{ color: theme.colors.foreground, fontSize: 13, flexShrink: 1 }}>
-            Reminder: {item.data.title ?? "you asked to come back to this chat"}
-            {open ? "" : later || " (done)"}
-          </Text>
-          {open && task
-            ? [
-                button("Done", () => run({ kind: "setReminder", id: task.id, reminder: null })),
-                button("+15m", () => run({ kind: "remindAgain", id: task.id, minutes: 15 })),
-                button("+1h", () => run({ kind: "remindAgain", id: task.id, minutes: 60 })),
-                done ? button(`Move to ${done.name}`, () => run({ kind: "moveTask", id: task.id, column: done.id })) : null,
-              ]
-            : null}
+      <View style={{ marginVertical: 6, padding: 12, gap: 8, maxWidth: 640, borderRadius: t.radius.card, borderWidth: 1, borderColor: open ? t.c.statusWarning : t.c.border, backgroundColor: t.c.surface1 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Icon name={open ? "AlarmClock" : "AlarmClockCheck"} size={16} color={open ? t.c.statusWarning : t.c.foregroundMuted} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={[t.text.body, { fontWeight: "600" }]} numberOfLines={2}>
+              {item.data.title ?? "You asked to come back to this chat"}
+            </Text>
+            <Text style={[t.text.small, open ? { color: t.c.statusWarning } : null]}>Reminder · {status}</Text>
+          </View>
         </View>
-        {item.data.note ? <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12, marginLeft: 22 }}>{item.data.note}</Text> : null}
+        {item.data.note ? <Text style={[t.text.meta, { marginLeft: 26 }]}>{item.data.note}</Text> : null}
+        {open && task ? (
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginLeft: 26 }}>
+            <Button t={t} icon="Check" label="Done" accessibilityLabel="Clear this reminder" onPress={() => run({ kind: "setReminder", id: task.id, reminder: null })} />
+            <Button t={t} label="+15m" accessibilityLabel="Remind me again in 15 minutes" onPress={() => run({ kind: "remindAgain", id: task.id, minutes: 15 })} />
+            <Button t={t} label="+1h" accessibilityLabel="Remind me again in an hour" onPress={() => run({ kind: "remindAgain", id: task.id, minutes: 60 })} />
+            {done ? <Button t={t} variant="ghost" icon="CircleCheck" label={`Move to ${done.name}`} onPress={() => run({ kind: "moveTask", id: task.id, column: done.id })} /> : null}
+          </View>
+        ) : null}
       </View>
     );
   };

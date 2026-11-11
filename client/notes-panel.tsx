@@ -1,8 +1,9 @@
 import { type PluginAgentPanelProps, useAgent, usePaseo } from "@getpaseo/plugin/client";
-import { TextInput } from "@getpaseo/plugin/client/ui";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Icon, TextInput } from "@getpaseo/plugin/client/ui";
+import { useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { MAX_NOTE_LENGTH, notePatch, readNote } from "../shared/notes";
+import { useTokens } from "./ui/kit";
 
 const SAVE_DELAY_MS = 1000;
 
@@ -66,51 +67,41 @@ function NotesBody({ agentId, theme, compact }: { agentId: string; theme: Theme;
     [],
   );
 
-  const styles = useMemo(
-    () => ({
-      panel: { flex: 1, padding: compact ? 12 : 16, gap: 8, backgroundColor: theme.colors.surface0 },
-      input: {
-        flex: 1,
-        minHeight: 160,
-        padding: 10,
-        fontSize: 13,
-        color: theme.colors.foreground,
-        backgroundColor: theme.colors.surface1,
-        borderColor: theme.colors.border,
-        borderWidth: 1,
-        borderRadius: 8,
-        textAlignVertical: "top" as const,
-      },
-      status: { color: theme.colors.foregroundMuted, fontSize: 11 },
-      failed: { color: theme.colors.statusDanger, fontSize: 11 },
-    }),
-    [theme, compact],
-  );
-
+  const t = useTokens(theme, compact);
   const statusText =
     status.kind === "saving"
-      ? "Saving"
+      ? "Saving…"
       : status.kind === "saved"
         ? `Saved ${pad(status.at.getHours())}:${pad(status.at.getMinutes())}`
         : status.kind === "failed"
           ? `Not saved: ${status.message}`
           : "Saved on this chat; every app sees it";
+  const statusIcon = status.kind === "saving" ? "LoaderCircle" : status.kind === "failed" ? "TriangleAlert" : "Check";
 
   return (
-    <View style={styles.panel}>
+    <View style={{ flex: 1, padding: compact ? 12 : 16, gap: 10, backgroundColor: t.c.surface0 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <Icon name="NotebookPen" size={15} color={t.c.foregroundMuted} />
+        <Text style={t.text.heading}>Notes</Text>
+        <View style={{ flex: 1 }} />
+        <Text style={[t.text.small, { opacity: 0.7 }]}>
+          {text.length}/{MAX_NOTE_LENGTH}
+        </Text>
+      </View>
       <TextInput
         accessibilityLabel="Notes for this chat"
-        placeholder="Notes for this chat: to-dos, context, links"
-        placeholderTextColor={theme.colors.foregroundMuted}
+        placeholder="To-dos, context, links… saved as you type"
+        placeholderTextColor={t.c.foregroundMuted}
         multiline
         maxLength={MAX_NOTE_LENGTH}
         value={text}
         onChangeText={setDraft}
-        style={styles.input}
+        style={{ flex: 1, minHeight: 200, padding: 12, fontSize: compact ? 15 : 14, lineHeight: compact ? 22 : 20, color: t.c.foreground, backgroundColor: t.c.surface1, borderColor: t.c.border, borderWidth: 1, borderRadius: t.radius.card, textAlignVertical: "top" }}
       />
-      <Text style={status.kind === "failed" ? styles.failed : styles.status}>
-        {statusText} · {text.length}/{MAX_NOTE_LENGTH}
-      </Text>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <Icon name={statusIcon} size={12} color={status.kind === "failed" ? t.c.statusDanger : t.c.foregroundMuted} />
+        <Text style={status.kind === "failed" ? t.text.danger : t.text.small}>{statusText}</Text>
+      </View>
     </View>
   );
 }

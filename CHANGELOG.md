@@ -2,6 +2,34 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.4.0 - 2026-11-11
+
+A redesign of every Morphise screen to sit naturally beside Paseo's own. No data changes: 0.3 boards, reminders and settings load as they are.
+
+- One set of controls throughout, sized from Paseo's own sidebar and settings: 32px controls (40px on phones), 8px rows, muted section labels, hover states, colours only from the theme.
+- Fixes text boxes that collapsed to 16px tall in the card editor and elsewhere.
+- Board:
+  - Board, Today and Archived as one segmented control with counts.
+  - Views, Filter (with a count of active filters) and Display (order, rows, card size) open as panels; active filters stay visible as removable tags.
+  - Quick add shows what it understood as tags under the box.
+- Columns: borderless, with the count ("3 / 5" against a limit), "hidden by filters" when a filter hides cards, and inline adding (type a title, press Enter, keep going).
+- Cards: priority icon, title, labels as dot tags, one line of due date, reminder, checklist and links. Move arrows appear on hover (always on phones). Swimlanes show priority and workspace names.
+- Card editor:
+  - Large title and description, then a property list: Status menu, Priority control, Labels, Due date with Today, Tomorrow and Next Monday, and Reminder, Link and Chat.
+  - A checklist with a progress bar.
+- Reminder picker: a list of choices, each with the time it lands on ("In 15 minutes, 22:01"), plus "Next week" and "Custom time…" with a live preview.
+- Customise: grouped sections with clear rows for columns, labels, automations and archiving.
+- Chat "Remind me" popover (pill and workspace header): a compact header with the chat's name on one line, the new picker, and "Add this chat to your tasks" as a menu row; a clear empty state when a workspace has no chat.
+- Reminder row in chats: a small card with the task, its note, "Due now", "Moved to …" or "Done", and Done, +15m, +1h and Move to Done buttons.
+- Notes panel: a header with the character count, a roomier text area, and a save status with an icon.
+- Settings: the status order is a list with colour dots and up and down buttons.
+- Morphise sidebar view:
+  - Rows match Paseo's: 36px, 8px radius, 14px titles, dimmer times, Paseo's selected colour, and native-style section labels.
+  - The status chip wall is now a filter menu with "Needs me", and active statuses show as removable tags.
+  - Pin and alarm buttons appear on hover, when set, or always on phones.
+
+Rolling back to 0.3.0: `paseo plugin update morphise --ref v0.3.0`.
+
 ## 0.3.0 - 2026-11-11
 
 - Tasks: a kanban board in the sidebar's "Tasks" row, as a Tasks panel in each workspace, and in the Command Center.

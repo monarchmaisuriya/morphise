@@ -1,7 +1,8 @@
 import { Icon, SettingsAction, SettingsCard, SettingsSection, TextInput } from "@getpaseo/plugin/client/ui";
 import type { ReactNode } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import type { Action } from "../../shared/actions";
+import { IconButton, tokens } from "../ui/kit";
 import { STATUS_TITLES } from "../../shared/arrange";
 import type { Layout, Prompt } from "../../shared/document";
 import { EMPTY_PROFILE, type Profile, TIMELINE_ITEM_TYPES } from "../../shared/profile";
@@ -113,32 +114,25 @@ function StatusOrder({ form }: { form: Form }) {
       [next[index], next[index + by]] = [next[index + by], next[index]];
     });
   const { theme } = form;
+  const t = tokens(theme, false);
+  const dot = { needs_input: t.c.statusWarning, attention: t.c.statusWarning, failed: t.c.statusDanger, running: t.c.accent, done: t.c.statusSuccess } as const;
   return (
-    <View style={{ paddingVertical: 8, paddingHorizontal: 12, gap: 4 }}>
-      <Text style={{ color: theme.colors.foreground, fontSize: 13 }}>Status order</Text>
-      <Text style={{ color: theme.colors.foregroundMuted, fontSize: 11 }}>Used to sort by status and to order status groups.</Text>
-      {order.map((indicator, index) => (
-        <View key={indicator} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <Text style={{ color: theme.colors.foreground, fontSize: 12, flex: 1 }}>
-            {index + 1}. {STATUS_TITLES[indicator]}
-          </Text>
-          {[
-            { label: "Up", by: -1, disabled: index === 0 },
-            { label: "Down", by: 1, disabled: index === order.length - 1 },
-          ].map((button) => (
-            <Pressable
-              key={button.label}
-              accessibilityRole="button"
-              accessibilityLabel={`Move ${STATUS_TITLES[indicator]} ${button.label.toLowerCase()}`}
-              disabled={button.disabled}
-              onPress={() => move(index, button.by)}
-              style={{ paddingHorizontal: 8, paddingVertical: 4, opacity: button.disabled ? 0.35 : 1 }}
-            >
-              <Text style={{ color: theme.colors.accent, fontSize: 12 }}>{button.label}</Text>
-            </Pressable>
-          ))}
-        </View>
-      ))}
+    <View style={{ paddingVertical: 10, paddingHorizontal: 16, gap: 6 }}>
+      <View style={{ gap: 2 }}>
+        <Text style={{ color: t.c.foreground, fontSize: 13 }}>Status order</Text>
+        <Text style={t.text.small}>Used to sort by status and to order status groups.</Text>
+      </View>
+      <View style={{ borderRadius: t.radius.row, borderWidth: 1, borderColor: t.c.border, overflow: "hidden" }}>
+        {order.map((indicator, index) => (
+          <View key={indicator} style={{ flexDirection: "row", alignItems: "center", gap: 10, minHeight: 36, paddingLeft: 12, paddingRight: 4, borderTopWidth: index === 0 ? 0 : 1, borderTopColor: t.c.border, backgroundColor: t.c.surface1 }}>
+            <Text style={[t.text.small, { width: 14 }]}>{index + 1}</Text>
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: dot[indicator] }} />
+            <Text style={{ color: t.c.foreground, fontSize: 13, flex: 1 }}>{STATUS_TITLES[indicator]}</Text>
+            <IconButton t={t} size="sm" icon="ChevronUp" label={`Move ${STATUS_TITLES[indicator]} up`} disabled={index === 0} onPress={() => move(index, -1)} />
+            <IconButton t={t} size="sm" icon="ChevronDown" label={`Move ${STATUS_TITLES[indicator]} down`} disabled={index === order.length - 1} onPress={() => move(index, 1)} />
+          </View>
+        ))}
+      </View>
     </View>
   );
 }

@@ -59,6 +59,17 @@ describe("boardColumns", () => {
     ]);
   });
 
+  it("counts the cards a filter shows apart from all cards in the column", () => {
+    const columns = boardColumns(document, { sort: "manual", swimlanes: "none", filter: { ...DEFAULT_FILTER, priorities: [1] } }, now);
+    expect([columns[1].count, columns[1].inScope, columns[1].shown]).toEqual([2, 2, 1]);
+  });
+
+  it("does not count other workspaces' cards as hidden by a filter in a workspace's board", () => {
+    const scoped = applyTaskOperation(document, { kind: "updateTask", id: "a", patch: { links: { workspaceId: "w1" } } }, now);
+    const columns = boardColumns(scoped, { sort: "manual", swimlanes: "none", filter: { ...DEFAULT_FILTER, workspaceId: "w1" } }, now);
+    expect([columns[1].count, columns[1].inScope, columns[1].shown]).toEqual([2, 1, 1]);
+  });
+
   it("flags a column over its WIP limit", () => {
     const limited = applyTaskOperation(document, { kind: "updateColumn", id: "todo", patch: { wipLimit: 1 } }, now);
     expect(boardColumns(limited, { sort: "manual", swimlanes: "none", filter: DEFAULT_FILTER }, now)[1].overLimit).toBe(true);

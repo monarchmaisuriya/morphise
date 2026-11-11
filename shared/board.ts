@@ -49,6 +49,10 @@ export interface BoardColumn {
   column: Column;
   // Every open task in the column, whatever the filter shows; the WIP limit counts these.
   count: number;
+  // The cards this board covers: all of them, or one workspace's in a workspace's board.
+  inScope: number;
+  // The cards the filter shows; inScope minus shown are hidden by the filter.
+  shown: number;
   overLimit: boolean;
   lanes: Lane[];
 }
@@ -77,6 +81,8 @@ export function boardColumns(document: TaskDocument, layout: Layout, now: Date):
     return {
       column,
       count: inColumn.length,
+      inScope: layout.filter.workspaceId === null ? inColumn.length : inColumn.filter((task) => task.links.workspaceId === layout.filter.workspaceId).length,
+      shown: shown.length,
       overLimit: column.wipLimit !== null && inColumn.length > column.wipLimit,
       lanes: lanesFor(shown, layout.swimlanes, document),
     };

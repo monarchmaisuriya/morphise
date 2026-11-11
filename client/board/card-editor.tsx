@@ -1,15 +1,17 @@
 import type { PluginTheme } from "@getpaseo/plugin";
-import { Icon, Modal, TextInput, useToast } from "@getpaseo/plugin/client/ui";
-import { type ReactNode, useMemo, useState } from "react";
+import { Icon, Modal, useToast } from "@getpaseo/plugin/client/ui";
+import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { slug, type TaskOperation } from "../../shared/task-ops";
 import type { Task, TaskDocument } from "../../shared/tasks";
-import { parseDueDate } from "../../shared/when";
+import { formatDue } from "../../shared/time-text";
+import { parseDueDate, todayDate } from "../../shared/when";
 import { useValue } from "../profile-store";
 import { ReminderPicker } from "../reminder-picker";
 import { tasksOf } from "../task-store";
+import { Button, Field, IconButton, PropertyRow, Segmented, Select, Tag, type Tokens, useTokens } from "../ui/kit";
 import type { BoardDeps } from "./deps";
-import { boardStyles, PRIORITY_COLOR } from "./styles";
+import { PRIORITY, priorityColor } from "./styles";
 
 export type EditorTarget = { kind: "existing"; taskId: string } | { kind: "new"; column: string; workspaceId: string | null };
 
@@ -39,15 +41,6 @@ export function newTaskId(): string {
   return `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-function Chip({ label, on, onPress, theme, color }: { label: string; on: boolean; onPress(): void; theme: PluginTheme; color?: string }) {
-  const styles = boardStyles(theme, false);
-  return (
-    <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: on }} accessibilityLabel={label} onPress={onPress} style={[styles.chip, on ? { backgroundColor: color ?? theme.colors.accent, borderColor: color ?? theme.colors.accent } : null]}>
-      <Text style={on ? styles.chipTextOn : styles.chipText}>{label}</Text>
-    </Pressable>
-  );
-}
-
 // The full editor for one card: every field, its reminder, checklist, links and actions.
 export function CardEditor({ deps, target, theme, compact, onClose }: { deps: BoardDeps; target: EditorTarget; theme: PluginTheme; compact: boolean; onClose(): void }) {
   const document: TaskDocument = tasksOf(useValue(deps.tasks));
@@ -61,7 +54,8 @@ export function CardEditor({ deps, target, theme, compact, onClose }: { deps: Bo
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
-  const styles = useMemo(() => boardStyles(theme, compact), [theme, compact]);
+  const t = useTokens(theme, compact);
+  const [reminderOpen, setReminderOpen] = useState(false);
   const set = (patch: Partial<Draft>) => setDraft((current) => ({ ...current, ...patch }));
   const now = new Date();
   const due = draft.dueText.trim() === "" ? null : parseDueDate(draft.dueText, now);
@@ -118,164 +112,162 @@ export function CardEditor({ deps, target, theme, compact, onClose }: { deps: Bo
     onClose();
   }
 
-  const field = (label: string, child: ReactNode) => (
-    <View style={styles.field}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      {child}
-    </View>
-  );
+  const today = todayDate(now);
+  const plusDays = (days: number) => {
+    const date = new Date(now);
+    date.setDate(date.getDate() + days);
+    return todayDate(date);
+  };
+  const nextMonday = plusDays(((8 - now.getDay()) % 7) || 7);
+  const addLabel = () => {
+    const name = newLabel.trim();
+    if (!name) return;
+    const taken = document.labels.find((label) => label.name.toLowerCase() === name.toLowerCase());
+    if (taken) {
+      setDraft((current) => (current.labels.includes(taken.id) ? current : { ...current, labels: [...current.labels, taken.id] }));
+      return setNewLabel("");
+    }
+    const id = slug(name, "label");
+    const unique = document.labels.some((label) => label.id === id) ? `${id}-${Date.now().toString(36)}` : id;
+    void run({ kind: "saveLabel", label: { id: unique, name } }).then((ok) => {
+      if (!ok) return;
+      setNewLabel("");
+      // From the draft as it is now: a label toggled while this saved is kept.
+      setDraft((current) => ({ ...current, labels: [...current.labels, unique] }));
+    });
+  };
+  const checked = task ? task.checklist.filter((item) => item.done).length : 0;
 
   return (
     <Modal title={task ? "Edit task" : "New task"} open onOpenChange={(open) => !open && onClose()}>
-      <Modal.Content contentContainerStyle={{ gap: 12 }}>
-        {field(
-          "Title",
-          <TextInput accessibilityLabel="Title" value={draft.title} onChangeText={(title) => set({ title })} style={styles.input} placeholderTextColor={theme.colors.foregroundMuted} placeholder="What needs doing" />,
-        )}
-        {field(
-          "Description",
-          <TextInput accessibilityLabel="Description" multiline value={draft.description} onChangeText={(description) => set({ description })} style={styles.multiline} />,
-        )}
-        {field(
-          "Column",
-          <View style={styles.row}>
-            {document.columns.map((column) => (
-              <Chip key={column.id} label={column.name} on={draft.column === column.id} onPress={() => set({ column: column.id })} theme={theme} color={column.color} />
-            ))}
-          </View>,
-        )}
-        {field(
-          "Priority",
-          <View style={styles.row}>
-            <Chip label="None" on={draft.priority === null} onPress={() => set({ priority: null })} theme={theme} />
-            {[1, 2, 3, 4].map((priority) => (
-              <Chip key={priority} label={`P${priority}`} on={draft.priority === priority} onPress={() => set({ priority })} theme={theme} color={PRIORITY_COLOR(theme, priority)} />
-            ))}
-          </View>,
-        )}
-        {field(
-          "Labels",
-          <View style={styles.row}>
-            {document.labels.map((label) => (
-              <Chip
-                key={label.id}
-                label={label.name}
-                color={label.color}
-                on={draft.labels.includes(label.id)}
-                onPress={() => set({ labels: draft.labels.includes(label.id) ? draft.labels.filter((id) => id !== label.id) : [...draft.labels, label.id] })}
-                theme={theme}
-              />
-            ))}
-            <TextInput
-              accessibilityLabel="New label"
-              placeholder="New label"
-              placeholderTextColor={theme.colors.foregroundMuted}
-              value={newLabel}
-              onChangeText={setNewLabel}
-              onSubmitEditing={() => {
-                const name = newLabel.trim();
-                if (!name) return;
-                const id = slug(name, "label");
-                void run({ kind: "saveLabel", label: { id: document.labels.some((label) => label.id === id) ? `${id}-${Date.now().toString(36)}` : id, name } }).then((ok) => {
-                  if (ok) setNewLabel("");
-                });
-              }}
-              style={styles.smallInput}
+      <Modal.Content contentContainerStyle={{ gap: 16, paddingBottom: 20 }}>
+        <View style={{ gap: 4 }}>
+          <Field t={t} bare value={draft.title} onChangeText={(title) => set({ title })} placeholder="Task title" accessibilityLabel="Title" autoFocus={!task} textStyle={{ fontSize: 20, fontWeight: "600" }} />
+          <Field t={t} bare multiline value={draft.description} onChangeText={(description) => set({ description })} placeholder="Add a description…" accessibilityLabel="Description" />
+        </View>
+
+        <View style={{ gap: 2, paddingVertical: 8, borderTopWidth: 1, borderBottomWidth: 1, borderColor: t.c.border }}>
+          <PropertyRow t={t} icon="Columns3" label="Status">
+            <Select t={t} label="Status" value={draft.column} onChange={(column) => set({ column })} options={document.columns.map((column) => ({ value: column.id, label: column.name, dot: column.color ?? (column.done ? t.c.statusSuccess : t.c.foregroundMuted) }))} />
+          </PropertyRow>
+          <PropertyRow t={t} icon="Signal" label="Priority">
+            <Segmented
+              t={t}
+              label="Priority"
+              value={String(draft.priority ?? 0)}
+              onChange={(value) => set({ priority: value === "0" ? null : Number(value) })}
+              options={[{ value: "0", label: "None" }, ...([1, 2, 3, 4] as const).map((priority) => ({ value: String(priority), label: PRIORITY[priority].name, icon: PRIORITY[priority].icon, tone: priorityColor(t.c, priority) }))]}
             />
-          </View>,
-        )}
-        {field(
-          "Due date",
-          <>
-            <TextInput accessibilityLabel="Due date" placeholder="fri, tomorrow, 2026-11-20" placeholderTextColor={theme.colors.foregroundMuted} value={draft.dueText} onChangeText={(dueText) => set({ dueText })} style={styles.input} />
-            {dueProblem ? <Text style={styles.error}>{dueProblem}</Text> : due ? <Text style={styles.muted}>Due {due}</Text> : null}
-          </>,
-        )}
-        {task
-          ? field(
-              "Reminder",
-              // Reminders do not fire on Done or archived cards, so they are not offered there.
-              finished ? (
-                <Text style={styles.muted}>{task.reminder ? "Paused while the card is in Done or archived." : "Move the card out of Done to set a reminder."}</Text>
-              ) : (
-                <View style={{ borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8 }}>
-                  <ReminderPicker deps={deps} target={{ kind: "task", taskId: task.id }} title={task.title} theme={theme} embedded onDone={() => {}} />
+          </PropertyRow>
+          <PropertyRow t={t} icon="Tag" label="Labels">
+            <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+              {document.labels.map((label) => (
+                <Tag key={label.id} t={t} label={label.name} color={label.color} on={draft.labels.includes(label.id)} onPress={() => set({ labels: draft.labels.includes(label.id) ? draft.labels.filter((id) => id !== label.id) : [...draft.labels, label.id] })} />
+              ))}
+              <View style={{ width: 150 }}>
+                <Field t={t} icon="Plus" value={newLabel} onChangeText={setNewLabel} onSubmit={addLabel} placeholder="New label" accessibilityLabel="New label" />
+              </View>
+            </View>
+          </PropertyRow>
+          <PropertyRow t={t} icon="Calendar" label="Due date">
+            <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+              <Tag t={t} label="Today" on={due === today} onPress={() => set({ dueText: today })} />
+              <Tag t={t} label="Tomorrow" on={due === plusDays(1)} onPress={() => set({ dueText: plusDays(1) })} />
+              <Tag t={t} label="Next Monday" on={due === nextMonday} onPress={() => set({ dueText: nextMonday })} />
+              <View style={{ width: 170 }}>
+                <Field t={t} plain value={draft.dueText} onChangeText={(dueText) => set({ dueText })} placeholder="fri, 20 nov, 2026-11-20" accessibilityLabel="Due date" error={dueProblem} />
+              </View>
+              {draft.dueText ? <IconButton t={t} size="sm" icon="X" label="Clear the due date" onPress={() => set({ dueText: "" })} /> : null}
+            </View>
+            {due && !dueProblem ? <Text style={t.text.small}>{new Date(`${due}T12:00:00`).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</Text> : null}
+          </PropertyRow>
+          {task ? (
+            <PropertyRow t={t} icon="AlarmClock" label="Reminder">
+              {finished ? (
+                <Text style={t.text.meta}>{task.reminder ? "Paused while the card is in Done or archived." : "Move the card out of Done to set a reminder."}</Text>
+              ) : reminderOpen ? (
+                <View style={{ borderWidth: 1, borderColor: t.c.border, borderRadius: t.radius.card, backgroundColor: t.c.surface1 }}>
+                  <ReminderPicker deps={deps} target={{ kind: "task", taskId: task.id }} title={task.title} theme={theme} compact={compact} embedded onDone={() => setReminderOpen(false)} />
                 </View>
-              ),
-            )
-          : null}
-        {task
-          ? field(
-              `Checklist ${task.checklist.filter((item) => item.done).length}/${task.checklist.length}`,
-              <View style={{ gap: 4 }}>
-                {task.checklist.map((item) => (
-                  <View key={item.id} style={styles.row}>
-                    <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: item.done }} accessibilityLabel={item.text} onPress={() => void run({ kind: "toggleChecklistItem", id: task.id, itemId: item.id })}>
-                      <Icon name={item.done ? "SquareCheck" : "Square"} size={16} color={theme.colors.foregroundMuted} />
-                    </Pressable>
-                    <Text style={[styles.muted, { flex: 1, textDecorationLine: item.done ? "line-through" : "none" }]}>{item.text}</Text>
-                    <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${item.text}`} onPress={() => void run({ kind: "removeChecklistItem", id: task.id, itemId: item.id })}>
-                      <Icon name="X" size={14} color={theme.colors.foregroundMuted} />
-                    </Pressable>
-                  </View>
-                ))}
-                <TextInput
-                  accessibilityLabel="Add a checklist item"
-                  placeholder="Add an item and press Enter"
-                  placeholderTextColor={theme.colors.foregroundMuted}
-                  value={newItem}
-                  onChangeText={setNewItem}
-                  onSubmitEditing={() => {
-                    const text = newItem.trim();
-                    if (!text) return;
-                    void run({ kind: "addChecklistItem", id: task.id, item: { id: `i-${Date.now().toString(36)}`, text } }).then((ok) => ok && setNewItem(""));
-                  }}
-                  style={styles.input}
-                />
-              </View>,
-            )
-          : null}
-        {field(
-          "Link",
-          <TextInput accessibilityLabel="Web address" placeholder="https://…" placeholderTextColor={theme.colors.foregroundMuted} value={draft.url} onChangeText={(url) => set({ url })} autoCapitalize="none" style={styles.input} />,
-        )}
-        {task?.links.agentId ? (
-          <View style={styles.row}>
-            <Text style={styles.muted}>Chat: {chat?.title ?? "closed or not loaded"}</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel="Insert this task into the chat" onPress={insertIntoChat} style={styles.button}>
-              <Text style={styles.buttonText}>Insert into chat</Text>
-            </Pressable>
-          </View>
-        ) : null}
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-        <View style={[styles.row, { justifyContent: "space-between" }]}>
-          <View style={styles.row}>
+              ) : (
+                <Pressable accessibilityRole="button" accessibilityLabel={task.reminder ? `Reminder ${formatDue(task.reminder, now)}. Change it` : "Set a reminder"} onPress={() => setReminderOpen(true)} style={{ alignSelf: "flex-start", height: t.control, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 8, borderRadius: t.radius.control, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1 }}>
+                  <Text style={{ color: task.reminder ? t.c.foreground : t.c.foregroundMuted, fontSize: 13 }}>{task.reminder ? formatDue(task.reminder, now) : "Set a reminder"}</Text>
+                  <Icon name="ChevronDown" size={14} color={t.c.foregroundMuted} />
+                </Pressable>
+              )}
+            </PropertyRow>
+          ) : null}
+          <PropertyRow t={t} icon="Link" label="Link">
+            <Field t={t} plain value={draft.url} onChangeText={(url) => set({ url })} placeholder="https://…" accessibilityLabel="Web address" />
+          </PropertyRow>
+          {task?.links.agentId ? (
+            <PropertyRow t={t} icon="MessageSquare" label="Chat">
+              <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+                <Text style={[t.text.body, { flexShrink: 1 }]} numberOfLines={1}>
+                  {chat?.title ?? "Closed or not loaded"}
+                </Text>
+                <Button t={t} variant="ghost" icon="TextCursorInput" label="Insert into chat" accessibilityLabel="Insert this task into the chat" onPress={insertIntoChat} />
+              </View>
+            </PropertyRow>
+          ) : null}
+        </View>
+
+        {task ? <Checklist t={t} task={task} checked={checked} newItem={newItem} setNewItem={setNewItem} run={run} /> : null}
+
+        {error ? <Text style={t.text.danger}>{error}</Text> : null}
+        <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: 8 }}>
+          <View style={{ flexDirection: "row", gap: 4 }}>
+            {task ? <Button t={t} variant="ghost" icon={task.archivedAt ? "ArchiveRestore" : "Archive"} label={task.archivedAt ? "Restore" : "Archive"} onPress={() => void run({ kind: task.archivedAt ? "restoreTask" : "archiveTask", id: task.id }).then((ok) => ok && onClose())} /> : null}
             {task ? (
-              <Pressable accessibilityRole="button" accessibilityLabel={task.archivedAt ? "Restore" : "Archive"} onPress={() => void run({ kind: task.archivedAt ? "restoreTask" : "archiveTask", id: task.id }).then((ok) => ok && onClose())} style={styles.button}>
-                <Text style={styles.buttonText}>{task.archivedAt ? "Restore" : "Archive"}</Text>
-              </Pressable>
-            ) : null}
-            {task ? (
-              <Pressable
-                accessibilityRole="button"
+              <Button
+                t={t}
+                variant="danger"
+                icon="Trash2"
+                label={confirmDelete ? "Press again to delete" : "Delete"}
                 accessibilityLabel={confirmDelete ? "Press again to delete for good" : "Delete"}
                 onPress={() => (confirmDelete ? void run({ kind: "deleteTask", id: task.id }).then((ok) => ok && onClose()) : setConfirmDelete(true))}
-                style={styles.danger}
-              >
-                <Text style={styles.dangerText}>{confirmDelete ? "Press again to delete" : "Delete"}</Text>
-              </Pressable>
+              />
             ) : null}
           </View>
-          <View style={styles.row}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Cancel" onPress={onClose} style={styles.button}>
-              <Text style={styles.buttonText}>Cancel</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Save" disabled={!draft.title.trim() || !!dueProblem} onPress={() => void save()} style={[styles.primary, !draft.title.trim() || dueProblem ? styles.disabled : null]}>
-              <Text style={styles.primaryText}>{task ? "Save" : "Add task"}</Text>
-            </Pressable>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <Button t={t} label="Cancel" onPress={onClose} />
+            <Button t={t} variant="primary" label={task ? "Save" : "Add task"} accessibilityLabel="Save" disabled={!draft.title.trim() || !!dueProblem} onPress={() => void save()} />
           </View>
         </View>
       </Modal.Content>
     </Modal>
+  );
+}
+
+function Checklist({ t, task, checked, newItem, setNewItem, run }: { t: Tokens; task: Task; checked: number; newItem: string; setNewItem(text: string): void; run(...operations: TaskOperation[]): Promise<boolean> }) {
+  const total = task.checklist.length;
+  const add = () => {
+    const text = newItem.trim();
+    if (!text) return;
+    void run({ kind: "addChecklistItem", id: task.id, item: { id: `i-${Date.now().toString(36)}`, text } }).then((ok) => ok && setNewItem(""));
+  };
+  return (
+    <View style={{ gap: 8 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <Icon name="ListChecks" size={14} color={t.c.foregroundMuted} />
+        <Text style={t.text.label}>Checklist</Text>
+        {total ? <Text style={t.text.small}>{checked} of {total}</Text> : null}
+      </View>
+      {total ? (
+        <View style={{ height: 4, borderRadius: 2, backgroundColor: t.c.surface2, overflow: "hidden" }}>
+          <View style={{ width: `${Math.round((checked / total) * 100)}%`, height: 4, backgroundColor: checked === total ? t.c.statusSuccess : t.c.accent }} />
+        </View>
+      ) : null}
+      {task.checklist.map((item) => (
+        <View key={item.id} style={{ flexDirection: "row", alignItems: "center", gap: 8, minHeight: t.compact ? 40 : 30 }}>
+          <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: item.done }} accessibilityLabel={item.text} onPress={() => void run({ kind: "toggleChecklistItem", id: task.id, itemId: item.id })} style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <Icon name={item.done ? "SquareCheck" : "Square"} size={16} color={item.done ? t.c.statusSuccess : t.c.foregroundMuted} />
+            <Text style={[t.text.body, { flex: 1, color: item.done ? t.c.foregroundMuted : t.c.foreground, textDecorationLine: item.done ? "line-through" : "none" }]}>{item.text}</Text>
+          </Pressable>
+          <IconButton t={t} size="sm" icon="X" label={`Remove ${item.text}`} onPress={() => void run({ kind: "removeChecklistItem", id: task.id, itemId: item.id })} />
+        </View>
+      ))}
+      <Field t={t} icon="Plus" value={newItem} onChangeText={setNewItem} onSubmit={add} placeholder="Add an item and press Enter" accessibilityLabel="Add a checklist item" />
+    </View>
   );
 }

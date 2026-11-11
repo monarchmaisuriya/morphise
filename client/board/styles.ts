@@ -1,71 +1,13 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 
-export const PRIORITY_COLOR = (theme: PluginTheme, priority: number | null) =>
-  priority === 1 ? theme.colors.statusDanger : priority === 2 ? theme.colors.statusWarning : priority === 3 ? theme.colors.accent : theme.colors.foregroundMuted;
+// How each priority reads and looks; P1 is the most urgent.
+export const PRIORITY = {
+  1: { name: "Urgent", icon: "CircleAlert" },
+  2: { name: "High", icon: "SignalHigh" },
+  3: { name: "Medium", icon: "SignalMedium" },
+  4: { name: "Low", icon: "SignalLow" },
+} as const;
 
-export function boardStyles(theme: PluginTheme, compact: boolean) {
-  const control = {
-    height: 30,
-    paddingHorizontal: 8,
-    fontSize: 12,
-    color: theme.colors.foreground,
-    backgroundColor: theme.colors.surface1,
-    borderColor: theme.colors.border,
-    borderWidth: 1,
-    borderRadius: 6,
-  };
-  return {
-    screen: { flex: 1, backgroundColor: theme.colors.surface0 },
-    toolbar: { padding: compact ? 10 : 14, gap: 8, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
-    row: { flexDirection: "row" as const, flexWrap: "wrap" as const, alignItems: "center" as const, gap: 6 },
-    tabs: { flexDirection: "row" as const, gap: 4 },
-    tab: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-    tabOn: { backgroundColor: theme.colors.surface2 },
-    tabText: { color: theme.colors.foregroundMuted, fontSize: 13 },
-    tabTextOn: { color: theme.colors.foreground, fontSize: 13, fontWeight: "600" as const },
-    input: { ...control, flex: 1, minWidth: compact ? 160 : 240 },
-    smallInput: { ...control, width: 90 },
-    multiline: { ...control, height: undefined, minHeight: 90, paddingVertical: 8, textAlignVertical: "top" as const },
-    chip: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: theme.colors.border },
-    chipOn: { backgroundColor: theme.colors.accent, borderColor: theme.colors.accent },
-    chipText: { color: theme.colors.foregroundMuted, fontSize: 11 },
-    chipTextOn: { color: theme.colors.accentForeground, fontSize: 11 },
-    button: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: theme.colors.border },
-    buttonText: { color: theme.colors.foreground, fontSize: 12 },
-    primary: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, backgroundColor: theme.colors.accent },
-    primaryText: { color: theme.colors.accentForeground, fontSize: 12, fontWeight: "600" as const },
-    danger: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: theme.colors.statusDanger },
-    dangerText: { color: theme.colors.statusDanger, fontSize: 12 },
-    disabled: { opacity: 0.4 },
-    board: { padding: compact ? 8 : 12, gap: 10, alignItems: "flex-start" as const },
-    column: { width: compact ? 270 : 290, maxHeight: "100%" as const, borderRadius: 10, backgroundColor: theme.colors.surface1, borderWidth: 1, borderColor: theme.colors.border },
-    columnHeader: { flexDirection: "row" as const, alignItems: "center" as const, gap: 6, padding: 10 },
-    columnName: { color: theme.colors.foreground, fontSize: 13, fontWeight: "600" as const, flex: 1 },
-    count: { color: theme.colors.foregroundMuted, fontSize: 12 },
-    countOver: { color: theme.colors.statusDanger, fontSize: 12, fontWeight: "600" as const },
-    lane: { color: theme.colors.foregroundMuted, fontSize: 11, paddingHorizontal: 10, paddingTop: 6 },
-    cards: { paddingHorizontal: 8, paddingBottom: 8, gap: 6 },
-    card: { padding: 10, gap: 6, borderRadius: 8, backgroundColor: theme.colors.surface0, borderWidth: 1, borderColor: theme.colors.border },
-    cardTitle: { color: theme.colors.foreground, fontSize: 13, lineHeight: 18 },
-    meta: { flexDirection: "row" as const, flexWrap: "wrap" as const, alignItems: "center" as const, gap: 6 },
-    metaText: { color: theme.colors.foregroundMuted, fontSize: 11 },
-    overdue: { color: theme.colors.statusDanger, fontSize: 11 },
-    dueSoon: { color: theme.colors.statusWarning, fontSize: 11 },
-    badge: { paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, borderWidth: 1 },
-    label: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 },
-    labelText: { color: theme.colors.foreground, fontSize: 10 },
-    arrows: { flexDirection: "row" as const, justifyContent: "space-between" as const },
-    arrow: { paddingHorizontal: 8, paddingVertical: 2 },
-    empty: { color: theme.colors.foregroundMuted, fontSize: 12, padding: 10 },
-    section: { color: theme.colors.foregroundMuted, fontSize: 12, fontWeight: "600" as const, paddingTop: 12, paddingBottom: 4 },
-    list: { padding: compact ? 10 : 16, gap: 6 },
-    listRow: { flexDirection: "row" as const, alignItems: "center" as const, gap: 8, padding: 10, borderRadius: 8, backgroundColor: theme.colors.surface1 },
-    listTitle: { color: theme.colors.foreground, fontSize: 13, flex: 1 },
-    muted: { color: theme.colors.foregroundMuted, fontSize: 12 },
-    error: { color: theme.colors.statusDanger, fontSize: 12 },
-    field: { gap: 4 },
-    fieldLabel: { color: theme.colors.foregroundMuted, fontSize: 11 },
-  };
+export function priorityColor(colors: PluginTheme["colors"], priority: number | null): string {
+  return priority === 1 ? colors.statusDanger : priority === 2 ? colors.statusWarning : priority === 3 ? colors.accent : colors.foregroundMuted;
 }
-
-export type BoardStyles = ReturnType<typeof boardStyles>;

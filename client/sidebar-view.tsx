@@ -11,7 +11,7 @@ import {
   useWorkspaces,
 } from "@getpaseo/plugin/client";
 import type { PluginAgentSnapshot, PluginWorkspaceSnapshot } from "@getpaseo/plugin";
-import { Icon, TextInput, useToast } from "@getpaseo/plugin/client/ui";
+import { Icon, useToast } from "@getpaseo/plugin/client/ui";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import {
@@ -38,6 +38,7 @@ import { type AlertEntry, remindersOf } from "./reminder-alerts";
 import { type PickerDeps, ReminderPicker } from "./reminder-picker";
 import { followUpTask } from "../shared/task-ops";
 import { type ApplyTaskOperations, type TaskStore, tasksOf } from "./task-store";
+import { Field, IconButton, MenuItem, Tag, type Tokens, useTokens } from "./ui/kit";
 import { viewPresence } from "./view-presence";
 
 type ViewConfig = Profile["sidebar"]["view"];
@@ -54,58 +55,35 @@ const INDICATOR_TOKEN = {
 const DEFAULT_VIEW_STATE: ViewState = { collapsed: [], statusFilter: [] };
 const REMINDERS_GROUP = "reminders";
 
+// Sizes match Paseo's own sidebar (measured on 0.16.0-beta.1): 36px rows inset 8px with an 8px
+// radius, 14px titles, 12px muted section labels and dimmer 12px times; the selected row uses
+// surface2. "Compact" density trims rows to 30px.
 function viewStyles(theme: Theme, config: ViewConfig, compact: boolean) {
-  const height = config.density === "compact" ? 28 : 36;
+  const c = theme.colors;
+  const height = compact ? 44 : config.density === "compact" ? 30 : 36;
   return {
     scroll: { flex: 1 },
-    filterBar: { paddingHorizontal: 8, paddingTop: 8, gap: 6 },
-    searchRow: { flexDirection: "row" as const, alignItems: "center" as const, gap: 6 },
-    search: {
-      flex: 1,
-      height: 28,
-      paddingHorizontal: 8,
-      fontSize: 12,
-      color: theme.colors.foreground,
-      backgroundColor: theme.colors.surface1,
-      borderColor: theme.colors.border,
-      borderWidth: 1,
-      borderRadius: 6,
-    },
-    next: {
-      flexDirection: "row" as const,
-      alignItems: "center" as const,
-      gap: 4,
-      height: 28,
-      paddingHorizontal: 8,
-      borderRadius: 6,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-    },
-    nextText: { color: theme.colors.foreground, fontSize: 11 },
-    disabled: { opacity: 0.45 },
-    chips: { flexDirection: "row" as const, flexWrap: "wrap" as const, gap: 4 },
-    chip: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border },
-    chipOn: { backgroundColor: theme.colors.accent, borderColor: theme.colors.accent },
-    chipText: { color: theme.colors.foregroundMuted, fontSize: 11 },
-    chipTextOn: { color: theme.colors.accentForeground, fontSize: 11 },
-    heading: { flexDirection: "row" as const, alignItems: "center" as const, gap: 4, paddingHorizontal: 8, paddingTop: 10, paddingBottom: 4 },
-    headingText: { color: theme.colors.foregroundMuted, fontSize: 11, flexShrink: 1 },
-    count: { color: theme.colors.foregroundMuted, fontSize: 11, opacity: 0.7 },
-    row: { minHeight: height, paddingLeft: 12, paddingRight: 4, flexDirection: "row" as const, alignItems: "center" as const },
-    rowMain: { flex: 1, minHeight: height, flexDirection: "row" as const, alignItems: "center" as const, gap: 8 },
-    agentRow: { minHeight: height - 4, paddingLeft: 30, paddingRight: 12, flexDirection: "row" as const, alignItems: "center" as const, gap: 6 },
-    selected: { backgroundColor: theme.colors.surface2 },
-    label: { color: theme.colors.foreground, fontSize: 12, lineHeight: 16, flexShrink: 1 },
-    secondary: { color: theme.colors.foregroundMuted, fontSize: 11, flexShrink: 1 },
-    due: { color: theme.colors.statusWarning, fontSize: 11 },
-    added: { color: theme.colors.statusSuccess, fontSize: 11 },
-    removed: { color: theme.colors.statusDanger, fontSize: 11 },
-    dot: { width: 6, height: 6, borderRadius: 3 },
-    // Phones need finger-sized targets.
-    action: { padding: compact ? 10 : 4, borderRadius: 4 },
-    more: { paddingLeft: 26, paddingVertical: 4 },
-    moreText: { color: theme.colors.accent, fontSize: 11 },
-    empty: { color: theme.colors.foregroundMuted, fontSize: 12, padding: 12 },
+    filterBar: { paddingHorizontal: 8, paddingTop: 4, paddingBottom: 4, gap: 6 },
+    searchRow: { flexDirection: "row" as const, alignItems: "center" as const, gap: 2 },
+    heading: { flexDirection: "row" as const, alignItems: "center" as const, gap: 6, minHeight: 32, paddingLeft: 16, paddingRight: 12, marginTop: 4 },
+    headingText: { color: c.foregroundMuted, fontSize: 12, flexShrink: 1 },
+    count: { color: c.foregroundMuted, fontSize: 12, opacity: 0.6 },
+    row: { minHeight: height, marginHorizontal: 8, paddingLeft: 8, paddingRight: 4, borderRadius: 8, flexDirection: "row" as const, alignItems: "center" as const, gap: 2 },
+    rowMain: { flex: 1, minWidth: 0, minHeight: height, flexDirection: "row" as const, alignItems: "center" as const, gap: 8 },
+    child: { paddingLeft: 26 },
+    selected: { backgroundColor: c.surface2 },
+    hovered: { backgroundColor: c.surface1 },
+    label: { color: c.foreground, fontSize: config.density === "compact" ? 13 : 14, flexShrink: 1 },
+    childLabel: { color: c.foregroundMuted, fontSize: 13, flexShrink: 1 },
+    secondary: { color: c.foregroundMuted, fontSize: 12, flexShrink: 1, opacity: 0.75 },
+    time: { color: c.foregroundMuted, fontSize: 12, opacity: 0.6, marginLeft: "auto" as const },
+    due: { color: c.statusWarning, fontSize: 12, marginLeft: "auto" as const },
+    added: { color: c.statusSuccess, fontSize: 12 },
+    removed: { color: c.statusDanger, fontSize: 12 },
+    dot: { width: 8, height: 8, borderRadius: 4 },
+    more: { flexDirection: "row" as const, alignItems: "center" as const, gap: 8, minHeight: 32, marginHorizontal: 8, paddingLeft: 8, borderRadius: 8 },
+    moreText: { color: c.foregroundMuted, fontSize: 13 },
+    empty: { color: c.foregroundMuted, fontSize: 13, paddingHorizontal: 16, paddingVertical: 12 },
   };
 }
 
@@ -114,6 +92,7 @@ type Styles = ReturnType<typeof viewStyles>;
 interface Shared {
   props: PluginSidebarViewProps;
   styles: Styles;
+  t: Tokens;
   config: ViewConfig;
   now: Date;
   // The soonest reminder on any chat of each workspace.
@@ -139,25 +118,33 @@ function useRemindToggle() {
   return { open, toggle: () => setOpen((value) => !value), close: () => setOpen(false) };
 }
 
-function RemindButton({ agentId, label, onPress, shared }: { agentId: string; label: string; onPress(): void; shared: Shared }) {
-  const reminder = shared.chatReminders.get(agentId);
-  const color = reminder ? (isDue(reminder, shared.now) ? shared.props.theme.colors.statusWarning : shared.props.theme.colors.accent) : shared.props.theme.colors.foregroundMuted;
+// One sidebar row: the main pressable and its buttons side by side (never nested), inside a hover
+// area. Buttons show on hover, on the selected row, on touch screens, or when they carry state.
+function RowShell({ selected, child, label, onPress, onLongPress, main, actions, showActions, disabled, shared }: { selected: boolean; child?: boolean; label: string; onPress(): void; onLongPress?(): void; main: ReactNode; actions?: ReactNode; showActions?: boolean; disabled?: boolean; shared: Shared }) {
+  const { styles, t } = shared;
+  const [hovered, setHovered] = useState(false);
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={reminder ? `Reminder for ${label}: ${formatDue(reminder, shared.now)}. Change it` : `Remind me about ${label}`}
-      onPress={onPress}
-      style={shared.styles.action}
-    >
-      <Icon name="AlarmClock" size={13} color={color} />
-    </Pressable>
+    // A plain View, not a Pressable: on web a Pressable becomes a Tab stop even when told not to.
+    <View onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)} style={[styles.row, child ? styles.child : null, selected ? styles.selected : hovered ? styles.hovered : null]}>
+      <Pressable accessibilityRole={disabled ? "text" : "button"} accessibilityLabel={label} disabled={disabled} onPress={onPress} onLongPress={onLongPress} style={styles.rowMain}>
+        {main}
+      </Pressable>
+      {actions && (hovered || selected || showActions || t.compact) ? <View style={{ flexDirection: "row", alignItems: "center" }}>{actions}</View> : null}
+    </View>
   );
+}
+
+function RemindButton({ agentId, label, onPress, shared }: { agentId: string; label: string; onPress(): void; shared: Shared }) {
+  const { t, now } = shared;
+  const reminder = shared.chatReminders.get(agentId);
+  const tone = reminder ? (isDue(reminder, now) ? t.c.statusWarning : t.c.accent) : undefined;
+  return <IconButton t={t} size="sm" icon="AlarmClock" tone={tone} label={reminder ? `Reminder for ${label}: ${formatDue(reminder, now)}. Change it` : `Remind me about ${label}`} onPress={onPress} />;
 }
 
 function InlinePicker({ agentId, workspaceId, title, onDone, shared }: { agentId: string; workspaceId: string; title: string; onDone(): void; shared: Shared }) {
   return (
-    <View style={{ marginLeft: 12, marginRight: 4, marginBottom: 4, borderWidth: 1, borderRadius: 8, borderColor: shared.props.theme.colors.border }}>
-      <ReminderPicker deps={shared.picker} target={{ kind: "chat", agentId, workspaceId, title }} title={title} theme={shared.props.theme} embedded onDone={onDone} />
+    <View style={{ marginHorizontal: 8, marginTop: 2, marginBottom: 6, borderWidth: 1, borderRadius: 10, borderColor: shared.t.c.border, backgroundColor: shared.t.c.surface1 }}>
+      <ReminderPicker deps={shared.picker} target={{ kind: "chat", agentId, workspaceId, title }} title={title} theme={shared.props.theme} compact={shared.t.compact} embedded onDone={onDone} />
     </View>
   );
 }
@@ -171,21 +158,24 @@ function AgentRow({ reference, shared }: { reference: AgentRef; shared: Shared }
   const label = agent.title ?? agent.provider;
   return (
     <View>
-      <View style={[styles.row, selected ? styles.selected : null]}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Open agent ${label}`}
-          onPress={() => props.navigation.openAgent(reference)}
-          onLongPress={remind.toggle}
-          style={[styles.agentRow, { flex: 1 }]}
-        >
-          <Icon name="Bot" size={12} color={props.theme.colors.foregroundMuted} />
-          <Text style={styles.secondary} numberOfLines={1}>
-            {label}
-          </Text>
-        </Pressable>
-        <RemindButton agentId={reference.id} label={label} onPress={remind.toggle} shared={shared} />
-      </View>
+      <RowShell
+        child
+        selected={selected}
+        label={`Open chat ${label}`}
+        onPress={() => props.navigation.openAgent(reference)}
+        onLongPress={remind.toggle}
+        showActions={shared.chatReminders.has(reference.id)}
+        main={
+          <>
+            <Icon name="MessageSquare" size={13} color={props.theme.colors.foregroundMuted} />
+            <Text style={styles.childLabel} numberOfLines={1}>
+              {label}
+            </Text>
+          </>
+        }
+        actions={<RemindButton agentId={reference.id} label={label} onPress={remind.toggle} shared={shared} />}
+        shared={shared}
+      />
       {remind.open ? <InlinePicker agentId={reference.id} workspaceId={agent.workspaceId} title={label} onDone={remind.close} shared={shared} /> : null}
     </View>
   );
@@ -207,11 +197,7 @@ function WorkspaceAgents({ reference, shared }: { reference: WorkspaceRef; share
 }
 
 function RowAction({ icon, label, onPress, shared }: { icon: string; label: string; onPress(): void; shared: Shared }) {
-  return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={shared.styles.action}>
-      <Icon name={icon} size={13} color={shared.props.theme.colors.foregroundMuted} />
-    </Pressable>
-  );
+  return <IconButton t={shared.t} size="sm" icon={icon} label={label} onPress={onPress} />;
 }
 
 // A task whose reminder is due, listed at the top of the view. Tapping opens its chat when it
@@ -221,23 +207,29 @@ function ReminderRow({ entry, chat, shared }: { entry: AlertEntry; chat: AgentRe
   const due = formatDue(entry.reminder, now);
   const open = chat ? () => props.navigation.openAgent(chat) : null;
   return (
-    <View style={styles.row}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={open ? `Open the chat for ${entry.title}, reminder ${due}` : `${entry.title}, reminder ${due}`}
-        disabled={!open}
-        onPress={() => open?.()}
-        style={styles.rowMain}
-      >
-        <Icon name="AlarmClock" size={12} color={props.theme.colors.statusWarning} />
-        <Text style={styles.label} numberOfLines={1}>
-          {entry.title}
-        </Text>
-        <Text style={styles.due}>{due}</Text>
-      </Pressable>
-      <RowAction icon="Clock" label={`Remind me about ${entry.title} again in 15 minutes`} onPress={() => shared.later(entry.taskId, 15)} shared={shared} />
-      <RowAction icon="Check" label={`Mark the reminder for ${entry.title} done`} onPress={() => shared.done(entry.taskId)} shared={shared} />
-    </View>
+    <RowShell
+      selected={false}
+      showActions
+      disabled={!open}
+      label={open ? `Open the chat for ${entry.title}, reminder ${due}` : `${entry.title}, reminder ${due}`}
+      onPress={() => open?.()}
+      main={
+        <>
+          <Icon name="AlarmClock" size={14} color={props.theme.colors.statusWarning} />
+          <Text style={styles.label} numberOfLines={1}>
+            {entry.title}
+          </Text>
+          <Text style={styles.due}>{due}</Text>
+        </>
+      }
+      actions={
+        <>
+          <RowAction icon="Clock" label={`Remind me about ${entry.title} again in 15 minutes`} onPress={() => shared.later(entry.taskId, 15)} shared={shared} />
+          <RowAction icon="Check" label={`Mark the reminder for ${entry.title} done`} onPress={() => shared.done(entry.taskId)} shared={shared} />
+        </>
+      }
+      shared={shared}
+    />
   );
 }
 
@@ -259,46 +251,52 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   const { details } = config;
   const elapsed = details.timeInStatus ? formatElapsed(workspace.since, now) : null;
   const reminder = shared.workspaceReminders.get(reference.id) ?? null;
+  const details2 = [details.project ? workspace.project : null, details.branch ? workspace.branch : null].filter(Boolean).join(" · ");
   return (
     <View>
-      <View style={[styles.row, selected ? styles.selected : null]}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Open workspace ${workspace.name}, ${STATUS_TITLES[workspace.indicator]}`}
-          onPress={() => props.navigation.openWorkspace(reference)}
-          style={styles.rowMain}
-        >
+      <RowShell
+        selected={selected}
+        label={`Open workspace ${workspace.name}, ${STATUS_TITLES[workspace.indicator]}`}
+        onPress={() => props.navigation.openWorkspace(reference)}
+        showActions={workspace.pinned}
+        main={
+          <>
           <View style={[styles.dot, { backgroundColor: props.theme.colors[INDICATOR_TOKEN[workspace.indicator]] }]} />
-          {workspace.pinned ? <Icon name="Pin" size={10} color={props.theme.colors.foregroundMuted} /> : null}
           <Text style={styles.label} numberOfLines={1}>
             {workspace.name}
           </Text>
-          {details.project ? <Text style={styles.secondary} numberOfLines={1}>{workspace.project}</Text> : null}
-          {details.branch && workspace.branch ? <Text style={styles.secondary} numberOfLines={1}>{workspace.branch}</Text> : null}
+          {details2 ? <Text style={styles.secondary} numberOfLines={1}>{details2}</Text> : null}
           {details.diff && workspace.diff && workspace.diff.additions + workspace.diff.deletions > 0 ? (
             <Text>
               <Text style={styles.added}>+{workspace.diff.additions}</Text> <Text style={styles.removed}>-{workspace.diff.deletions}</Text>
             </Text>
           ) : null}
-          {elapsed ? <Text style={styles.secondary}>{elapsed}</Text> : null}
+          {workspace.pinned && !config.rowActions.includes("pin") ? <Icon name="Pin" size={11} color={props.theme.colors.foregroundMuted} /> : null}
           {reminder ? (
-            <>
-              <Icon name="AlarmClock" size={10} color={props.theme.colors.foregroundMuted} />
-              <Text style={styles.secondary} numberOfLines={1}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+              <Icon name="AlarmClock" size={12} color={isDue(reminder, now) ? props.theme.colors.statusWarning : props.theme.colors.foregroundMuted} />
+              <Text style={[styles.secondary, isDue(reminder, now) ? { color: props.theme.colors.statusWarning, opacity: 1 } : null]} numberOfLines={1}>
                 {formatDue(reminder, now)}
               </Text>
-            </>
+            </View>
           ) : null}
-        </Pressable>
-        {config.rowActions.includes("pin") ? (
-          <RowAction
-            icon={workspace.pinned ? "PinOff" : "Pin"}
-            label={workspace.pinned ? `Unpin ${workspace.name}` : `Pin ${workspace.name}`}
-            onPress={() => void paseo.workspaces.ref(reference.id).setPinned(!workspace.pinned).catch(report(toast, "change the pin"))}
-            shared={shared}
-          />
-        ) : null}
-      </View>
+          {elapsed ? <Text style={styles.time}>{elapsed}</Text> : <View style={{ marginLeft: "auto" }} />}
+          </>
+        }
+        actions={
+          config.rowActions.includes("pin") ? (
+            <IconButton
+              t={shared.t}
+              size="sm"
+              icon={workspace.pinned ? "PinOff" : "Pin"}
+              tone={workspace.pinned ? props.theme.colors.foreground : undefined}
+              label={workspace.pinned ? `Unpin ${workspace.name}` : `Pin ${workspace.name}`}
+              onPress={() => void paseo.workspaces.ref(reference.id).setPinned(!workspace.pinned).catch(report(toast, "change the pin"))}
+            />
+          ) : undefined
+        }
+        shared={shared}
+      />
       {config.showAgents ? <WorkspaceAgents reference={reference} shared={shared} /> : null}
     </View>
   );
@@ -321,23 +319,25 @@ function ChatRow({ reference, shared }: { reference: AgentRef; shared: Shared })
   const groupedByWorkspace = config.groupBy !== "status" && config.groupBy !== "none";
   return (
     <View>
-      <View style={[styles.row, selected ? styles.selected : null]}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Open chat ${chat.name}, ${STATUS_TITLES[chat.indicator]}`}
-          onPress={() => props.navigation.openAgent(reference)}
-          onLongPress={remind.toggle}
-          style={styles.rowMain}
-        >
-          <View style={[styles.dot, { backgroundColor: props.theme.colors[INDICATOR_TOKEN[chat.indicator]] }]} />
-          <Text style={styles.label} numberOfLines={1}>
-            {chat.name}
-          </Text>
-          {!groupedByWorkspace && workspace ? <Text style={styles.secondary} numberOfLines={1}>{workspace}</Text> : null}
-          {elapsed ? <Text style={styles.secondary}>{elapsed}</Text> : null}
-        </Pressable>
-        <RemindButton agentId={reference.id} label={chat.name} onPress={remind.toggle} shared={shared} />
-      </View>
+      <RowShell
+        selected={selected}
+        label={`Open chat ${chat.name}, ${STATUS_TITLES[chat.indicator]}`}
+        onPress={() => props.navigation.openAgent(reference)}
+        onLongPress={remind.toggle}
+        showActions={shared.chatReminders.has(reference.id)}
+        main={
+          <>
+            <View style={[styles.dot, { backgroundColor: props.theme.colors[INDICATOR_TOKEN[chat.indicator]] }]} />
+            <Text style={styles.label} numberOfLines={1}>
+              {chat.name}
+            </Text>
+            {!groupedByWorkspace && workspace ? <Text style={styles.secondary} numberOfLines={1}>{workspace}</Text> : null}
+            {elapsed ? <Text style={styles.time}>{elapsed}</Text> : <View style={{ marginLeft: "auto" }} />}
+          </>
+        }
+        actions={<RemindButton agentId={reference.id} label={chat.name} onPress={remind.toggle} shared={shared} />}
+        shared={shared}
+      />
       {remind.open ? <InlinePicker agentId={reference.id} workspaceId={chat.workspaceId} title={chat.name} onDone={remind.close} shared={shared} /> : null}
     </View>
   );
@@ -352,26 +352,12 @@ function GroupHeading({ title, count, collapsed, onToggle, shared }: { title: st
       onPress={onToggle}
       style={styles.heading}
     >
-      <Icon name={collapsed ? "ChevronRight" : "ChevronDown"} size={11} color={props.theme.colors.foregroundMuted} />
       <Text style={styles.headingText} numberOfLines={1}>
         {title}
       </Text>
       {config.counts ? <Text style={styles.count}>{count}</Text> : null}
-    </Pressable>
-  );
-}
-
-function Chip({ label, on, onPress, shared }: { label: string; on: boolean; onPress(): void; shared: Shared }) {
-  const { styles } = shared;
-  return (
-    <Pressable
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked: on }}
-      accessibilityLabel={`Show ${label}`}
-      onPress={onPress}
-      style={[styles.chip, on ? styles.chipOn : null]}
-    >
-      <Text style={on ? styles.chipTextOn : styles.chipText}>{label}</Text>
+      <View style={{ flex: 1 }} />
+      <Icon name={collapsed ? "ChevronRight" : "ChevronDown"} size={12} color={props.theme.colors.foregroundMuted} />
     </Pressable>
   );
 }
@@ -387,49 +373,46 @@ interface FilterBarProps {
   shared: Shared;
 }
 
+// Search, a status filter menu and Next, in one row like Paseo's own sidebar tools. Active status
+// filters show as removable tags under it, so they stay visible with the menu closed.
 function FilterBar({ search, onSearch, statuses, onStatuses, onNext, placeholder, shared }: FilterBarProps) {
-  const { styles, props } = shared;
+  const { styles, props, t } = shared;
+  const [open, setOpen] = useState(false);
   const needsMe = needsMeOn(statuses);
+  const active = needsMe ? 1 : statuses.length;
+  const toggleStatus = (indicator: Indicator) => {
+    const on = !needsMe && statuses.includes(indicator);
+    onStatuses(on ? statuses.filter((item) => item !== indicator) : [...(needsMe ? [] : statuses), indicator]);
+  };
   return (
     <View style={styles.filterBar}>
       <View style={styles.searchRow}>
-        <TextInput
-          accessibilityLabel="Search workspaces"
-          placeholder={placeholder}
-          placeholderTextColor={props.theme.colors.foregroundMuted}
-          value={search}
-          onChangeText={onSearch}
-          autoCapitalize="none"
-          autoCorrect={false}
-          style={styles.search}
-        />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={onNext ? "Open the next one that needs you" : "Nothing needs you"}
-          accessibilityState={{ disabled: onNext === null }}
-          disabled={onNext === null}
-          onPress={() => onNext?.()}
-          style={[styles.next, onNext ? null : styles.disabled]}
-        >
-          <Icon name="SkipForward" size={12} color={props.theme.colors.foreground} />
-          <Text style={styles.nextText}>Next</Text>
-        </Pressable>
+        <View style={{ flex: 1, marginRight: 4 }}>
+          <Field t={t} plain icon="Search" value={search} onChangeText={onSearch} placeholder={placeholder} accessibilityLabel={placeholder} />
+        </View>
+        <View>
+          <IconButton t={t} icon="ListFilter" tone={active ? props.theme.colors.accent : undefined} label={active ? `Status filter, ${active} on` : "Filter by status"} onPress={() => setOpen(!open)} />
+          {active ? <View pointerEvents="none" style={{ position: "absolute", top: 4, right: 4, width: 7, height: 7, borderRadius: 4, backgroundColor: props.theme.colors.accent }} /> : null}
+        </View>
+        <IconButton t={t} icon="SkipForward" label={onNext ? "Open the next one that needs you" : "Nothing needs you"} disabled={onNext === null} onPress={() => onNext?.()} />
       </View>
-      <View style={styles.chips}>
-        <Chip label="Needs me" on={needsMe} onPress={() => onStatuses(needsMe ? [] : [...NEEDS_ME])} shared={shared} />
-        {INDICATORS.map((indicator) => {
-          const on = !needsMe && statuses.includes(indicator);
-          return (
-            <Chip
-              key={indicator}
-              label={STATUS_TITLES[indicator]}
-              on={on}
-              onPress={() => onStatuses(on ? statuses.filter((item) => item !== indicator) : [...(needsMe ? [] : statuses), indicator])}
-              shared={shared}
-            />
-          );
-        })}
-      </View>
+      {open ? (
+        <View style={{ padding: 4, borderRadius: 10, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1 }}>
+          <MenuItem t={t} role="checkbox" icon="Hand" label="Needs me" hint="permission or failed" checked={needsMe} onPress={() => onStatuses(needsMe ? [] : [...NEEDS_ME])} />
+          {INDICATORS.map((indicator) => (
+            <MenuItem key={indicator} t={t} role="checkbox" dot={props.theme.colors[INDICATOR_TOKEN[indicator]]} label={STATUS_TITLES[indicator]} checked={!needsMe && statuses.includes(indicator)} onPress={() => toggleStatus(indicator)} />
+          ))}
+          {active ? <MenuItem t={t} icon="X" label="Show all" onPress={() => onStatuses([])} /> : null}
+        </View>
+      ) : active ? (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4 }}>
+          {needsMe ? (
+            <Tag t={t} label="Needs me" color={props.theme.colors.statusWarning} onRemove={() => onStatuses([])} />
+          ) : (
+            statuses.map((indicator) => <Tag key={indicator} t={t} label={STATUS_TITLES[indicator]} color={props.theme.colors[INDICATOR_TOKEN[indicator]]} onRemove={() => toggleStatus(indicator)} />)
+          )}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -511,6 +494,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
 
   return function MorphiseSidebarView(props: PluginSidebarViewProps) {
     const styles = useMemo(() => viewStyles(props.theme, config, props.layout.compact), [props.theme, props.layout.compact]);
+    const t = useTokens(props.theme, props.layout.compact);
     const reminders = remindersOf(tasksOf(useValue(deps.tasks)));
     const now = useReminderClock(reminders.map((entry) => entry.reminder), config.details.timeInStatus);
     const viewState = useSettings(viewStateSettings);
@@ -551,7 +535,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     }
     const done = (taskId: string) => void deps.apply({ kind: "setReminder", id: taskId, reminder: null }).catch(report(toast, "mark the reminder done"));
     const later = (taskId: string, minutes: number) => void deps.apply({ kind: "remindAgain", id: taskId, minutes }).catch(report(toast, "move the reminder"));
-    const shared: Shared = { props, styles, config, now, workspaceReminders, statuses: filter.statuses, chatReminders, picker: deps, done, later };
+    const shared: Shared = { props, styles, t, config, now, workspaceReminders, statuses: filter.statuses, chatReminders, picker: deps, done, later };
     const collapsed = new Set(state.collapsed);
     const toggleCollapsed = (key: string) =>
       saveState({ collapsed: collapsed.has(key) ? state.collapsed.filter((item) => item !== key) : [...state.collapsed, key] });
@@ -598,6 +582,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
                   onPress={() => setExpanded(new Set([...expanded, section.key]))}
                   style={styles.more}
                 >
+                  <Icon name="ChevronDown" size={14} color={props.theme.colors.foregroundMuted} />
                   <Text style={styles.moreText}>Show {hidden} more</Text>
                 </Pressable>
               ) : null}
