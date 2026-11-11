@@ -30,6 +30,8 @@ export interface Announcement {
 export interface SurfaceDeps extends BoardDeps {
   announcements: ValueStore<Announcement>;
   updateView(patch: Partial<Profile["sidebar"]["view"]>): Promise<void>;
+  // False until the first workspace list arrives.
+  workspacesReady: ValueStore<boolean>;
 }
 
 function message(error: unknown) {

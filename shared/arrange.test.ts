@@ -45,6 +45,11 @@ describe("isVisible", () => {
     expect(isVisible(workspace({ id: "b", archivingAt: "2026-11-11T10:00:00Z" }))).toBe(false);
     expect(isVisible(workspace({ id: "c", background: true }))).toBe(false);
   });
+
+  it("shows background workspaces when Show background is on, never archived ones", () => {
+    expect(isVisible(workspace({ id: "c", background: true }), true)).toBe(true);
+    expect(isVisible(workspace({ id: "b", archivingAt: "2026-11-11T10:00:00Z" }), true)).toBe(false);
+  });
 });
 
 describe("compareWorkspaces", () => {

@@ -3,7 +3,7 @@
   "name": "Morphise",
   "description": "Kanban task board with reminders, status-sorted sidebar, chat notes, prompts, layouts, and settings forms for Paseo's sidebar, headers, composer, timeline and theme",
   "icon": "morphise.png",
-  "media": ["assets/settings.jpg", "assets/workspace.jpg", "assets/editor.jpg"],
+  "media": ["assets/workspace.jpg", "assets/board.jpg", "assets/editor.jpg", "assets/settings.jpg"],
   "requirements": {
     "paseo": ">=0.16.0-beta.1"
   }

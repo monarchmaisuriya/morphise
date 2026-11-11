@@ -1,19 +1,22 @@
 import {
   type AgentRef,
   type Group,
+  openExternalUrl,
+  type PluginHostSummary,
   type PluginSidebarViewProps,
   type WorkspaceRef,
   useAgent,
   useAgents,
+  useHosts,
   usePaseo,
   useSettings,
   useWorkspace,
   useWorkspaces,
 } from "@getpaseo/plugin/client";
 import type { PluginAgentSnapshot, PluginWorkspaceSnapshot } from "@getpaseo/plugin";
-import { Icon, useToast } from "@getpaseo/plugin/client/ui";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { copyText, Icon, useToast } from "@getpaseo/plugin/client/ui";
+import { type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { Animated, Easing, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import {
   capRows,
   compareWorkspaces,
@@ -29,6 +32,7 @@ import {
 import { attentionOrder, NEEDS_ME, needsAttention, needsMeOn, nextAttention } from "../shared/attention";
 import { chatGroupKey, chatIndicator, chatMatches, chatName, compareChats, isListedChat } from "../shared/chat-status";
 import { INDICATORS, type Indicator, type Profile } from "../shared/profile";
+import { DEFAULT_CHAT_ROWS, owningChatKey, type RowShows, rowShows, rowTitle, statusLine, visibleChats } from "../shared/row-meta";
 import { isDue, type Reminder } from "../shared/reminders";
 import { formatDue, formatElapsed } from "../shared/time-text";
 import { type ViewState, viewStateSettings } from "../shared/view-state";
@@ -38,7 +42,8 @@ import { type AlertEntry, remindersOf } from "./reminder-alerts";
 import { type PickerDeps, ReminderPicker } from "./reminder-picker";
 import { followUpTask } from "../shared/task-ops";
 import { type ApplyTaskOperations, type TaskStore, tasksOf } from "./task-store";
-import { Button, Field, IconButton, MenuItem, Tag, type Tokens, useTokens } from "./ui/kit";
+import { Button, Dropdown, Field, IconButton, MenuItem, PopoverHost, Tag, type Tokens, useTokens } from "./ui/kit";
+import type { PullRequestInfo, ServiceInfo, WorkspaceInfo, WorkspaceList } from "./workspaces";
 import { viewPresence } from "./view-presence";
 import { cannotHover } from "./web";
 
@@ -53,7 +58,7 @@ const INDICATOR_TOKEN = {
   done: "statusSuccess",
 } as const;
 
-const DEFAULT_VIEW_STATE: ViewState = { collapsed: [], statusFilter: [], projectFilter: [], hideDone: false, changedOnly: false, pinnedOnly: false };
+const DEFAULT_VIEW_STATE: ViewState = { collapsed: [], statusFilter: [], projectFilter: [], hideDone: false, changedOnly: false, pinnedOnly: false, showBackground: false };
 // Touch screens get finger-sized rows and always-visible row buttons. Paseo reports its sidebar as
 // "compact" on desktop too, so the input decides this (no hover), not the layout.
 const TOUCH = cannotHover();
@@ -68,7 +73,8 @@ const REMINDERS_GROUP = "reminders";
 
 // Search text, the open menu and expanded groups live outside the view, so they survive the view
 // being rebuilt when its options change.
-const viewUi = createValueStore<{ search: string; searching: boolean; menu: "filter" | "view" | null; expanded: readonly string[] }>({ search: "", searching: false, menu: null, expanded: [] });
+// The Display menu's open section is kept here too: every Display change rebuilds the view.
+const viewUi = createValueStore<{ search: string; searching: boolean; menu: "filter" | "view" | null; expanded: readonly string[]; section: string | null }>({ search: "", searching: false, menu: null, expanded: [], section: null });
 
 // Sizes match Paseo's own sidebar (measured on 0.16.0-beta.1): 36px rows inset 8px with an 8px
 // radius, 14px titles, 12px muted section labels and dimmer 12px times; the selected row uses
@@ -82,25 +88,6 @@ function viewStyles(theme: Theme, config: ViewConfig) {
     header: { flexDirection: "row" as const, alignItems: "center" as const, minHeight: 36, paddingLeft: 16, paddingRight: 8, gap: 2 },
     headerText: { color: c.foregroundMuted, fontSize: 12, flex: 1 },
     tools: { paddingHorizontal: 8, paddingBottom: 6, gap: 6 },
-    // Floats over the list below the header, with the platform's usual shadow.
-    menu: {
-      position: "absolute" as const,
-      top: 0,
-      left: 8,
-      right: 8,
-      // Bounded by the list area, so it never runs off a short screen; short menus stay short.
-      maxHeight: "95%" as const,
-      padding: 4,
-      borderRadius: 10,
-      borderWidth: 1,
-      borderColor: c.border,
-      backgroundColor: c.surface1,
-      shadowColor: "#000000",
-      shadowOpacity: 0.35,
-      shadowRadius: 16,
-      shadowOffset: { width: 0, height: 8 },
-      elevation: 12,
-    },
     // More space above a heading than below it: the heading belongs to the rows that follow.
     heading: { flexDirection: "row" as const, alignItems: "center" as const, gap: 6, minHeight: 28, paddingLeft: 16, paddingRight: 12, marginTop: 14 },
     headingText: { color: c.foregroundMuted, fontSize: 12, flexShrink: 1 },
@@ -109,12 +96,24 @@ function viewStyles(theme: Theme, config: ViewConfig) {
     project: { flexDirection: "row" as const, alignItems: "center" as const, minHeight: TOUCH ? 44 : 40, marginHorizontal: 8, marginTop: 10, paddingLeft: 8, paddingRight: 4, borderRadius: 8, gap: 2 },
     projectMain: { flex: 1, minWidth: 0, flexDirection: "row" as const, alignItems: "center" as const, gap: 8, minHeight: TOUCH ? 44 : 40 },
     tile: { width: 16, height: 16, borderRadius: 4, alignItems: "center" as const, justifyContent: "center" as const },
-    tileText: { color: "#ffffff", fontSize: 10, fontWeight: "700" as const },
+    tileText: { color: "#ffffff", fontSize: 10, fontWeight: "600" as const },
     projectText: { color: c.foregroundMuted, fontSize: 14, flexShrink: 1 },
     row: { minHeight: height, marginHorizontal: 8, paddingLeft: 8, paddingRight: 6, borderRadius: 8, flexDirection: "row" as const, alignItems: "center" as const, gap: 2 },
     rowMain: { flex: 1, minWidth: 0, minHeight: height, flexDirection: "row" as const, alignItems: "center" as const, gap: 8 },
+    // Two-line rows: the status mark and time line up with the title line.
+    twoLine: { alignItems: "flex-start" as const, paddingVertical: 6 },
+    lines: { flex: 1, minWidth: 0, gap: 1 },
+    line: { flexDirection: "row" as const, alignItems: "center" as const, gap: 6, minHeight: 20 },
+    subLine: { flexDirection: "row" as const, alignItems: "center" as const, gap: 8, minHeight: 16, overflow: "hidden" as const },
+    meta: { color: c.foregroundMuted, fontSize: 12, flexShrink: 1 },
+    // Chats under a workspace hang off a thin line in the status column.
+    nest: { position: "relative" as const },
+    connector: { position: "absolute" as const, left: 23, top: 0, bottom: 8, width: 1, backgroundColor: c.border },
+    subConnector: { position: "absolute" as const, left: 43, top: 0, bottom: 8, width: 1, backgroundColor: c.border },
     slot: { width: 16, alignItems: "center" as const, justifyContent: "center" as const },
-    child: { paddingLeft: 32, minHeight: TOUCH ? 40 : 30 },
+    child: { paddingLeft: 24, minHeight: TOUCH ? 40 : 30 },
+    // A sub-agent sits one step further in, under its parent chat.
+    grandchild: { paddingLeft: 44 },
     selected: { backgroundColor: c.surface2 },
     hovered: { backgroundColor: c.surface1 },
     label: { color: c.foreground, fontSize: config.density === "compact" ? 13 : 14, flexShrink: 1 },
@@ -149,6 +148,16 @@ interface Shared {
   // Clears a task's reminder, or asks again in some minutes.
   done(taskId: string): void;
   later(taskId: string, minutes: number): void;
+  // The Display "Show" choices.
+  shows: RowShows;
+  // Pull requests, checks and services, which Paseo's workspace hooks do not carry.
+  workspaces: ValueStore<WorkspaceList>;
+  hosts: readonly PluginHostSummary[];
+  // Every label in use, for the row menu's Labels list.
+  labels: readonly string[];
+  // "Show more" state for groups and for a workspace's chats.
+  isExpanded(key: string): boolean;
+  setExpanded(key: string, on: boolean): void;
 }
 
 function report(toast: ReturnType<typeof useToast>, what: string) {
@@ -163,30 +172,102 @@ function useRemindToggle() {
 }
 
 // One sidebar row: the main pressable and its buttons side by side (never nested), inside a hover
-// area. Buttons show on hover, on touch screens, or when they carry state (a set reminder).
-function RowShell({ selected, child, label, onPress, onLongPress, main, actions, showActions, disabled, shared }: { selected: boolean; child?: boolean; label: string; onPress(): void; onLongPress?(): void; main: ReactNode; actions?: ReactNode; showActions?: boolean; disabled?: boolean; shared: Shared }) {
+// area. As in Paseo, the buttons take the place of the trailing time on hover; they always show
+// on touch screens and when they carry state (a set reminder, an armed archive). A long press, or
+// a right-click on the web, runs `onLongPress`.
+function RowShell({ selected, child, grandchild, twoLine, label, onPress, onLongPress, main, trailing, actions, showActions, disabled, rowRef, onHover, shared }: { selected: boolean; child?: boolean; twoLine?: boolean; label: string; onPress(): void; onLongPress?(): void; main: ReactNode; trailing?: ReactNode; actions?: ReactNode; showActions?: boolean; disabled?: boolean; rowRef?: RefObject<View | null>; onHover?(on: boolean): void; grandchild?: boolean; shared: Shared }) {
   const { styles } = shared;
   const [hovered, setHovered] = useState(false);
+  const hover = (on: boolean) => {
+    setHovered(on);
+    onHover?.(on);
+  };
+  const actionsShown = !!actions && (hovered || showActions || TOUCH);
+  // Right-click opens the same menu as a long press. React Native Web forwards `onContextMenu`
+  // but its Pressable never maps a mouse right-click to `onLongPress`, and React Native's types
+  // do not list the prop, so it is passed untyped and on the web only.
+  const contextMenu = onLongPress && Platform.OS === "web" ? { onContextMenu: (event: { preventDefault(): void }) => (event.preventDefault(), onLongPress()) } : {};
   return (
     // A plain View, not a Pressable: on web a Pressable becomes a Tab stop even when told not to.
-    <View onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)} style={[styles.row, child ? styles.child : null, selected ? styles.selected : hovered ? styles.hovered : null]}>
-      <Pressable accessibilityRole={disabled ? "text" : "button"} accessibilityLabel={label} disabled={disabled} onPress={onPress} onLongPress={onLongPress} style={styles.rowMain}>
+    <View ref={rowRef} onPointerEnter={() => hover(true)} onPointerLeave={() => hover(false)} style={[styles.row, child ? styles.child : null, grandchild ? styles.grandchild : null, selected ? styles.selected : hovered ? styles.hovered : null]}>
+      <Pressable accessibilityRole={disabled ? "text" : "button"} accessibilityLabel={label} disabled={disabled} onPress={onPress} onLongPress={onLongPress} style={[styles.rowMain, twoLine ? styles.twoLine : null]} {...contextMenu}>
         {main}
+        {actionsShown ? null : trailing}
       </Pressable>
-      {actions && (hovered || showActions || TOUCH) ? <View style={{ flexDirection: "row", alignItems: "center" }}>{actions}</View> : null}
+      {actionsShown ? <View style={{ flexDirection: "row", alignItems: "center" }}>{actions}</View> : null}
     </View>
   );
 }
 
-// A 6px status dot in the same 16px column as project tiles, as Paseo draws it. It takes colour
-// only when the status needs the user or is in motion; finished work is plain, done work dim.
-function StatusDot({ indicator, shared }: { indicator: Indicator; shared: Shared }) {
-  const c = shared.props.theme.colors;
-  const color = indicator === "done" ? c.foregroundMuted : indicator === "attention" ? c.foreground : c[INDICATOR_TOKEN[indicator]];
+const NATIVE_DRIVER = Platform.OS !== "web";
+
+// A slow fade between full and faint, for running work and loading placeholders (Paseo spins a
+// ring for running work and pulses its loading placeholders).
+function usePulse(on: boolean): Animated.Value {
+  const value = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (!on) {
+      value.setValue(1);
+      return;
+    }
+    const ease = Easing.inOut(Easing.ease);
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(value, { toValue: 0.25, duration: 750, easing: ease, useNativeDriver: NATIVE_DRIVER }),
+        Animated.timing(value, { toValue: 1, duration: 750, easing: ease, useNativeDriver: NATIVE_DRIVER }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [on, value]);
+  return value;
+}
+
+function indicatorColor(colors: Theme["colors"], indicator: Indicator): string {
+  return indicator === "done" ? colors.foregroundMuted : indicator === "attention" ? colors.foreground : colors[INDICATOR_TOKEN[indicator]];
+}
+
+// The status mark in the same 16px column as project tiles, as Paseo draws it. It takes colour
+// only when the status needs the user or is in motion; running work pulses; done work is dim.
+function StatusMark({ indicator, shared }: { indicator: Indicator; shared: Shared }) {
+  const pulse = usePulse(indicator === "running");
   return (
-    <View style={shared.styles.slot}>
-      <View accessibilityLabel={STATUS_TITLES[indicator]} style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color, opacity: indicator === "done" ? 0.6 : 1 }} />
+    <View style={[shared.styles.slot, { height: 20 }]}>
+      <Animated.View accessibilityLabel={STATUS_TITLES[indicator]} style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: indicatorColor(shared.props.theme.colors, indicator), opacity: indicator === "done" ? 0.6 : pulse }} />
     </View>
+  );
+}
+
+// Pulsing placeholder rows until the first workspace list arrives.
+function LoadingRows({ shared }: { shared: Shared }) {
+  const pulse = usePulse(true);
+  const { styles, props } = shared;
+  const fill = props.theme.colors.surface2;
+  return (
+    <Animated.View accessibilityLabel="Loading" style={{ opacity: pulse, paddingTop: 8 }}>
+      {[72, 50, 64, 42, 58].map((width) => (
+        <View key={width} style={styles.row}>
+          <View style={[styles.rowMain, { gap: 8 }]}>
+            <View style={styles.slot}>
+              <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: fill }} />
+            </View>
+            <View style={{ height: 10, borderRadius: 5, width: `${width}%`, backgroundColor: fill }} />
+          </View>
+        </View>
+      ))}
+    </Animated.View>
+  );
+}
+
+// "Show more" and "Show less" under a group or a workspace's chats.
+function MoreRow({ label, spoken, icon, count, child, grandchild, onPress, shared }: { label: string; spoken: string; icon: string; count?: number; child?: boolean; grandchild?: boolean; onPress(): void; shared: Shared }) {
+  const { styles, props } = shared;
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={spoken} onPress={onPress} style={[styles.more, child || grandchild ? { paddingLeft: grandchild ? 46 : 26, minHeight: 28 } : null]}>
+      <Icon name={icon} size={child || grandchild ? 12 : 14} color={props.theme.colors.foregroundMuted} />
+      <Text style={[styles.moreText, child || grandchild ? { fontSize: 13 } : null]}>{label}</Text>
+      {count ? <Text style={styles.count}>{count}</Text> : null}
+    </Pressable>
   );
 }
 
@@ -205,50 +286,81 @@ function InlinePicker({ agentId, workspaceId, title, onDone, shared }: { agentId
   );
 }
 
-function AgentRow({ reference, shared }: { reference: AgentRef; shared: Shared }) {
-  const { props, styles } = shared;
-  const agent = useAgent(reference, (item) => ({ title: item.title, provider: item.provider, workspaceId: item.workspaceId }));
+// A chat listed under its workspace, or a sub-agent under its chat (`sub`). Only the open one is
+// highlighted.
+function AgentRow({ reference, sub, shared }: { reference: AgentRef; sub?: boolean; shared: Shared }) {
+  const { props, styles, now } = shared;
+  const chat = useAgent(reference, (item) => ({ name: chatName(item), indicator: chatIndicator(item), workspaceId: item.workspaceId, last: item.lastActivityAt }));
   const remind = useRemindToggle();
-  if (!agent) return null;
-  const selected = props.active.agent?.key === reference.key;
-  const label = agent.title ?? agent.provider;
+  if (!chat) return null;
+  const elapsed = shared.shows.lastActivity ? formatElapsed(chat.last, now) : null;
   return (
     <View>
       <RowShell
-        child
-        selected={selected}
-        label={`Open chat ${label}`}
+        child={!sub}
+        grandchild={sub}
+        selected={props.active.agent?.key === reference.key}
+        label={`Open chat ${chat.name}, ${STATUS_TITLES[chat.indicator]}`}
         onPress={() => props.navigation.openAgent(reference)}
         onLongPress={remind.toggle}
         showActions={shared.chatReminders.has(reference.id)}
         main={
           <>
-            <Icon name="MessageSquare" size={13} color={props.theme.colors.foregroundMuted} />
+            <StatusMark indicator={chat.indicator} shared={shared} />
             <Text style={styles.childLabel} numberOfLines={1}>
-              {label}
+              {chat.name}
             </Text>
           </>
         }
-        actions={<RemindButton agentId={reference.id} label={label} onPress={remind.toggle} shared={shared} />}
+        trailing={elapsed ? <Text style={styles.time}>{elapsed}</Text> : null}
+        actions={<RemindButton agentId={reference.id} label={chat.name} onPress={remind.toggle} shared={shared} />}
         shared={shared}
       />
-      {remind.open ? <InlinePicker agentId={reference.id} workspaceId={agent.workspaceId} title={label} onDone={remind.close} shared={shared} /> : null}
+      {remind.open ? <InlinePicker agentId={reference.id} workspaceId={chat.workspaceId} title={chat.name} onDone={remind.close} shared={shared} /> : null}
+      {!sub && shared.config.showSubAgents !== false ? <SubAgents parent={reference} shared={shared} /> : null}
     </View>
   );
 }
 
-function WorkspaceAgents({ reference, shared }: { reference: WorkspaceRef; shared: Shared }) {
-  const agents = useAgents({
-    hosts: [reference.hostId],
-    where: (agent) => agent.workspace.key === reference.key && isListedChat(agent) && chatMatches(agent, { statuses: shared.statuses, search: "" }),
-    orderBy: ["lastActivityAt", "desc"],
-  });
+// A chat's sub-agents, latest first: the first few (5 unless changed), then Show more. The open
+// sub-agent stays listed past the limit. Only direct sub-agents of a listed chat show.
+function SubAgents({ parent, shared }: { parent: AgentRef; shared: Shared }) {
+  const { styles, config, props } = shared;
+  const subs = useAgents({ hosts: [parent.hostId], where: (agent) => agent.parentAgentId === parent.id && agent.status !== "closed", orderBy: ["lastActivityAt", "desc"] });
+  if (subs.length === 0) return null;
+  const key = `subs:${parent.key}`;
+  const limit = config.subAgentRows ?? DEFAULT_CHAT_ROWS;
+  const expanded = shared.isExpanded(key);
+  const { rows, hidden } = visibleChats(subs, limit, expanded, props.active.agent?.key ?? null);
   return (
-    <>
-      {agents.map((agent) => (
-        <AgentRow key={agent.key} reference={agent} shared={shared} />
+    <View style={styles.nest}>
+      <View pointerEvents="none" style={styles.subConnector} />
+      {rows.map((agent) => (
+        <AgentRow key={agent.key} reference={agent} sub shared={shared} />
       ))}
-    </>
+      {hidden > 0 ? <MoreRow grandchild icon="ChevronDown" label="Show more" spoken={`Show ${hidden} more sub-agents`} count={hidden} onPress={() => shared.setExpanded(key, true)} shared={shared} /> : null}
+      {expanded && subs.length > limit ? <MoreRow grandchild icon="ChevronUp" label="Show less" spoken="Show fewer sub-agents" onPress={() => shared.setExpanded(key, false)} shared={shared} /> : null}
+    </View>
+  );
+}
+
+// A workspace's chats, latest first: the first few (5 unless changed), then Show more. The chat
+// holding the open agent (`openKey`) stays listed past the limit.
+function WorkspaceChats({ workspaceKey, chats, openKey, shared }: { workspaceKey: string; chats: readonly AgentRef[]; openKey: string | null; shared: Shared }) {
+  const { styles, config } = shared;
+  const key = `chats:${workspaceKey}`;
+  const limit = config.chatRows ?? DEFAULT_CHAT_ROWS;
+  const expanded = shared.isExpanded(key);
+  const { rows, hidden } = visibleChats(chats, limit, expanded, openKey);
+  return (
+    <View style={styles.nest}>
+      <View pointerEvents="none" style={styles.connector} />
+      {rows.map((chat) => (
+        <AgentRow key={chat.key} reference={chat} shared={shared} />
+      ))}
+      {hidden > 0 ? <MoreRow child icon="ChevronDown" label="Show more" spoken={`Show ${hidden} more chats`} count={hidden} onPress={() => shared.setExpanded(key, true)} shared={shared} /> : null}
+      {expanded && chats.length > limit ? <MoreRow child icon="ChevronUp" label="Show less" spoken="Show fewer chats" onPress={() => shared.setExpanded(key, false)} shared={shared} /> : null}
+    </View>
   );
 }
 
@@ -289,12 +401,121 @@ function ReminderRow({ entry, chat, shared }: { entry: AlertEntry; chat: AgentRe
   );
 }
 
+// A small icon and text on a row's second line or in the hover card.
+function Meta({ icon, text, color, shared }: { icon?: string; text: string; color?: string; shared: Shared }) {
+  const muted = shared.props.theme.colors.foregroundMuted;
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 3, flexShrink: 1, minWidth: 0 }}>
+      {icon ? <Icon name={icon} size={11} color={color ?? muted} /> : null}
+      <Text style={[shared.styles.meta, color ? { color } : null]} numberOfLines={1}>
+        {text}
+      </Text>
+    </View>
+  );
+}
+
+function DiffText({ diff, shared }: { diff: { additions: number; deletions: number }; shared: Shared }) {
+  return (
+    <Text style={{ fontSize: 12 }} accessibilityLabel={`${diff.additions} lines added, ${diff.deletions} removed`}>
+      <Text style={shared.styles.added}>+{diff.additions}</Text> <Text style={shared.styles.removed}>-{diff.deletions}</Text>
+    </Text>
+  );
+}
+
+const PR_ICON = { open: "GitPullRequest", draft: "GitPullRequestDraft", merged: "GitMerge", closed: "GitPullRequestClosed" } as const;
+
+function pullRequestColor(colors: Theme["colors"], pr: PullRequestInfo): string {
+  return pr.state === "open" ? colors.statusSuccess : pr.state === "closed" ? colors.statusDanger : pr.state === "merged" ? colors.accent : colors.foregroundMuted;
+}
+
+function checksColor(colors: Theme["colors"], checks: PullRequestInfo["checks"]): string | null {
+  return checks === "success" ? colors.statusSuccess : checks === "pending" ? colors.statusWarning : checks === "failure" ? colors.statusDanger : null;
+}
+
+const CHECKS_TEXT = { success: "checks passed", pending: "checks running", failure: "checks failed", none: "no checks" } as const;
+
+// The pull request on a row's title line: its state icon and number, and a dot for its checks.
+function PullRequestBadge({ pr, checks, shared }: { pr: PullRequestInfo; checks: boolean; shared: Shared }) {
+  const c = shared.props.theme.colors;
+  const dot = checks ? checksColor(c, pr.checks) : null;
+  return (
+    <View accessibilityLabel={`Pull request${pr.number ? ` ${pr.number}` : ""}, ${pr.state}${checks ? `, ${CHECKS_TEXT[pr.checks]}` : ""}`} style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+      <Icon name={PR_ICON[pr.state]} size={12} color={pullRequestColor(c, pr)} />
+      {pr.number ? <Text style={shared.styles.meta}>#{pr.number}</Text> : null}
+      {dot ? <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: dot }} /> : null}
+    </View>
+  );
+}
+
+function serviceColor(colors: Theme["colors"], service: ServiceInfo): string {
+  if (!service.running) return colors.foregroundMuted;
+  return service.healthy === false ? colors.statusWarning : colors.statusSuccess;
+}
+
+function ServicesMeta({ services, shared }: { services: readonly ServiceInfo[]; shared: Shared }) {
+  const first = services[0];
+  return (
+    <View accessibilityLabel={`Services: ${services.map((service) => `${service.name} ${service.running ? "running" : "stopped"}`).join(", ")}`} style={{ flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 1, minWidth: 0 }}>
+      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: serviceColor(shared.props.theme.colors, first) }} />
+      <Text style={shared.styles.meta} numberOfLines={1}>
+        {first.name}
+        {first.port ? `:${first.port}` : ""}
+        {services.length > 1 ? ` +${services.length - 1}` : ""}
+      </Text>
+    </View>
+  );
+}
+
+const lastSegment = (path: string) => path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? path;
+
+// The card Paseo shows for a hovered workspace: title, changes, host, branch and folder; here also
+// the pull request, checks, services and labels. Paseo draws it beside the sidebar; a plugin view
+// cannot draw outside its sidebar (the main pane paints over it), so it opens under the row.
+function WorkspaceCard({ title, workspace, info, host, shared }: { title: string; workspace: { branch: string | null; diff: { additions: number; deletions: number } | null; directory: string; labels: readonly string[] }; info: WorkspaceInfo | null; host: string | null; shared: Shared }) {
+  const c = shared.props.theme.colors;
+  const pr = info?.pullRequest ?? null;
+  const ahead = info ? `${info.ahead ? ` ↑${info.ahead}` : ""}${info.behind ? ` ↓${info.behind}` : ""}` : "";
+  return (
+    <View style={{ padding: 6, gap: 6 }}>
+      <Text style={{ color: c.foreground, fontSize: 13, fontWeight: "600" }} numberOfLines={2}>
+        {title}
+      </Text>
+      {workspace.diff && workspace.diff.additions + workspace.diff.deletions > 0 ? (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+          <Icon name="FileDiff" size={11} color={c.foregroundMuted} />
+          <DiffText diff={workspace.diff} shared={shared} />
+        </View>
+      ) : null}
+      {host ? <Meta icon="Server" text={host} shared={shared} /> : null}
+      {workspace.branch ? <Meta icon="GitBranch" text={`${workspace.branch}${info?.dirty ? " ·" : ""}${ahead}`} shared={shared} /> : null}
+      <Meta icon="Folder" text={lastSegment(workspace.directory)} shared={shared} />
+      {pr ? <Meta icon={PR_ICON[pr.state]} color={pullRequestColor(c, pr)} text={`${pr.number ? `#${pr.number} ` : ""}${pr.title || pr.state}${pr.checks !== "none" ? ` · ${CHECKS_TEXT[pr.checks]}` : ""}`} shared={shared} /> : null}
+      {info?.services.map((service) => (
+        <View key={service.name} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: serviceColor(c, service) }} />
+          <Text style={shared.styles.meta} numberOfLines={1}>
+            {service.name}
+            {service.port ? `:${service.port}` : ""} {service.running ? (service.healthy === false ? "unhealthy" : "running") : "stopped"}
+          </Text>
+        </View>
+      ))}
+      {workspace.labels.length ? <Meta icon="Tag" text={workspace.labels.join(", ")} shared={shared} /> : null}
+    </View>
+  );
+}
+
 function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: Shared }) {
-  const { props, styles, config, now, t } = shared;
+  const { props, styles, config, now, t, shows } = shared;
+  const c = props.theme.colors;
   const paseo = usePaseo();
   const toast = useToast();
+  const rowRef = useRef<View>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [confirmArchive, setConfirmArchive] = useState(false);
+  const [menu, setMenu] = useState<"actions" | "labels" | null>(null);
+  const [newLabel, setNewLabel] = useState("");
+  const [card, setCard] = useState(false);
+  const cardTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // A rename saves once, though Enter and leaving the field both ask to.
   const renameSaved = useRef(false);
   // An armed "Archive?" disarms by itself, so a stray press later cannot archive.
@@ -303,8 +524,15 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
     const timer = setTimeout(() => setConfirmArchive(false), 4000);
     return () => clearTimeout(timer);
   }, [confirmArchive]);
+  useEffect(
+    () => () => {
+      if (cardTimer.current) clearTimeout(cardTimer.current);
+    },
+    [],
+  );
   const workspace = useWorkspace(reference, (item) => ({
     name: workspaceName(item),
+    title: rowTitle(config, item),
     indicator: item.indicator,
     branch: item.branch,
     project: item.projectDisplayName,
@@ -313,12 +541,35 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
     // A workspace never prompted shows the time it was created, as Paseo's list does.
     lastPrompt: item.lastPromptAt ?? item.createdAt,
     pinned: item.pinnedAt !== null,
+    labels: item.labels,
+    directory: item.directory,
   }));
+  const info = useValue(shared.workspaces).get(reference.id) ?? null;
+  // Chats, latest first; the status filter applies to them too.
+  const chats = useAgents({
+    hosts: [reference.hostId],
+    where: (agent) => agent.workspace.key === reference.key && isListedChat(agent) && chatMatches(agent, { statuses: shared.statuses, search: "" }),
+    orderBy: ["lastActivityAt", "desc"],
+  });
+  const latestChat = useAgent(chats[0] ?? "", (agent) => chatName(agent)) ?? null;
+  // Null until the open agent loads; the workspace row keeps the highlight until then.
+  const openAgent = useAgent(props.active.agent ?? "", (agent) => ({ parentId: agent.parentAgentId, closed: agent.status === "closed" }));
   if (!workspace) return null;
-  const selected = props.active.workspace?.key === reference.key;
-  const { details } = config;
+  const isOpen = props.active.workspace?.key === reference.key;
+  const chatsShown = config.showAgents && ((config.agentsFor ?? "active") === "all" || isOpen) && chats.length > 0;
+  // Exactly one row is highlighted: the open chat or sub-agent when it is listed here, else the
+  // workspace. `openChat` is the listed chat that holds it.
+  const open = props.active.agent && openAgent ? { key: props.active.agent.key, ...openAgent } : null;
+  // Not limited to the open workspace: the chat holding the open agent stays listed wherever it is.
+  const openChat = chatsShown ? owningChatKey(chats, open, config.showSubAgents !== false) : null;
+  const selected = isOpen && openChat === null;
   const handle = () => paseo.workspaces.ref(reference.id);
+  const closeMenu = () => {
+    setMenu(null);
+    setNewLabel("");
+  };
   const startRename = () => {
+    closeMenu();
     renameSaved.current = false;
     setRenaming(workspace.name);
   };
@@ -330,17 +581,39 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
     if (title === workspace.name) return;
     void handle().setTitle(title || null).catch(report(toast, "rename the workspace"));
   };
-  // Archiving asks twice: the first press turns the button into "Archive?".
+  // Archiving asks twice: the first press turns the button (or menu item) into "Archive?".
   const archive = () => {
     if (!confirmArchive) return setConfirmArchive(true);
     setConfirmArchive(false);
+    closeMenu();
     void handle()
       .archive()
       .then((result) => {
         if (result.error) toast.error(`Could not archive ${workspace.name}: ${result.error}`);
       }, report(toast, "archive the workspace"));
   };
-  // While renaming, the row becomes a field; its nested chats stay where they are.
+  const togglePin = () => {
+    closeMenu();
+    void handle().setPinned(!workspace.pinned).catch(report(toast, "change the pin"));
+  };
+  const copy = (text: string, what: string) => {
+    closeMenu();
+    void copyText(text).then(() => toast.show(`Copied the ${what}`), report(toast, `copy the ${what}`));
+  };
+  const setLabel = (label: string, assigned: boolean) => void handle().setLabel(label, { assigned }).catch(report(toast, "change the labels"));
+  const createLabel = () => {
+    const label = newLabel.trim();
+    setNewLabel("");
+    if (label && !workspace.labels.includes(label)) setLabel(label, true);
+  };
+  const hover = (on: boolean) => {
+    if (cardTimer.current) clearTimeout(cardTimer.current);
+    cardTimer.current = null;
+    if (!on) return setCard(false);
+    if (!TOUCH) cardTimer.current = setTimeout(() => setCard(true), 600);
+  };
+
+  // While renaming, the row becomes a field; its chats stay where they are.
   const renameField =
     renaming === null ? null : (
       <View style={{ marginHorizontal: 8, paddingVertical: 2 }}>
@@ -348,67 +621,153 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
       </View>
     );
   // Like Paseo's rows: time since the last prompt, or time in the current status when chosen.
-  const elapsed = formatElapsed(details.timeInStatus ? workspace.since : workspace.lastPrompt, now);
+  const elapsed = shows.lastActivity ? formatElapsed(config.details.timeInStatus ? workspace.since : workspace.lastPrompt, now) : null;
   const reminder = shared.workspaceReminders.get(reference.id) ?? null;
-  // Inside its own project group a row never repeats the project's name.
-  const details2 = [details.project && config.groupBy !== "project" ? workspace.project : null, details.branch ? workspace.branch : null].filter(Boolean).join(" · ");
+  const host = shared.hosts.find((item) => item.serverId === reference.hostId)?.label ?? null;
+  const pr = shows.pullRequest ? info?.pullRequest ?? null : null;
+  const changes = workspace.diff && workspace.diff.additions + workspace.diff.deletions > 0 ? workspace.diff : null;
+  const twoLine = config.rowStyle !== "one-line";
+  const line = twoLine ? statusLine(workspace.indicator, latestChat, workspace.title) : null;
+
+  // Second-line details, in Paseo's Display order. A row inside its project group never repeats
+  // the project's name; the host shows only when there is more than one.
+  const details: ReactNode[] = [];
+  const branchShown = shows.branch && workspace.branch && config.titleSource !== "branch";
+  if (branchShown) details.push(<Meta key="branch" icon="GitBranch" text={workspace.branch ?? ""} shared={shared} />);
+  if (shows.project && config.groupBy !== "project") details.push(<Meta key="project" icon="Folder" text={workspace.project} shared={shared} />);
+  if (shows.host && host && shared.hosts.length > 1) details.push(<Meta key="host" icon="Server" text={host} shared={shared} />);
+  if (shows.diff && changes) details.push(<DiffText key="diff" diff={changes} shared={shared} />);
+  if (shows.services && info?.services.length) details.push(<ServicesMeta key="services" services={info.services} shared={shared} />);
+  if (shows.labels && workspace.labels.length) details.push(<Meta key="labels" icon="Tag" text={workspace.labels.join(", ")} shared={shared} />);
+  if (reminder) details.push(<Meta key="reminder" icon="AlarmClock" color={isDue(reminder, now) ? c.statusWarning : undefined} text={formatDue(reminder, now)} shared={shared} />);
+  // A two-line row with nothing else to say names its branch, then its project.
+  const fallback = twoLine && !line && details.length === 0 ? (workspace.branch && config.titleSource !== "branch" ? workspace.branch : config.groupBy !== "project" ? workspace.project : null) : null;
+  const lead = line ? (
+    <Text key="status" style={[styles.meta, line.tone === "warning" ? { color: c.statusWarning } : line.tone === "danger" ? { color: c.statusDanger } : null]} numberOfLines={1}>
+      {line.text}
+    </Text>
+  ) : fallback ? (
+    <Meta key="fallback" icon={workspace.branch && config.titleSource !== "branch" ? "GitBranch" : "Folder"} text={fallback} shared={shared} />
+  ) : null;
+  // Pinned rows in their own Pinned section need no icon; elsewhere the icon shows it.
+  const pinIcon = workspace.pinned && !(config.pinnedFirst && config.groupBy !== "none") ? <Icon name="Pin" size={11} color={c.foregroundMuted} /> : null;
+  const titleText = (
+    <Text style={[styles.label, workspace.indicator === "attention" ? { fontWeight: "600" } : null]} numberOfLines={1}>
+      {workspace.title}
+    </Text>
+  );
+  const main = twoLine ? (
+    <>
+      <StatusMark indicator={workspace.indicator} shared={shared} />
+      <View style={styles.lines}>
+        <View style={styles.line}>
+          {titleText}
+          {pr ? <PullRequestBadge pr={pr} checks={shows.checks} shared={shared} /> : null}
+          {pinIcon}
+        </View>
+        {lead || details.length ? (
+          <View style={styles.subLine}>
+            {lead}
+            {details}
+          </View>
+        ) : null}
+      </View>
+    </>
+  ) : (
+    <>
+      <StatusMark indicator={workspace.indicator} shared={shared} />
+      {titleText}
+      {pr ? <PullRequestBadge pr={pr} checks={shows.checks} shared={shared} /> : null}
+      {details}
+      {pinIcon}
+    </>
+  );
+  const time = elapsed ? (
+    <View style={{ marginLeft: "auto", height: 20, justifyContent: "center" }}>
+      <Text style={[styles.time, { marginLeft: 0 }]}>{elapsed}</Text>
+    </View>
+  ) : null;
+
   return (
     <View>
       {renameField ?? (
-      <RowShell
-        selected={selected}
-        label={`Open workspace ${workspace.name}, ${STATUS_TITLES[workspace.indicator]}`}
-        onPress={() => props.navigation.openWorkspace(reference)}
-        showActions={confirmArchive}
-        main={
+        <RowShell
+          rowRef={rowRef}
+          twoLine={twoLine}
+          selected={selected}
+          label={`Open workspace ${workspace.title}, ${STATUS_TITLES[workspace.indicator]}`}
+          onPress={() => props.navigation.openWorkspace(reference)}
+          onLongPress={() => setMenu("actions")}
+          onHover={hover}
+          showActions={confirmArchive || menu !== null}
+          main={main}
+          trailing={time}
+          actions={
+            <>
+              {confirmArchive && menu === null ? (
+                <Button t={t} variant="danger" label="Archive?" accessibilityLabel={`Press again to archive ${workspace.name}`} onPress={archive} style={{ height: 24, paddingHorizontal: 6 }} />
+              ) : (
+                <IconButton t={t} size="sm" icon="Archive" label={`Archive ${workspace.name}`} onPress={archive} />
+              )}
+              {config.rowActions.includes("pin") ? <IconButton t={t} size="sm" icon={workspace.pinned ? "PinOff" : "Pin"} tone={workspace.pinned ? c.foreground : undefined} label={workspace.pinned ? `Unpin ${workspace.name}` : `Pin ${workspace.name}`} onPress={togglePin} /> : null}
+              <IconButton t={t} size="sm" icon="EllipsisVertical" label={`Actions for ${workspace.name}`} onPress={() => setMenu(menu ? null : "actions")} />
+            </>
+          }
+          shared={shared}
+        />
+      )}
+      <Dropdown t={t} open={card && menu === null && renaming === null} onClose={() => setCard(false)} anchor={rowRef} passive width={280}>
+        <WorkspaceCard title={workspace.title} workspace={workspace} info={info} host={host} shared={shared} />
+      </Dropdown>
+      <Dropdown t={t} open={menu !== null} onClose={closeMenu} anchor={rowRef} width={250}>
+        {menu === "labels" ? (
           <>
-          <StatusDot indicator={workspace.indicator} shared={shared} />
-          <Text style={styles.label} numberOfLines={1}>
-            {workspace.name}
-          </Text>
-          {details2 ? <Text style={styles.secondary} numberOfLines={1}>{details2}</Text> : null}
-          {details.diff && workspace.diff && workspace.diff.additions + workspace.diff.deletions > 0 ? (
-            <Text>
-              <Text style={styles.added}>+{workspace.diff.additions}</Text> <Text style={styles.removed}>-{workspace.diff.deletions}</Text>
-            </Text>
-          ) : null}
-          {/* Pinned rows in their own Pinned section need no icon; elsewhere the icon shows it. */}
-          {workspace.pinned && !(config.pinnedFirst && config.groupBy !== "none") ? <Icon name="Pin" size={11} color={props.theme.colors.foregroundMuted} /> : null}
-          {reminder ? (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
-              <Icon name="AlarmClock" size={12} color={isDue(reminder, now) ? props.theme.colors.statusWarning : props.theme.colors.foregroundMuted} />
-              <Text style={[styles.secondary, isDue(reminder, now) ? { color: props.theme.colors.statusWarning, opacity: 1 } : null]} numberOfLines={1}>
-                {formatDue(reminder, now)}
-              </Text>
+            <MenuItem t={t} icon="ChevronLeft" label="Labels" onPress={() => setMenu("actions")} />
+            {[...new Set([...shared.labels, ...workspace.labels])].sort().map((label) => (
+              <MenuItem key={label} t={t} role="checkbox" icon="Tag" label={label} checked={workspace.labels.includes(label)} onPress={() => setLabel(label, !workspace.labels.includes(label))} />
+            ))}
+            <View style={{ padding: 4 }}>
+              <Field t={t} plain icon="Plus" value={newLabel} onChangeText={setNewLabel} onSubmit={createLabel} placeholder="Create label" accessibilityLabel={`Create a label for ${workspace.name}`} />
             </View>
-          ) : null}
-          {elapsed ? <Text style={styles.time}>{elapsed}</Text> : <View style={{ marginLeft: "auto" }} />}
           </>
-        }
-        actions={
+        ) : (
           <>
-            <IconButton t={t} size="sm" icon="Pencil" label={`Rename ${workspace.name}`} onPress={startRename} />
-            {confirmArchive ? (
-              <Button t={t} variant="danger" label="Archive?" accessibilityLabel={`Press again to archive ${workspace.name}`} onPress={archive} style={{ height: 24, paddingHorizontal: 6 }} />
-            ) : (
-              <IconButton t={t} size="sm" icon="Archive" label={`Archive ${workspace.name}`} onPress={archive} />
-            )}
-            {config.rowActions.includes("pin") ? (
-              <IconButton
+            <MenuItem t={t} icon="Copy" label="Copy path" onPress={() => copy(workspace.directory, "path")} />
+            {workspace.branch ? <MenuItem t={t} icon="GitBranch" label="Copy branch name" onPress={() => copy(workspace.branch ?? "", "branch name")} /> : null}
+            <MenuItem t={t} icon="Pencil" label="Rename workspace" onPress={startRename} />
+            <MenuItem t={t} icon={workspace.pinned ? "PinOff" : "Pin"} label={workspace.pinned ? "Unpin" : "Pin to top"} onPress={togglePin} />
+            <MenuItem t={t} icon="Tag" label="Labels" hint={workspace.labels.length ? String(workspace.labels.length) : undefined} onPress={() => setMenu("labels")} />
+            {info?.pullRequest ? (
+              <MenuItem
                 t={t}
-                size="sm"
-                icon={workspace.pinned ? "PinOff" : "Pin"}
-                tone={workspace.pinned ? props.theme.colors.foreground : undefined}
-                label={workspace.pinned ? `Unpin ${workspace.name}` : `Pin ${workspace.name}`}
-                onPress={() => void handle().setPinned(!workspace.pinned).catch(report(toast, "change the pin"))}
+                icon={PR_ICON[info.pullRequest.state]}
+                label={`Open pull request${info.pullRequest.number ? ` #${info.pullRequest.number}` : ""}`}
+                onPress={() => {
+                  closeMenu();
+                  void openExternalUrl(info.pullRequest?.url ?? "").catch(report(toast, "open the pull request"));
+                }}
               />
             ) : null}
+            {info?.services
+              .filter((service) => service.url)
+              .map((service) => (
+                <MenuItem
+                  key={service.name}
+                  t={t}
+                  icon="ExternalLink"
+                  label={`Open ${service.name}`}
+                  hint={service.port ? `:${service.port}` : undefined}
+                  onPress={() => {
+                    closeMenu();
+                    void openExternalUrl(service.url ?? "").catch(report(toast, `open ${service.name}`));
+                  }}
+                />
+              ))}
+            <MenuItem t={t} icon="Archive" tone={confirmArchive ? c.statusDanger : undefined} label={confirmArchive ? "Archive? Press again" : "Archive"} onPress={archive} />
           </>
-        }
-        shared={shared}
-      />
-      )}
-      {config.showAgents && ((config.agentsFor ?? "active") === "all" || selected) ? <WorkspaceAgents reference={reference} shared={shared} /> : null}
+        )}
+      </Dropdown>
+      {chatsShown ? <WorkspaceChats workspaceKey={reference.key} chats={chats} openKey={openChat ?? props.active.agent?.key ?? null} shared={shared} /> : null}
     </View>
   );
 }
@@ -426,7 +785,7 @@ function ChatRow({ reference, shared }: { reference: AgentRef; shared: Shared })
   const remind = useRemindToggle();
   if (!chat) return null;
   const selected = props.active.agent?.key === reference.key;
-  const elapsed = formatElapsed(chat.last, now);
+  const elapsed = shared.shows.lastActivity ? formatElapsed(chat.last, now) : null;
   const groupedByWorkspace = config.groupBy !== "status" && config.groupBy !== "none";
   return (
     <View>
@@ -438,14 +797,14 @@ function ChatRow({ reference, shared }: { reference: AgentRef; shared: Shared })
         showActions={shared.chatReminders.has(reference.id)}
         main={
           <>
-            <StatusDot indicator={chat.indicator} shared={shared} />
+            <StatusMark indicator={chat.indicator} shared={shared} />
             <Text style={styles.label} numberOfLines={1}>
               {chat.name}
             </Text>
             {!groupedByWorkspace && workspace ? <Text style={styles.secondary} numberOfLines={1}>{workspace}</Text> : null}
-            {elapsed ? <Text style={styles.time}>{elapsed}</Text> : <View style={{ marginLeft: "auto" }} />}
           </>
         }
+        trailing={elapsed ? <Text style={styles.time}>{elapsed}</Text> : null}
         actions={<RemindButton agentId={reference.id} label={chat.name} onPress={remind.toggle} shared={shared} />}
         shared={shared}
       />
@@ -473,25 +832,31 @@ function GroupHeading({ title, count, collapsed, onToggle, shared }: { title: st
   );
 }
 
-// A project group's heading, as in Paseo's own sidebar: a letter tile and the project's name.
-// Pressing it folds the group; on hover a plus opens Paseo's New workspace screen for the project
-// (what Paseo's openProject navigation shows).
+// A project group's heading, as in Paseo's own sidebar: a letter tile and the project's name. On
+// hover the tile turns into the fold chevron and a plus opens Paseo's New workspace screen for the
+// project (what Paseo's openProject navigation shows). The count shows on hover, as a detail.
 function ProjectHeading({ title, first, count, collapsed, onToggle, shared }: { title: string; first: WorkspaceRef | null; count: number; collapsed: boolean; onToggle(): void; shared: Shared }) {
   const { styles, config, props, t } = shared;
   const project = useWorkspace(first ?? "", (workspace) => workspace.project) ?? null;
   const [hovered, setHovered] = useState(false);
+  const chevron = collapsed || hovered;
   return (
     <View onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)} style={[styles.project, hovered ? styles.hovered : null]}>
       <Pressable accessibilityRole="button" accessibilityLabel={`${collapsed ? "Expand" : "Collapse"} ${title}, ${count} ${count === 1 ? "workspace" : "workspaces"}`} onPress={onToggle} style={styles.projectMain}>
-        <View style={[styles.tile, { backgroundColor: tileColor(title) }]}>
-          <Text style={styles.tileText}>{title.trim().charAt(0).toUpperCase() || "?"}</Text>
-        </View>
+        {chevron ? (
+          <View style={styles.tile}>
+            <Icon name={collapsed ? "ChevronRight" : "ChevronDown"} size={13} color={props.theme.colors.foregroundMuted} />
+          </View>
+        ) : (
+          <View style={[styles.tile, { backgroundColor: tileColor(title) }]}>
+            <Text style={styles.tileText}>{title.trim().charAt(0).toUpperCase() || "?"}</Text>
+          </View>
+        )}
         <Text style={styles.projectText} numberOfLines={1}>
           {title}
         </Text>
-        {config.counts ? <Text style={styles.count}>{count}</Text> : null}
+        {config.counts && (hovered || collapsed || TOUCH) ? <Text style={styles.count}>{count}</Text> : null}
         <View style={{ flex: 1 }} />
-        {collapsed || hovered ? <Icon name={collapsed ? "ChevronRight" : "ChevronDown"} size={13} color={props.theme.colors.foregroundMuted} /> : null}
       </Pressable>
       {project && (hovered || TOUCH) ? <IconButton t={t} size="sm" icon="Plus" label={`New workspace in ${title}`} onPress={() => props.navigation.openProject(project)} /> : null}
     </View>
@@ -510,24 +875,26 @@ interface HeaderProps {
   filters: number;
   // Opens the next item that needs the user; null when nothing does.
   onNext: (() => void) | null;
+  // Where the Filter and Display menus open from.
+  headerRef: RefObject<View | null>;
   shared: Shared;
 }
 
 // The view's header, like Paseo's "Workspaces" heading: the list's name, then icon buttons for
 // search, filters, view options and Next. Menus open over the list instead of pushing it down.
-function Header({ menu, setMenu, searching, setSearching, search, onSearch, filters, onNext, shared }: HeaderProps) {
+function Header({ menu, setMenu, searching, setSearching, search, onSearch, filters, onNext, headerRef, shared }: HeaderProps) {
   const { styles, props, t, config } = shared;
   const showSearch = searching || search !== "";
   const toggle = (next: Exclude<Menu, null>) => setMenu(menu === next ? null : next);
   return (
-    <View style={styles.header}>
+    <View ref={headerRef} style={styles.header}>
       <Text style={styles.headerText}>{config.list === "chats" ? "Chats" : "Workspaces"}</Text>
       <IconButton t={t} size="sm" icon="Search" tone={showSearch ? props.theme.colors.foreground : undefined} label={showSearch ? "Close search" : "Search"} onPress={() => (showSearch ? (onSearch(""), setSearching(false)) : setSearching(true))} />
       <View>
         <IconButton t={t} size="sm" icon="ListFilter" tone={filters || menu === "filter" ? props.theme.colors.foreground : undefined} label={filters ? `Filters, ${filters} on` : "Filter"} onPress={() => toggle("filter")} />
         {filters ? <View pointerEvents="none" style={{ position: "absolute", top: 2, right: 2, width: 6, height: 6, borderRadius: 3, backgroundColor: props.theme.colors.accent }} /> : null}
       </View>
-      <IconButton t={t} size="sm" icon="SlidersHorizontal" tone={menu === "view" ? props.theme.colors.foreground : undefined} label="View options: grouping, sorting, rows per group" onPress={() => toggle("view")} />
+      <IconButton t={t} size="sm" icon="SlidersHorizontal" tone={menu === "view" ? props.theme.colors.foreground : undefined} label="Display: grouping, sorting, what rows show" onPress={() => toggle("view")} />
       <IconButton t={t} size="sm" icon="SkipForward" label={onNext ? "Open the next one that needs you" : "Nothing needs you"} disabled={onNext === null} onPress={() => onNext?.()} />
     </View>
   );
@@ -591,56 +958,82 @@ function FilterMenu({ state, save, projects, shared }: FilterMenuProps) {
   );
 }
 
-// Grouping, sorting, rows per group and row details, saved to the active layout so every app
-// shows the same list.
-function ViewMenu({ update, shared }: { update(patch: Partial<ViewConfig>): void; shared: Shared }) {
-  const { t, config } = shared;
-  const radio = <Value extends string>(value: Value, current: Value, label: string, apply: () => void, hint?: string) => <MenuItem key={value} t={t} role="radio" label={label} hint={hint} checked={value === current} onPress={apply} />;
+// Paseo's Display menu and Morphise's extras as compact rows, each showing its current value and
+// opening its choices in place, one at a time. View choices are saved to the active layout so every
+// app shows the same list; Show background is kept on this device, as Paseo keeps it.
+function ViewMenu({ update, state, saveState, shared }: { update(patch: Partial<ViewConfig>): void; state: ViewState; saveState(next: Partial<ViewState>): void; shared: Shared }) {
+  const { t, config, shows } = shared;
+  const open = useValue(viewUi).section;
+  const setOpen = (section: string | null) => viewUi.set({ ...viewUi.get(), section });
+  const choice = <Value extends string>(key: string, title: string, current: Value, options: readonly (readonly [Value, string])[], apply: (value: Value) => void) => (
+    <View key={key}>
+      <MenuItem t={t} icon={open === key ? "ChevronDown" : "ChevronRight"} label={title} hint={options.find(([value]) => value === current)?.[1]} onPress={() => setOpen(open === key ? null : key)} />
+      {open === key ? (
+        <View style={{ paddingLeft: 14 }}>
+          {options.map(([value, label]) => (
+            <MenuItem
+              key={value}
+              t={t}
+              role="radio"
+              label={label}
+              checked={value === current}
+              onPress={() => {
+                // Choosing the current value writes nothing, so an unchanged option never adds a
+                // key that an older version cannot read.
+                if (value !== current) apply(value);
+                setOpen(null);
+              }}
+            />
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
   const perGroup = config.rowLimit.enabled ? config.rowLimit.rows : 0;
+  const chatsFor = config.showAgents ? config.agentsFor ?? "active" : "off";
+  const chatRows = config.chatRows ?? DEFAULT_CHAT_ROWS;
+  const subAgentRows = config.subAgentRows ?? DEFAULT_CHAT_ROWS;
+  const toggles: [keyof RowShows | "timeInStatus" | "counts", string, boolean, () => void][] = [
+    ["branch", "Branch", shows.branch, () => update({ details: { ...config.details, branch: !shows.branch } })],
+    ["project", "Project", shows.project, () => update({ details: { ...config.details, project: !shows.project } })],
+    ["host", "Host", shows.host, () => update({ show: { ...config.show, host: !shows.host } })],
+    ["pullRequest", "Pull request", shows.pullRequest, () => update({ show: { ...config.show, pullRequest: !shows.pullRequest } })],
+    ["checks", "Checks", shows.checks, () => update({ show: { ...config.show, checks: !shows.checks } })],
+    ["services", "Services", shows.services, () => update({ show: { ...config.show, services: !shows.services } })],
+    ["labels", "Labels", shows.labels, () => update({ show: { ...config.show, labels: !shows.labels } })],
+    ["diff", "Diff stats", shows.diff, () => update({ details: { ...config.details, diff: !shows.diff } })],
+    ["lastActivity", "Last activity", shows.lastActivity, () => update({ show: { ...config.show, lastActivity: !shows.lastActivity } })],
+    ["timeInStatus", "Time in status, not since last prompt", config.details.timeInStatus, () => update({ details: { ...config.details, timeInStatus: !config.details.timeInStatus } })],
+    ["counts", "Counts in headings", config.counts, () => update({ counts: !config.counts })],
+  ];
   return (
     <>
-      <MenuSection title="Group by" shared={shared}>
-        {(
-          [
-            ["project", "Project"],
-            ["status", "Status"],
-            ["activity", "Last used"],
-            ["label", "Label"],
-            ["none", "No groups"],
-          ] as const
-        ).map(([value, label]) => radio(value, config.groupBy, label, () => update({ groupBy: value })))}
-      </MenuSection>
-      <MenuSection title="Sort by" shared={shared}>
-        {(
-          [
-            ["activity", "Last prompt"],
-            ["status", "Status"],
-            ["name", "Name"],
-            ["created", "Newest"],
-            ["statusChanged", "Latest status change"],
-            ["changes", "Most changed lines"],
-          ] as const
-        ).map(([value, label]) => radio(value, config.orderBy, label, () => update({ orderBy: value })))}
-      </MenuSection>
-      <MenuSection title="Per group" shared={shared}>
-        {[...new Set([5, 10, 20, ...(perGroup && ![5, 10, 20].includes(perGroup) ? [perGroup] : []), 0])].map((rows) =>
-          radio(String(rows), String(perGroup), rows === 0 ? "Show all" : `${rows}, then Show more`, () => update({ rowLimit: rows === 0 ? { ...config.rowLimit, enabled: false } : { enabled: true, rows } })),
-        )}
-      </MenuSection>
+      {choice("group", "Grouping", config.groupBy, [["project", "Project"], ["status", "Status"], ["activity", "Last used"], ["label", "Label"], ["none", "No groups"]] as const, (groupBy) => update({ groupBy }))}
+      {choice("sort", "Sort", config.orderBy, [["activity", "Last prompt"], ["created", "Created"], ["status", "Status"], ["name", "Name"], ["statusChanged", "Latest status change"], ["changes", "Most changed lines"]] as const, (orderBy) => update({ orderBy }))}
+      {config.list === "workspaces" ? choice("title", "Title", config.titleSource ?? "title", [["title", "Title"], ["branch", "Branch name"]] as const, (titleSource) => update({ titleSource })) : null}
+      {choice("rows", "Rows", config.rowStyle ?? "two-line", [["two-line", "Two lines"], ["one-line", "One line"]] as const, (rowStyle) => update({ rowStyle }))}
+      {choice("height", "Row height", config.density, [["compact", "Compact"], ["comfortable", "Comfortable"]] as const, (density) => update({ density }))}
+      {choice("limit", "Per group", String(perGroup), [...new Set(["5", "10", "20", ...(perGroup && ![5, 10, 20].includes(perGroup) ? [String(perGroup)] : []), "0"])].map((rows) => [rows, rows === "0" ? "Show all" : `${rows}, then Show more`] as const), (rows) => update({ rowLimit: rows === "0" ? { ...config.rowLimit, enabled: false } : { enabled: true, rows: Number(rows) } }))}
       {config.list === "workspaces" ? (
-        <MenuSection title="Chats under workspaces" shared={shared}>
-          {radio("off", config.showAgents ? config.agentsFor ?? "active" : "off", "Hidden", () => update({ showAgents: false }))}
-          {radio("active", config.showAgents ? config.agentsFor ?? "active" : "off", "Open workspace only", () => update({ showAgents: true, agentsFor: "active" }))}
-          {radio("all", config.showAgents ? config.agentsFor ?? "active" : "off", "Every workspace", () => update({ showAgents: true, agentsFor: "all" }))}
-        </MenuSection>
+        <>
+          {choice("chats", "Chats", chatsFor, [["off", "Hidden"], ["active", "Open workspace only"], ["all", "Every workspace"]] as const, (value) => update(value === "off" ? { showAgents: false } : { showAgents: true, agentsFor: value }))}
+          {chatsFor !== "off" ? choice("chatRows", "Chats per workspace", String(chatRows), [...new Set(["3", "5", "10", "20", String(chatRows)])].map((rows) => [rows, `${rows}, then Show more`] as const), (rows) => update({ chatRows: Number(rows) })) : null}
+          {chatsFor !== "off"
+            ? choice("subAgents", "Sub-agents per chat", config.showSubAgents === false ? "hidden" : String(subAgentRows), [["hidden", "Hidden"], ...[...new Set(["3", "5", "10", "20", String(subAgentRows)])].map((rows) => [rows, `${rows}, then Show more`] as const)] as const, (value) => update(value === "hidden" ? { showSubAgents: false } : { showSubAgents: true, subAgentRows: Number(value) }))
+            : null}
+        </>
       ) : null}
-      <MenuSection title="Rows" shared={shared}>
-        <MenuItem t={t} role="checkbox" label="Comfortable height" checked={config.density === "comfortable"} onPress={() => update({ density: config.density === "comfortable" ? "compact" : "comfortable" })} />
-        <MenuItem t={t} role="checkbox" label="Branch" checked={config.details.branch} onPress={() => update({ details: { ...config.details, branch: !config.details.branch } })} />
-        <MenuItem t={t} role="checkbox" label="Changed lines" checked={config.details.diff} onPress={() => update({ details: { ...config.details, diff: !config.details.diff } })} />
-        <MenuItem t={t} role="checkbox" label="Time in status" checked={config.details.timeInStatus} onPress={() => update({ details: { ...config.details, timeInStatus: !config.details.timeInStatus } })} />
-        <MenuItem t={t} role="checkbox" label="Counts in headings" checked={config.counts} onPress={() => update({ counts: !config.counts })} />
-      </MenuSection>
+      <View>
+        <MenuItem t={t} icon={open === "show" ? "ChevronDown" : "ChevronRight"} label="Show" hint={`${toggles.filter(([, , on]) => on).length} on`} onPress={() => setOpen(open === "show" ? null : "show")} />
+        {open === "show" ? (
+          <View style={{ paddingLeft: 14 }}>
+            {toggles.map(([key, label, on, toggle]) => (
+              <MenuItem key={key} t={t} role="checkbox" label={label} checked={on} onPress={toggle} />
+            ))}
+          </View>
+        ) : null}
+      </View>
+      {config.list === "workspaces" ? <MenuItem t={t} role="checkbox" icon="EyeOff" label="Show background" checked={state.showBackground} onPress={() => saveState({ showBackground: !state.showBackground })} /> : null}
     </>
   );
 }
@@ -648,6 +1041,9 @@ function ViewMenu({ update, shared }: { update(patch: Partial<ViewConfig>): void
 export interface ViewDeps extends PickerDeps {
   // Saves the view's group, sort and limit options to the active layout.
   updateView(patch: Partial<ViewConfig>): Promise<void>;
+  workspaces: ValueStore<WorkspaceList>;
+  // False until the first workspace list arrives, while the view shows loading placeholders.
+  workspacesReady: ValueStore<boolean>;
 }
 
 interface RowSource {
@@ -680,13 +1076,13 @@ function workspaceRows(config: ViewConfig) {
           orderGroups<Group<WorkspaceRef>>(useWorkspaces({ where, orderBy: compare, groupBy: (workspace) => groupKeys(config, workspace) }), config);
   // Like Paseo's own sidebar, pinned workspaces get their own section above the groups.
   const pinnedApart = config.pinnedFirst && config.groupBy !== "none";
-  return function useWorkspaceRows(filter: Filter, props: PluginSidebarViewProps): RowSource {
-    const shown = (workspace: PluginWorkspaceSnapshot) => isVisible(workspace) && matchesFilter(workspace, filter);
+  return function useWorkspaceRows(filter: Filter, props: PluginSidebarViewProps, showBackground: boolean): RowSource {
+    const shown = (workspace: PluginWorkspaceSnapshot) => isVisible(workspace, showBackground) && matchesFilter(workspace, filter);
     const pinned = useWorkspaces({ where: (workspace) => shown(workspace) && workspace.pinnedAt !== null, orderBy: compare });
     const grouped = useSections((workspace) => shown(workspace) && !(pinnedApart && workspace.pinnedAt !== null));
     const sections = pinnedApart && pinned.length ? [{ key: "pinned", title: "Pinned", items: pinned }, ...grouped] : grouped;
     const protectedKeys = new Set(useWorkspaces({ where: (workspace) => shown(workspace) && isProtected(workspace) }).map((ref) => ref.key));
-    const waitingRefs = useWorkspaces({ where: (workspace) => isVisible(workspace) && needsAttention(workspace.indicator), orderBy: compare });
+    const waitingRefs = useWorkspaces({ where: (workspace) => isVisible(workspace, showBackground) && needsAttention(workspace.indicator), orderBy: compare });
     const next = nextAttention(withHidden(attentionOrder(sections, new Set(waitingRefs.map((ref) => ref.key))), waitingRefs), props.active.workspace?.key ?? null);
     return {
       sections,
@@ -706,7 +1102,8 @@ function chatRows(config: ViewConfig) {
       ? (where: Where<PluginAgentSnapshot>) => [{ key: "all", title: null, items: useAgents({ where, orderBy: compare }) }]
       : (where: Where<PluginAgentSnapshot>) =>
           orderGroups<Group<AgentRef>>(useAgents({ where, orderBy: compare, groupBy: (chat) => chatGroupKey(config, chat) }), config);
-  return function useChatRows(filter: Filter, props: PluginSidebarViewProps): RowSource {
+  // Background workspaces are a workspace-list choice; the chat list has none.
+  return function useChatRows(filter: Filter, props: PluginSidebarViewProps, _showBackground: boolean): RowSource {
     const shown = (chat: PluginAgentSnapshot) => isListedChat(chat) && chatMatches(chat, filter);
     const sections = useSections(shown);
     const isProtectedChat = (chat: PluginAgentSnapshot) => ["needs_input", "failed"].includes(chatIndicator(chat));
@@ -748,11 +1145,14 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     const expanded = new Set(ui.expanded);
     const setSearch = (text: string) => setUi({ search: text });
     const setSearching = (on: boolean) => setUi({ searching: on });
-    const setMenu = (next: Menu) => setUi({ menu: next });
+    // A menu opens with its sections folded.
+    const setMenu = (next: Menu) => setUi({ menu: next, section: null });
     const setExpanded = (next: ReadonlySet<string>) => setUi({ expanded: [...next] });
     // Project names for the Projects filter, from the same visible workspaces.
-    const projects = useWorkspaces({ where: isVisible, groupBy: (workspace) => ({ key: workspace.project.key, title: workspace.projectDisplayName }) }).map((group) => ({ key: group.key, title: group.title ?? "Project" }));
+    const projects = useWorkspaces({ where: (workspace) => isVisible(workspace, state.showBackground), groupBy: (workspace) => ({ key: workspace.project.key, title: workspace.projectDisplayName }) }).map((group) => ({ key: group.key, title: group.title ?? "Project" }));
     const toast = useToast();
+    const headerRef = useRef<View>(null);
+    const viewRef = useRef<View>(null);
     // Tells the settings screen that Paseo is showing this view.
     useEffect(() => viewPresence.set(true), []);
 
@@ -775,7 +1175,10 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     };
     const filters = filter.statuses.length + (filter.projects?.length ?? 0) + Number(filter.hideDone) + Number(filter.changedOnly) + Number(filter.pinnedOnly);
     const updateView = (patch: Partial<ViewConfig>) => void deps.updateView(patch).catch(report(toast, "change the view"));
-    const source = useRows(filter, props);
+    const source = useRows(filter, props, state.showBackground);
+    const ready = useValue(deps.workspacesReady);
+    const workspaceList = useValue(deps.workspaces);
+    const hosts = useHosts();
     const { sections, protectedKeys } = source;
 
     const dueEntries = reminders.filter((entry) => isDue(entry.reminder, now));
@@ -797,7 +1200,27 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     }
     const done = (taskId: string) => void deps.apply({ kind: "setReminder", id: taskId, reminder: null }).catch(report(toast, "mark the reminder done"));
     const later = (taskId: string, minutes: number) => void deps.apply({ kind: "remindAgain", id: taskId, minutes }).catch(report(toast, "move the reminder"));
-    const shared: Shared = { props, styles, t, config, now, workspaceReminders, statuses: filter.statuses, chatReminders, picker: deps, done, later };
+    const labels = [...new Set([...workspaceList.values()].flatMap((workspace) => workspace.labels))].sort();
+    const setExpandedKey = (key: string, on: boolean) => setExpanded(new Set(on ? [...expanded, key] : [...expanded].filter((item) => item !== key)));
+    const shared: Shared = {
+      props,
+      styles,
+      t,
+      config,
+      now,
+      workspaceReminders,
+      statuses: filter.statuses,
+      chatReminders,
+      picker: deps,
+      done,
+      later,
+      shows: rowShows(config),
+      workspaces: deps.workspaces,
+      hosts,
+      labels,
+      isExpanded: (key) => expanded.has(key),
+      setExpanded: setExpandedKey,
+    };
     const collapsed = new Set(state.collapsed);
     const toggleCollapsed = (key: string) =>
       saveState({ collapsed: collapsed.has(key) ? state.collapsed.filter((item) => item !== key) : [...state.collapsed, key] });
@@ -814,9 +1237,10 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     ];
 
     return (
-      <View style={styles.scroll}>
+      <View ref={viewRef} style={styles.scroll}>
+        <PopoverHost bounds={viewRef}>
         {on ? (
-          <Header menu={menu} setMenu={setMenu} searching={searching} setSearching={setSearching} search={search} onSearch={setSearch} filters={filters} onNext={source.onNext} shared={shared} />
+          <Header menu={menu} setMenu={setMenu} searching={searching} setSearching={setSearching} search={search} onSearch={setSearch} filters={filters} onNext={source.onNext} headerRef={headerRef} shared={shared} />
         ) : null}
         {on && (searching || search !== "" || activeTags.length) ? (
           <View style={styles.tools}>
@@ -838,7 +1262,8 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
             {remindersFolded ? null : dueEntries.map((entry) => <ReminderRow key={`${entry.taskId}:${entry.reminder.setAt}`} entry={entry} chat={entry.agentId ? dueChats.get(entry.agentId) ?? null : null} shared={shared} />)}
           </View>
         ) : null}
-        {nothing ? <Text style={styles.empty}>{filter.search || filters ? `No ${source.noun} match` : `No ${source.noun} yet`}</Text> : null}
+        {nothing && !ready ? <LoadingRows shared={shared} /> : null}
+        {nothing && ready ? <Text style={styles.empty}>{filter.search || filters ? `No ${source.noun} match` : `No ${source.noun} yet`}</Text> : null}
         {sections.map((section) => {
           const folded = section.title !== null && collapsed.has(section.key);
           // The Pinned section is never shortened: pins are few by choice.
@@ -857,45 +1282,17 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
             <View key={section.key}>
               {heading}
               {folded ? null : rows.map((reference) => source.renderRow(reference, shared))}
-              {!folded && hidden > 0 ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Show ${hidden} more ${source.noun}`}
-                  onPress={() => setExpanded(new Set([...expanded, section.key]))}
-                  style={styles.more}
-                >
-                  <Icon name="ChevronDown" size={14} color={props.theme.colors.foregroundMuted} />
-                  <Text style={styles.moreText}>Show more</Text>
-                  <Text style={styles.count}>{hidden}</Text>
-                </Pressable>
-              ) : null}
-              {!folded && collapsible ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Show fewer ${source.noun}`}
-                  onPress={() => setExpanded(new Set([...expanded].filter((key) => key !== section.key)))}
-                  style={styles.more}
-                >
-                  <Icon name="ChevronUp" size={14} color={props.theme.colors.foregroundMuted} />
-                  <Text style={styles.moreText}>Show less</Text>
-                </Pressable>
-              ) : null}
+              {!folded && hidden > 0 ? <MoreRow icon="ChevronDown" label="Show more" spoken={`Show ${hidden} more ${source.noun}`} count={hidden} onPress={() => setExpandedKey(section.key, true)} shared={shared} /> : null}
+              {!folded && collapsible ? <MoreRow icon="ChevronUp" label="Show less" spoken={`Show fewer ${source.noun}`} onPress={() => setExpandedKey(section.key, false)} shared={shared} /> : null}
             </View>
           );
         })}
       </ScrollView>
-          {menu ? (
-            <>
-              {/* Tapping outside the menu closes it. */}
-              <Pressable accessibilityRole="button" accessibilityLabel="Close menu" onPress={() => setMenu(null)} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
-              <View style={styles.menu}>
-                <ScrollView>
-                  {menu === "filter" ? <FilterMenu state={state} save={saveState} projects={projects} shared={shared} /> : <ViewMenu update={updateView} shared={shared} />}
-                </ScrollView>
-              </View>
-            </>
-          ) : null}
+          <Dropdown t={t} open={menu !== null} onClose={() => setMenu(null)} anchor={headerRef} width={420} maxHeight={560}>
+            {menu === "filter" ? <FilterMenu state={state} save={saveState} projects={projects} shared={shared} /> : <ViewMenu update={updateView} state={state} saveState={saveState} shared={shared} />}
+          </Dropdown>
         </View>
+        </PopoverHost>
       </View>
     );
   };

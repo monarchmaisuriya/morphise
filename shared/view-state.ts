@@ -16,6 +16,8 @@ export const viewStateSettings = defineSettings({
     hideDone: z.boolean().default(false),
     changedOnly: z.boolean().default(false),
     pinnedOnly: z.boolean().default(false),
+    // Paseo's "Show background": background workspaces are hidden unless this is on.
+    showBackground: z.boolean().default(false),
   }),
 });
 

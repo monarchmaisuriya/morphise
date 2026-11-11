@@ -1,7 +1,9 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { Icon, TextInput } from "@getpaseo/plugin/client/ui";
-import { type ReactNode, useMemo, useState } from "react";
-import { Pressable, type StyleProp, Text, type TextStyle, View, type ViewStyle } from "react-native";
+import { createContext, Fragment, type ReactNode, type RefObject, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createValueStore, useValue, type ValueStore } from "../profile-store";
+import { onPressOutside } from "../web";
+import { Modal as Layer, Platform, Pressable, ScrollView, type StyleProp, Text, type TextStyle, useWindowDimensions, View, type ViewStyle } from "react-native";
 
 // Morphise's small UI kit. Sizes follow Paseo's own sidebar and settings (measured on 0.16.0-beta.1:
 // 36px rows, 8px radius, 14px row text, 12px muted section labels), so plugin screens sit next to
@@ -209,6 +211,9 @@ export function Field({
           onSubmitEditing={onSubmit}
           style={[
             { flex: 1, minWidth: 0, color: c.foreground, fontSize: t.compact ? 15 : 13, paddingVertical: multiline ? 8 : 0, minHeight: multiline ? (bare ? 44 : 72) : t.control - 2, textAlignVertical: multiline ? "top" : "center" },
+            // The field's border already shows focus; on the web the input's own outline would draw a
+            // second ring inside it. `outlineWidth` is web-only, so it is cast past the native type.
+            WEB ? (INPUT_NO_OUTLINE as TextStyle) : null,
             textStyle,
           ]}
         />
@@ -279,13 +284,164 @@ export function PropertyRow({ t, icon, label, children }: { t: Tokens; icon: str
   );
 }
 
-// A value that opens a list of choices beneath it; for status, labels and similar fields.
+// Where a surface's open popover draws. React Native Web gives every View `z-index: 0`, so each
+// View is its own stacking layer and later rows paint over a popover placed inside an earlier row.
+// The host renders the popover after all of the surface's content instead, so it draws above it.
+type OpenPopover = { owner: { id: number }; node: ReactNode } | null;
+let popoverIds = 0;
+type PopoverContext = { layer: ValueStore<OpenPopover>; bounds: RefObject<View | null> | null };
+const PopoverLayer = createContext<PopoverContext | null>(null);
+
+// `bounds` is the area popovers must stay inside: a sidebar view, which Paseo's other panes paint
+// over. Without it, the window (a dialog, which nothing paints over).
+export function PopoverHost({ children, bounds = null }: { children: ReactNode; bounds?: RefObject<View | null> | null }) {
+  const [layer] = useState(() => createValueStore<OpenPopover>(null));
+  const context = useMemo(() => ({ layer, bounds }), [layer, bounds]);
+  return (
+    <PopoverLayer.Provider value={context}>
+      {children}
+      <PopoverSlot layer={layer} />
+    </PopoverLayer.Provider>
+  );
+}
+
+// Only this slot redraws when the popover changes, so the surface around it does not.
+// Keyed by owner, so one popover replacing another never inherits its measured position.
+function PopoverSlot({ layer }: { layer: ValueStore<OpenPopover> }) {
+  const open = useValue(layer);
+  return open ? <Fragment key={open.owner.id}>{open.node}</Fragment> : null;
+}
+
+// A popover list anchored to a trigger, drawn in the surface's PopoverHost. It floats over the
+// content, escapes a dialog's scroll area, opens below the trigger (or above when there is more room
+// there), scrolls inside a bounded height, and closes on a press outside. `header` stays fixed above
+// the scrolling part. Escape belongs to Paseo's dialog (its overlay stack takes the key before any
+// plugin listener), so inside a dialog it closes the dialog, as it does elsewhere in Paseo.
+//
+// On the web it uses fixed positioning inside the current dialog: a separate React Native Modal
+// would add a second focus trap beside Paseo's dialog, and the two hand focus back and forth until
+// the page hangs. Fixed positions are measured from a probe, because an animated (transformed)
+// dialog moves the origin that fixed children are placed from.
+type DropdownProps = {
+  t: Tokens;
+  open: boolean;
+  onClose(): void;
+  anchor: RefObject<View | null>;
+  header?: ReactNode;
+  children: ReactNode;
+  width?: number;
+  // The tallest the popover grows before it scrolls (320 unless set), within the window.
+  maxHeight?: number;
+  // A passive popover (a hover card) takes no presses and has no backdrop to close it.
+  passive?: boolean;
+};
+
+export function Dropdown(props: DropdownProps) {
+  const context = useContext(PopoverLayer);
+  if (!context) throw new Error("Dropdown needs a PopoverHost around its surface, so its popover can draw above the content");
+  const { layer, bounds } = context;
+  const [owner] = useState(() => ({ id: ++popoverIds }));
+  const node = props.open ? <DropdownSurface {...props} bounds={bounds} /> : null;
+  // Runs after every render, so the popover shows this render's options and search text.
+  useLayoutEffect(() => {
+    if (node) layer.set({ owner, node });
+    else if (layer.get()?.owner === owner) layer.set(null);
+  });
+  useLayoutEffect(() => () => {
+    if (layer.get()?.owner === owner) layer.set(null);
+  }, [layer, owner]);
+  return null;
+}
+
+function DropdownSurface({ t, onClose, anchor, bounds, header, children, width = 320, maxHeight = 320, passive = false }: Omit<DropdownProps, "open"> & { bounds: RefObject<View | null> | null }) {
+  const window = useWindowDimensions();
+  const probe = useRef<View>(null);
+  const [place, setPlace] = useState<{ trigger: Frame; area: Frame; origin: { x: number; y: number } } | null>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  const placed = place !== null;
+  // Only presses outside the whole popover layer close it here: those land on Paseo's own panes,
+  // which paint above a sidebar's layer. Presses inside the layer belong to the backdrop, which
+  // swallows them, so closing never lets a press fall through to the row or button underneath.
+  useEffect(() => (passive || !placed || !WEB ? undefined : onPressOutside(probe.current, () => closeRef.current())), [passive, placed]);
+  // Measured after every render, so an anchor that moves (a re-sorted row) takes its popover with
+  // it; the position is only stored when it changed, so this settles after one pass.
+  useLayoutEffect(() => {
+    const measure = (view: View | null | undefined, then: (frame: Frame) => void) => view?.measureInWindow((x, y, frameWidth, height) => then({ x, y, width: frameWidth, height }));
+    const whole = { x: 0, y: 0, width: window.width, height: window.height };
+    measure(anchor.current, (trigger) => {
+      const withArea = (area: Frame) => {
+        const update = (next: { trigger: Frame; area: Frame; origin: { x: number; y: number } }) => setPlace((current) => (current && JSON.stringify(current) === JSON.stringify(next) ? current : next));
+        if (!WEB) return update({ trigger, area, origin: { x: 0, y: 0 } });
+        measure(probe.current, (origin) => update({ trigger, area, origin: { x: origin.x, y: origin.y } }));
+      };
+      if (bounds?.current) measure(bounds.current, withArea);
+      else withArea(whole);
+    });
+  });
+  const surface = (() => {
+    if (!place) return null;
+    const { trigger, area, origin } = place;
+    const gap = 4;
+    const margin = 8;
+    const below = area.y + area.height - (trigger.y + trigger.height) - gap - margin;
+    const above = trigger.y - area.y - gap - margin;
+    const popoverWidth = Math.min(width, area.width - margin * 2);
+    const upward = below < 240 && above > below;
+    const room = Math.min(maxHeight, upward ? above : below);
+    return (
+      <View
+        pointerEvents={passive ? "none" : "box-none"}
+        style={{
+          position: "absolute",
+          left: Math.max(area.x + margin, Math.min(trigger.x, area.x + area.width - popoverWidth - margin)) - origin.x,
+          top: (upward ? trigger.y - gap - room : trigger.y + trigger.height + gap) - origin.y,
+          height: room,
+          width: popoverWidth,
+          justifyContent: upward ? "flex-end" : "flex-start",
+        }}
+      >
+        <View style={{ flexShrink: 1, padding: 4, gap: 4, borderRadius: t.radius.row + 2, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1, shadowColor: "#000000", shadowOpacity: 0.35, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 12 }}>
+          {header}
+          <ScrollView style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled">
+            {children}
+          </ScrollView>
+        </View>
+      </View>
+    );
+  })();
+  const backdrop = passive ? null : <Pressable accessibilityLabel="Close" onPress={onClose} style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }} />;
+  if (!WEB) {
+    return (
+      <Layer transparent visible animationType="none" onRequestClose={onClose}>
+        {backdrop}
+        {surface}
+      </Layer>
+    );
+  }
+  return (
+    // "fixed" is web-only, so it is cast past React Native's position type.
+    <View ref={probe} pointerEvents={passive ? "none" : "auto"} style={{ position: "fixed" as "absolute", top: 0, left: 0, right: 0, bottom: 0 }}>
+      {backdrop}
+      {surface}
+    </View>
+  );
+}
+
+type Frame = { x: number; y: number; width: number; height: number };
+
+const WEB = Platform.OS === "web";
+const INPUT_NO_OUTLINE: unknown = { outlineWidth: 0 };
+
+// A value that opens its choices in a popover; for status, columns and similar fields.
 export function Select<Value extends string>({ t, value, options, onChange, label, placeholder }: { t: Tokens; value: Value | null; options: readonly { value: Value; label: string; dot?: string; icon?: string }[]; onChange(value: Value): void; label: string; placeholder?: string }) {
   const [open, setOpen] = useState(false);
+  const anchor = useRef<View>(null);
   const current = options.find((option) => option.value === value) ?? null;
   return (
-    <View style={{ gap: 4, alignSelf: "stretch" }}>
+    <View style={{ alignSelf: "stretch" }}>
       <Pressable
+        ref={anchor}
         accessibilityRole="button"
         accessibilityLabel={`${label}: ${current?.label ?? placeholder ?? "none"}. Change`}
         accessibilityState={{ expanded: open }}
@@ -297,8 +453,7 @@ export function Select<Value extends string>({ t, value, options, onChange, labe
         <Text style={{ color: current ? t.c.foreground : t.c.foregroundMuted, fontSize: 13 }}>{current?.label ?? placeholder ?? "None"}</Text>
         <Icon name={open ? "ChevronUp" : "ChevronDown"} size={14} color={t.c.foregroundMuted} />
       </Pressable>
-      {open ? (
-        <View style={{ alignSelf: "flex-start", minWidth: 200, padding: 4, borderRadius: t.radius.row, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1 }}>
+      <Dropdown t={t} open={open} onClose={() => setOpen(false)} anchor={anchor} width={260}>
           {options.map((option) => (
             <MenuItem
               key={option.value}
@@ -314,8 +469,7 @@ export function Select<Value extends string>({ t, value, options, onChange, labe
               }}
             />
           ))}
-        </View>
-      ) : null}
+      </Dropdown>
     </View>
   );
 }

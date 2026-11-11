@@ -38,6 +38,7 @@ export default function contribute(client: PluginClientContext) {
   const taskStore = createTaskStore();
   const chats = createValueStore<Chats>(new Map());
   const workspaceList = createValueStore<WorkspaceList>(new Map());
+  const workspacesReady = createValueStore(false);
   const changeWorkspaceList = (change: Parameters<typeof reduceWorkspaceInfo>[1]) => {
     const next = reduceWorkspaceInfo(workspaceList.get(), change);
     if (next !== workspaceList.get()) workspaceList.set(next);
@@ -97,6 +98,7 @@ export default function contribute(client: PluginClientContext) {
     apply: applyTasks,
     chats,
     workspaces: workspaceList,
+    workspacesReady,
     announcements,
     updateView,
     reminderSettings: () => profileOf(store.get()).reminders,
@@ -189,6 +191,7 @@ export default function contribute(client: PluginClientContext) {
     name: string,
     list: Promise<{ subscription: ListSubscription<Snapshot> }>,
     observer: { snapshot(snapshot: Snapshot): void; update(message: { type: string; payload?: unknown }): void },
+    onFailed?: () => void,
   ) {
     list
       .then(({ subscription }) => {
@@ -202,7 +205,9 @@ export default function contribute(client: PluginClientContext) {
         releases.push(release);
       })
       .catch((error: unknown) => {
-        if (!stopped) console.error(`[morphise] ${name} watch failed; buttons and live updates may be missing`, error);
+        if (stopped) return;
+        console.error(`[morphise] ${name} watch failed; buttons and live updates may be missing`, error);
+        onFailed?.();
       });
   }
 
@@ -253,12 +258,15 @@ export default function contribute(client: PluginClientContext) {
     }),
   );
 
+  // If the list cannot load, Paseo's own rows are all the view has, so it stops showing placeholders.
+  const workspacesFailed = () => workspacesReady.set(true);
   watch("Workspace", client.paseo.workspaces.list({ subscribe: {} }), {
     snapshot: (snapshot) => {
       profile.reopen();
       taskStream.reopen();
       openKeeper();
       changeWorkspaceList({ snapshot: snapshot.entries });
+      workspacesReady.set(true);
       setDirectory({ ...directory, workspaces: reduceWorkspaces(directory.workspaces, { snapshot: snapshot.entries }) });
     },
     update: (message) => {
@@ -266,7 +274,7 @@ export default function contribute(client: PluginClientContext) {
       const workspaces = reduceWorkspaces(directory.workspaces, { message });
       if (workspaces !== directory.workspaces) setDirectory({ ...directory, workspaces });
     },
-  });
+  }, workspacesFailed);
 
   watch("Agent", client.paseo.agents.list({ subscribe: {} }), {
     snapshot: (snapshot) => {

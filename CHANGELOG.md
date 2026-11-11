@@ -2,6 +2,41 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.7.0 - 2026-11-12
+
+The Morphise sidebar view now offers everything Paseo's own sidebar does that a plugin can reach, plus its own extras.
+
+- **Rows like a session list:**
+  - Two lines: the title, then a muted line.
+  - The muted line says what needs you ("Waiting for your permission" in amber, "Failed" in red), or "Working" with the latest chat. Then the details you chose.
+  - "One line" is an option in Display.
+- **Running work pulses;** the list shows pulsing placeholder rows while it loads.
+- **Paseo's row menu:** ⋮ on hover, or right-click (long press on touch).
+  - Copy path, Copy branch name, Rename, Pin to top, Labels (tick or create), Archive.
+  - Also Open pull request and open a running service.
+- **Hover card:** title, changed lines, host, branch (with ahead and behind), folder, pull request and checks, services, labels.
+- **Pull requests, checks and services** on rows, as Paseo shows them.
+- **Display menu** in Paseo's shape, one compact row per setting:
+  - Grouping, Sort, Title (title or branch name), Rows, Row height, Per group, Chats, Chats per workspace.
+  - Show: Branch, Project, Host, Pull request, Checks, Services, Labels, Diff stats, Last activity. Defaults follow Paseo's.
+  - Show background (kept per device).
+- **Project headings:** the tile turns into the fold chevron on hover; the count shows on hover.
+- **Chats under a workspace:**
+  - The latest 5 (change it in Display), then Show more.
+  - Sub-agents are listed under their parent chat: the latest 5 (change it, or hide them, in Display), then Show more.
+  - Only the open chat or sub-agent is highlighted, not its workspace too.
+- **Popovers** (Status, Workspace and the sidebar menus):
+  - They float over the content and scroll inside a fixed height, instead of growing a dialog.
+  - They close when you press anywhere outside them.
+- **Not possible for a plugin yet:** Paseo's Mark as unread, Manual (drag) order, Open project settings and Remove project have no plugin API.
+- **Hover card position:** a plugin cannot draw beside the sidebar, so the hover card opens under the row.
+
+Rolling back to 0.6.0: `paseo plugin update morphise --ref v0.6.0`.
+- **Settings that 0.6.0 cannot read:**
+  - Any of the new Display choices: Rows, Title, the new Show items, Chats per workspace, Sub-agents per chat.
+  - With one chosen, 0.6.0 reports the profile as invalid and keeps the data.
+- **Profiles where none were chosen** stay readable by 0.6.0.
+
 ## 0.6.0 - 2026-11-11
 
 Morphise sidebar view, cleaner and with more ways to arrange it. Inspired by the "distill" and "quieter" rules of the Impeccable and Hallmark design skills: say things once, colour only what needs you, and hide complexity until asked.

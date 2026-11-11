@@ -7,10 +7,13 @@ interface StyleElement {
   textContent: string | null;
   remove(): void;
 }
+type PressListener = (event: { target: unknown }) => void;
 declare const document: {
   createElement(tag: "style"): StyleElement;
   head: { appendChild(node: StyleElement): unknown };
   visibilityState: "visible" | "hidden";
+  addEventListener(type: "pointerdown", listener: PressListener, capture: boolean): void;
+  removeEventListener(type: "pointerdown", listener: PressListener, capture: boolean): void;
 };
 interface NotificationConstructor {
   new (title: string, options: { body: string; tag: string }): unknown;
@@ -24,6 +27,19 @@ declare const globalThis: { Notification?: NotificationConstructor; matchMedia?(
 export function cannotHover(): boolean {
   if (Platform.OS !== "web") return true;
   return globalThis.matchMedia?.("(hover: none)").matches === true;
+}
+
+// Runs `handler` when the user presses anywhere on the page outside `inside` (a rendered View's
+// element on the web). A plugin view's own backdrop cannot catch presses on Paseo's panes, which
+// paint above it. Native apps get nothing here: their popovers sit in a modal with a backdrop.
+export function onPressOutside(inside: unknown, handler: () => void): () => void {
+  if (Platform.OS !== "web" || !inside) return () => {};
+  const node = inside as { contains(target: unknown): boolean };
+  const listener: PressListener = (event) => {
+    if (!node.contains(event.target)) handler();
+  };
+  document.addEventListener("pointerdown", listener, true);
+  return () => document.removeEventListener("pointerdown", listener, true);
 }
 
 export function applyStyleSheet(css: string): () => void {

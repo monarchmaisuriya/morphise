@@ -8,12 +8,14 @@ Settings are split into tabs: Layouts, Sidebar, Look, Buttons, Commands, Prompts
 - **Sidebar view:** a replacement for the workspace list. Pick "Morphise" in Paseo's Settings, Sidebar, Sidebar view (Morphise's settings remind you while Paseo still shows its own). It lists workspaces or chats.
   - Sort by status (the order is yours), last prompt, name, newest, latest status change or most changed lines, with pinned workspaces first.
   - Group by project, status, last used (Today, Yesterday, This week…), label, or not at all, with counts in the headers. Groups you fold stay folded on that device.
-  - Each group shows 5 workspaces by default, then "Show more"; change the number in settings or in the View options menu.
+  - Each group shows 5 workspaces by default, then "Show more"; change the number in settings or in the Display menu.
   - Filter by status, project, hide done, only changed, or only pinned, from the Filter menu; active filters show as tags.
   - It looks like Paseo's own sidebar: a "Workspaces" header with search, a status filter menu (with "Needs me") and a Next button that opens the next workspace waiting for you; a Pinned section; project groups with letter tiles and a "+" for a new workspace in that project.
-  - Rows show their buttons on hover: rename, archive (press twice), pin, and remind me on chats.
+  - Two-line rows: the title, then a muted line with what needs you ("Waiting for your permission", "Failed"), "Working" and the latest chat, and the details you chose. Running work pulses. "One line" is an option.
+  - Everything Paseo's own rows offer that a plugin can reach: on hover Archive (press twice) and a ⋮ menu, also on right-click or long press, with Copy path, Copy branch name, Rename, Pin to top, Labels, Open pull request, open a service, Archive; a hover card with changes, host, branch, folder, pull request, checks, services and labels.
+  - The Display menu follows Paseo's: Grouping, Sort, Title (title or branch name), Rows, Per group, Chats, and Show (Branch, Project, Host, Pull request, Checks, Services, Labels, Diff stats, Last activity), plus Show background per device.
+  - Chats under a workspace: the latest 5 (changeable), then "Show more"; each chat's sub-agents under it, also the latest 5 (changeable or hidden); only the open chat or sub-agent is highlighted.
   - Shorten long groups with "Show more"; workspaces that need permission or failed always show.
-  - Row details: branch, added and removed lines, time in status, project; a pin button.
 - **Theme:** a light or dark palette from eight colours, listed under Settings, Appearance.
 - **Buttons:** sidebar header and footer rows, workspace header buttons or menus, pills above the message box, and message box controls (a button, an on/off switch saved on the chat, or a model, mode or thinking picker).
 - **Commands:** slash commands, Command Center items, New workspace presets, and hidden timeline row types.
@@ -52,6 +54,7 @@ Requires Paseo 0.16.0-beta.1 or later, on both the daemon and the app.
 - The task board is one settings document on the daemon, shared by every app; changes from several apps at once are merged. Notes are stored on the chat, so they go when the chat does.
 - Paseo gives plugins no notification or "unread" control, so a reminder cannot make Paseo itself ring; Morphise shows it in its own row, list, view, chime and notification. A reminder row in the chat is written by the daemon; if no app is connected at the time, it is written once one connects.
 - Sorting, filtering and reminders in the list apply to Morphise's own sidebar view; plugins cannot reorder Paseo's built-in list or add items to its right-click menus, so "Remind me" sits on the pill, the header, and Morphise's own rows.
+- Paseo's Mark as unread, Manual (drag) order, Open project settings and Remove project have no plugin API, so Morphise's view cannot offer them. Its hover card opens under the row, because a plugin cannot draw beside the sidebar.
 - Cards move with arrows, not drag and drop.
 - Actions from header buttons, sidebar rows and the Command Center act on the focused chat's message box.
 - If Paseo rejects part of the settings, such as an unknown icon name, that part is skipped, the rest still applies, and the Advanced tab lists what was not applied and why.

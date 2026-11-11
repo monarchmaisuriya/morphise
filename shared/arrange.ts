@@ -51,8 +51,9 @@ export function workspaceName(workspace: Pick<ArrangeWorkspace, "name" | "title"
   return workspace.title ?? workspace.name;
 }
 
-export function isVisible(workspace: ArrangeWorkspace): boolean {
-  return workspace.archivingAt === null && !workspace.background;
+// Archived workspaces never show; background ones only when the view's "Show background" is on.
+export function isVisible(workspace: ArrangeWorkspace, showBackground = false): boolean {
+  return workspace.archivingAt === null && (showBackground || !workspace.background);
 }
 
 // Rows that the row limit never hides: the workspace is waiting on the user or broke.

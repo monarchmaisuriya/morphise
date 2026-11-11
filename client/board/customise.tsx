@@ -7,7 +7,7 @@ import { slug, type TaskOperation } from "../../shared/task-ops";
 import { RULE_STATUSES, type Rule, type TaskDocument } from "../../shared/tasks";
 import { useValue } from "../profile-store";
 import { tasksOf } from "../task-store";
-import { Button, Field, IconButton, Select, type Tokens, useTokens } from "../ui/kit";
+import { Button, Field, IconButton, PopoverHost, Select, type Tokens, useTokens } from "../ui/kit";
 import type { BoardDeps } from "./deps";
 
 const COLORS = ["#8f8cf2", "#4fb3a9", "#e0a84f", "#e06c75", "#61afef", "#98c379", "#c678dd", "#8b8ca3"];
@@ -112,6 +112,7 @@ export function CustomiseBoard({ deps, theme, compact, onClose }: { deps: BoardD
   return (
     <Modal title="Customise board" open onOpenChange={(open) => !open && onClose()}>
       <Modal.Content contentContainerStyle={{ gap: 24, paddingBottom: 24 }}>
+        <PopoverHost>
         <Section t={t} title="Columns" hint="A limit turns the column's count red when it holds more cards. One column is Done.">
           {document.columns.map((column, index) => (
             <Row key={column.id} t={t}>
@@ -194,6 +195,7 @@ export function CustomiseBoard({ deps, theme, compact, onClose }: { deps: BoardD
             <Text style={t.text.body}>days</Text>
           </Row>
         </Section>
+        </PopoverHost>
       </Modal.Content>
     </Modal>
   );

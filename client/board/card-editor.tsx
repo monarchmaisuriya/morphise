@@ -9,7 +9,7 @@ import { parseDueDate, todayDate } from "../../shared/when";
 import { useValue } from "../profile-store";
 import { ReminderPicker } from "../reminder-picker";
 import { tasksOf } from "../task-store";
-import { Button, Field, IconButton, PropertyRow, Segmented, Select, Tag, type Tokens, useTokens } from "../ui/kit";
+import { Button, Field, IconButton, PopoverHost, PropertyRow, Segmented, Select, Tag, type Tokens, useTokens } from "../ui/kit";
 import type { BoardDeps } from "./deps";
 import { WorkspacePicker } from "./workspace-picker";
 import { PRIORITY, priorityColor } from "./styles";
@@ -143,6 +143,7 @@ export function CardEditor({ deps, target, theme, compact, onClose }: { deps: Bo
   return (
     <Modal title={task ? "Edit task" : "New task"} open onOpenChange={(open) => !open && onClose()}>
       <Modal.Content contentContainerStyle={{ gap: 16, paddingBottom: 20 }}>
+        <PopoverHost>
         <View style={{ gap: 4 }}>
           <Field t={t} bare value={draft.title} onChangeText={(title) => set({ title })} placeholder="Task title" accessibilityLabel="Title" autoFocus={!task} textStyle={{ fontSize: 20, fontWeight: "600" }} />
           <Field t={t} bare multiline value={draft.description} onChangeText={(description) => set({ description })} placeholder="Add a description…" accessibilityLabel="Description" />
@@ -177,7 +178,7 @@ export function CardEditor({ deps, target, theme, compact, onClose }: { deps: Bo
               <Tag t={t} label="Tomorrow" on={due === plusDays(1)} onPress={() => set({ dueText: plusDays(1) })} />
               <Tag t={t} label="Next Monday" on={due === nextMonday} onPress={() => set({ dueText: nextMonday })} />
               <View style={{ width: 170 }}>
-                <Field t={t} plain value={draft.dueText} onChangeText={(dueText) => set({ dueText })} placeholder="fri, 20 nov, 2026-11-20" accessibilityLabel="Due date" error={dueProblem} />
+                <Field t={t} plain value={draft.dueText} onChangeText={(dueText) => set({ dueText })} placeholder="No date: type fri, 20 nov or 2026-11-20" accessibilityLabel="Due date" error={dueProblem} />
               </View>
               {draft.dueText ? <IconButton t={t} size="sm" icon="X" label="Clear the due date" onPress={() => set({ dueText: "" })} /> : null}
             </View>
@@ -239,6 +240,7 @@ export function CardEditor({ deps, target, theme, compact, onClose }: { deps: Bo
             <Button t={t} variant="primary" label={task ? "Save" : "Add task"} accessibilityLabel="Save" disabled={!draft.title.trim() || !!dueProblem} onPress={() => void save()} />
           </View>
         </View>
+        </PopoverHost>
       </Modal.Content>
     </Modal>
   );

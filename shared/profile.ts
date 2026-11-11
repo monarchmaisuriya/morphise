@@ -176,6 +176,29 @@ const viewSchema = z
     // Which workspaces list their chats when showAgents is on: only the open one (when unset), or
     // all. No default, so documents nobody changed stay readable by 0.5, which rejects new keys.
     agentsFor: z.enum(["active", "all"]).optional(),
+    // The keys below have no default for the same reason: 0.6 rejects keys it does not know.
+    // Rows show a muted second line (status, pull request, services) unless "one-line".
+    rowStyle: z.enum(["two-line", "one-line"]).optional(),
+    // What names a workspace row, as in Paseo's Display menu: its title, or its branch name.
+    titleSource: z.enum(["title", "branch"]).optional(),
+    // Paseo's Display "Show" choices that `details` does not already hold; unset ones follow
+    // Paseo's defaults (see `rowShows`).
+    show: z
+      .strictObject({
+        host: z.boolean().optional(),
+        pullRequest: z.boolean().optional(),
+        checks: z.boolean().optional(),
+        services: z.boolean().optional(),
+        labels: z.boolean().optional(),
+        lastActivity: z.boolean().optional(),
+      })
+      .optional(),
+    // How many chats a workspace lists before "Show more" (5 when unset).
+    chatRows: z.int().min(1).max(50).optional(),
+    // Sub-agents listed under their parent chat (shown when unset), and how many before "Show more"
+    // (5 when unset).
+    showSubAgents: z.boolean().optional(),
+    subAgentRows: z.int().min(1).max(50).optional(),
   })
   .prefault({});
 
