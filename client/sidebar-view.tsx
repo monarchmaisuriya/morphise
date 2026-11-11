@@ -30,17 +30,18 @@ import {
   workspaceName,
 } from "../shared/arrange";
 import { attentionOrder, NEEDS_ME, needsAttention, needsMeOn, nextAttention } from "../shared/attention";
-import { chatGroupKey, chatIndicator, chatMatches, chatName, compareChats, isListedChat } from "../shared/chat-status";
+import { chatGroupKey, chatIndicator, chatMatches, chatName, compareChats, isSidebarChat } from "../shared/chat-status";
 import { INDICATORS, type Indicator, type Profile } from "../shared/profile";
-import { DEFAULT_CHAT_ROWS, owningChatKey, type RowShows, rowShows, rowTitle, statusLine, visibleChats } from "../shared/row-meta";
+import { chatTree, DEFAULT_CHAT_ROWS, effectiveIndicator, MARK_KEY, markApplies, owningRowKey, type RowShows, rowShows, rowTitle, statusLine, visibleChats } from "../shared/row-meta";
+import { newTaskId } from "./board/card-editor";
 import { isDue, type Reminder } from "../shared/reminders";
 import { formatDue, formatElapsed } from "../shared/time-text";
 import { type ViewState, viewStateSettings } from "../shared/view-state";
 import { createValueStore, type ValueStore, useValue } from "./profile-store";
 import { useReminderClock } from "./reminder-clock";
 import { type AlertEntry, remindersOf } from "./reminder-alerts";
-import { type PickerDeps, ReminderPicker } from "./reminder-picker";
-import { followUpTask } from "../shared/task-ops";
+import { type PickerDeps, ReminderPicker, type ReminderTarget } from "./reminder-picker";
+import { followUpTask, followUpWorkspaceTask } from "../shared/task-ops";
 import { type ApplyTaskOperations, type TaskStore, tasksOf } from "./task-store";
 import { Button, Dropdown, Field, IconButton, MenuItem, PopoverHost, Tag, type Tokens, useTokens } from "./ui/kit";
 import type { PullRequestInfo, ServiceInfo, WorkspaceInfo, WorkspaceList } from "./workspaces";
@@ -50,13 +51,9 @@ import { cannotHover } from "./web";
 type ViewConfig = Profile["sidebar"]["view"];
 type Theme = PluginSidebarViewProps["theme"];
 
-const INDICATOR_TOKEN = {
-  needs_input: "statusWarning",
-  attention: "statusWarning",
-  failed: "statusDanger",
-  running: "accent",
-  done: "statusSuccess",
-} as const;
+// Paseo themes have no blue or purple, so these two hues are fixed; both read on light and dark.
+const BLUE = "#4c8dff";
+const PURPLE = "#a371f7";
 
 const DEFAULT_VIEW_STATE: ViewState = { collapsed: [], statusFilter: [], projectFilter: [], hideDone: false, changedOnly: false, pinnedOnly: false, showBackground: false };
 // Touch screens get finger-sized rows and always-visible row buttons. Paseo reports its sidebar as
@@ -74,7 +71,25 @@ const REMINDERS_GROUP = "reminders";
 // Search text, the open menu and expanded groups live outside the view, so they survive the view
 // being rebuilt when its options change.
 // The Display menu's open section is kept here too: every Display change rebuilds the view.
-const viewUi = createValueStore<{ search: string; searching: boolean; menu: "filter" | "view" | null; expanded: readonly string[]; section: string | null }>({ search: "", searching: false, menu: null, expanded: [], section: null });
+// Selection mode (bulk actions) lives here too: workspace ids, so it survives a rebuild.
+const viewUi = createValueStore<{ search: string; searching: boolean; menu: "filter" | "view" | null; expanded: readonly string[]; section: string | null; selecting: boolean; selected: readonly string[] }>({
+  search: "",
+  searching: false,
+  menu: null,
+  expanded: [],
+  section: null,
+  selecting: false,
+  selected: [],
+});
+
+// When the open workspace became the open one, kept outside the view: every Display change
+// rebuilds the view, and a fresh ref would make a just-set Unread mark look older than the visit.
+const openedAt: { id: string | null; at: number } = { id: null, at: 0 };
+
+const toggleSelected = (workspaceId: string) => {
+  const ui = viewUi.get();
+  viewUi.set({ ...ui, selected: ui.selected.includes(workspaceId) ? ui.selected.filter((id) => id !== workspaceId) : [...ui.selected, workspaceId] });
+};
 
 // Sizes match Paseo's own sidebar (measured on 0.16.0-beta.1): 36px rows inset 8px with an 8px
 // radius, 14px titles, 12px muted section labels and dimmer 12px times; the selected row uses
@@ -126,6 +141,7 @@ function viewStyles(theme: Theme, config: ViewConfig) {
     dot: { width: 7, height: 7, borderRadius: 4 },
     more: { flexDirection: "row" as const, alignItems: "center" as const, gap: 10, minHeight: 32, marginHorizontal: 8, paddingLeft: 10, borderRadius: 8 },
     moreText: { color: c.foregroundMuted, fontSize: 14 },
+    bulk: { flexDirection: "row" as const, alignItems: "center" as const, gap: 2, minHeight: 40, paddingLeft: 16, paddingRight: 8, borderTopWidth: 1, borderTopColor: c.border, backgroundColor: c.surface1 },
     empty: { color: c.foregroundMuted, fontSize: 13, paddingHorizontal: 16, paddingVertical: 12 },
   };
 }
@@ -223,17 +239,24 @@ function usePulse(on: boolean): Animated.Value {
   return value;
 }
 
+// One colour per status: waiting on you amber, failed red, running white, finished but unread
+// blue, done a dim grey-green (green drawn faint).
 function indicatorColor(colors: Theme["colors"], indicator: Indicator): string {
-  return indicator === "done" ? colors.foregroundMuted : indicator === "attention" ? colors.foreground : colors[INDICATOR_TOKEN[indicator]];
+  if (indicator === "needs_input") return colors.statusWarning;
+  if (indicator === "failed") return colors.statusDanger;
+  if (indicator === "running") return colors.foreground;
+  if (indicator === "attention") return BLUE;
+  return colors.statusSuccess;
 }
 
-// The status mark in the same 16px column as project tiles, as Paseo draws it. It takes colour
-// only when the status needs the user or is in motion; running work pulses; done work is dim.
+const DONE_OPACITY = 0.45;
+
+// The status mark in the same 16px column as project tiles, as Paseo draws it. Running work pulses.
 function StatusMark({ indicator, shared }: { indicator: Indicator; shared: Shared }) {
   const pulse = usePulse(indicator === "running");
   return (
     <View style={[shared.styles.slot, { height: 20 }]}>
-      <Animated.View accessibilityLabel={STATUS_TITLES[indicator]} style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: indicatorColor(shared.props.theme.colors, indicator), opacity: indicator === "done" ? 0.6 : pulse }} />
+      <Animated.View accessibilityLabel={STATUS_TITLES[indicator]} style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: indicatorColor(shared.props.theme.colors, indicator), opacity: indicator === "done" ? DONE_OPACITY : pulse }} />
     </View>
   );
 }
@@ -278,17 +301,17 @@ function RemindButton({ agentId, label, onPress, shared }: { agentId: string; la
   return <IconButton t={t} size="sm" icon="AlarmClock" tone={tone} label={reminder ? `Reminder for ${label}: ${formatDue(reminder, now)}. Change it` : `Remind me about ${label}`} onPress={onPress} />;
 }
 
-function InlinePicker({ agentId, workspaceId, title, onDone, shared }: { agentId: string; workspaceId: string; title: string; onDone(): void; shared: Shared }) {
+function InlinePicker({ target, title, onDone, shared }: { target: ReminderTarget; title: string; onDone(): void; shared: Shared }) {
   return (
     <View style={{ marginHorizontal: 8, marginTop: 2, marginBottom: 6, borderWidth: 1, borderRadius: 10, borderColor: shared.t.c.border, backgroundColor: shared.t.c.surface1 }}>
-      <ReminderPicker deps={shared.picker} target={{ kind: "chat", agentId, workspaceId, title }} title={title} theme={shared.props.theme} compact={shared.t.compact} embedded onDone={onDone} />
+      <ReminderPicker deps={shared.picker} target={target} title={title} theme={shared.props.theme} compact={shared.t.compact} embedded onDone={onDone} />
     </View>
   );
 }
 
 // A chat listed under its workspace, or a sub-agent under its chat (`sub`). Only the open one is
 // highlighted.
-function AgentRow({ reference, sub, shared }: { reference: AgentRef; sub?: boolean; shared: Shared }) {
+function AgentRow({ reference, sub, subs = [], shared }: { reference: AgentRef; sub?: boolean; subs?: readonly AgentRef[]; shared: Shared }) {
   const { props, styles, now } = shared;
   const chat = useAgent(reference, (item) => ({ name: chatName(item), indicator: chatIndicator(item), workspaceId: item.workspaceId, last: item.lastActivityAt }));
   const remind = useRemindToggle();
@@ -316,22 +339,23 @@ function AgentRow({ reference, sub, shared }: { reference: AgentRef; sub?: boole
         actions={<RemindButton agentId={reference.id} label={chat.name} onPress={remind.toggle} shared={shared} />}
         shared={shared}
       />
-      {remind.open ? <InlinePicker agentId={reference.id} workspaceId={chat.workspaceId} title={chat.name} onDone={remind.close} shared={shared} /> : null}
-      {!sub && shared.config.showSubAgents !== false ? <SubAgents parent={reference} shared={shared} /> : null}
+      {remind.open ? <InlinePicker target={{ kind: "chat", agentId: reference.id, workspaceId: chat.workspaceId, title: chat.name }} title={chat.name} onDone={remind.close} shared={shared} /> : null}
+      {!sub && subs.length > 0 ? <SubAgents parent={reference} subs={subs} shared={shared} /> : null}
     </View>
   );
 }
 
-// A chat's sub-agents, latest first: the first few (5 unless changed), then Show more. The open
-// sub-agent stays listed past the limit. Only direct sub-agents of a listed chat show.
-function SubAgents({ parent, shared }: { parent: AgentRef; shared: Shared }) {
+// A chat's sub-agents, latest first: the first few (5 unless changed), then Show more, or only the
+// open one when the view shows just that. The open sub-agent stays listed past the limit.
+function SubAgents({ parent, subs, shared }: { parent: AgentRef; subs: readonly AgentRef[]; shared: Shared }) {
   const { styles, config, props } = shared;
-  const subs = useAgents({ hosts: [parent.hostId], where: (agent) => agent.parentAgentId === parent.id && agent.status !== "closed", orderBy: ["lastActivityAt", "desc"] });
-  if (subs.length === 0) return null;
+  const openKey = props.active.agent?.key ?? null;
   const key = `subs:${parent.key}`;
   const limit = config.subAgentRows ?? DEFAULT_CHAT_ROWS;
   const expanded = shared.isExpanded(key);
-  const { rows, hidden } = visibleChats(subs, limit, expanded, props.active.agent?.key ?? null);
+  const openOnly = config.showSubAgents === "open";
+  const { rows, hidden } = openOnly ? { rows: subs.filter((agent) => agent.key === openKey), hidden: 0 } : visibleChats(subs, limit, expanded, openKey);
+  if (rows.length === 0) return null;
   return (
     <View style={styles.nest}>
       <View pointerEvents="none" style={styles.subConnector} />
@@ -339,14 +363,14 @@ function SubAgents({ parent, shared }: { parent: AgentRef; shared: Shared }) {
         <AgentRow key={agent.key} reference={agent} sub shared={shared} />
       ))}
       {hidden > 0 ? <MoreRow grandchild icon="ChevronDown" label="Show more" spoken={`Show ${hidden} more sub-agents`} count={hidden} onPress={() => shared.setExpanded(key, true)} shared={shared} /> : null}
-      {expanded && subs.length > limit ? <MoreRow grandchild icon="ChevronUp" label="Show less" spoken="Show fewer sub-agents" onPress={() => shared.setExpanded(key, false)} shared={shared} /> : null}
+      {!openOnly && expanded && subs.length > limit ? <MoreRow grandchild icon="ChevronUp" label="Show less" spoken="Show fewer sub-agents" onPress={() => shared.setExpanded(key, false)} shared={shared} /> : null}
     </View>
   );
 }
 
 // A workspace's chats, latest first: the first few (5 unless changed), then Show more. The chat
 // holding the open agent (`openKey`) stays listed past the limit.
-function WorkspaceChats({ workspaceKey, chats, openKey, shared }: { workspaceKey: string; chats: readonly AgentRef[]; openKey: string | null; shared: Shared }) {
+function WorkspaceChats({ workspaceKey, chats, subsOf, openKey, shared }: { workspaceKey: string; chats: readonly AgentRef[]; subsOf: ReadonlyMap<string, readonly AgentRef[]>; openKey: string | null; shared: Shared }) {
   const { styles, config } = shared;
   const key = `chats:${workspaceKey}`;
   const limit = config.chatRows ?? DEFAULT_CHAT_ROWS;
@@ -356,7 +380,7 @@ function WorkspaceChats({ workspaceKey, chats, openKey, shared }: { workspaceKey
     <View style={styles.nest}>
       <View pointerEvents="none" style={styles.connector} />
       {rows.map((chat) => (
-        <AgentRow key={chat.key} reference={chat} shared={shared} />
+        <AgentRow key={chat.key} reference={chat} subs={shared.config.showSubAgents === false ? [] : subsOf.get(chat.id) ?? []} shared={shared} />
       ))}
       {hidden > 0 ? <MoreRow child icon="ChevronDown" label="Show more" spoken={`Show ${hidden} more chats`} count={hidden} onPress={() => shared.setExpanded(key, true)} shared={shared} /> : null}
       {expanded && chats.length > limit ? <MoreRow child icon="ChevronUp" label="Show less" spoken="Show fewer chats" onPress={() => shared.setExpanded(key, false)} shared={shared} /> : null}
@@ -366,6 +390,100 @@ function WorkspaceChats({ workspaceKey, chats, openKey, shared }: { workspaceKey
 
 function RowAction({ icon, label, onPress, shared }: { icon: string; label: string; onPress(): void; shared: Shared }) {
   return <IconButton t={shared.t} size="sm" icon={icon} label={label} onPress={onPress} />;
+}
+
+// The bar under the list in selection mode: what is selected, and actions on all of it at once.
+function BulkBar({ shownIds, shared }: { shownIds: ReadonlySet<string>; shared: Shared }) {
+  const { t, styles } = shared;
+  const paseo = usePaseo();
+  const toast = useToast();
+  // Only rows still listed: archived, vanished or filtered-out workspaces drop out of the selection.
+  const selected = useValue(viewUi).selected.filter((id) => shownIds.has(id) && shared.workspaces.get().get(id)?.open !== false);
+  const list = useValue(shared.workspaces);
+  const [confirmArchive, setConfirmArchive] = useState(false);
+  const [labelsOpen, setLabelsOpen] = useState(false);
+  const [newLabel, setNewLabel] = useState("");
+  const anchor = useRef<View>(null);
+  useEffect(() => {
+    if (!confirmArchive) return;
+    const timer = setTimeout(() => setConfirmArchive(false), 4000);
+    return () => clearTimeout(timer);
+  }, [confirmArchive]);
+  const finish = () => viewUi.set({ ...viewUi.get(), selecting: false, selected: [] });
+  // Runs one action on every selected workspace and reports how many failed, not just the first.
+  const each = async (what: string, ids: readonly string[], run: (workspace: ReturnType<typeof paseo.workspaces.ref>, id: string) => Promise<unknown>) => {
+    const results = await Promise.allSettled(ids.map((id) => run(paseo.workspaces.ref(id), id)));
+    const failed = results.filter((result) => result.status === "rejected").length;
+    if (failed) toast.error(`Could not ${what} ${failed} of ${ids.length} workspaces`);
+    return failed === 0;
+  };
+  // Archiving deletes a Paseo worktree's folder, so the confirm step names those with work at stake:
+  // uncommitted, unpushed, or not known yet.
+  const atRisk = selected.filter((id) => {
+    const workspace = list.get(id);
+    return workspace?.paseoWorktree === true && !(workspace.dirty === false && workspace.ahead === 0);
+  }).length;
+  const allPinned = selected.length > 0 && selected.every((id) => list.get(id)?.pinned);
+  // Marks skip workspaces that need the user, as the row menu does.
+  const markable = selected.filter((id) => !["needs_input", "failed"].includes(list.get(id)?.status ?? ""));
+  const labels = shared.labels;
+  const allHave = (label: string) => selected.length > 0 && selected.every((id) => list.get(id)?.labels.includes(label));
+  const archive = () => {
+    if (!confirmArchive) return setConfirmArchive(true);
+    setConfirmArchive(false);
+    void each("archive", selected, (workspace) =>
+      workspace.archive().then((result) => {
+        if (result.error) throw new Error(result.error);
+      }),
+    ).then((ok) => ok && finish());
+  };
+  const markDone = () => {
+    const skipped = selected.length - markable.length;
+    void each("mark", markable, (workspace, id) => workspace.setMetadata({ [MARK_KEY]: { kind: "done", at: new Date().toISOString(), since: list.get(id)?.statusEnteredAt ?? null } })).then((ok) => {
+      if (skipped) toast.show(`Skipped ${skipped} that ${skipped === 1 ? "needs" : "need"} you (permission or failed)`);
+      if (ok) finish();
+    });
+  };
+  const toggleLabel = (label: string) => {
+    const assigned = !allHave(label);
+    void each("label", selected, (workspace) => workspace.setLabel(label, { assigned }));
+  };
+  const createLabel = () => {
+    const label = newLabel.trim();
+    setNewLabel("");
+    if (label) void each("label", selected, (workspace) => workspace.setLabel(label, { assigned: true }));
+  };
+  return (
+    <View ref={anchor} style={styles.bulk}>
+      <Text style={[styles.meta, { flex: 1 }]} numberOfLines={1}>
+        {selected.length} selected
+      </Text>
+      <IconButton t={t} size="sm" icon={allPinned ? "PinOff" : "Pin"} label={allPinned ? "Unpin the selected workspaces" : "Pin the selected workspaces"} disabled={!selected.length} onPress={() => void each(allPinned ? "unpin" : "pin", selected, (workspace) => workspace.setPinned(!allPinned))} />
+      <IconButton t={t} size="sm" icon="CircleCheck" label="Mark the selected workspaces done" disabled={!markable.length} onPress={markDone} />
+      <IconButton t={t} size="sm" icon="Tag" label="Label the selected workspaces" disabled={!selected.length} onPress={() => setLabelsOpen(!labelsOpen)} />
+      {confirmArchive ? (
+        <Button
+          t={t}
+          variant="danger"
+          label={atRisk ? `Archive? ${atRisk} with local work` : "Archive?"}
+          accessibilityLabel={`Press again to archive ${selected.length} workspaces${atRisk ? `; ${atRisk} have uncommitted, unpushed or unknown changes that archiving deletes` : ""}`}
+          onPress={archive}
+          style={{ height: 24, paddingHorizontal: 6 }}
+        />
+      ) : (
+        <IconButton t={t} size="sm" icon="Archive" label="Archive the selected workspaces" disabled={!selected.length} onPress={archive} />
+      )}
+      <IconButton t={t} size="sm" icon="X" label="Stop selecting" onPress={finish} />
+      <Dropdown t={t} open={labelsOpen} onClose={() => setLabelsOpen(false)} anchor={anchor} width={260}>
+        {labels.map((label) => (
+          <MenuItem key={label} t={t} role="checkbox" icon="Tag" label={label} checked={allHave(label)} onPress={() => toggleLabel(label)} />
+        ))}
+        <View style={{ padding: 4 }}>
+          <Field t={t} plain icon="Plus" value={newLabel} onChangeText={setNewLabel} onSubmit={createLabel} placeholder="Create label" accessibilityLabel="Create a label for the selected workspaces" />
+        </View>
+      </Dropdown>
+    </View>
+  );
 }
 
 // A task whose reminder is due, listed at the top of the view. Tapping opens its chat when it
@@ -414,6 +532,36 @@ function Meta({ icon, text, color, shared }: { icon?: string; text: string; colo
   );
 }
 
+// Commits not yet pushed (blue) and not yet pulled (amber), as "↑2 ↓1".
+function AheadBehind({ ahead, behind, shared }: { ahead: number; behind: number; shared: Shared }) {
+  const c = shared.props.theme.colors;
+  return (
+    <Text style={{ fontSize: 12 }} accessibilityLabel={`${ahead} commits to push, ${behind} to pull`}>
+      {ahead ? <Text style={{ color: BLUE }}>↑{ahead}</Text> : null}
+      {ahead && behind ? " " : null}
+      {behind ? <Text style={{ color: c.statusWarning }}>↓{behind}</Text> : null}
+    </Text>
+  );
+}
+
+// Labels, each with its own colour dot (picked by name, as project tiles are).
+function LabelsMeta({ labels, shared }: { labels: readonly string[]; shared: Shared }) {
+  const shown = labels.slice(0, 2);
+  return (
+    <View accessibilityLabel={`Labels: ${labels.join(", ")}`} style={{ flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 1, minWidth: 0 }}>
+      {shown.map((label) => (
+        <View key={label} style={{ flexDirection: "row", alignItems: "center", gap: 3, flexShrink: 1, minWidth: 0 }}>
+          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tileColor(label) }} />
+          <Text style={shared.styles.meta} numberOfLines={1}>
+            {label}
+          </Text>
+        </View>
+      ))}
+      {labels.length > shown.length ? <Text style={shared.styles.meta}>+{labels.length - shown.length}</Text> : null}
+    </View>
+  );
+}
+
 function DiffText({ diff, shared }: { diff: { additions: number; deletions: number }; shared: Shared }) {
   return (
     <Text style={{ fontSize: 12 }} accessibilityLabel={`${diff.additions} lines added, ${diff.deletions} removed`}>
@@ -425,7 +573,7 @@ function DiffText({ diff, shared }: { diff: { additions: number; deletions: numb
 const PR_ICON = { open: "GitPullRequest", draft: "GitPullRequestDraft", merged: "GitMerge", closed: "GitPullRequestClosed" } as const;
 
 function pullRequestColor(colors: Theme["colors"], pr: PullRequestInfo): string {
-  return pr.state === "open" ? colors.statusSuccess : pr.state === "closed" ? colors.statusDanger : pr.state === "merged" ? colors.accent : colors.foregroundMuted;
+  return pr.state === "open" ? colors.statusSuccess : pr.state === "closed" ? colors.statusDanger : pr.state === "merged" ? PURPLE : colors.foregroundMuted;
 }
 
 function checksColor(colors: Theme["colors"], checks: PullRequestInfo["checks"]): string | null {
@@ -514,6 +662,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   const [confirmArchive, setConfirmArchive] = useState(false);
   const [menu, setMenu] = useState<"actions" | "labels" | null>(null);
   const [newLabel, setNewLabel] = useState("");
+  const [reminding, setReminding] = useState(false);
   const [card, setCard] = useState(false);
   const cardTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // A rename saves once, though Enter and leaving the field both ask to.
@@ -545,23 +694,33 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
     directory: item.directory,
   }));
   const info = useValue(shared.workspaces).get(reference.id) ?? null;
-  // Chats, latest first; the status filter applies to them too.
-  const chats = useAgents({
-    hosts: [reference.hostId],
-    where: (agent) => agent.workspace.key === reference.key && isListedChat(agent) && chatMatches(agent, { statuses: shared.statuses, search: "" }),
-    orderBy: ["lastActivityAt", "desc"],
-  });
-  const latestChat = useAgent(chats[0] ?? "", (agent) => chatName(agent)) ?? null;
-  // Null until the open agent loads; the workspace row keeps the highlight until then.
-  const openAgent = useAgent(props.active.agent ?? "", (agent) => ({ parentId: agent.parentAgentId, closed: agent.status === "closed" }));
-  if (!workspace) return null;
+  const { selecting, selected: selection } = useValue(viewUi);
+  const picked = selection.includes(reference.id);
+  // Every agent in the workspace, latest first, and each one's parent: chats with their sub-agents
+  // under them. The tree is built from all of them, so a sub-agent never loses its parent to a
+  // filter; the status filter then picks which chats are listed.
+  const inWorkspace = (agent: PluginAgentSnapshot) => agent.workspace.key === reference.key;
+  const agents = useAgents({ hosts: [reference.hostId], where: inWorkspace, orderBy: ["lastActivityAt", "desc"] });
+  const byParent = useAgents({ hosts: [reference.hostId], where: inWorkspace, groupBy: (agent) => agent.parentAgentId ?? TOP_LEVEL });
+  const matching = useAgents({ hosts: [reference.hostId], where: (agent) => inWorkspace(agent) && chatMatches(agent, { statuses: shared.statuses, search: "" }) });
+  const tree = chatTree(agents, parentsOf(byParent));
+  const matchingKeys = new Set(matching.map((agent) => agent.key));
+  const chats = shared.statuses.length ? tree.top.filter((chat) => matchingKeys.has(chat.key)) : tree.top;
+  const latestChat = useAgent(tree.top[0] ?? "", (agent) => chatName(agent)) ?? null;
   const isOpen = props.active.workspace?.key === reference.key;
+  const mark = info?.mark ?? null;
+  if (!workspace) return null;
+  const indicator = effectiveIndicator(workspace.indicator, workspace.since, mark);
+  // Marks only offered where they change what the row shows: never on a row that needs the user,
+  // no "Mark as done" on a done row, and undoing only a mark that is in force and visible.
+  const applies = markApplies(workspace.indicator, workspace.since, mark);
+  const markable = workspace.indicator !== "needs_input" && workspace.indicator !== "failed";
+  const markedDone = applies && mark.kind === "done" && workspace.indicator !== "done";
+  const markedUnread = applies && mark.kind === "unread" && workspace.indicator !== "attention";
   const chatsShown = config.showAgents && ((config.agentsFor ?? "active") === "all" || isOpen) && chats.length > 0;
   // Exactly one row is highlighted: the open chat or sub-agent when it is listed here, else the
-  // workspace. `openChat` is the listed chat that holds it.
-  const open = props.active.agent && openAgent ? { key: props.active.agent.key, ...openAgent } : null;
-  // Not limited to the open workspace: the chat holding the open agent stays listed wherever it is.
-  const openChat = chatsShown ? owningChatKey(chats, open, config.showSubAgents !== false) : null;
+  // workspace. `openChat` is the listed chat that holds it, and stays listed past the limit.
+  const openChat = chatsShown ? owningRowKey({ top: chats, children: tree.children }, props.active.agent?.key ?? null, config.showSubAgents !== false) : null;
   const selected = isOpen && openChat === null;
   const handle = () => paseo.workspaces.ref(reference.id);
   const closeMenu = () => {
@@ -601,6 +760,17 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
     void copyText(text).then(() => toast.show(`Copied the ${what}`), report(toast, `copy the ${what}`));
   };
   const setLabel = (label: string, assigned: boolean) => void handle().setLabel(label, { assigned }).catch(report(toast, "change the labels"));
+  // Morphise's own Done and Unread marks, kept on the workspace so every app shows them.
+  const setMark = (kind: "done" | "unread" | null) => {
+    closeMenu();
+    void handle()
+      .setMetadata({ [MARK_KEY]: kind ? { kind, at: new Date().toISOString(), since: workspace.since } : null })
+      .catch(report(toast, "mark the workspace"));
+  };
+  const addTask = () => {
+    closeMenu();
+    void shared.picker.apply({ kind: "addTask", task: { id: newTaskId(), title: workspace.title, links: { workspaceId: reference.id } } }).then(() => toast.show(`Added "${workspace.title}" to tasks`), report(toast, "add the task"));
+  };
   const createLabel = () => {
     const label = newLabel.trim();
     setNewLabel("");
@@ -610,7 +780,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
     if (cardTimer.current) clearTimeout(cardTimer.current);
     cardTimer.current = null;
     if (!on) return setCard(false);
-    if (!TOUCH) cardTimer.current = setTimeout(() => setCard(true), 600);
+    if (!TOUCH && !selecting) cardTimer.current = setTimeout(() => setCard(true), 600);
   };
 
   // While renaming, the row becomes a field; its chats stay where they are.
@@ -623,22 +793,27 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   // Like Paseo's rows: time since the last prompt, or time in the current status when chosen.
   const elapsed = shows.lastActivity ? formatElapsed(config.details.timeInStatus ? workspace.since : workspace.lastPrompt, now) : null;
   const reminder = shared.workspaceReminders.get(reference.id) ?? null;
+  // The workspace's own reminder (not one of its chats'), which Remind me edits.
+  const ownReminder = followUpWorkspaceTask(tasksOf(shared.picker.tasks.get()), reference.id)?.reminder ?? null;
   const host = shared.hosts.find((item) => item.serverId === reference.hostId)?.label ?? null;
   const pr = shows.pullRequest ? info?.pullRequest ?? null : null;
   const changes = workspace.diff && workspace.diff.additions + workspace.diff.deletions > 0 ? workspace.diff : null;
   const twoLine = config.rowStyle !== "one-line";
-  const line = twoLine ? statusLine(workspace.indicator, latestChat, workspace.title) : null;
+  const line = twoLine ? statusLine(indicator, latestChat, workspace.title) : null;
 
   // Second-line details, in Paseo's Display order. A row inside its project group never repeats
   // the project's name; the host shows only when there is more than one.
   const details: ReactNode[] = [];
   const branchShown = shows.branch && workspace.branch && config.titleSource !== "branch";
-  if (branchShown) details.push(<Meta key="branch" icon="GitBranch" text={workspace.branch ?? ""} shared={shared} />);
-  if (shows.project && config.groupBy !== "project") details.push(<Meta key="project" icon="Folder" text={workspace.project} shared={shared} />);
+  // The branch turns amber while it has uncommitted changes.
+  const branchColor = info?.dirty ? c.statusWarning : undefined;
+  if (branchShown) details.push(<Meta key="branch" icon="GitBranch" color={branchColor} text={workspace.branch ?? ""} shared={shared} />);
+  if (shows.branch && info && (info.ahead || info.behind)) details.push(<AheadBehind key="sync" ahead={info.ahead ?? 0} behind={info.behind ?? 0} shared={shared} />);
+  if (shows.project && config.groupBy !== "project") details.push(<Meta key="project" icon="Folder" color={tileColor(workspace.project)} text={workspace.project} shared={shared} />);
   if (shows.host && host && shared.hosts.length > 1) details.push(<Meta key="host" icon="Server" text={host} shared={shared} />);
   if (shows.diff && changes) details.push(<DiffText key="diff" diff={changes} shared={shared} />);
   if (shows.services && info?.services.length) details.push(<ServicesMeta key="services" services={info.services} shared={shared} />);
-  if (shows.labels && workspace.labels.length) details.push(<Meta key="labels" icon="Tag" text={workspace.labels.join(", ")} shared={shared} />);
+  if (shows.labels && workspace.labels.length) details.push(<LabelsMeta key="labels" labels={workspace.labels} shared={shared} />);
   if (reminder) details.push(<Meta key="reminder" icon="AlarmClock" color={isDue(reminder, now) ? c.statusWarning : undefined} text={formatDue(reminder, now)} shared={shared} />);
   // A two-line row with nothing else to say names its branch, then its project.
   const fallback = twoLine && !line && details.length === 0 ? (workspace.branch && config.titleSource !== "branch" ? workspace.branch : config.groupBy !== "project" ? workspace.project : null) : null;
@@ -647,18 +822,25 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
       {line.text}
     </Text>
   ) : fallback ? (
-    <Meta key="fallback" icon={workspace.branch && config.titleSource !== "branch" ? "GitBranch" : "Folder"} text={fallback} shared={shared} />
+    <Meta key="fallback" icon={workspace.branch && config.titleSource !== "branch" ? "GitBranch" : "Folder"} color={workspace.branch && config.titleSource !== "branch" ? branchColor : undefined} text={fallback} shared={shared} />
   ) : null;
   // Pinned rows in their own Pinned section need no icon; elsewhere the icon shows it.
   const pinIcon = workspace.pinned && !(config.pinnedFirst && config.groupBy !== "none") ? <Icon name="Pin" size={11} color={c.foregroundMuted} /> : null;
   const titleText = (
-    <Text style={[styles.label, workspace.indicator === "attention" ? { fontWeight: "600" } : null]} numberOfLines={1}>
+    <Text style={[styles.label, indicator === "attention" ? { fontWeight: "600" } : null]} numberOfLines={1}>
       {workspace.title}
     </Text>
   );
+  const mark0 = selecting ? (
+    <View style={[styles.slot, { height: 20 }]}>
+      <Icon name={picked ? "SquareCheck" : "Square"} size={14} color={picked ? c.accent : c.foregroundMuted} />
+    </View>
+  ) : (
+    <StatusMark indicator={indicator} shared={shared} />
+  );
   const main = twoLine ? (
     <>
-      <StatusMark indicator={workspace.indicator} shared={shared} />
+      {mark0}
       <View style={styles.lines}>
         <View style={styles.line}>
           {titleText}
@@ -675,7 +857,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
     </>
   ) : (
     <>
-      <StatusMark indicator={workspace.indicator} shared={shared} />
+      {mark0}
       {titleText}
       {pr ? <PullRequestBadge pr={pr} checks={shows.checks} shared={shared} /> : null}
       {details}
@@ -694,15 +876,15 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
         <RowShell
           rowRef={rowRef}
           twoLine={twoLine}
-          selected={selected}
-          label={`Open workspace ${workspace.title}, ${STATUS_TITLES[workspace.indicator]}`}
-          onPress={() => props.navigation.openWorkspace(reference)}
-          onLongPress={() => setMenu("actions")}
+          selected={selecting ? picked : selected}
+          label={selecting ? `${picked ? "Deselect" : "Select"} ${workspace.title}` : `Open workspace ${workspace.title}, ${STATUS_TITLES[indicator]}`}
+          onPress={() => (selecting ? toggleSelected(reference.id) : props.navigation.openWorkspace(reference))}
+          onLongPress={() => (selecting ? toggleSelected(reference.id) : setMenu("actions"))}
           onHover={hover}
           showActions={confirmArchive || menu !== null}
           main={main}
           trailing={time}
-          actions={
+          actions={selecting ? undefined : (
             <>
               {confirmArchive && menu === null ? (
                 <Button t={t} variant="danger" label="Archive?" accessibilityLabel={`Press again to archive ${workspace.name}`} onPress={archive} style={{ height: 24, paddingHorizontal: 6 }} />
@@ -712,7 +894,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
               {config.rowActions.includes("pin") ? <IconButton t={t} size="sm" icon={workspace.pinned ? "PinOff" : "Pin"} tone={workspace.pinned ? c.foreground : undefined} label={workspace.pinned ? `Unpin ${workspace.name}` : `Pin ${workspace.name}`} onPress={togglePin} /> : null}
               <IconButton t={t} size="sm" icon="EllipsisVertical" label={`Actions for ${workspace.name}`} onPress={() => setMenu(menu ? null : "actions")} />
             </>
-          }
+          )}
           shared={shared}
         />
       )}
@@ -737,6 +919,31 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
             <MenuItem t={t} icon="Pencil" label="Rename workspace" onPress={startRename} />
             <MenuItem t={t} icon={workspace.pinned ? "PinOff" : "Pin"} label={workspace.pinned ? "Unpin" : "Pin to top"} onPress={togglePin} />
             <MenuItem t={t} icon="Tag" label="Labels" hint={workspace.labels.length ? String(workspace.labels.length) : undefined} onPress={() => setMenu("labels")} />
+            <MenuItem
+              t={t}
+              icon="AlarmClock"
+              label={ownReminder ? "Change reminder" : "Remind me"}
+              hint={ownReminder ? formatDue(ownReminder, now) : undefined}
+              onPress={() => {
+                closeMenu();
+                setReminding(true);
+              }}
+            />
+            {/* Only marks that change something: no "Mark as done" on a done workspace. Paseo's own
+                unread state cannot be cleared by a plugin, so a natively unread row offers neither. */}
+            {markedDone ? <MenuItem t={t} icon="RotateCcw" label="Mark as not done" onPress={() => setMark(null)} /> : markable && indicator !== "done" ? <MenuItem t={t} icon="CircleCheck" label="Mark as done" onPress={() => setMark("done")} /> : null}
+            {markedUnread ? <MenuItem t={t} icon="MailOpen" label="Mark as read" onPress={() => setMark(null)} /> : markable && indicator !== "attention" ? <MenuItem t={t} icon="Mail" label="Mark as unread" onPress={() => setMark("unread")} /> : null}
+            <MenuItem t={t} icon="ListPlus" label="Add task" onPress={addTask} />
+            <MenuItem
+              t={t}
+              icon="ListChecks"
+              label="Select"
+              hint="for bulk actions"
+              onPress={() => {
+                closeMenu();
+                viewUi.set({ ...viewUi.get(), selecting: true, selected: [reference.id] });
+              }}
+            />
             {info?.pullRequest ? (
               <MenuItem
                 t={t}
@@ -748,6 +955,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
                 }}
               />
             ) : null}
+            {info?.pullRequest ? <MenuItem t={t} icon="Link" label="Copy pull request link" onPress={() => copy(info.pullRequest?.url ?? "", "pull request link")} /> : null}
             {info?.services
               .filter((service) => service.url)
               .map((service) => (
@@ -767,7 +975,8 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
           </>
         )}
       </Dropdown>
-      {chatsShown ? <WorkspaceChats workspaceKey={reference.key} chats={chats} openKey={openChat ?? props.active.agent?.key ?? null} shared={shared} /> : null}
+      {reminding ? <InlinePicker target={{ kind: "workspace", workspaceId: reference.id, title: workspace.title }} title={workspace.title} onDone={() => setReminding(false)} shared={shared} /> : null}
+      {chatsShown ? <WorkspaceChats workspaceKey={reference.key} chats={chats} subsOf={tree.children} openKey={openChat ?? props.active.agent?.key ?? null} shared={shared} /> : null}
     </View>
   );
 }
@@ -808,7 +1017,7 @@ function ChatRow({ reference, shared }: { reference: AgentRef; shared: Shared })
         actions={<RemindButton agentId={reference.id} label={chat.name} onPress={remind.toggle} shared={shared} />}
         shared={shared}
       />
-      {remind.open ? <InlinePicker agentId={reference.id} workspaceId={chat.workspaceId} title={chat.name} onDone={remind.close} shared={shared} /> : null}
+      {remind.open ? <InlinePicker target={{ kind: "chat", agentId: reference.id, workspaceId: chat.workspaceId, title: chat.name }} title={chat.name} onDone={remind.close} shared={shared} /> : null}
     </View>
   );
 }
@@ -932,7 +1141,7 @@ function FilterMenu({ state, save, projects, shared }: FilterMenuProps) {
       <MenuSection title="Status" shared={shared}>
         <MenuItem t={t} role="checkbox" icon="Hand" label="Needs me" hint="permission or failed" checked={needsMe} onPress={() => save({ statusFilter: needsMe ? [] : [...NEEDS_ME] })} />
         {INDICATORS.map((indicator) => (
-          <MenuItem key={indicator} t={t} role="checkbox" dot={indicator === "done" ? props.theme.colors.foregroundMuted : indicator === "attention" ? props.theme.colors.foreground : props.theme.colors[INDICATOR_TOKEN[indicator]]} label={STATUS_TITLES[indicator]} checked={!needsMe && statuses.includes(indicator)} onPress={() => toggleStatus(indicator)} />
+          <MenuItem key={indicator} t={t} role="checkbox" dot={indicatorColor(props.theme.colors, indicator)} label={STATUS_TITLES[indicator]} checked={!needsMe && statuses.includes(indicator)} onPress={() => toggleStatus(indicator)} />
         ))}
       </MenuSection>
       <MenuSection title="Show only" shared={shared}>
@@ -1019,7 +1228,13 @@ function ViewMenu({ update, state, saveState, shared }: { update(patch: Partial<
           {choice("chats", "Chats", chatsFor, [["off", "Hidden"], ["active", "Open workspace only"], ["all", "Every workspace"]] as const, (value) => update(value === "off" ? { showAgents: false } : { showAgents: true, agentsFor: value }))}
           {chatsFor !== "off" ? choice("chatRows", "Chats per workspace", String(chatRows), [...new Set(["3", "5", "10", "20", String(chatRows)])].map((rows) => [rows, `${rows}, then Show more`] as const), (rows) => update({ chatRows: Number(rows) })) : null}
           {chatsFor !== "off"
-            ? choice("subAgents", "Sub-agents per chat", config.showSubAgents === false ? "hidden" : String(subAgentRows), [["hidden", "Hidden"], ...[...new Set(["3", "5", "10", "20", String(subAgentRows)])].map((rows) => [rows, `${rows}, then Show more`] as const)] as const, (value) => update(value === "hidden" ? { showSubAgents: false } : { showSubAgents: true, subAgentRows: Number(value) }))
+            ? choice(
+                "subAgents",
+                "Sub-agents per chat",
+                config.showSubAgents === false ? "hidden" : config.showSubAgents === "open" ? "open" : String(subAgentRows),
+                [["hidden", "Hidden"], ["open", "Only the open one"], ...[...new Set(["3", "5", "10", "20", String(subAgentRows)])].map((rows) => [rows, `${rows}, then Show more`] as const)] as const,
+                (value) => update(value === "hidden" ? { showSubAgents: false } : value === "open" ? { showSubAgents: "open" } : { showSubAgents: true, subAgentRows: Number(value) }),
+              )
             : null}
         </>
       ) : null}
@@ -1033,6 +1248,21 @@ function ViewMenu({ update, state, saveState, shared }: { update(patch: Partial<
           </View>
         ) : null}
       </View>
+      {config.list === "workspaces" ? (
+        <>
+          {choice(
+            "autoArchive",
+            "Auto-archive marked done",
+            config.autoArchive ? String(config.autoArchive.days) : "off",
+            [["off", "Off"], ...[...new Set(["1", "3", "7", "14", "30", ...(config.autoArchive ? [String(config.autoArchive.days)] : [])])].map((days) => [days, `${days} ${days === "1" ? "day" : "days"} after marking`] as const)] as const,
+            (value) => update({ autoArchive: value === "off" ? undefined : { days: Number(value) } }),
+          )}
+          {open === "autoArchive" ? (
+            // Merged pull requests have Paseo's own switch; repeating it here would be a second rule.
+            <Text style={[shared.styles.meta, { paddingHorizontal: 22, paddingVertical: 4 }]}>Never archives work git could lose. For merged pull requests, turn on Paseo's "Archive merged PR workspaces" in its host settings.</Text>
+          ) : null}
+        </>
+      ) : null}
       {config.list === "workspaces" ? <MenuItem t={t} role="checkbox" icon="EyeOff" label="Show background" checked={state.showBackground} onPress={() => saveState({ showBackground: !state.showBackground })} /> : null}
     </>
   );
@@ -1067,22 +1297,41 @@ function withHidden<Ref extends { key: string }>(shown: readonly Ref[], all: rea
   return [...shown, ...all.filter((ref) => !keys.has(ref.key))];
 }
 
+// The group key for top-level agents when agents are grouped by parent; agent ids are UUIDs, so it
+// cannot clash with a parent id.
+const TOP_LEVEL = "~top-level";
+
+function parentsOf(groups: readonly { key: string; items: readonly { id: string }[] }[]): Map<string, string | null> {
+  const parents = new Map<string, string | null>();
+  for (const group of groups) for (const item of group.items) parents.set(item.id, group.key === TOP_LEVEL ? null : group.key);
+  return parents;
+}
+
+// Morphise's Done and Unread marks change what a workspace's status is for every rule: filters,
+// sorting, status groups, the row limit and Next all see the marked status.
+function withMark(workspace: PluginWorkspaceSnapshot, list: WorkspaceList): PluginWorkspaceSnapshot {
+  const mark = list.get(workspace.id)?.mark ?? null;
+  if (!mark) return workspace;
+  const indicator = effectiveIndicator(workspace.indicator, workspace.statusEnteredAt, mark);
+  return indicator === workspace.indicator ? workspace : { ...workspace, indicator };
+}
+
 function workspaceRows(config: ViewConfig) {
-  const compare = compareWorkspaces(config);
-  const useSections =
-    config.groupBy === "none"
-      ? (where: Where<PluginWorkspaceSnapshot>) => [{ key: "all", title: null, items: useWorkspaces({ where, orderBy: compare }) }]
-      : (where: Where<PluginWorkspaceSnapshot>) =>
-          orderGroups<Group<WorkspaceRef>>(useWorkspaces({ where, orderBy: compare, groupBy: (workspace) => groupKeys(config, workspace) }), config);
+  const compareBase = compareWorkspaces(config);
   // Like Paseo's own sidebar, pinned workspaces get their own section above the groups.
   const pinnedApart = config.pinnedFirst && config.groupBy !== "none";
-  return function useWorkspaceRows(filter: Filter, props: PluginSidebarViewProps, showBackground: boolean): RowSource {
-    const shown = (workspace: PluginWorkspaceSnapshot) => isVisible(workspace, showBackground) && matchesFilter(workspace, filter);
+  return function useWorkspaceRows(filter: Filter, props: PluginSidebarViewProps, showBackground: boolean, list: WorkspaceList): RowSource {
+    const marked = (workspace: PluginWorkspaceSnapshot) => withMark(workspace, list);
+    const compare = (left: PluginWorkspaceSnapshot, right: PluginWorkspaceSnapshot) => compareBase(marked(left), marked(right));
+    const shown = (workspace: PluginWorkspaceSnapshot) => isVisible(workspace, showBackground) && matchesFilter(marked(workspace), filter);
     const pinned = useWorkspaces({ where: (workspace) => shown(workspace) && workspace.pinnedAt !== null, orderBy: compare });
-    const grouped = useSections((workspace) => shown(workspace) && !(pinnedApart && workspace.pinnedAt !== null));
+    const inGroups = (workspace: PluginWorkspaceSnapshot) => shown(workspace) && !(pinnedApart && workspace.pinnedAt !== null);
+    // The same hook in both branches, so the hook order never depends on the grouping.
+    const groupedRefs = useWorkspaces(config.groupBy === "none" ? { where: inGroups, orderBy: compare } : { where: inGroups, orderBy: compare, groupBy: (workspace) => groupKeys(config, marked(workspace)) });
+    const grouped = config.groupBy === "none" ? [{ key: "all", title: null, items: groupedRefs as readonly WorkspaceRef[] }] : orderGroups<Group<WorkspaceRef>>(groupedRefs as readonly Group<WorkspaceRef>[], config);
     const sections = pinnedApart && pinned.length ? [{ key: "pinned", title: "Pinned", items: pinned }, ...grouped] : grouped;
-    const protectedKeys = new Set(useWorkspaces({ where: (workspace) => shown(workspace) && isProtected(workspace) }).map((ref) => ref.key));
-    const waitingRefs = useWorkspaces({ where: (workspace) => isVisible(workspace, showBackground) && needsAttention(workspace.indicator), orderBy: compare });
+    const protectedKeys = new Set(useWorkspaces({ where: (workspace) => shown(workspace) && isProtected(marked(workspace)) }).map((ref) => ref.key));
+    const waitingRefs = useWorkspaces({ where: (workspace) => isVisible(workspace, showBackground) && needsAttention(marked(workspace).indicator), orderBy: compare });
     const next = nextAttention(withHidden(attentionOrder(sections, new Set(waitingRefs.map((ref) => ref.key))), waitingRefs), props.active.workspace?.key ?? null);
     return {
       sections,
@@ -1102,13 +1351,19 @@ function chatRows(config: ViewConfig) {
       ? (where: Where<PluginAgentSnapshot>) => [{ key: "all", title: null, items: useAgents({ where, orderBy: compare }) }]
       : (where: Where<PluginAgentSnapshot>) =>
           orderGroups<Group<AgentRef>>(useAgents({ where, orderBy: compare, groupBy: (chat) => chatGroupKey(config, chat) }), config);
-  // Background workspaces are a workspace-list choice; the chat list has none.
-  return function useChatRows(filter: Filter, props: PluginSidebarViewProps, _showBackground: boolean): RowSource {
-    const shown = (chat: PluginAgentSnapshot) => isListedChat(chat) && chatMatches(chat, filter);
+  return function useChatRows(filter: Filter, props: PluginSidebarViewProps, showBackground: boolean, list: WorkspaceList): RowSource {
+    // Chats in archived, internal or (unless shown) background workspaces stay out, as their
+    // workspaces do. A workspace the list has not loaded yet does not hide its chats.
+    const inShownWorkspace = (chat: PluginAgentSnapshot) => {
+      const workspace = list.get(chat.workspaceId);
+      return !workspace || workspace.open || (showBackground && workspace.background);
+    };
+    const listed = (chat: PluginAgentSnapshot) => isSidebarChat(chat) && inShownWorkspace(chat);
+    const shown = (chat: PluginAgentSnapshot) => listed(chat) && chatMatches(chat, filter);
     const sections = useSections(shown);
     const isProtectedChat = (chat: PluginAgentSnapshot) => ["needs_input", "failed"].includes(chatIndicator(chat));
     const protectedKeys = new Set(useAgents({ where: (chat) => shown(chat) && isProtectedChat(chat) }).map((ref) => ref.key));
-    const waitingRefs = useAgents({ where: (chat) => isListedChat(chat) && needsAttention(chatIndicator(chat)), orderBy: compare });
+    const waitingRefs = useAgents({ where: (chat) => listed(chat) && needsAttention(chatIndicator(chat)), orderBy: compare });
     const next = nextAttention(withHidden(attentionOrder(sections, new Set(waitingRefs.map((ref) => ref.key))), waitingRefs), props.active.agent?.key ?? null);
     return {
       sections,
@@ -1152,6 +1407,18 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     const projects = useWorkspaces({ where: (workspace) => isVisible(workspace, state.showBackground), groupBy: (workspace) => ({ key: workspace.project.key, title: workspace.projectDisplayName }) }).map((group) => ({ key: group.key, title: group.title ?? "Project" }));
     const toast = useToast();
     const headerRef = useRef<View>(null);
+    // Unread clears once its workspace is the open one, as Paseo's own unread does, whether or not
+    // its row is on screen. A mark made after the workspace became open (marking the open
+    // workspace unread) stays until it is opened again.
+    const paseo = usePaseo();
+    const openWorkspaceId = props.active.workspace?.id ?? null;
+    if (openedAt.id !== openWorkspaceId) Object.assign(openedAt, { id: openWorkspaceId, at: Date.now() });
+    const workspaceList = useValue(deps.workspaces);
+    const openMark = openWorkspaceId ? workspaceList.get(openWorkspaceId)?.mark ?? null : null;
+    useEffect(() => {
+      if (!openWorkspaceId || openMark?.kind !== "unread" || Date.parse(openMark.at) >= openedAt.at) return;
+      void paseo.workspaces.ref(openWorkspaceId).setMetadata({ [MARK_KEY]: null }).catch(report(toast, "mark the workspace read"));
+    }, [openWorkspaceId, openMark, paseo, toast]);
     const viewRef = useRef<View>(null);
     // Tells the settings screen that Paseo is showing this view.
     useEffect(() => viewPresence.set(true), []);
@@ -1175,9 +1442,8 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     };
     const filters = filter.statuses.length + (filter.projects?.length ?? 0) + Number(filter.hideDone) + Number(filter.changedOnly) + Number(filter.pinnedOnly);
     const updateView = (patch: Partial<ViewConfig>) => void deps.updateView(patch).catch(report(toast, "change the view"));
-    const source = useRows(filter, props, state.showBackground);
+    const source = useRows(filter, props, state.showBackground, workspaceList);
     const ready = useValue(deps.workspacesReady);
-    const workspaceList = useValue(deps.workspaces);
     const hosts = useHosts();
     const { sections, protectedKeys } = source;
 
@@ -1229,7 +1495,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
 
     const placeholder = config.list === "chats" ? "Search chats" : "Search name, branch or project";
     const activeTags = [
-      ...(needsMeOn(filter.statuses) ? [{ key: "needs", label: "Needs me", color: props.theme.colors.statusWarning, remove: () => saveState({ statusFilter: [] }) }] : filter.statuses.map((indicator) => ({ key: indicator, label: STATUS_TITLES[indicator], color: props.theme.colors[INDICATOR_TOKEN[indicator]], remove: () => saveState({ statusFilter: state.statusFilter.filter((item) => item !== indicator) }) }))),
+      ...(needsMeOn(filter.statuses) ? [{ key: "needs", label: "Needs me", color: props.theme.colors.statusWarning, remove: () => saveState({ statusFilter: [] }) }] : filter.statuses.map((indicator) => ({ key: indicator, label: STATUS_TITLES[indicator], color: indicatorColor(props.theme.colors, indicator), remove: () => saveState({ statusFilter: state.statusFilter.filter((item) => item !== indicator) }) }))),
       ...(filter.projects ?? []).map((key) => ({ key, label: projects.find((project) => project.key === key)?.title ?? "Project", color: tileColor(projects.find((project) => project.key === key)?.title ?? ""), remove: () => saveState({ projectFilter: state.projectFilter.filter((item) => item !== key) }) })),
       ...(filter.hideDone ? [{ key: "hideDone", label: "Done hidden", color: undefined, remove: () => saveState({ hideDone: false }) }] : []),
       ...(filter.changedOnly ? [{ key: "changed", label: "Changed", color: undefined, remove: () => saveState({ changedOnly: false }) }] : []),
@@ -1288,6 +1554,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
           );
         })}
       </ScrollView>
+          {ui.selecting && config.list === "workspaces" ? <BulkBar shownIds={new Set(sections.flatMap((section) => section.items.map((item) => (item as WorkspaceRef).id)))} shared={shared} /> : null}
           <Dropdown t={t} open={menu !== null} onClose={() => setMenu(null)} anchor={headerRef} width={420} maxHeight={560}>
             {menu === "filter" ? <FilterMenu state={state} save={saveState} projects={projects} shared={shared} /> : <ViewMenu update={updateView} state={state} saveState={saveState} shared={shared} />}
           </Dropdown>

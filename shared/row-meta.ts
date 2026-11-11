@@ -53,14 +53,14 @@ export function statusLine(indicator: Indicator, latestChat: string | null, rowN
 
 export const DEFAULT_CHAT_ROWS = 5;
 
-// The top-level chat row that holds the open agent: the open chat itself, or the parent of an open
-// sub-agent when sub-agents are listed. Null when neither is among `chats`, or when the open agent
-// is closed (closed agents are never listed), so the workspace row keeps the highlight.
-export function owningChatKey(chats: readonly { key: string; id: string }[], open: { key: string; parentId: string | null; closed: boolean } | null, subAgentsShown: boolean): string | null {
-  if (!open || open.closed) return null;
-  if (open.parentId === null) return chats.some((chat) => chat.key === open.key) ? open.key : null;
+// The top-level row that holds the open agent: the open chat itself, or the chat an open sub-agent
+// sits under when sub-agents are shown. Null when the open agent is not in this workspace's tree,
+// so the workspace row keeps the highlight.
+export function owningRowKey(tree: { top: readonly { key: string; id: string }[]; children: ReadonlyMap<string, readonly { key: string }[]> }, openKey: string | null, subAgentsShown: boolean): string | null {
+  if (openKey === null) return null;
+  if (tree.top.some((row) => row.key === openKey)) return openKey;
   if (!subAgentsShown) return null;
-  return chats.find((chat) => chat.id === open.parentId)?.key ?? null;
+  return tree.top.find((row) => tree.children.get(row.id)?.some((child) => child.key === openKey))?.key ?? null;
 }
 
 // The chats a workspace lists, latest first: the first `limit`, or all once expanded. The open
@@ -71,4 +71,60 @@ export function visibleChats<Ref extends { key: string }>(latestFirst: readonly 
   const open = openKey === null ? undefined : latestFirst.slice(limit).find((ref) => ref.key === openKey);
   if (open) rows.push(open);
   return { rows, hidden: latestFirst.length - rows.length };
+}
+
+// A workspace's chats as a tree: each sub-agent sits under its top-level ancestor (deeper
+// sub-agents too); a sub-agent whose parent is not listed here (archived, or in another workspace)
+// stands at the top level, so no open sub-agent goes missing. Both keep `latestFirst` order.
+export function chatTree<Ref extends { key: string; id: string }>(latestFirst: readonly Ref[], parentOf: ReadonlyMap<string, string | null>): { top: Ref[]; children: Map<string, Ref[]> } {
+  const ids = new Set(latestFirst.map((ref) => ref.id));
+  const rootOf = (id: string): string => {
+    let current = id;
+    // Bounded, so a parent loop in bad data cannot hang the view.
+    for (let step = 0; step < ids.size; step++) {
+      const parent = parentOf.get(current) ?? null;
+      if (parent === null || !ids.has(parent)) return current;
+      current = parent;
+    }
+    return current;
+  };
+  const top: Ref[] = [];
+  const children = new Map<string, Ref[]>();
+  for (const ref of latestFirst) {
+    const root = rootOf(ref.id);
+    if (root === ref.id) top.push(ref);
+    else {
+      const list = children.get(root);
+      if (list) list.push(ref);
+      else children.set(root, [ref]);
+    }
+  }
+  return { top, children };
+}
+
+// `since` is the workspace's statusEnteredAt when the mark was made: the mark holds while that has
+// not moved, so any status change ends it, and the host's and the app's clocks never meet.
+export type WorkspaceMark = { kind: "done" | "unread"; at: string; since: string | null };
+
+// The workspace metadata key Morphise keeps its own Done and Unread marks under.
+export const MARK_KEY = "morphise.mark";
+
+export function readMark(value: unknown): WorkspaceMark | null {
+  if (typeof value !== "object" || value === null) return null;
+  const { kind, at, since } = value as Record<string, unknown>;
+  if ((kind !== "done" && kind !== "unread") || typeof at !== "string" || Number.isNaN(Date.parse(at))) return null;
+  if (since !== null && typeof since !== "string") return null;
+  return { kind, at, since };
+}
+
+// Whether a mark is in force: made against the workspace's current status, which is not one that
+// needs the user. A permission request or a failure always shows.
+export function markApplies(indicator: Indicator | string, statusEnteredAt: string | null, mark: WorkspaceMark | null): mark is WorkspaceMark {
+  return mark !== null && indicator !== "needs_input" && indicator !== "failed" && mark.since === statusEnteredAt;
+}
+
+// The status Morphise shows: the mark's while it applies, Paseo's otherwise.
+export function effectiveIndicator(indicator: Indicator, statusEnteredAt: string | null, mark: WorkspaceMark | null): Indicator {
+  if (!markApplies(indicator, statusEnteredAt, mark)) return indicator;
+  return mark.kind === "done" ? "done" : "attention";
 }

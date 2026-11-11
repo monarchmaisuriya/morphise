@@ -22,6 +22,7 @@ import { profileSettings } from "./shared/document";
 import type { Profile } from "./shared/profile";
 import { remindersKeeper } from "./shared/reminder-contracts";
 import { REMINDER_KEY } from "./shared/reminders";
+import { dueForArchive } from "./shared/auto-archive";
 import { archiveOldDone, rulesForTransitions } from "./shared/rules";
 import type { TaskOperation } from "./shared/task-ops";
 import { taskSettings } from "./shared/tasks";
@@ -136,6 +137,29 @@ export default function contribute(client: PluginClientContext) {
       },
     );
   };
+  // Auto-archive, when the view's rule is on: each app tries each due workspace once, and archiving
+  // a workspace twice is harmless, so several open apps agree.
+  const archiveTried = new Set<string>();
+  const sweepWorkspaces = () => {
+    const rule = profileOf(store.get()).sidebar.view.autoArchive;
+    if (stopped || !rule || !workspacesReady.get()) return;
+    const now = new Date();
+    for (const workspace of workspaceList.get().values()) {
+      if (archiveTried.has(workspace.id) || !dueForArchive(workspace, rule, now)) continue;
+      archiveTried.add(workspace.id);
+      client.paseo.workspaces.archive(workspace.id).then(
+        (result) => {
+          if (result.error) console.error(`[morphise] Could not auto-archive ${workspace.name}: ${result.error}`);
+          else console.info(`[morphise] Auto-archived ${workspace.name}`);
+        },
+        (error: unknown) => console.error(`[morphise] Could not auto-archive ${workspace.name}`, error),
+      );
+    }
+  };
+  const sweepTimer = setInterval(sweepWorkspaces, 10 * 60_000);
+  releases.push(() => clearInterval(sweepTimer));
+  // Turning the rule on takes effect at once.
+  releases.push(store.subscribe(sweepWorkspaces));
   let archiving = false;
   releases.push(
     taskStore.subscribe(() => {
@@ -267,6 +291,7 @@ export default function contribute(client: PluginClientContext) {
       openKeeper();
       changeWorkspaceList({ snapshot: snapshot.entries });
       workspacesReady.set(true);
+      sweepWorkspaces();
       setDirectory({ ...directory, workspaces: reduceWorkspaces(directory.workspaces, { snapshot: snapshot.entries }) });
     },
     update: (message) => {

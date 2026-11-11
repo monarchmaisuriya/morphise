@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Text, View } from "react-native";
 import type { Profile } from "../shared/profile";
 import { MAX_NOTE_LENGTH, presetTitle, type Reminder, reminderAt } from "../shared/reminders";
-import { followUpTask, type TaskOperation } from "../shared/task-ops";
+import { followUpTask, followUpWorkspaceTask, type TaskOperation } from "../shared/task-ops";
 import type { TaskDocument } from "../shared/tasks";
 import { formatDue } from "../shared/time-text";
 import { parseWhen } from "../shared/when";
@@ -13,8 +13,18 @@ import { type ApplyTaskOperations, type TaskStore, tasksOf } from "./task-store"
 import { Button, Field, MenuItem, useTokens } from "./ui/kit";
 import { requestNotifications } from "./web";
 
-// What a reminder is about: one chat (its follow-up task) or one task.
-export type ReminderTarget = { kind: "chat"; agentId: string; workspaceId: string | null; title: string } | { kind: "task"; taskId: string };
+// What a reminder is about: one chat or one workspace (each through its follow-up task), or one task.
+export type ReminderTarget =
+  | { kind: "chat"; agentId: string; workspaceId: string | null; title: string }
+  | { kind: "workspace"; workspaceId: string; title: string }
+  | { kind: "task"; taskId: string };
+
+// The task a chat or workspace reminder lives on, when it has one yet.
+function followUpOf(document: TaskDocument, target: ReminderTarget) {
+  if (target.kind === "chat") return followUpTask(document, target.agentId);
+  if (target.kind === "workspace") return followUpWorkspaceTask(document, target.workspaceId);
+  return document.tasks.find((task) => task.id === target.taskId) ?? null;
+}
 
 export interface PickerDeps {
   tasks: TaskStore;
@@ -23,8 +33,7 @@ export interface PickerDeps {
 }
 
 export function currentReminder(document: TaskDocument, target: ReminderTarget): Reminder | null {
-  if (target.kind === "chat") return followUpTask(document, target.agentId)?.reminder ?? null;
-  return document.tasks.find((task) => task.id === target.taskId)?.reminder ?? null;
+  return followUpOf(document, target)?.reminder ?? null;
 }
 
 // "Reminds you in 25m", "Reminds you on Thu 09:00", or "Reminder due 5m ago".
@@ -35,13 +44,13 @@ export function reminderPhrase(reminder: Reminder, now: Date): string {
 }
 
 function operationFor(target: ReminderTarget, reminder: Reminder | null): TaskOperation {
-  return target.kind === "chat"
-    ? { kind: "remindChat", agentId: target.agentId, workspaceId: target.workspaceId, title: target.title, reminder }
-    : { kind: "setReminder", id: target.taskId, reminder };
+  if (target.kind === "chat") return { kind: "remindChat", agentId: target.agentId, workspaceId: target.workspaceId, title: target.title, reminder };
+  if (target.kind === "workspace") return { kind: "remindWorkspace", workspaceId: target.workspaceId, title: target.title, reminder };
+  return { kind: "setReminder", id: target.taskId, reminder };
 }
 
 function againOperation(document: TaskDocument, target: ReminderTarget, minutes: number): TaskOperation | null {
-  const taskId = target.kind === "task" ? target.taskId : followUpTask(document, target.agentId)?.id;
+  const taskId = followUpOf(document, target)?.id;
   return taskId ? { kind: "remindAgain", id: taskId, minutes } : null;
 }
 

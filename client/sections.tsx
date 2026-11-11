@@ -23,6 +23,7 @@ import {
 } from "./task-surfaces";
 import { NotesPanel } from "./notes-panel";
 import { createPromptPicker } from "./prompt-picker";
+import { createDispatchScreen, DISPATCH_SCREEN_ID, DispatchSidebarItem } from "./dispatch";
 import { createSidebarView } from "./sidebar-view";
 import { applyStyleSheet } from "./web";
 
@@ -146,6 +147,18 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
         track(client.addScreen({ id: TASKS_SCREEN_ID, title: "Tasks", Component: createTasksScreen(tasks) }));
         track(client.addWorkspacePanel({ id: "tasks", title: "Tasks", icon: "ListTodo", context: "workspace", Component: createWorkspaceTasksPanel(tasks) }));
         track(client.addSidebarHeaderItem({ id: "tasks", title: "Tasks", Component: createTasksSidebarItem(tasks) }));
+        track(client.addScreen({ id: DISPATCH_SCREEN_ID, title: "Dispatch", Component: createDispatchScreen(tasks) }));
+        track(client.addSidebarHeaderItem({ id: "dispatch", title: "Dispatch", Component: DispatchSidebarItem }));
+        track(
+          client.addCommandCenterItem({
+            id: "morphise-dispatch",
+            title: "Dispatch prompts to new workspaces",
+            icon: "Send",
+            keywords: ["dispatch", "batch", "parallel", "agents", "prompts", "new workspace"],
+            context: "global",
+            onSelect: ({ openScreen }) => openScreen({ screenId: DISPATCH_SCREEN_ID }),
+          }),
+        );
         track(client.addTimelineRenderer({ kind: "reminder", version: 1, schema: reminderRowSchema, Component: createReminderRow(tasks) }));
         const global = [
           { id: "morphise-tasks", title: "Open tasks", tab: "board" },

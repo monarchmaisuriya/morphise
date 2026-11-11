@@ -1,3 +1,5 @@
+import { MARK_KEY, readMark, type WorkspaceMark } from "../shared/row-meta";
+
 // Workspace names and projects for surfaces Paseo draws outside the plugin host, such as modals and
 // popovers, where Paseo's workspace hooks cannot run. Kept from the same owned workspace list
 // subscription as the directory.
@@ -25,21 +27,37 @@ export interface WorkspaceInfo {
   // The workspace's title when set, else its name.
   name: string;
   project: string;
+  // The project's id, folder and kind, for starting new workspaces in it.
+  projectId: string | null;
+  projectRootPath: string | null;
+  projectKind: string | null;
   // Not archived and not a background workspace.
   open: boolean;
   background: boolean;
+  pinned: boolean;
+  // Paseo's raw status and when it began, which a Morphise mark is made against.
+  status: string | null;
+  statusEnteredAt: string | null;
   lastUsed: string | null;
+  // The newest of the last prompt and the last agent activity.
+  lastActive: string | null;
   directory: string | null;
   // Git and GitHub state, as Paseo's own sidebar rows and hover card show them.
   branch: string | null;
-  dirty: boolean;
-  ahead: number;
-  behind: number;
+  // Null when Paseo has not loaded the git state yet: unknown is never read as clean.
+  dirty: boolean | null;
+  // Commits not pushed to, and not pulled from, the branch's upstream; null without one or unknown.
+  ahead: number | null;
+  behind: number | null;
+  // Whether archiving removes the folder: Paseo deletes the worktrees it created.
+  paseoWorktree: boolean | null;
   diff: { additions: number; deletions: number } | null;
   labels: readonly string[];
   pullRequest: PullRequestInfo | null;
   // Long-running services only (scripts of type "service").
   services: readonly ServiceInfo[];
+  // Morphise's own Done or Unread mark, kept on the workspace's metadata.
+  mark: WorkspaceMark | null;
 }
 
 export type WorkspaceList = ReadonlyMap<string, WorkspaceInfo>;
@@ -51,6 +69,10 @@ function record(value: unknown): Record<string, unknown> | null {
 }
 
 const text = (value: unknown) => (typeof value === "string" && value ? value : null);
+
+const newest = (left: string | null, right: string | null) => (left === null ? right : right === null ? left : Date.parse(left) >= Date.parse(right) ? left : right);
+
+const whole = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : null);
 
 const count = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : 0);
 
@@ -85,24 +107,32 @@ function readWorkspace(value: unknown): WorkspaceInfo | null {
   const id = text(workspace?.id);
   if (!workspace || !id) return null;
   const git = record(workspace.gitRuntime);
-  const aheadBehind = record(git?.aheadBehind);
   const diff = record(workspace.diffStat);
   return {
     id,
     name: text(workspace.title) ?? text(workspace.name) ?? id,
     project: text(workspace.projectDisplayName) ?? "",
+    projectId: text(workspace.projectId),
+    projectRootPath: text(workspace.projectRootPath),
+    projectKind: text(workspace.projectKind),
     open: !workspace.archivingAt && workspace.background !== true && workspace.internal !== true,
     background: workspace.background === true,
+    pinned: !!text(workspace.pinnedAt),
+    status: text(workspace.status),
+    statusEnteredAt: text(workspace.statusEnteredAt),
     lastUsed: text(workspace.lastUserMessageAt) ?? text(workspace.activityAt),
+    lastActive: newest(text(workspace.lastUserMessageAt), text(workspace.activityAt)),
     directory: text(workspace.workspaceDirectory),
     branch: text(git?.currentBranch),
-    dirty: git?.isDirty === true,
-    ahead: count(aheadBehind?.ahead),
-    behind: count(aheadBehind?.behind),
+    dirty: typeof git?.isDirty === "boolean" ? git.isDirty : null,
+    ahead: whole(git?.aheadOfOrigin),
+    behind: whole(git?.behindOfOrigin),
+    paseoWorktree: typeof git?.isPaseoOwnedWorktree === "boolean" ? git.isPaseoOwnedWorktree : null,
     diff: diff ? { additions: count(diff.additions), deletions: count(diff.deletions) } : null,
     labels: Array.isArray(workspace.labels) ? workspace.labels.filter((label): label is string => typeof label === "string") : [],
     pullRequest: readPullRequest(record(workspace.githubRuntime)?.pullRequest),
     services: readServices(workspace.scripts),
+    mark: readMark(record(workspace.metadata)?.[MARK_KEY]),
   };
 }
 

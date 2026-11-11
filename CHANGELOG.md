@@ -2,6 +2,47 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.8.0 - 2026-11-12
+
+- **Chats no longer vanish.** Chats and sub-agents whose agent process stopped ("closed") stay listed while Paseo still has them. Before, a workspace whose chats had closed showed none, even with their tabs open. Archived ones stay out, as in Paseo.
+- **Sub-agents:**
+  - Sub-agents always sit under their top-level chat, deeper ones too.
+  - One whose parent is not listed shows on its own.
+  - New choice in Display, Sub-agents per chat: Hidden, Only the open one, or 3, 5, 10, 20.
+- **Status colours:** needs permission amber, failed red, running white (pulsing), finished but unread blue, done a dim grey-green.
+- **Git and detail colours:**
+  - The branch turns amber with uncommitted changes.
+  - ↑ commits to push show in blue, ↓ commits to pull in amber.
+  - Merged pull requests show in purple.
+  - Labels carry their own colour dot.
+- **New in the row menu:**
+  - Remind me, for the workspace itself.
+  - Mark as done, or Mark as unread. These are Morphise's own marks, shared by every app. A mark lasts until the workspace's status changes, and Unread clears when you open the workspace. Marks are never offered on, and never hide, a workspace waiting for permission or one that failed.
+  - Add task.
+  - Copy pull request link.
+  - Select.
+- **Bulk actions:**
+  - Choose Select in a row's menu, then tick rows.
+  - A bar under the list pins or unpins, marks done, labels, or archives them all.
+  - Archive asks twice, and says how many of the worktrees still have uncommitted, unpushed or unknown changes. Archiving deletes a Paseo worktree's folder.
+- **Auto-archive marked done** (Display menu, off by default):
+  - Archives workspaces marked done 1 to 30 days ago.
+  - Like Paseo's own safe archive, it skips a worktree unless its git state is known clean with nothing unpushed. It also skips workspaces that are pinned, running, waiting for permission, or failed.
+  - For merged pull requests, turn on Paseo's own "Archive merged PR workspaces" in its host settings.
+- **Dispatch** (a new row in Paseo's sidebar header, and in the Command Center):
+  - Choose a project, an agent your chats already use, and a new worktree or the project folder. Then write several prompts; each starts its own workspace and agent.
+  - If one fails, Dispatch stops, says why, and keeps the prompts not yet started.
+- **Smaller fixes:**
+  - An empty due date no longer reads like a date.
+  - Web text fields draw one focus ring, not two.
+
+Rolling back to 0.7.0: `paseo plugin update morphise --ref v0.7.0`.
+- **Settings that 0.7.0 cannot read:**
+  - Sub-agents per chat set to "Only the open one".
+  - Auto-archive marked done turned on.
+  - With either chosen, 0.7.0 reports the profile as invalid and keeps the data. Switch them back first.
+- **Marks:** 0.7.0 ignores the Done and Unread marks.
+
 ## 0.7.0 - 2026-11-12
 
 The Morphise sidebar view now offers everything Paseo's own sidebar does that a plugin can reach, plus its own extras.

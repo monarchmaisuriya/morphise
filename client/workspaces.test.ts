@@ -27,7 +27,7 @@ describe("workspace info", () => {
           workspaceDirectory: "/repo/w1",
           labels: ["urgent"],
           diffStat: { additions: 4, deletions: 1 },
-          gitRuntime: { currentBranch: "fix/login", isDirty: true, aheadBehind: { ahead: 2, behind: 1 } },
+          gitRuntime: { currentBranch: "fix/login", isDirty: true, aheadBehind: { ahead: 9, behind: 9 }, aheadOfOrigin: 2, behindOfOrigin: 1, isPaseoOwnedWorktree: true },
           githubRuntime: { pullRequest: { number: 12, url: "https://github.com/a/b/pull/12", title: "Fix login", state: "OPEN", isMerged: false, isDraft: true, checksStatus: "failure", reviewDecision: "approved", baseRefName: "main", headRefName: "fix/login" } },
           scripts: [{ scriptName: "web", type: "service", hostname: "localhost", port: 3000, lifecycle: "running", health: "unhealthy" }, { scriptName: "lint", type: "script", hostname: "", port: null, lifecycle: "stopped", health: null }],
         }),
@@ -39,11 +39,17 @@ describe("workspace info", () => {
       dirty: true,
       ahead: 2,
       behind: 1,
+      paseoWorktree: true,
       diff: { additions: 4, deletions: 1 },
       labels: ["urgent"],
       pullRequest: { number: 12, url: "https://github.com/a/b/pull/12", state: "draft", checks: "failure", review: "approved" },
       services: [{ name: "web", port: 3000, running: true, healthy: false }],
     });
+  });
+
+  it("keeps git state Paseo has not loaded yet as unknown, never as clean", () => {
+    const list = reduceWorkspaceInfo(new Map(), { snapshot: [descriptor("w1")] });
+    expect(list.get("w1")).toMatchObject({ dirty: null, ahead: null, behind: null, paseoWorktree: null });
   });
 
   it("offers open workspaces matching a search, most recently used first", () => {

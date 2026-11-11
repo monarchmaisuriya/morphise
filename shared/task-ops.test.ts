@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyTaskOperation, followUpTask, type TaskOperation } from "./task-ops";
+import { applyTaskOperation, followUpTask, followUpWorkspaceTask, type TaskOperation } from "./task-ops";
 import { EMPTY_TASKS, type TaskDocument } from "./tasks";
 
 const now = new Date("2026-11-11T14:30:00.000Z");
@@ -157,6 +157,19 @@ describe("chat follow-ups", () => {
     const document = apply(EMPTY_TASKS, { kind: "remindChat", agentId: "chat-1", workspaceId: "w1", title: "x", reminder });
     expect(followUpTask(document, "chat-1")?.id).toBe(document.tasks[0].id);
     expect(followUpTask(apply(document, { kind: "moveTask", id: document.tasks[0].id, column: "done" }), "chat-1")).toBeNull();
+  });
+
+  it("creates a workspace's own follow-up task, then updates the same task, apart from its chats' tasks", () => {
+    const chat = apply(EMPTY_TASKS, { kind: "remindChat", agentId: "chat-1", workspaceId: "w1", title: "Chat", reminder });
+    let document = apply(chat, { kind: "remindWorkspace", workspaceId: "w1", title: "Fix login", reminder });
+    expect(document.tasks).toHaveLength(2);
+    const own = followUpWorkspaceTask(document, "w1");
+    expect(own).toMatchObject({ title: "Follow up: Fix login", reminder, links: { workspaceId: "w1" } });
+    expect(own?.links.agentId).toBeUndefined();
+    document = apply(document, { kind: "remindWorkspace", workspaceId: "w1", title: "Fix login", reminder: null });
+    expect(document.tasks).toHaveLength(2);
+    expect(followUpWorkspaceTask(document, "w1")?.reminder).toBeNull();
+    expect(followUpTask(document, "chat-1")?.reminder).toEqual(reminder);
   });
 
   it("moves a 0.2 chat reminder into a task once, however many apps run the migration", () => {

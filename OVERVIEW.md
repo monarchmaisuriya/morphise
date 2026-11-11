@@ -16,6 +16,10 @@ Settings are split into tabs: Layouts, Sidebar, Look, Buttons, Commands, Prompts
   - The Display menu follows Paseo's: Grouping, Sort, Title (title or branch name), Rows, Per group, Chats, and Show (Branch, Project, Host, Pull request, Checks, Services, Labels, Diff stats, Last activity), plus Show background per device.
   - Chats under a workspace: the latest 5 (changeable), then "Show more"; each chat's sub-agents under it, also the latest 5 (changeable or hidden); only the open chat or sub-agent is highlighted.
   - Shorten long groups with "Show more"; workspaces that need permission or failed always show.
+  - Colours say what each row needs: needs permission amber, failed red, running white (pulsing), finished but unread blue, done dim grey-green; uncommitted branches amber, unpushed commits blue, merged pull requests purple.
+  - Mark a workspace done or unread yourself, set a reminder on it, add it to tasks, or select several for bulk actions (pin, mark done, label, archive).
+  - Auto-archive (off by default) archives workspaces marked done some days ago, never a worktree with uncommitted, unpushed or unknown changes. Merged pull requests use Paseo's own "Archive merged PR workspaces" setting.
+- **Dispatch:** start several agents at once. Pick a project and an agent your chats use, then write one prompt per new workspace.
 - **Theme:** a light or dark palette from eight colours, listed under Settings, Appearance.
 - **Buttons:** sidebar header and footer rows, workspace header buttons or menus, pills above the message box, and message box controls (a button, an on/off switch saved on the chat, or a model, mode or thinking picker).
 - **Commands:** slash commands, Command Center items, New workspace presets, and hidden timeline row types.

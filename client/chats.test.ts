@@ -15,9 +15,14 @@ const agent = (id: string, extra: Record<string, unknown> = {}) => ({
 const upsert = (value: ReturnType<typeof agent>) => ({ message: { type: "agent_update", payload: { kind: "upsert", agent: value } } });
 
 describe("reduceChats", () => {
+  it("keeps the chat's provider and model as Paseo's agent config writes them", () => {
+    const { chats } = reduceChats(new Map(), { snapshot: [{ agent: agent("a", { model: "opus" }) }] });
+    expect(chats.get("a")?.model).toBe("claude/opus");
+  });
+
   it("keeps each open chat's title, workspace and status from a snapshot, without reporting changes", () => {
     const { chats, transitions } = reduceChats(new Map(), { snapshot: [{ agent: agent("a") }, { agent: agent("b", { status: "closed" }) }] });
-    expect([...chats]).toEqual([["a", { title: "Chat a", workspaceId: "w1", indicator: "done" }]]);
+    expect([...chats]).toEqual([["a", { title: "Chat a", workspaceId: "w1", indicator: "done", model: "" }]]);
     expect(transitions).toEqual([]);
   });
 

@@ -49,6 +49,7 @@ export type TaskOperation =
   | { kind: "deleteRule"; id: string }
   | { kind: "setArchiveDone"; enabled: boolean; days: number }
   | { kind: "remindChat"; agentId: string; workspaceId: string | null; title: string; reminder: Reminder | null }
+  | { kind: "remindWorkspace"; workspaceId: string; title: string; reminder: Reminder | null }
   | { kind: "migrateChatReminder"; agentId: string; workspaceId: string | null; title: string; reminder: Reminder };
 
 export class TaskOperationError extends Error {}
@@ -94,6 +95,15 @@ export function firstOpenColumn(document: TaskDocument): Column {
 export function followUpTask(document: TaskDocument, agentId: string): Task | null {
   const done = document.columns.find((column) => column.done)?.id;
   const open = document.tasks.filter((task) => task.links.agentId === agentId && task.archivedAt === null && task.column !== done);
+  const reminded = open.filter((task) => task.reminder !== null).sort((left, right) => left.reminder!.at.localeCompare(right.reminder!.at));
+  return reminded[0] ?? open[0] ?? null;
+}
+
+// A workspace's own follow-up task: an open task linked to the workspace and to no chat, the one
+// with the soonest reminder first.
+export function followUpWorkspaceTask(document: TaskDocument, workspaceId: string): Task | null {
+  const done = document.columns.find((column) => column.done)?.id;
+  const open = document.tasks.filter((task) => task.links.workspaceId === workspaceId && !task.links.agentId && task.archivedAt === null && task.column !== done);
   const reminded = open.filter((task) => task.reminder !== null).sort((left, right) => left.reminder!.at.localeCompare(right.reminder!.at));
   return reminded[0] ?? open[0] ?? null;
 }
@@ -352,6 +362,26 @@ function mutate(document: TaskDocument, operation: TaskOperation, now: Date): vo
           title: `Follow up: ${operation.title}`.slice(0, 200),
           reminder: operation.reminder,
           links: { agentId: operation.agentId, ...(operation.workspaceId ? { workspaceId: operation.workspaceId } : {}) },
+        },
+        now,
+      );
+      return;
+    }
+    case "remindWorkspace": {
+      const task = followUpWorkspaceTask(document, operation.workspaceId);
+      if (task) {
+        task.reminder = operation.reminder;
+        touch(task, now);
+        return;
+      }
+      if (!operation.reminder) return;
+      insertTask(
+        document,
+        {
+          id: uniqueId(`follow-up-${slug(operation.workspaceId, "workspace")}`, document.tasks.map((item) => item.id)),
+          title: `Follow up: ${operation.title}`.slice(0, 200),
+          reminder: operation.reminder,
+          links: { workspaceId: operation.workspaceId },
         },
         now,
       );

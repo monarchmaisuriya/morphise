@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chatIndicator, isListedChat } from "./chat-status";
+import { chatIndicator, isListedChat, isSidebarChat } from "./chat-status";
 
 const chat = (overrides: Partial<Parameters<typeof chatIndicator>[0]> = {}) => ({
   status: "idle" as const,
@@ -17,6 +17,20 @@ describe("chatIndicator", () => {
     expect(chatIndicator(chat({ status: "initializing" }))).toBe("running");
     expect(chatIndicator(chat({ requiresAttention: true, attentionReason: "finished" }))).toBe("attention");
     expect(chatIndicator(chat())).toBe("done");
+  });
+});
+
+describe("chatIndicator for closed chats", () => {
+  it("is done once the agent closed, even with stale attention", () => {
+    expect(chatIndicator({ status: "closed", requiresAttention: true, attentionReason: "permission" })).toBe("done");
+    expect(chatIndicator({ status: "closed", requiresAttention: true, attentionReason: "error" })).toBe("done");
+  });
+});
+
+describe("isSidebarChat", () => {
+  it("lists every top-level chat, closed ones too, and no sub-agents", () => {
+    expect(isSidebarChat({ parentAgentId: null })).toBe(true);
+    expect(isSidebarChat({ parentAgentId: "parent" })).toBe(false);
   });
 });
 

@@ -9,6 +9,8 @@ export interface ChatInfo {
   title: string;
   workspaceId: string;
   indicator: Indicator;
+  // `provider/model`, the form Paseo's agent config takes.
+  model: string;
 }
 
 export type Chats = ReadonlyMap<string, ChatInfo>;
@@ -30,11 +32,14 @@ function readChat(value: unknown): { id: string; info: ChatInfo | null } | null 
     attentionReason: (agent.attentionReason ?? null) as ChatStatusFields["attentionReason"],
   });
   const title = typeof agent.title === "string" && agent.title ? agent.title : typeof agent.provider === "string" ? agent.provider : "Chat";
-  return { id: agent.id, info: { title, workspaceId: typeof agent.workspaceId === "string" ? agent.workspaceId : "", indicator } };
+  const provider = typeof agent.provider === "string" ? agent.provider : "";
+  // Empty when the model is unknown: Paseo's agent config needs both parts.
+  const model = provider && typeof agent.model === "string" && agent.model ? `${provider}/${agent.model}` : "";
+  return { id: agent.id, info: { title, workspaceId: typeof agent.workspaceId === "string" ? agent.workspaceId : "", indicator, model } };
 }
 
 const same = (left: ChatInfo | undefined, right: ChatInfo | null) =>
-  left?.title === right?.title && left?.workspaceId === right?.workspaceId && left?.indicator === right?.indicator;
+  left?.title === right?.title && left?.workspaceId === right?.workspaceId && left?.indicator === right?.indicator && left?.model === right?.model;
 
 // A snapshot replaces the list without reporting transitions (nothing "entered" a status);
 // updates report each chat that entered a different status.

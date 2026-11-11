@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { profileSchema } from "./profile";
-import { owningChatKey, rowShows, rowTitle, statusLine, visibleChats } from "./row-meta";
+import { chatTree, effectiveIndicator, owningRowKey, readMark, rowShows, rowTitle, statusLine, visibleChats } from "./row-meta";
 
 const view = (patch: Record<string, unknown> = {}) => profileSchema.parse({ sidebar: { view: patch } }).sidebar.view;
 
@@ -36,27 +36,24 @@ describe("statusLine", () => {
   });
 });
 
-describe("owningChatKey", () => {
-  const chats = [
-    { key: "h:a", id: "a" },
-    { key: "h:b", id: "b" },
-  ];
+describe("owningRowKey", () => {
+  const tree = {
+    top: [
+      { key: "h:a", id: "a" },
+      { key: "h:b", id: "b" },
+    ],
+    children: new Map([["a", [{ key: "h:s" }]]]),
+  };
 
-  it("is the open chat, or the parent of an open sub-agent when sub-agents are listed", () => {
-    expect(owningChatKey(chats, { key: "h:b", parentId: null, closed: false }, true)).toBe("h:b");
-    expect(owningChatKey(chats, { key: "h:s", parentId: "a", closed: false }, true)).toBe("h:a");
+  it("is the open chat, or the chat an open sub-agent sits under when sub-agents show", () => {
+    expect(owningRowKey(tree, "h:b", true)).toBe("h:b");
+    expect(owningRowKey(tree, "h:s", true)).toBe("h:a");
   });
 
-  it("is nothing when the open agent is not listed here, so the workspace keeps the highlight", () => {
-    expect(owningChatKey(chats, { key: "h:s", parentId: "a", closed: false }, false)).toBeNull();
-    expect(owningChatKey(chats, { key: "h:z", parentId: null, closed: false }, true)).toBeNull();
-    expect(owningChatKey(chats, { key: "h:s", parentId: "z", closed: false }, true)).toBeNull();
-    expect(owningChatKey(chats, null, true)).toBeNull();
-  });
-
-  it("is nothing for a closed open agent, which no row lists", () => {
-    expect(owningChatKey(chats, { key: "h:s", parentId: "a", closed: true }, true)).toBeNull();
-    expect(owningChatKey(chats, { key: "h:b", parentId: null, closed: true }, true)).toBeNull();
+  it("is nothing when the open agent is not shown here, so the workspace keeps the highlight", () => {
+    expect(owningRowKey(tree, "h:s", false)).toBeNull();
+    expect(owningRowKey(tree, "h:z", true)).toBeNull();
+    expect(owningRowKey(tree, null, true)).toBeNull();
   });
 });
 
@@ -72,5 +69,59 @@ describe("visibleChats", () => {
   it("keeps the open chat listed even past the limit", () => {
     expect(visibleChats(refs, 5, false, "g")).toEqual({ rows: [...refs.slice(0, 5), { key: "g" }], hidden: 1 });
     expect(visibleChats(refs, 5, false, "b").rows).toEqual(refs.slice(0, 5));
+  });
+});
+
+describe("chatTree", () => {
+  const ref = (id: string) => ({ key: `h:${id}`, id });
+  const parents = new Map<string, string | null>([
+    ["a", null],
+    ["s1", "a"],
+    ["s2", "s1"],
+    ["o", "gone"],
+    ["b", null],
+  ]);
+
+  it("nests sub-agents, deeper ones too, under their top-level chat, in list order", () => {
+    const { top, children } = chatTree([ref("s2"), ref("a"), ref("o"), ref("s1"), ref("b")], parents);
+    expect(top.map((item) => item.id)).toEqual(["a", "o", "b"]);
+    expect(children.get("a")?.map((item) => item.id)).toEqual(["s2", "s1"]);
+  });
+
+  it("puts a sub-agent whose parent is not listed at the top level", () => {
+    expect(chatTree([ref("o")], parents).top.map((item) => item.id)).toEqual(["o"]);
+  });
+
+  it("stops on a parent loop and still lists each chat once", () => {
+    const loop = new Map<string, string | null>([["x", "y"], ["y", "x"]]);
+    const { top, children } = chatTree([ref("x"), ref("y")], loop);
+    expect(top.length + [...children.values()].flat().length).toBe(2);
+  });
+});
+
+describe("marks", () => {
+  const entered = "2026-11-12T09:00:00Z";
+
+  it("reads only well-formed marks", () => {
+    expect(readMark({ kind: "done", at: "2026-11-12T10:00:00Z", since: entered })).toEqual({ kind: "done", at: "2026-11-12T10:00:00Z", since: entered });
+    expect(readMark({ kind: "done", at: "2026-11-12T10:00:00Z", since: null })).toEqual({ kind: "done", at: "2026-11-12T10:00:00Z", since: null });
+    expect(readMark({ kind: "other", at: "2026-11-12T10:00:00Z", since: entered })).toBeNull();
+    expect(readMark({ kind: "done", at: "soon", since: entered })).toBeNull();
+    expect(readMark({ kind: "done", at: "2026-11-12T10:00:00Z", since: 5 })).toBeNull();
+    expect(readMark(null)).toBeNull();
+  });
+
+  it("shows the mark while the status it was made against has not changed", () => {
+    const done = { kind: "done" as const, at: "2026-11-12T10:00:00Z", since: entered };
+    expect(effectiveIndicator("attention", entered, done)).toBe("done");
+    expect(effectiveIndicator("running", "2026-11-12T11:00:00Z", done)).toBe("running");
+    expect(effectiveIndicator("done", entered, { kind: "unread", at: "2026-11-12T10:00:00Z", since: entered })).toBe("attention");
+    expect(effectiveIndicator("done", entered, null)).toBe("done");
+  });
+
+  it("never hides a permission request or a failure", () => {
+    const done = { kind: "done" as const, at: "2026-11-12T10:00:00Z", since: entered };
+    expect(effectiveIndicator("needs_input", entered, done)).toBe("needs_input");
+    expect(effectiveIndicator("failed", entered, done)).toBe("failed");
   });
 });

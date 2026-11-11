@@ -195,9 +195,12 @@ const viewSchema = z
       .optional(),
     // How many chats a workspace lists before "Show more" (5 when unset).
     chatRows: z.int().min(1).max(50).optional(),
-    // Sub-agents listed under their parent chat (shown when unset), and how many before "Show more"
-    // (5 when unset).
-    showSubAgents: z.boolean().optional(),
+    // Sub-agents listed under their parent chat: all of them (true, or unset), none (false), or only
+    // the open one ("open"); and how many before "Show more" (5 when unset).
+    showSubAgents: z.union([z.boolean(), z.literal("open")]).optional(),
+    // Archive workspaces marked done `days` ago. Off when unset. Never archives work git could
+    // lose. Merged pull requests are Paseo's own "Archive merged PR workspaces" setting.
+    autoArchive: z.strictObject({ days: z.int().min(1).max(90) }).optional(),
     subAgentRows: z.int().min(1).max(50).optional(),
   })
   .prefault({});

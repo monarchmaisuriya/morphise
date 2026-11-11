@@ -10,6 +10,8 @@ export interface ChatStatusFields {
 
 // The same five statuses Paseo shows for workspaces, for one chat.
 export function chatIndicator(chat: ChatStatusFields): Indicator {
+  // A closed agent has no process left to wait on or fail, whatever attention it last carried.
+  if (chat.status === "closed") return "done";
   if (chat.attentionReason === "permission") return "needs_input";
   if (chat.attentionReason === "error" || chat.status === "error") return "failed";
   if (chat.status === "running" || chat.status === "initializing") return "running";
@@ -17,9 +19,17 @@ export function chatIndicator(chat: ChatStatusFields): Indicator {
   return "done";
 }
 
-// Chats the sidebar lists: open ones, not sub-agents of another chat.
+// Open top-level chats, for automation rules and follow-up titles: a chat that closes leaves
+// this set instead of looking finished.
 export function isListedChat(chat: { readonly status: ChatStatusFields["status"]; readonly parentAgentId: string | null }): boolean {
   return chat.status !== "closed" && chat.parentAgentId === null;
+}
+
+// Chats the sidebar lists: every top-level chat Paseo gives plugins, closed ones too. Paseo leaves
+// archived agents out of that list; "closed" only means the agent process stopped, and its tab
+// can still be open.
+export function isSidebarChat(chat: { readonly parentAgentId: string | null }): boolean {
+  return chat.parentAgentId === null;
 }
 
 type View = Profile["sidebar"]["view"];
