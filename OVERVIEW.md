@@ -1,11 +1,11 @@
-Morphise reshapes Paseo's interface from settings forms, adds a status-aware sidebar, and helps you come back to the right chat at the right time. Change something under Settings, Plugins, Morphise, save, and every connected Paseo app updates within a moment, without a reload.
+Morphise reshapes Paseo's interface from settings forms, adds a status-aware sidebar, and gives you a kanban task board with reminders that bring you back to the right chat at the right time. Change something under Settings, Plugins, Morphise, save, and every connected Paseo app updates within a moment, without a reload.
 
 ## What you can change
 
 Settings are split into tabs: Layouts, Sidebar, Look, Buttons, Commands, Prompts and Advanced (the whole profile as JSON).
 
 - **Layouts:** keep several whole setups and switch between them in settings or from the Command Center ("Morphise layout: …"). Your 0.1 profile becomes the layout "Default".
-- **Sidebar view:** a replacement for the workspace list. Pick "Morphise" in Settings, Sidebar, Sidebar view.
+- **Sidebar view:** a replacement for the workspace list. Pick "Morphise" in Paseo's Settings, Sidebar, Sidebar view (Morphise's settings remind you while Paseo still shows its own). It lists workspaces or chats.
   - Sort by status (needs permission, failed, running, finished unread, done; the order is yours), by last prompt or by name, with pinned workspaces first.
   - Group by project, status, label, or not at all, with counts in the headers. Groups you fold stay folded on that device.
   - Search, status chips, a "Needs me" chip, and a Next button that opens the next workspace waiting for you.
@@ -18,13 +18,24 @@ Settings are split into tabs: Layouts, Sidebar, Look, Buttons, Commands, Prompts
 
 Buttons, rows, commands and controls run one of a small set of actions: open a link, insert or replace text in the message box, set the model, mode or thinking level, or open Morphise's settings. Morphise has no action that runs commands or writes files.
 
-## Reminders, notes and prompts
+## Tasks and reminders
 
-- **Remind me:** from a chat's "Remind me" pill, `/remind 45m` (or `2h`, `1h30m`, `clear`), or the Command Center. The choices default to 15 minutes, 30 minutes, 1 hour and 3 hours, and you can change them on the Sidebar tab. When a reminder is due:
-  - the "Reminders" row in the sidebar shows how many are due, and opens a list where you can open the chat or mark it done;
-  - the chat is listed under "Reminders" at the top of Morphise's sidebar view;
-  - open apps play a short chime and, on desktop and browser, show a notification if you allowed it; a toast shows while the sidebar is shown;
-  - a reminder row appears in the chat itself.
+- **Board:** open "Tasks" in the sidebar, the Tasks panel in a workspace (only that workspace's cards), or "Open tasks" in the Command Center.
+  - Columns: name, colour, order, a work in progress limit, and which one is Done, under Customise.
+  - Cards: title, description, priority P1 to P4, labels, due date, reminder, checklist, link, and the chat they belong to ("Insert into chat" puts the card in its message box). The arrows on a card move it one column.
+  - Quick add: `Fix login p1 @bug #review due:fri tomorrow 9am`. The preview under the box shows what each part became.
+  - Filters, sort, rows (by priority, label or workspace) and card size can be saved as views, which also appear in the Command Center.
+  - Today lists reminders due, overdue cards, cards due today and reminders later today. Archived lists archived cards; Customise can archive Done cards after some days.
+  - Automations: when a linked chat needs permission, fails or finishes, move its card to a column; when a card enters Done, clear its reminder. They run while any Paseo app is open.
+- **Remind me:** every reminder belongs to a card. "Remind me" on a chat sets the reminder on that chat's follow-up card, creating it in the first column if needed.
+  - Open the picker from the chat's pill (it counts down: "⏰ 25m"), the workspace header, the alarm button or a long press on a chat row in Morphise's sidebar view, or a card.
+  - Choose a preset (yours, on the Sidebar tab), "This evening", "Tomorrow morning", or type `45m`, `17:30`, `5pm`, `tomorrow 9am` or `fri 10:00`. Add a note for when you come back. Reminders can be 1 minute to 7 days ahead.
+  - `/remind <time>` and `/remind clear` in a chat; `/task <quick add>` adds a card linked to the chat; the Command Center has the presets and "Clear this chat's reminder".
+  - When a reminder is due: "Tasks" in the sidebar shows how many are due; the card is listed under Reminders at the top of the sidebar view; open apps chime, show a toast and, if you allowed it, a desktop notification; a row appears in the linked chat with Done, +15m, +1h and Move to Done.
+  - +15m and +1h on a reminder that is not due yet push it later. Reminders on Done or archived cards are paused.
+
+## Notes and prompts
+
 - **Chat notes:** a Notes panel beside any chat (or "Open this chat's notes" in the Command Center), saved on the chat.
 - **Prompts:** saved prompts shared by every layout; pick one from the Prompts box in any message box to insert it.
 
@@ -33,10 +44,11 @@ Buttons, rows, commands and controls run one of a small set of actions: open a l
 Requires Paseo 0.16.0-beta.1 or later, on both the daemon and the app.
 
 - Settings are stored on the daemon, so every app connected to that host shares them. They are plain JSON, not a secret store. Which groups are folded and which status chips are on are kept per device.
-- Reminders and notes are stored on the chat, so they go when the chat does.
+- The task board is one settings document on the daemon, shared by every app; changes from several apps at once are merged. Notes are stored on the chat, so they go when the chat does.
 - Paseo gives plugins no notification or "unread" control, so a reminder cannot make Paseo itself ring; Morphise shows it in its own row, list, view, chime and notification. A reminder row in the chat is written by the daemon; if no app is connected at the time, it is written once one connects.
-- Sorting, filtering and reminders in the list apply to Morphise's own sidebar view; plugins cannot reorder Paseo's built-in list.
+- Sorting, filtering and reminders in the list apply to Morphise's own sidebar view; plugins cannot reorder Paseo's built-in list or add items to its right-click menus, so "Remind me" sits on the pill, the header, and Morphise's own rows.
+- Cards move with arrows, not drag and drop.
 - Actions from header buttons, sidebar rows and the Command Center act on the focused chat's message box.
 - If Paseo rejects part of the settings, such as an unknown icon name, that part is skipped, the rest still applies, and the Advanced tab lists what was not applied and why.
-- Ids starting with `morphise-` and the `/remind` command are reserved for Morphise's own items.
+- Ids starting with `morphise-` and the `/remind` and `/task` commands are reserved for Morphise's own items.
 - CSS in the style layer can load remote resources like any stylesheet.

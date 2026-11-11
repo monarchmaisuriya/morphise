@@ -1,22 +1,40 @@
 import { z } from "zod";
 import { MAX_REMINDER_MINUTES } from "./profile";
 
-// A chat's reminder lives on the chat itself (agent metadata). Apps write `REMINDER_KEY`; the
-// daemon writes only `REMINDER_ROW_KEY`, the setAt of the reminder whose chat row it wrote.
-// Top-level metadata keys replace independently, so neither writer can undo the other.
+// Morphise 0.2 kept a chat's reminder on the chat (agent metadata `REMINDER_KEY`) and marked the
+// one whose chat row it wrote in `REMINDER_ROW_KEY` (its setAt). 0.3 keeps reminders on tasks; the
+// daemon marks rows it wrote in `REMINDER_ROWS_KEY`, task id to setAt, and only it writes that key.
+// Top-level metadata keys replace independently, so writers of different keys cannot undo each other.
 export const REMINDER_KEY = "morphise.reminder";
 export const REMINDER_ROW_KEY = "morphise.reminderRow";
+export const REMINDER_ROWS_KEY = "morphise.reminderRows";
 
 const MINUTE = 60_000;
 
+export const MAX_NOTE_LENGTH = 200;
+
 export const reminderSchema = z
-  .strictObject({ at: z.iso.datetime(), setAt: z.iso.datetime() })
+  .strictObject({
+    at: z.iso.datetime(),
+    setAt: z.iso.datetime(),
+    // What to do when it is due, shown with the reminder.
+    note: z.string().max(MAX_NOTE_LENGTH, `A note can be at most ${MAX_NOTE_LENGTH} characters`).optional(),
+  })
   .refine(({ at, setAt }) => Date.parse(at) > Date.parse(setAt), { message: "A reminder must be due after it was set" })
   .refine(({ at, setAt }) => Date.parse(at) - Date.parse(setAt) <= MAX_REMINDER_MINUTES * MINUTE, {
     message: "A reminder can be at most 7 days away",
   });
 
 export type Reminder = z.infer<typeof reminderSchema>;
+
+// A reminder at a chosen time, 1 minute to 7 days from now, with an optional note.
+export function reminderAt(at: Date, now: Date, note?: string): Reminder {
+  const minutes = (at.getTime() - now.getTime()) / MINUTE;
+  if (!(minutes >= 1) || minutes > MAX_REMINDER_MINUTES) throw new Error("A reminder must be 1 minute to 7 days away");
+  const text = note?.trim();
+  if (text && text.length > MAX_NOTE_LENGTH) throw new Error(`A note can be at most ${MAX_NOTE_LENGTH} characters`);
+  return { at: at.toISOString(), setAt: now.toISOString(), ...(text ? { note: text } : {}) };
+}
 
 export function createReminder(minutes: number, now: Date): Reminder {
   if (!Number.isInteger(minutes) || minutes < 1 || minutes > MAX_REMINDER_MINUTES) {
@@ -50,6 +68,14 @@ export function readReminder(metadata: unknown): Reminder | null {
 export function readReminderRow(metadata: unknown): string | null {
   const value = record(metadata)?.[REMINDER_ROW_KEY];
   return typeof value === "string" ? value : null;
+}
+
+// Task id to the setAt of the reminder whose row was written; entries this version cannot read
+// are dropped.
+export function readReminderRows(metadata: unknown): Record<string, string> {
+  const value = record(record(metadata)?.[REMINDER_ROWS_KEY]);
+  if (!value) return {};
+  return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
 }
 
 export function isDue(reminder: Reminder, now: Date): boolean {

@@ -7,18 +7,20 @@ import { createComposerControl, createPresetField } from "./composer-surfaces";
 import type { Directory } from "./directory";
 import type { Section } from "./reconciler";
 import { type ActionDeps, type ActionTarget, runAction } from "./run-action";
-import { reminderRowSchema, remindersArm } from "../shared/reminder-contracts";
-import { presetTitle } from "../shared/reminders";
+import { reminderLabel } from "../shared/board";
+import { reminderRowSchema } from "../shared/reminder-contracts";
+import { presetTitle, reminderAt } from "../shared/reminders";
+import { createTasksScreen, createWorkspaceTasksPanel } from "./board/board";
+import { TASKS_SCREEN_ID } from "./board/deps";
 import {
-  changeReminder,
+  chatReminder,
+  createChatPopover,
   createReminderRow,
-  createRemindersScreen,
-  createRemindersSidebarItem,
-  REMINDERS_SCREEN_ID,
-  type ReminderDeps,
-  reminderMenu,
+  createTasksSidebarItem,
   runRemindCommand,
-} from "./reminder-surfaces";
+  runTaskCommand,
+  type SurfaceDeps,
+} from "./task-surfaces";
 import { NotesPanel } from "./notes-panel";
 import { createPromptPicker } from "./prompt-picker";
 import { createSidebarView } from "./sidebar-view";
@@ -32,6 +34,8 @@ export interface Applied {
   // Shared by every layout.
   prompts: readonly Prompt[];
   directory: Directory;
+  // Saved board views, offered in the Command Center.
+  taskViews: readonly { id: string; name: string }[];
 }
 
 type Button = Profile["header"]["buttons"][number];
@@ -79,14 +83,22 @@ function createRows(rows: readonly Row[], deps: ActionDeps) {
 
 const json = (value: unknown) => JSON.stringify(value);
 
-export function createSections(client: PluginClientContext, deps: ActionDeps, reminderDeps: ReminderDeps, switchLayout: (id: string) => Promise<void>): Section<Applied>[] {
-  // The reminder settings in effect right now, for surfaces registered once.
-  let reminderSettings: Profile["reminders"] | null = null;
-  const settingsOf = () => {
-    if (!reminderSettings) throw new Error("Morphise has not received its profile yet");
-    return reminderSettings;
-  };
-  const arm = (agentId: string) => client.rpc(remindersArm, { agentId });
+export function createSections(client: PluginClientContext, deps: ActionDeps, tasks: SurfaceDeps, switchLayout: (id: string) => Promise<void>): Section<Applied>[] {
+  // A chat's pill and a workspace's header button show its reminder, kept current as tasks
+  // change and as time passes.
+  const ChatPopover = createChatPopover(tasks);
+  function remindButton(agentId: string | null): PluginButton {
+    const reminder = agentId ? chatReminder(tasks, agentId) : null;
+    return { title: "Remind me", icon: "AlarmClock", label: reminderLabel(reminder, new Date()), behavior: { kind: "popover", Content: ChatPopover } };
+  }
+  function keepLabelsCurrent(update: () => void) {
+    const stop = tasks.tasks.subscribe(update);
+    const timer = setInterval(update, 60_000);
+    return () => {
+      stop();
+      clearInterval(timer);
+    };
+  }
   return [
     {
       name: "theme",
@@ -122,26 +134,76 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, re
             id: "profile-view",
             title: "Morphise",
             description: "Workspaces laid out by your Morphise profile",
-            Component: createSidebarView(sidebar.view, { reminders: reminderDeps.reminders, arm }),
+            Component: createSidebarView(sidebar.view, tasks),
           }),
         );
       },
     },
     {
-      // Kept current for the surfaces below, which are registered once.
-      name: "reminders.settings",
-      key: ({ profile }) => json(profile.reminders),
-      register({ profile }) {
-        reminderSettings = profile.reminders;
+      name: "tasks.surfaces",
+      key: () => "always",
+      register(_input, track) {
+        track(client.addScreen({ id: TASKS_SCREEN_ID, title: "Tasks", Component: createTasksScreen(tasks) }));
+        track(client.addWorkspacePanel({ id: "tasks", title: "Tasks", icon: "ListTodo", context: "workspace", Component: createWorkspaceTasksPanel(tasks) }));
+        track(client.addSidebarHeaderItem({ id: "tasks", title: "Tasks", Component: createTasksSidebarItem(tasks) }));
+        track(client.addTimelineRenderer({ kind: "reminder", version: 1, schema: reminderRowSchema, Component: createReminderRow(tasks) }));
+        const global = [
+          { id: "morphise-tasks", title: "Open tasks", tab: "board" },
+          { id: "morphise-tasks-today", title: "Open today's tasks and reminders", tab: "today" },
+        ];
+        for (const item of global) {
+          track(
+            client.addCommandCenterItem({
+              id: item.id,
+              title: item.title,
+              icon: "ListTodo",
+              keywords: ["tasks", "board", "kanban", "todo", "reminders"],
+              context: "global",
+              onSelect: ({ openScreen }) => openScreen({ screenId: TASKS_SCREEN_ID, params: { tab: item.tab } }),
+            }),
+          );
+        }
+        track(
+          client.addCommandCenterItem({
+            id: "morphise-tasks-workspace",
+            title: "Open this workspace's tasks",
+            icon: "ListTodo",
+            keywords: ["tasks", "board", "kanban"],
+            context: "workspace",
+            onSelect: ({ openPanel }) => openPanel("tasks"),
+          }),
+        );
+        track(
+          client.addCommandCenterItem({
+            id: "morphise-task-from-chat",
+            title: "Add this chat to your tasks",
+            icon: "ListPlus",
+            keywords: ["task", "todo", "kanban", "follow up"],
+            context: "agent",
+            onSelect: ({ agent, workspace }) => runTaskCommand(tasks, agent.id, workspace.id, ""),
+          }),
+        );
       },
     },
     {
-      name: "reminders.surfaces",
-      key: () => "always",
-      register(_input, track) {
-        track(client.addScreen({ id: REMINDERS_SCREEN_ID, title: "Reminders", Component: createRemindersScreen(reminderDeps, settingsOf) }));
-        track(client.addSidebarHeaderItem({ id: "reminders", title: "Reminders", Component: createRemindersSidebarItem(reminderDeps) }));
-        track(client.addTimelineRenderer({ kind: "reminder", version: 1, schema: reminderRowSchema, Component: createReminderRow(client, settingsOf) }));
+      name: "tasks.views",
+      key: ({ taskViews }) => json(taskViews),
+      register({ taskViews }, track) {
+        for (const view of taskViews) {
+          track(
+            client.addCommandCenterItem({
+              id: `morphise-task-view-${view.id}`,
+              title: `Tasks view: ${view.name}`,
+              icon: "ListFilter",
+              keywords: ["tasks", "view", "board"],
+              context: "global",
+              onSelect: async ({ openScreen }) => {
+                await tasks.apply({ kind: "setActiveView", id: view.id });
+                openScreen({ screenId: TASKS_SCREEN_ID, params: { tab: "board" } });
+              },
+            }),
+          );
+        }
       },
     },
     {
@@ -189,34 +251,51 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, re
     },
     {
       name: "reminders.pills",
-      key: ({ profile, directory }) => json([profile.reminders, directory.agents]),
-      register({ profile, directory }, track) {
+      key: ({ directory }) => json(directory.agents),
+      register({ directory }, track) {
+        const pills: { agentId: string; registration: ReturnType<typeof client.addComposerPill> }[] = [];
+        // Tracked one by one, so pills added before a failing one are still removed.
         for (const agent of directory.agents) {
-          const registration = client.addComposerPill({
-            id: "morphise-remind",
-            workspaceId: agent.workspaceId,
-            agentId: agent.id,
-            button: reminderMenu(client, agent.id, profile.reminders),
-          });
+          const registration = client.addComposerPill({ id: "morphise-remind", workspaceId: agent.workspaceId, agentId: agent.id, button: remindButton(agent.id) });
+          track(() => registration.remove());
+          pills.push({ agentId: agent.id, registration });
+        }
+        track(keepLabelsCurrent(() => pills.forEach(({ agentId, registration }) => registration.update({ label: remindButton(agentId).label }))));
+      },
+    },
+    {
+      name: "reminders.headerButtons",
+      key: ({ directory }) => json(directory.workspaces),
+      register({ directory }, track) {
+        for (const workspaceId of directory.workspaces) {
+          const registration = client.addHeaderButton({ id: "morphise-remind", workspaceId, button: { ...remindButton(null), label: undefined } });
           track(() => registration.remove());
         }
       },
     },
     {
       name: "reminders.commands",
-      key: ({ profile }) => json(profile.reminders),
+      key: ({ profile }) => json(profile.reminders.presets),
       register({ profile }, track) {
-        const settings = profile.reminders;
         track(
           client.addSlashCommand({
             name: "remind",
             description: "Remind me about this chat later",
-            argumentHint: "45m, 2h or clear",
+            argumentHint: "45m, 17:30, tomorrow 9am or clear",
             context: "agent",
-            onSubmit: ({ agent, args }) => runRemindCommand(client, agent.id, args, settings),
+            onSubmit: ({ agent, workspace, args }) => runRemindCommand(tasks, agent.id, workspace.id, args),
           }),
         );
-        for (const minutes of settings.presets) {
+        track(
+          client.addSlashCommand({
+            name: "task",
+            description: "Add a task linked to this chat",
+            argumentHint: "Fix login p1 @bug #review due:fri tomorrow 9am",
+            context: "agent",
+            onSubmit: ({ agent, workspace, args }) => runTaskCommand(tasks, agent.id, workspace.id, args),
+          }),
+        );
+        for (const minutes of profile.reminders.presets) {
           track(
             client.addCommandCenterItem({
               id: `morphise-remind-${minutes}`,
@@ -224,7 +303,8 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, re
               icon: "AlarmClock",
               keywords: ["remind", "reminder", "later"],
               context: "agent",
-              onSelect: ({ agent }) => changeReminder(client, agent.id, minutes, settings),
+              onSelect: ({ agent, workspace }) =>
+                tasks.apply({ kind: "remindChat", agentId: agent.id, workspaceId: workspace.id, title: agent.title ?? "Chat", reminder: reminderAt(new Date(Date.now() + minutes * 60_000), new Date()) }).then(() => {}),
             }),
           );
         }
@@ -235,7 +315,7 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, re
             icon: "BellOff",
             keywords: ["remind", "reminder", "done"],
             context: "agent",
-            onSelect: ({ agent }) => changeReminder(client, agent.id, null, settings),
+            onSelect: ({ agent, workspace }) => runRemindCommand(tasks, agent.id, workspace.id, "clear"),
           }),
         );
       },

@@ -1,4 +1,4 @@
-import { defineRpc, defineSubscription } from "@getpaseo/plugin";
+import { defineSubscription } from "@getpaseo/plugin";
 import { z } from "zod";
 
 // Held open by every app so the daemon has a Paseo connection to write reminder rows with.
@@ -8,12 +8,12 @@ export const remindersKeeper = defineSubscription({
   event: z.object({}),
 });
 
-// Sent by an app right after it sets or clears a chat's reminder, so the daemon re-arms.
-export const remindersArm = defineRpc({
-  name: "reminders.arm",
-  input: z.object({ agentId: z.string().min(1) }),
-  output: z.object({}),
+// The row the daemon writes into a chat when a task's reminder comes due. Rows written by 0.2
+// carry only the times.
+export const reminderRowSchema = z.object({
+  taskId: z.string().optional(),
+  title: z.string().optional(),
+  at: z.string(),
+  setAt: z.string(),
+  note: z.string().optional(),
 });
-
-// The chat row the daemon writes when a reminder comes due.
-export const reminderRowSchema = z.object({ at: z.string(), setAt: z.string() });

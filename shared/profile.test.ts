@@ -16,6 +16,7 @@ describe("profileSchema", () => {
         footerRows: [],
         view: {
           enabled: false,
+          list: "workspaces",
           groupBy: "project",
           orderBy: "activity",
           thenBy: "activity",

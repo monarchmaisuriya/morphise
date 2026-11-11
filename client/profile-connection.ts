@@ -1,12 +1,11 @@
-import type { ProfileEvent } from "../shared/watch";
-import type { ProfileStore } from "./profile-store";
+import type { ValueStore } from "./profile-store";
 
-export type ProfileStreamHandle = (() => void) & { readonly ready: Promise<void> };
+export type StreamHandle = (() => void) & { readonly ready: Promise<void> };
 
-export type OpenProfileStream = (
-  onEvent: (event: ProfileEvent) => void,
-  onClosed: (error?: unknown) => void,
-) => ProfileStreamHandle;
+export type OpenStream<Event> = (onEvent: (event: Event) => void, onClosed: (error?: unknown) => void) => StreamHandle;
+
+// The last event a stream sent, kept apart from the connection's health.
+export type StreamStore<Event> = ValueStore<{ event: Event | null; connectionError: string | null }>;
 
 function describe(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -18,7 +17,7 @@ function describe(error: unknown): string {
 // user asks. Replacing even an open-looking stream means a close notice that arrives late
 // cannot leave the client without updates. Only the current stream may write to the store: a
 // stream this code released reports "Subscription released", which is not a failure.
-export function connectProfile(openStream: OpenProfileStream, store: ProfileStore) {
+export function connectStream<Event>(openStream: OpenStream<Event>, store: StreamStore<Event>) {
   let release: (() => void) | null = null;
 
   function open() {
@@ -32,7 +31,7 @@ export function connectProfile(openStream: OpenProfileStream, store: ProfileStor
     handle.ready.catch((error: unknown) => fail(handle, error));
   }
 
-  function fail(handle: ProfileStreamHandle, error: unknown) {
+  function fail(handle: StreamHandle, error: unknown) {
     if (release === handle) store.set({ ...store.get(), connectionError: describe(error) });
   }
 

@@ -144,6 +144,8 @@ const statusOrderSchema = z
 const viewSchema = z
   .strictObject({
     enabled: z.boolean().default(false),
+    // What the view lists: workspaces, or every chat on its own row.
+    list: z.enum(["workspaces", "chats"]).default("workspaces"),
     groupBy: z.enum(["project", "label", "status", "none"]).default("project"),
     orderBy: z.enum(["status", "activity", "name"]).default("activity"),
     // Breaks ties left by orderBy.

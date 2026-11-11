@@ -1,14 +1,30 @@
-import { nextDueTime, presetTitle } from "../shared/reminders";
+import { nextDueTime, type Reminder } from "../shared/reminders";
+import type { TaskDocument } from "../shared/tasks";
 import type { ValueStore } from "./profile-store";
-import type { ReminderEntry, Reminders } from "./reminders";
 
-// Reminders whose due time passed while this app was open, not alerted yet. Reminders that were
-// already due when the app opened are listed in the sidebar instead of ringing on every start.
-export function dueSince(reminders: Reminders, started: Date, now: Date, alerted: Set<string>): ReminderEntry[] {
-  const due: ReminderEntry[] = [];
-  for (const entry of reminders.values()) {
+// A task reminder this app may alert about.
+export interface AlertEntry {
+  taskId: string;
+  title: string;
+  agentId: string | null;
+  reminder: Reminder;
+}
+
+// Reminders on open tasks: not archived, not in Done.
+export function remindersOf(document: TaskDocument): AlertEntry[] {
+  const done = document.columns.find((column) => column.done)?.id;
+  return document.tasks
+    .filter((task) => task.reminder !== null && task.archivedAt === null && task.column !== done)
+    .map((task) => ({ taskId: task.id, title: task.title, agentId: task.links.agentId ?? null, reminder: task.reminder! }));
+}
+
+// Reminders whose time passed while this app was open, not alerted yet. Ones already due when
+// the app opened are listed on the board instead of ringing on every start.
+export function dueSince(entries: readonly AlertEntry[], started: Date, now: Date, alerted: Set<string>): AlertEntry[] {
+  const due: AlertEntry[] = [];
+  for (const entry of entries) {
     const at = Date.parse(entry.reminder.at);
-    const key = `${entry.agentId}:${entry.reminder.setAt}`;
+    const key = `${entry.taskId}:${entry.reminder.setAt}`;
     if (at > started.getTime() && at <= now.getTime() && !alerted.has(key)) {
       alerted.add(key);
       due.push(entry);
@@ -19,13 +35,13 @@ export function dueSince(reminders: Reminders, started: Date, now: Date, alerted
 
 export interface AlertSinks {
   chime(): void;
-  notify(entry: ReminderEntry): void;
-  // Shown as toasts by the Reminders sidebar row while it is mounted.
-  announce(entries: ReminderEntry[]): void;
+  notify(entry: AlertEntry): void;
+  // Shown as toasts by the Tasks sidebar row while it is mounted.
+  announce(entries: AlertEntry[]): void;
 }
 
 // The app's own reminder clock, running in plugin scope so it needs no mounted component.
-export function startReminderAlerts(store: ValueStore<Reminders>, sinks: AlertSinks, now = () => new Date()) {
+export function startReminderAlerts(source: Pick<ValueStore<AlertEntry[]>, "get" | "subscribe">, sinks: AlertSinks, now = () => new Date()) {
   const started = now();
   const alerted = new Set<string>();
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -42,7 +58,7 @@ export function startReminderAlerts(store: ValueStore<Reminders>, sinks: AlertSi
 
   function check() {
     try {
-      const due = dueSince(store.get(), started, now(), alerted);
+      const due = dueSince(source.get(), started, now(), alerted);
       if (due.length > 0) {
         attempt("chime", () => sinks.chime());
         due.forEach((entry) => attempt("notification", () => sinks.notify(entry)));
@@ -55,21 +71,17 @@ export function startReminderAlerts(store: ValueStore<Reminders>, sinks: AlertSi
 
   function schedule() {
     if (timer) clearTimeout(timer);
-    const next = nextDueTime([...store.get().values()].map((entry) => entry.reminder), now());
+    const next = nextDueTime(source.get().map((entry) => entry.reminder), now());
     // Timers far ahead drift after sleep; re-check at least every minute.
     timer = next ? setTimeout(check, Math.min(next.getTime() - now().getTime() + 50, 60_000)) : null;
   }
 
   // A change can bring a reminder that is already due (set on another device), so check, not
   // just reschedule.
-  const stop = store.subscribe(check);
+  const stop = source.subscribe(check);
   check();
   return () => {
     stop();
     if (timer) clearTimeout(timer);
   };
-}
-
-export function reminderBody(entry: ReminderEntry, setMinutesAgo: number): string {
-  return `${entry.title ?? "A chat"}: you asked to come back${setMinutesAgo > 0 ? ` (set ${presetTitle(setMinutesAgo)} ago)` : ""}`;
 }

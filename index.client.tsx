@@ -2,7 +2,7 @@ import { settingsRpc } from "@getpaseo/plugin";
 import { type PluginClientContext, openExternalUrl } from "@getpaseo/plugin/client";
 import { type Directory, EMPTY_DIRECTORY, reduceAgents, reduceWorkspaces } from "./client/directory";
 import { createProfileEditor } from "./client/editor";
-import { connectProfile } from "./client/profile-connection";
+import { connectStream } from "./client/profile-connection";
 import { createProfileStore, createValueStore, layoutsOf, profileOf, promptsOf } from "./client/profile-store";
 import { type Problem, createReconciler } from "./client/reconciler";
 import { createDraftStore } from "./client/draft";
@@ -11,13 +11,19 @@ import { ButtonsTab, CommandsTab, LayoutsTab, LookTab, PromptsTab, SidebarTab } 
 import { type ActionDeps, EDITOR_SCREEN_ID, JSON_SCREEN_ID } from "./client/run-action";
 import { createSections } from "./client/sections";
 import { chimeWav } from "./client/chime";
-import { reminderBody, startReminderAlerts } from "./client/reminder-alerts";
-import type { Announcement } from "./client/reminder-surfaces";
-import { reduceReminders, type Reminders } from "./client/reminders";
+import { type Chats, reduceChats } from "./client/chats";
+import { type AlertEntry, remindersOf, startReminderAlerts } from "./client/reminder-alerts";
+import { legacyReminders } from "./client/reminders";
+import { createTaskStore, createTaskWriter, tasksOf } from "./client/task-store";
+import type { Announcement, SurfaceDeps } from "./client/task-surfaces";
 import { isWindowVisible, showNotification } from "./client/web";
 import { profileSettings } from "./shared/document";
 import { remindersKeeper } from "./shared/reminder-contracts";
-import { profileWatch } from "./shared/watch";
+import { REMINDER_KEY } from "./shared/reminders";
+import { archiveOldDone, rulesForTransitions } from "./shared/rules";
+import type { TaskOperation } from "./shared/task-ops";
+import { taskSettings } from "./shared/tasks";
+import { profileWatch, tasksWatch } from "./shared/watch";
 
 interface ListSubscription<Snapshot> {
   subscribe(observer: { snapshot(snapshot: Snapshot): void; update(message: { type: string; payload?: unknown }): void }): () => void;
@@ -27,8 +33,10 @@ interface ListSubscription<Snapshot> {
 export default function contribute(client: PluginClientContext) {
   const store = createProfileStore();
   const problems = createValueStore<Problem[]>([]);
-  const reminders = createValueStore<Reminders>(new Map());
+  const taskStore = createTaskStore();
+  const chats = createValueStore<Chats>(new Map());
   const profileRpc = settingsRpc(profileSettings.id);
+  const taskRpc = settingsRpc(taskSettings.id);
 
   // Switching layout is one save of `activeLayout`, against the revision this app last received.
   async function switchLayout(id: string) {
@@ -49,14 +57,83 @@ export default function contribute(client: PluginClientContext) {
     openSettings: (id) => client.openSettings(id),
     openUrl: openExternalUrl,
   };
-  const reconciler = createReconciler(createSections(client, deps, { client, reminders, announcements }, switchLayout), (list) => problems.set(list));
-  const apply = () => reconciler.apply({ profile: profileOf(store.get()), prompts: promptsOf(store.get()), layouts: layoutsOf(store.get()), directory });
+  // Every task change goes through this: operations re-applied on the newest saved list.
+  const applyTasks = createTaskWriter({
+    read: () => client.rpc(taskRpc.read, {}),
+    write: (input) => client.rpc(taskRpc.write, input),
+  });
+  const surfaces: SurfaceDeps = {
+    client,
+    tasks: taskStore,
+    apply: applyTasks,
+    chats,
+    announcements,
+    reminderSettings: () => profileOf(store.get()).reminders,
+  };
+  const reconciler = createReconciler(createSections(client, deps, surfaces, switchLayout), (list) => problems.set(list));
+  const apply = () =>
+    reconciler.apply({
+      profile: profileOf(store.get()),
+      prompts: promptsOf(store.get()),
+      layouts: layoutsOf(store.get()),
+      directory,
+      taskViews: tasksOf(taskStore.get()).views.map(({ id, name }) => ({ id, name })),
+    });
   store.subscribe(apply);
+  taskStore.subscribe(apply);
 
-  const profile = connectProfile(
+  const profile = connectStream(
     (onEvent, onClosed) => client.subscribe(profileWatch, {}, onEvent, { onClosed: ({ error }) => onClosed(error) }),
     store,
   );
+  const taskStream = connectStream(
+    (onEvent, onClosed) => client.subscribe(tasksWatch, {}, onEvent, { onClosed: ({ error }) => onClosed(error) }),
+    taskStore,
+  );
+
+  // Automatic changes (rules, archiving, the 0.2 migration) are logged, not toasted: no one
+  // pressed anything. Each is safe to repeat, so several open apps agree.
+  const applyAutomatically = (what: string, operations: TaskOperation[]) => {
+    if (operations.length === 0 || stopped) return Promise.resolve(true);
+    return applyTasks(...operations).then(
+      () => true,
+      (error: unknown) => {
+        console.error(`[morphise] Could not ${what}`, error);
+        return false;
+      },
+    );
+  };
+  let archiving = false;
+  releases.push(
+    taskStore.subscribe(() => {
+      if (archiving || taskStore.get().event?.status !== "ready") return;
+      const operations = archiveOldDone(tasksOf(taskStore.get()), new Date());
+      if (operations.length === 0) return;
+      archiving = true;
+      void applyAutomatically("archive old Done cards", operations).finally(() => (archiving = false));
+    }),
+  );
+
+  // Morphise 0.2 kept chat reminders on the chats; each becomes a follow-up task, then the old
+  // value is cleared. Waits for the task list so the first save has a revision to write against.
+  const migrated = new Set<string>();
+  function migrateLegacy(entries: readonly { agent: unknown }[]) {
+    if (taskStore.get().event?.status !== "ready") return;
+    for (const legacy of legacyReminders(entries)) {
+      if (migrated.has(legacy.agentId)) continue;
+      migrated.add(legacy.agentId);
+      void applyAutomatically("move a 0.2 reminder onto the board", [{ kind: "migrateChatReminder", ...legacy }]).then((moved) => {
+        // A failed move is tried again with the next task change or reconnect.
+        if (!moved) return void migrated.delete(legacy.agentId);
+        return client.paseo.agents
+          .ref(legacy.agentId)
+          .setMetadata({ [REMINDER_KEY]: null })
+          .catch((error: unknown) => console.error("[morphise] Could not clear a 0.2 reminder after moving it", error));
+      });
+    }
+  }
+  let lastAgentEntries: readonly { agent: unknown }[] = [];
+  releases.push(taskStore.subscribe(() => migrateLegacy(lastAgentEntries)));
 
   // One tab per settings screen, in this order; every tab edits one shared draft.
   const drafts = createDraftStore();
@@ -104,8 +181,10 @@ export default function contribute(client: PluginClientContext) {
     apply();
   };
 
-  const setReminders = (next: Reminders) => {
-    if (next !== reminders.get()) reminders.set(next);
+  const changeChats = (change: Parameters<typeof reduceChats>[1]) => {
+    const { chats: next, transitions } = reduceChats(chats.get(), change);
+    if (next !== chats.get()) chats.set(next);
+    if (transitions.length) void applyAutomatically("run a task rule", rulesForTransitions(tasksOf(taskStore.get()), transitions));
   };
 
   // Gives the daemon a connection for writing reminder rows into chats. Like the profile stream,
@@ -123,16 +202,19 @@ export default function contribute(client: PluginClientContext) {
   };
   releases.push(() => releaseKeeper?.());
 
+  const alertSource = {
+    get: (): AlertEntry[] => remindersOf(tasksOf(taskStore.get())),
+    subscribe: (listener: () => void) => taskStore.subscribe(listener),
+  };
   releases.push(
-    startReminderAlerts(reminders, {
+    startReminderAlerts(alertSource, {
       chime() {
         if (!profileOf(store.get()).reminders.sound || !isWindowVisible()) return;
         client.playAudio({ base64: chimeWav(), mimeType: "audio/wav" }).catch((error: unknown) => console.error("[morphise] Could not play the reminder chime", error));
       },
       notify(entry) {
         if (!profileOf(store.get()).reminders.desktopNotification) return;
-        const minutesAgo = Math.round((Date.parse(entry.reminder.at) - Date.parse(entry.reminder.setAt)) / 60_000);
-        showNotification("Reminder", reminderBody(entry, minutesAgo), `${entry.agentId}:${entry.reminder.setAt}`);
+        showNotification(`Reminder: ${entry.title}`, entry.reminder.note ?? "You asked to come back to this", `${entry.taskId}:${entry.reminder.setAt}`);
       },
       announce(entries) {
         announcements.set({ seq: announcements.get().seq + 1, entries });
@@ -143,6 +225,7 @@ export default function contribute(client: PluginClientContext) {
   watch("Workspace", client.paseo.workspaces.list({ subscribe: {} }), {
     snapshot: (snapshot) => {
       profile.reopen();
+      taskStream.reopen();
       openKeeper();
       setDirectory({ ...directory, workspaces: reduceWorkspaces(directory.workspaces, { snapshot: snapshot.entries }) });
     },
@@ -154,11 +237,13 @@ export default function contribute(client: PluginClientContext) {
 
   watch("Agent", client.paseo.agents.list({ subscribe: {} }), {
     snapshot: (snapshot) => {
-      setReminders(reduceReminders(reminders.get(), { snapshot: snapshot.entries }));
+      lastAgentEntries = snapshot.entries;
+      migrateLegacy(snapshot.entries);
+      changeChats({ snapshot: snapshot.entries });
       setDirectory({ ...directory, agents: reduceAgents(directory.agents, { snapshot: snapshot.entries }) });
     },
     update: (message) => {
-      setReminders(reduceReminders(reminders.get(), { message }));
+      changeChats({ message });
       const agents = reduceAgents(directory.agents, { message });
       if (agents !== directory.agents) setDirectory({ ...directory, agents });
     },
@@ -168,6 +253,7 @@ export default function contribute(client: PluginClientContext) {
     stopped = true;
     releases.forEach((release) => release());
     profile.stop();
+    taskStream.stop();
     reconciler.dispose();
   };
 }

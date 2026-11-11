@@ -1,0 +1,70 @@
+import { describe, expect, it } from "vitest";
+import { chatIndicator, isListedChat } from "./chat-status";
+
+const chat = (overrides: Partial<Parameters<typeof chatIndicator>[0]> = {}) => ({
+  status: "idle" as const,
+  requiresAttention: false,
+  attentionReason: null,
+  ...overrides,
+});
+
+describe("chatIndicator", () => {
+  it("maps a chat to Paseo's five statuses", () => {
+    expect(chatIndicator(chat({ requiresAttention: true, attentionReason: "permission", status: "running" }))).toBe("needs_input");
+    expect(chatIndicator(chat({ requiresAttention: true, attentionReason: "error" }))).toBe("failed");
+    expect(chatIndicator(chat({ status: "error" }))).toBe("failed");
+    expect(chatIndicator(chat({ status: "running" }))).toBe("running");
+    expect(chatIndicator(chat({ status: "initializing" }))).toBe("running");
+    expect(chatIndicator(chat({ requiresAttention: true, attentionReason: "finished" }))).toBe("attention");
+    expect(chatIndicator(chat())).toBe("done");
+  });
+});
+
+describe("isListedChat", () => {
+  it("lists open top-level chats only", () => {
+    expect(isListedChat({ status: "idle", parentAgentId: null })).toBe(true);
+    expect(isListedChat({ status: "closed", parentAgentId: null })).toBe(false);
+    expect(isListedChat({ status: "running", parentAgentId: "parent" })).toBe(false);
+  });
+});
+
+import { chatGroupKey, chatMatches, compareChats } from "./chat-status";
+import { profileSchema } from "./profile";
+
+type View = ReturnType<typeof profileSchema.parse>["sidebar"]["view"];
+const view = (overrides: Partial<View> = {}): View => ({ ...profileSchema.parse({}).sidebar.view, ...overrides });
+const listed = (id: string, overrides: Record<string, unknown> = {}) => ({
+  id,
+  title: id,
+  provider: "claude",
+  workspaceId: "w1",
+  status: "idle" as const,
+  requiresAttention: false,
+  attentionReason: null,
+  lastActivityAt: "2026-11-11T10:00:00Z",
+  parentAgentId: null,
+  ...overrides,
+});
+
+describe("chat rules", () => {
+  const items = [
+    listed("done-new", { lastActivityAt: "2026-11-11T12:00:00Z" }),
+    listed("running", { status: "running" }),
+    listed("needs", { requiresAttention: true, attentionReason: "permission" }),
+  ];
+
+  it("sorts chats by status order, then by latest activity", () => {
+    expect([...items].sort(compareChats(view({ orderBy: "status" }))).map((chat) => chat.id)).toEqual(["needs", "running", "done-new"]);
+    expect([...items].sort(compareChats(view({ orderBy: "activity" })))[0].id).toBe("done-new");
+  });
+
+  it("filters chats by the status chips and by title search", () => {
+    expect(items.filter((chat) => chatMatches(chat, { statuses: ["running"], search: "" })).map((chat) => chat.id)).toEqual(["running"]);
+    expect(items.filter((chat) => chatMatches(chat, { statuses: [], search: "NEE" })).map((chat) => chat.id)).toEqual(["needs"]);
+  });
+
+  it("groups chats by status, or by their workspace for project and label grouping", () => {
+    expect(chatGroupKey(view({ groupBy: "status" }), items[2])).toEqual({ key: "status:needs_input", title: "Needs permission" });
+    expect(chatGroupKey(view({ groupBy: "project" }), items[0])).toEqual({ key: "workspace:w1", title: "w1" });
+  });
+});

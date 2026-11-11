@@ -2,15 +2,16 @@ import { describe, expect, it } from "vitest";
 import { EMPTY_DOCUMENT } from "../shared/document";
 import { EMPTY_PROFILE } from "../shared/profile";
 import type { ProfileEvent } from "../shared/watch";
-import { watchProfile, type ProfileSettings } from "./profile-watch";
+import { watchSettings, type WatchableSettings } from "./settings-watch";
 
-type State = Awaited<ReturnType<ProfileSettings["read"]>>;
+type Settings = WatchableSettings<typeof EMPTY_DOCUMENT>;
+type State = Awaited<ReturnType<Settings["read"]>>;
 
 function fakeSettings(initial: State) {
   const listeners = new Set<(state: State) => void>();
   let release: (state: State) => void = () => {};
   let deferRead = false;
-  const settings: ProfileSettings = {
+  const settings: Settings = {
     read: () => (deferRead ? new Promise<State>((resolve) => (release = resolve)) : Promise.resolve(initial)),
     subscribe(listener) {
       listeners.add(listener);
@@ -47,11 +48,11 @@ const ready = (revision: string, name = "x") => ({
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-describe("watchProfile", () => {
+describe("watchSettings", () => {
   it("sends the stored profile as soon as a client subscribes", async () => {
     const fake = fakeSettings(ready("r1"));
     const client = subscriber();
-    void watchProfile(fake.settings)({}, client.context);
+    void watchSettings(fake.settings)({}, client.context);
     await flush();
     expect(client.events).toEqual([{ status: "ready", revision: "r1", document: ready("r1").values }]);
   });
@@ -59,7 +60,7 @@ describe("watchProfile", () => {
   it("sends every later save", async () => {
     const fake = fakeSettings(ready("r1"));
     const client = subscriber();
-    void watchProfile(fake.settings)({}, client.context);
+    void watchSettings(fake.settings)({}, client.context);
     await flush();
     fake.save(ready("r2", "y"));
     expect(client.events.map((event) => event.revision)).toEqual(["r1", "r2"]);
@@ -69,7 +70,7 @@ describe("watchProfile", () => {
     const fake = fakeSettings(ready("r1"));
     fake.deferNextRead();
     const client = subscriber();
-    void watchProfile(fake.settings)({}, client.context);
+    void watchSettings(fake.settings)({}, client.context);
     fake.save(ready("r2", "y"));
     fake.resolveRead(ready("r1"));
     await flush();
@@ -79,7 +80,7 @@ describe("watchProfile", () => {
   it("passes on a stored document that no longer validates", async () => {
     const fake = fakeSettings({ status: "invalid", revision: "r9", error: "theme: Required" });
     const client = subscriber();
-    void watchProfile(fake.settings)({}, client.context);
+    void watchSettings(fake.settings)({}, client.context);
     await flush();
     expect(client.events).toEqual([{ status: "invalid", revision: "r9", error: "theme: Required" }]);
   });
@@ -87,7 +88,7 @@ describe("watchProfile", () => {
   it("stops listening when the client leaves", async () => {
     const fake = fakeSettings(ready("r1"));
     const client = subscriber();
-    const running = watchProfile(fake.settings)({}, client.context);
+    const running = watchSettings(fake.settings)({}, client.context);
     await flush();
     expect(fake.listenerCount()).toBe(1);
     client.controller.abort();
@@ -99,7 +100,7 @@ describe("watchProfile", () => {
     const fake = fakeSettings(ready("r1"));
     fake.settings.read = () => Promise.reject(new Error("settings file unreadable"));
     const client = subscriber();
-    await expect(watchProfile(fake.settings)({}, client.context)).rejects.toThrow("settings file unreadable");
+    await expect(watchSettings(fake.settings)({}, client.context)).rejects.toThrow("settings file unreadable");
     expect(fake.listenerCount()).toBe(0);
   });
 });

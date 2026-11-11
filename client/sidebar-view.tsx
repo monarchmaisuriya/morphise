@@ -10,9 +10,9 @@ import {
   useWorkspace,
   useWorkspaces,
 } from "@getpaseo/plugin/client";
-import type { PluginWorkspaceSnapshot } from "@getpaseo/plugin";
+import type { PluginAgentSnapshot, PluginWorkspaceSnapshot } from "@getpaseo/plugin";
 import { Icon, TextInput, useToast } from "@getpaseo/plugin/client/ui";
-import { useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import {
   capRows,
@@ -27,13 +27,18 @@ import {
   workspaceName,
 } from "../shared/arrange";
 import { attentionOrder, NEEDS_ME, needsAttention, needsMeOn, nextAttention } from "../shared/attention";
+import { chatGroupKey, chatIndicator, chatMatches, chatName, compareChats, isListedChat } from "../shared/chat-status";
 import { INDICATORS, type Indicator, type Profile } from "../shared/profile";
 import { isDue, type Reminder } from "../shared/reminders";
 import { formatDue, formatElapsed } from "../shared/time-text";
 import { type ViewState, viewStateSettings } from "../shared/view-state";
 import { type ValueStore, useValue } from "./profile-store";
 import { useReminderClock } from "./reminder-clock";
-import { clearReminder, type Reminders } from "./reminders";
+import { type AlertEntry, remindersOf } from "./reminder-alerts";
+import { type PickerDeps, ReminderPicker } from "./reminder-picker";
+import { followUpTask } from "../shared/task-ops";
+import { type ApplyTaskOperations, type TaskStore, tasksOf } from "./task-store";
+import { viewPresence } from "./view-presence";
 
 type ViewConfig = Profile["sidebar"]["view"];
 type Theme = PluginSidebarViewProps["theme"];
@@ -113,38 +118,83 @@ interface Shared {
   now: Date;
   // The soonest reminder on any chat of each workspace.
   workspaceReminders: ReadonlyMap<string, Reminder>;
-  done(agentId: string): void;
+  // The status chips also filter chats listed under a workspace.
+  statuses: readonly Indicator[];
+  // Each chat's own reminder (on its follow-up task), for the alarm button on chat rows.
+  chatReminders: ReadonlyMap<string, Reminder>;
+  picker: PickerDeps;
+  // Clears a task's reminder, or asks again in some minutes.
+  done(taskId: string): void;
+  later(taskId: string, minutes: number): void;
 }
 
 function report(toast: ReturnType<typeof useToast>, what: string) {
   return (error: unknown) => toast.error(`Could not ${what}: ${error instanceof Error ? error.message : String(error)}`);
 }
 
+// The alarm button on a chat row and the reminder picker it opens under the row. Long-pressing the
+// row opens it too: Paseo's own chat menu cannot take plugin items.
+function useRemindToggle() {
+  const [open, setOpen] = useState(false);
+  return { open, toggle: () => setOpen((value) => !value), close: () => setOpen(false) };
+}
+
+function RemindButton({ agentId, label, onPress, shared }: { agentId: string; label: string; onPress(): void; shared: Shared }) {
+  const reminder = shared.chatReminders.get(agentId);
+  const color = reminder ? (isDue(reminder, shared.now) ? shared.props.theme.colors.statusWarning : shared.props.theme.colors.accent) : shared.props.theme.colors.foregroundMuted;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={reminder ? `Reminder for ${label}: ${formatDue(reminder, shared.now)}. Change it` : `Remind me about ${label}`}
+      onPress={onPress}
+      style={shared.styles.action}
+    >
+      <Icon name="AlarmClock" size={13} color={color} />
+    </Pressable>
+  );
+}
+
+function InlinePicker({ agentId, workspaceId, title, onDone, shared }: { agentId: string; workspaceId: string; title: string; onDone(): void; shared: Shared }) {
+  return (
+    <View style={{ marginLeft: 12, marginRight: 4, marginBottom: 4, borderWidth: 1, borderRadius: 8, borderColor: shared.props.theme.colors.border }}>
+      <ReminderPicker deps={shared.picker} target={{ kind: "chat", agentId, workspaceId, title }} title={title} theme={shared.props.theme} embedded onDone={onDone} />
+    </View>
+  );
+}
+
 function AgentRow({ reference, shared }: { reference: AgentRef; shared: Shared }) {
   const { props, styles } = shared;
-  const agent = useAgent(reference, (item) => ({ title: item.title, provider: item.provider }));
+  const agent = useAgent(reference, (item) => ({ title: item.title, provider: item.provider, workspaceId: item.workspaceId }));
+  const remind = useRemindToggle();
   if (!agent) return null;
   const selected = props.active.agent?.key === reference.key;
   const label = agent.title ?? agent.provider;
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`Open agent ${label}`}
-      onPress={() => props.navigation.openAgent(reference)}
-      style={[styles.agentRow, selected ? styles.selected : null]}
-    >
-      <Icon name="Bot" size={12} color={props.theme.colors.foregroundMuted} />
-      <Text style={styles.secondary} numberOfLines={1}>
-        {label}
-      </Text>
-    </Pressable>
+    <View>
+      <View style={[styles.row, selected ? styles.selected : null]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Open agent ${label}`}
+          onPress={() => props.navigation.openAgent(reference)}
+          onLongPress={remind.toggle}
+          style={[styles.agentRow, { flex: 1 }]}
+        >
+          <Icon name="Bot" size={12} color={props.theme.colors.foregroundMuted} />
+          <Text style={styles.secondary} numberOfLines={1}>
+            {label}
+          </Text>
+        </Pressable>
+        <RemindButton agentId={reference.id} label={label} onPress={remind.toggle} shared={shared} />
+      </View>
+      {remind.open ? <InlinePicker agentId={reference.id} workspaceId={agent.workspaceId} title={label} onDone={remind.close} shared={shared} /> : null}
+    </View>
   );
 }
 
 function WorkspaceAgents({ reference, shared }: { reference: WorkspaceRef; shared: Shared }) {
   const agents = useAgents({
     hosts: [reference.hostId],
-    where: (agent) => agent.workspace.key === reference.key,
+    where: (agent) => agent.workspace.key === reference.key && isListedChat(agent) && chatMatches(agent, { statuses: shared.statuses, search: "" }),
     orderBy: ["lastActivityAt", "desc"],
   });
   return (
@@ -164,27 +214,29 @@ function RowAction({ icon, label, onPress, shared }: { icon: string; label: stri
   );
 }
 
-// A chat whose reminder is due, listed at the top of the view.
-function ReminderRow({ reference, reminder, shared }: { reference: AgentRef; reminder: Reminder; shared: Shared }) {
+// A task whose reminder is due, listed at the top of the view. Tapping opens its chat when it
+// has one.
+function ReminderRow({ entry, chat, shared }: { entry: AlertEntry; chat: AgentRef | null; shared: Shared }) {
   const { props, styles, now } = shared;
-  const agent = useAgent(reference, (item) => ({ title: item.title, provider: item.provider }));
-  if (!agent) return null;
-  const label = agent.title ?? agent.provider;
+  const due = formatDue(entry.reminder, now);
+  const open = chat ? () => props.navigation.openAgent(chat) : null;
   return (
     <View style={styles.row}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Open chat ${label}, reminder ${formatDue(reminder, now)}`}
-        onPress={() => props.navigation.openAgent(reference)}
+        accessibilityLabel={open ? `Open the chat for ${entry.title}, reminder ${due}` : `${entry.title}, reminder ${due}`}
+        disabled={!open}
+        onPress={() => open?.()}
         style={styles.rowMain}
       >
         <Icon name="AlarmClock" size={12} color={props.theme.colors.statusWarning} />
         <Text style={styles.label} numberOfLines={1}>
-          {label}
+          {entry.title}
         </Text>
-        <Text style={styles.due}>{formatDue(reminder, now)}</Text>
+        <Text style={styles.due}>{due}</Text>
       </Pressable>
-      <RowAction icon="Check" label={`Mark the reminder for ${label} done`} onPress={() => shared.done(reference.id)} shared={shared} />
+      <RowAction icon="Clock" label={`Remind me about ${entry.title} again in 15 minutes`} onPress={() => shared.later(entry.taskId, 15)} shared={shared} />
+      <RowAction icon="Check" label={`Mark the reminder for ${entry.title} done`} onPress={() => shared.done(entry.taskId)} shared={shared} />
     </View>
   );
 }
@@ -252,6 +304,45 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   );
 }
 
+// One chat in the Chats list.
+function ChatRow({ reference, shared }: { reference: AgentRef; shared: Shared }) {
+  const { props, styles, config, now } = shared;
+  const chat = useAgent(reference, (item) => ({
+    name: chatName(item),
+    indicator: chatIndicator(item),
+    workspaceId: item.workspaceId,
+    last: item.lastActivityAt,
+  }));
+  const workspace = useWorkspace(chat?.workspaceId ?? "", (item) => item.title ?? item.name);
+  const remind = useRemindToggle();
+  if (!chat) return null;
+  const selected = props.active.agent?.key === reference.key;
+  const elapsed = config.details.timeInStatus ? formatElapsed(chat.last, now) : null;
+  const groupedByWorkspace = config.groupBy !== "status" && config.groupBy !== "none";
+  return (
+    <View>
+      <View style={[styles.row, selected ? styles.selected : null]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Open chat ${chat.name}, ${STATUS_TITLES[chat.indicator]}`}
+          onPress={() => props.navigation.openAgent(reference)}
+          onLongPress={remind.toggle}
+          style={styles.rowMain}
+        >
+          <View style={[styles.dot, { backgroundColor: props.theme.colors[INDICATOR_TOKEN[chat.indicator]] }]} />
+          <Text style={styles.label} numberOfLines={1}>
+            {chat.name}
+          </Text>
+          {!groupedByWorkspace && workspace ? <Text style={styles.secondary} numberOfLines={1}>{workspace}</Text> : null}
+          {elapsed ? <Text style={styles.secondary}>{elapsed}</Text> : null}
+        </Pressable>
+        <RemindButton agentId={reference.id} label={chat.name} onPress={remind.toggle} shared={shared} />
+      </View>
+      {remind.open ? <InlinePicker agentId={reference.id} workspaceId={chat.workspaceId} title={chat.name} onDone={remind.close} shared={shared} /> : null}
+    </View>
+  );
+}
+
 function GroupHeading({ title, count, collapsed, onToggle, shared }: { title: string; count: number; collapsed: boolean; onToggle(): void; shared: Shared }) {
   const { styles, config, props } = shared;
   return (
@@ -290,11 +381,13 @@ interface FilterBarProps {
   onSearch(text: string): void;
   statuses: readonly Indicator[];
   onStatuses(next: Indicator[]): void;
-  next: WorkspaceRef | null;
+  // Opens the next item that needs the user; null when nothing does.
+  onNext: (() => void) | null;
+  placeholder: string;
   shared: Shared;
 }
 
-function FilterBar({ search, onSearch, statuses, onStatuses, next, shared }: FilterBarProps) {
+function FilterBar({ search, onSearch, statuses, onStatuses, onNext, placeholder, shared }: FilterBarProps) {
   const { styles, props } = shared;
   const needsMe = needsMeOn(statuses);
   return (
@@ -302,7 +395,7 @@ function FilterBar({ search, onSearch, statuses, onStatuses, next, shared }: Fil
       <View style={styles.searchRow}>
         <TextInput
           accessibilityLabel="Search workspaces"
-          placeholder="Search name, branch or project"
+          placeholder={placeholder}
           placeholderTextColor={props.theme.colors.foregroundMuted}
           value={search}
           onChangeText={onSearch}
@@ -312,11 +405,11 @@ function FilterBar({ search, onSearch, statuses, onStatuses, next, shared }: Fil
         />
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={next ? "Open the next workspace that needs you" : "Nothing needs you"}
-          accessibilityState={{ disabled: next === null }}
-          disabled={next === null}
-          onPress={() => next && props.navigation.openWorkspace(next)}
-          style={[styles.next, next ? null : styles.disabled]}
+          accessibilityLabel={onNext ? "Open the next one that needs you" : "Nothing needs you"}
+          accessibilityState={{ disabled: onNext === null }}
+          disabled={onNext === null}
+          onPress={() => onNext?.()}
+          style={[styles.next, onNext ? null : styles.disabled]}
         >
           <Icon name="SkipForward" size={12} color={props.theme.colors.foreground} />
           <Text style={styles.nextText}>Next</Text>
@@ -341,33 +434,92 @@ function FilterBar({ search, onSearch, statuses, onStatuses, next, shared }: Fil
   );
 }
 
-export interface ViewDeps {
-  reminders: ValueStore<Reminders>;
-  // Tells the daemon a reminder changed, so it re-arms its timer.
-  arm(agentId: string): Promise<unknown>;
+export type ViewDeps = PickerDeps;
+
+interface RowSource {
+  sections: { key: string; title: string | null; items: readonly { key: string }[] }[];
+  // Rows the row limit never hides.
+  protectedKeys: ReadonlySet<string>;
+  // Opens the next row that needs the user, in view order; null when none does.
+  onNext: (() => void) | null;
+  noun: string;
+  renderRow(reference: { key: string }, shared: Shared): ReactNode;
+  // Chat groups by workspace carry the workspace id as title; their heading looks up its name.
+  groupsAreWorkspaces: boolean;
 }
 
-type Section = { key: string; title: string | null; items: readonly WorkspaceRef[] };
+type Where<Snapshot> = (item: Snapshot) => boolean;
+
+function workspaceRows(config: ViewConfig) {
+  const compare = compareWorkspaces(config);
+  const useSections =
+    config.groupBy === "none"
+      ? (where: Where<PluginWorkspaceSnapshot>) => [{ key: "all", title: null, items: useWorkspaces({ where, orderBy: compare }) }]
+      : (where: Where<PluginWorkspaceSnapshot>) =>
+          orderGroups<Group<WorkspaceRef>>(useWorkspaces({ where, orderBy: compare, groupBy: (workspace) => groupKeys(config, workspace) }), config);
+  return function useWorkspaceRows(filter: Filter, props: PluginSidebarViewProps): RowSource {
+    const shown = (workspace: PluginWorkspaceSnapshot) => isVisible(workspace) && matchesFilter(workspace, filter);
+    const sections = useSections(shown);
+    const protectedKeys = new Set(useWorkspaces({ where: (workspace) => shown(workspace) && isProtected(workspace) }).map((ref) => ref.key));
+    const waiting = new Set(useWorkspaces({ where: (workspace) => isVisible(workspace) && needsAttention(workspace.indicator) }).map((ref) => ref.key));
+    const next = nextAttention(attentionOrder(sections, waiting), props.active.workspace?.key ?? null);
+    return {
+      sections,
+      protectedKeys,
+      onNext: next ? () => props.navigation.openWorkspace(next) : null,
+      noun: "workspaces",
+      renderRow: (reference, shared) => <WorkspaceRow key={reference.key} reference={reference as WorkspaceRef} shared={shared} />,
+      groupsAreWorkspaces: false,
+    };
+  };
+}
+
+function chatRows(config: ViewConfig) {
+  const compare = compareChats(config);
+  const useSections =
+    config.groupBy === "none"
+      ? (where: Where<PluginAgentSnapshot>) => [{ key: "all", title: null, items: useAgents({ where, orderBy: compare }) }]
+      : (where: Where<PluginAgentSnapshot>) =>
+          orderGroups<Group<AgentRef>>(useAgents({ where, orderBy: compare, groupBy: (chat) => chatGroupKey(config, chat) }), config);
+  return function useChatRows(filter: Filter, props: PluginSidebarViewProps): RowSource {
+    const shown = (chat: PluginAgentSnapshot) => isListedChat(chat) && chatMatches(chat, filter);
+    const sections = useSections(shown);
+    const isProtectedChat = (chat: PluginAgentSnapshot) => ["needs_input", "failed"].includes(chatIndicator(chat));
+    const protectedKeys = new Set(useAgents({ where: (chat) => shown(chat) && isProtectedChat(chat) }).map((ref) => ref.key));
+    const waiting = new Set(useAgents({ where: (chat) => isListedChat(chat) && needsAttention(chatIndicator(chat)) }).map((ref) => ref.key));
+    const next = nextAttention(attentionOrder(sections, waiting), props.active.agent?.key ?? null);
+    return {
+      sections,
+      protectedKeys,
+      onNext: next ? () => props.navigation.openAgent(next) : null,
+      noun: "chats",
+      renderRow: (reference, shared) => <ChatRow key={reference.key} reference={reference as AgentRef} shared={shared} />,
+      groupsAreWorkspaces: config.groupBy !== "status",
+    };
+  };
+}
+
+// A heading for a group of chats from one workspace, titled with that workspace's name.
+function WorkspaceGroupHeading(props: { workspaceId: string; count: number; collapsed: boolean; onToggle(): void; shared: Shared }) {
+  const name = useWorkspace(props.workspaceId, (workspace) => workspace.title ?? workspace.name);
+  return <GroupHeading title={name ?? "Workspace"} count={props.count} collapsed={props.collapsed} onToggle={props.onToggle} shared={props.shared} />;
+}
 
 export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
-  const compare = compareWorkspaces(config);
   // Chosen once per profile, so each view instance always calls the same hooks.
-  const useMainSections =
-    config.groupBy === "none"
-      ? (where: (workspace: PluginWorkspaceSnapshot) => boolean): Section[] => [{ key: "all", title: null, items: useWorkspaces({ where, orderBy: compare }) }]
-      : (where: (workspace: PluginWorkspaceSnapshot) => boolean): Section[] =>
-          orderGroups<Group<WorkspaceRef>>(useWorkspaces({ where, orderBy: compare, groupBy: (workspace) => groupKeys(config, workspace) }), config);
+  const useRows = config.list === "chats" ? chatRows(config) : workspaceRows(config);
 
   return function MorphiseSidebarView(props: PluginSidebarViewProps) {
     const styles = useMemo(() => viewStyles(props.theme, config, props.layout.compact), [props.theme, props.layout.compact]);
-    const reminders = useValue(deps.reminders);
-    const now = useReminderClock(reminders, config.details.timeInStatus);
+    const reminders = remindersOf(tasksOf(useValue(deps.tasks)));
+    const now = useReminderClock(reminders.map((entry) => entry.reminder), config.details.timeInStatus);
     const viewState = useSettings(viewStateSettings);
     const state = viewState.status === "ready" ? viewState.values : DEFAULT_VIEW_STATE;
     const [search, setSearch] = useState("");
     const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
-    const paseo = usePaseo();
     const toast = useToast();
+    // Tells the settings screen that Paseo is showing this view.
+    useEffect(() => viewPresence.set(true), []);
 
     const saveState = (next: Partial<ViewState>) => {
       if (viewState.status !== "ready") return;
@@ -377,29 +529,33 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     };
 
     const filter: Filter = { statuses: config.filterBar ? state.statusFilter : [], search: config.filterBar ? search : "" };
-    const shown = (workspace: PluginWorkspaceSnapshot) => isVisible(workspace) && matchesFilter(workspace, filter);
-    const sections = useMainSections(shown);
-    const protectedKeys = new Set(useWorkspaces({ where: (workspace) => shown(workspace) && isProtected(workspace) }).map((ref) => ref.key));
-    const waiting = new Set(useWorkspaces({ where: (workspace) => isVisible(workspace) && needsAttention(workspace.indicator) }).map((ref) => ref.key));
-    const next = nextAttention(attentionOrder(sections, waiting), props.active.workspace?.key ?? null);
+    const source = useRows(filter, props);
+    const { sections, protectedKeys } = source;
 
-    const dueIds = new Set([...reminders.values()].filter((entry) => isDue(entry.reminder, now)).map((entry) => entry.agentId));
-    const dueChats = useAgents({ where: (agent) => dueIds.has(agent.id) });
+    const dueEntries = reminders.filter((entry) => isDue(entry.reminder, now));
+    const dueChatIds = new Set(dueEntries.flatMap((entry) => (entry.agentId ? [entry.agentId] : [])));
+    const dueChats = new Map(useAgents({ where: (agent) => dueChatIds.has(agent.id) }).map((ref) => [ref.id, ref]));
     const workspaceReminders = new Map<string, Reminder>();
-    for (const entry of reminders.values()) {
-      const current = entry.workspaceId ? workspaceReminders.get(entry.workspaceId) : undefined;
-      if (entry.workspaceId && (!current || entry.reminder.at < current.at)) workspaceReminders.set(entry.workspaceId, entry.reminder);
+    const document = tasksOf(useValue(deps.tasks));
+    for (const entry of reminders) {
+      const workspaceId = document.tasks.find((task) => task.id === entry.taskId)?.links.workspaceId;
+      const current = workspaceId ? workspaceReminders.get(workspaceId) : undefined;
+      if (workspaceId && (!current || entry.reminder.at < current.at)) workspaceReminders.set(workspaceId, entry.reminder);
     }
 
-    const done = (agentId: string) =>
-      void clearReminder(paseo.agents.ref(agentId))
-        .then(() => deps.arm(agentId))
-        .catch(report(toast, "mark the reminder done"));
-    const shared: Shared = { props, styles, config, now, workspaceReminders, done };
+    // The same task the pill, picker and /remind act on.
+    const chatReminders = new Map<string, Reminder>();
+    for (const agentId of new Set(reminders.flatMap((entry) => (entry.agentId ? [entry.agentId] : [])))) {
+      const reminder = followUpTask(document, agentId)?.reminder;
+      if (reminder) chatReminders.set(agentId, reminder);
+    }
+    const done = (taskId: string) => void deps.apply({ kind: "setReminder", id: taskId, reminder: null }).catch(report(toast, "mark the reminder done"));
+    const later = (taskId: string, minutes: number) => void deps.apply({ kind: "remindAgain", id: taskId, minutes }).catch(report(toast, "move the reminder"));
+    const shared: Shared = { props, styles, config, now, workspaceReminders, statuses: filter.statuses, chatReminders, picker: deps, done, later };
     const collapsed = new Set(state.collapsed);
     const toggleCollapsed = (key: string) =>
       saveState({ collapsed: collapsed.has(key) ? state.collapsed.filter((item) => item !== key) : [...state.collapsed, key] });
-    const nothing = sections.every((section) => section.items.length === 0) && dueChats.length === 0;
+    const nothing = sections.every((section) => section.items.length === 0) && dueEntries.length === 0;
     const remindersFolded = collapsed.has(REMINDERS_GROUP);
 
     return (
@@ -410,35 +566,35 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
             onSearch={setSearch}
             statuses={state.statusFilter}
             onStatuses={(statusFilter) => saveState({ statusFilter })}
-            next={next}
+            onNext={source.onNext}
+            placeholder={config.list === "chats" ? "Search chats" : "Search name, branch or project"}
             shared={shared}
           />
         ) : null}
-        {dueChats.length > 0 ? (
+        {dueEntries.length > 0 ? (
           <View>
-            <GroupHeading title="Reminders" count={dueChats.length} collapsed={remindersFolded} onToggle={() => toggleCollapsed(REMINDERS_GROUP)} shared={shared} />
-            {remindersFolded
-              ? null
-              : dueChats.map((reference) => {
-                  const entry = reminders.get(reference.id);
-                  return entry ? <ReminderRow key={reference.key} reference={reference} reminder={entry.reminder} shared={shared} /> : null;
-                })}
+            <GroupHeading title="Reminders" count={dueEntries.length} collapsed={remindersFolded} onToggle={() => toggleCollapsed(REMINDERS_GROUP)} shared={shared} />
+            {remindersFolded ? null : dueEntries.map((entry) => <ReminderRow key={`${entry.taskId}:${entry.reminder.setAt}`} entry={entry} chat={entry.agentId ? dueChats.get(entry.agentId) ?? null : null} shared={shared} />)}
           </View>
         ) : null}
-        {nothing ? <Text style={styles.empty}>{filter.search || filter.statuses.length ? "No workspaces match" : "No workspaces yet"}</Text> : null}
+        {nothing ? <Text style={styles.empty}>{filter.search || filter.statuses.length ? `No ${source.noun} match` : `No ${source.noun} yet`}</Text> : null}
         {sections.map((section) => {
           const folded = section.title !== null && collapsed.has(section.key);
           const { rows, hidden } = capRows(section.items, protectedKeys, config.rowLimit, expanded.has(section.key));
+          const heading =
+            section.title === null ? null : source.groupsAreWorkspaces ? (
+              <WorkspaceGroupHeading workspaceId={section.title} count={section.items.length} collapsed={folded} onToggle={() => toggleCollapsed(section.key)} shared={shared} />
+            ) : (
+              <GroupHeading title={section.title} count={section.items.length} collapsed={folded} onToggle={() => toggleCollapsed(section.key)} shared={shared} />
+            );
           return (
             <View key={section.key}>
-              {section.title !== null ? (
-                <GroupHeading title={section.title} count={section.items.length} collapsed={folded} onToggle={() => toggleCollapsed(section.key)} shared={shared} />
-              ) : null}
-              {folded ? null : rows.map((reference) => <WorkspaceRow key={reference.key} reference={reference} shared={shared} />)}
+              {heading}
+              {folded ? null : rows.map((reference) => source.renderRow(reference, shared))}
               {!folded && hidden > 0 ? (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={`Show ${hidden} more workspaces`}
+                  accessibilityLabel={`Show ${hidden} more ${source.noun}`}
                   onPress={() => setExpanded(new Set([...expanded, section.key]))}
                   style={styles.more}
                 >

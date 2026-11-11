@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { EMPTY_DOCUMENT } from "../shared/document";
 import type { ProfileEvent } from "../shared/watch";
-import { connectProfile, type OpenProfileStream, type ProfileStreamHandle } from "./profile-connection";
+import { connectStream, type OpenStream, type StreamHandle } from "./profile-connection";
 import { createProfileStore } from "./profile-store";
 
 interface FakeStream {
@@ -12,10 +12,10 @@ interface FakeStream {
 
 function fakeDaemon(options: { failOpen?: string } = {}) {
   const streams: FakeStream[] = [];
-  const open: OpenProfileStream = (onEvent, onClosed) => {
+  const open: OpenStream<ProfileEvent> = (onEvent, onClosed) => {
     const stream: FakeStream = { emit: onEvent, close: onClosed, released: false };
     streams.push(stream);
-    const handle = (() => void (stream.released = true)) as ProfileStreamHandle;
+    const handle = (() => void (stream.released = true)) as StreamHandle;
     Object.assign(handle, {
       ready: options.failOpen ? Promise.reject(new Error(options.failOpen)) : Promise.resolve(),
     });
@@ -27,11 +27,11 @@ function fakeDaemon(options: { failOpen?: string } = {}) {
 const ready = (revision: string): ProfileEvent => ({ status: "ready", revision, document: EMPTY_DOCUMENT });
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-describe("connectProfile", () => {
+describe("connectStream", () => {
   it("opens one stream and puts its events in the store", () => {
     const daemon = fakeDaemon();
     const store = createProfileStore();
-    connectProfile(daemon.open, store);
+    connectStream(daemon.open, store);
     daemon.streams[0].emit(ready("r1"));
     expect(daemon.streams).toHaveLength(1);
     expect(store.get()).toEqual({ event: ready("r1"), connectionError: null });
@@ -40,7 +40,7 @@ describe("connectProfile", () => {
   it("keeps the last profile and records why when the daemon closes the stream", () => {
     const daemon = fakeDaemon();
     const store = createProfileStore();
-    connectProfile(daemon.open, store);
+    connectStream(daemon.open, store);
     daemon.streams[0].emit(ready("r1"));
     daemon.streams[0].close(new Error("Plugin stopped: morphise"));
     expect(store.get()).toEqual({ event: ready("r1"), connectionError: "Plugin stopped: morphise" });
@@ -49,7 +49,7 @@ describe("connectProfile", () => {
   it("reports a stream the daemon refused to open", async () => {
     const daemon = fakeDaemon({ failOpen: "Update the host to use subscriptions" });
     const store = createProfileStore();
-    connectProfile(daemon.open, store);
+    connectStream(daemon.open, store);
     await flush();
     expect(store.get()).toEqual({ event: null, connectionError: "Update the host to use subscriptions" });
   });
@@ -57,7 +57,7 @@ describe("connectProfile", () => {
   it("reopens a closed stream and clears the error once an event arrives", () => {
     const daemon = fakeDaemon();
     const store = createProfileStore();
-    const connection = connectProfile(daemon.open, store);
+    const connection = connectStream(daemon.open, store);
     daemon.streams[0].close(new Error("Plugin stopped: morphise"));
     connection.reopen();
     daemon.streams[1].emit(ready("r2"));
@@ -68,7 +68,7 @@ describe("connectProfile", () => {
   it("replaces a stream that still looks open, so a late close notice cannot leave it stuck", () => {
     const daemon = fakeDaemon();
     const store = createProfileStore();
-    const connection = connectProfile(daemon.open, store);
+    const connection = connectStream(daemon.open, store);
     connection.reopen();
     expect(daemon.streams[0].released).toBe(true);
     expect(daemon.streams).toHaveLength(2);
@@ -77,7 +77,7 @@ describe("connectProfile", () => {
   it("ignores a stream it replaced, even when that stream reports a failure afterwards", () => {
     const daemon = fakeDaemon();
     const store = createProfileStore();
-    const connection = connectProfile(daemon.open, store);
+    const connection = connectStream(daemon.open, store);
     daemon.streams[0].emit(ready("r1"));
     connection.reopen();
     daemon.streams[0].close(new Error("Subscription released"));
@@ -88,7 +88,7 @@ describe("connectProfile", () => {
   it("does not report a stream whose opening was cut short by stop", async () => {
     const daemon = fakeDaemon({ failOpen: "Subscription released" });
     const store = createProfileStore();
-    const connection = connectProfile(daemon.open, store);
+    const connection = connectStream(daemon.open, store);
     connection.stop();
     await flush();
     expect(store.get()).toEqual({ event: null, connectionError: null });
@@ -97,7 +97,7 @@ describe("connectProfile", () => {
   it("releases the stream on stop and opens nothing afterwards", () => {
     const daemon = fakeDaemon();
     const store = createProfileStore();
-    const connection = connectProfile(daemon.open, store);
+    const connection = connectStream(daemon.open, store);
     connection.stop();
     connection.reopen();
     expect(daemon.streams).toHaveLength(1);

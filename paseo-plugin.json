@@ -1,7 +1,7 @@
 {
   "id": "morphise",
   "name": "Morphise",
-  "description": "Status-sorted sidebar, chat reminders and notes, prompts, layouts, and settings forms for Paseo's sidebar, headers, composer, timeline and theme",
+  "description": "Kanban task board with reminders, status-sorted sidebar, chat notes, prompts, layouts, and settings forms for Paseo's sidebar, headers, composer, timeline and theme",
   "icon": "morphise.png",
   "media": ["assets/settings.jpg", "assets/workspace.jpg", "assets/editor.jpg"],
   "requirements": {

@@ -1,4 +1,4 @@
-import { SettingsAction, SettingsCard, SettingsSection, TextInput } from "@getpaseo/plugin/client/ui";
+import { Icon, SettingsAction, SettingsCard, SettingsSection, TextInput } from "@getpaseo/plugin/client/ui";
 import type { ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { Action } from "../../shared/actions";
@@ -6,6 +6,8 @@ import { STATUS_TITLES } from "../../shared/arrange";
 import type { Layout, Prompt } from "../../shared/document";
 import { EMPTY_PROFILE, type Profile, TIMELINE_ITEM_TYPES } from "../../shared/profile";
 import { presetTitle } from "../../shared/reminders";
+import { useValue } from "../profile-store";
+import { viewPresence } from "../view-presence";
 import { ActionFields, type Form, ListEditor, NumberField, SelectField, SwitchField, TextField } from "./fields";
 import { parseMetadataText, uniqueId } from "./form-values";
 
@@ -154,6 +156,18 @@ function viewFields(form: Form): { [Key in keyof ViewConfig]: ReactNode } {
         onChange={(value) => set("enabled", value)}
       />
     ),
+    list: (
+      <SelectField
+        label="List"
+        hint="Chats shows every chat as its own row, with the same filters"
+        value={view.list}
+        options={[
+          { value: "workspaces", label: "Workspaces" },
+          { value: "chats", label: "Chats" },
+        ]}
+        onChange={(value) => set("list", value)}
+      />
+    ),
     groupBy: (
       <SelectField
         label="Group by"
@@ -289,12 +303,33 @@ function reminderFields(form: Form): { [Key in keyof Profile["reminders"]]: Reac
   };
 }
 
+// Paseo shows one sidebar view at a time and plugins cannot pick it, so say plainly when the
+// Morphise view is on but not the one Paseo is showing.
+function ViewCallout({ form }: { form: Form }) {
+  const shown = useValue(viewPresence);
+  if (!form.profile.sidebar.view.enabled || shown) return null;
+  const { theme } = form;
+  return (
+    <View style={{ flexDirection: "row", gap: 10, padding: 12, borderRadius: 8, borderWidth: 1, borderColor: theme.colors.statusWarning, backgroundColor: theme.colors.surface1 }}>
+      <Icon name="TriangleAlert" size={16} color={theme.colors.statusWarning} />
+      <View style={{ flex: 1, gap: 4 }}>
+        <Text style={{ color: theme.colors.foreground, fontSize: 13, fontWeight: "600" }}>Paseo is still showing its own sidebar</Text>
+        <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12 }}>
+          These settings change the Morphise sidebar view. To see it, open Paseo's Settings, then Sidebar, then Sidebar view, and pick
+          Morphise. This note goes away once the view is showing in this window.
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 export function SidebarTab(form: Form): ReactNode {
   const view = viewFields(form);
   const reminders = reminderFields(form);
   return (
     <>
-      <SettingsSection title="Sidebar view">
+      <ViewCallout form={form} />
+      <SettingsSection title="Morphise sidebar view" info="These settings apply inside the Morphise sidebar view only.">
         <SettingsCard>{Object.values(view)}</SettingsCard>
       </SettingsSection>
       <SettingsSection title="Reminders">
