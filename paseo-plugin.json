@@ -1,0 +1,10 @@
+{
+  "id": "morphise",
+  "name": "Morphise",
+  "description": "Reshape Paseo's sidebar, headers, composer, timeline and theme from one live profile",
+  "icon": "morphise.png",
+  "media": ["assets/workspace.jpg", "assets/editor.jpg"],
+  "requirements": {
+    "paseo": ">=0.16.0-beta.1 <0.17.0"
+  }
+}
