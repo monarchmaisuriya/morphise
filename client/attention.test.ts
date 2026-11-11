@@ -24,6 +24,18 @@ describe("attention", () => {
     expect(list.get("e")?.reason).toBe("failed");
   });
 
+  it("carries the oldest waiting request and the chat's last error, for the Inbox to show", () => {
+    const list = reduceAttention(new Map(), {
+      snapshot: [
+        // Paseo's own notification names the newest request: the last one listed.
+        { agent: agent("p", { status: "running", pendingPermissions: [{ id: "r1", name: "Bash", kind: "tool", detail: { type: "shell", command: "ls" } }, { id: "r2", name: "Edit", kind: "tool" }] }) },
+        { agent: agent("e", { status: "error", requiresAttention: true, attentionReason: "error", lastError: "Rate limited" }) },
+      ],
+    });
+    expect(list.get("p")).toMatchObject({ permissionCount: 2, permission: { id: "r2", tool: "Edit" }, error: "" });
+    expect(list.get("e")).toMatchObject({ permission: null, permissionCount: 0, error: "Rate limited" });
+  });
+
   it("follows updates: an opened chat leaves the list, an unchanged one keeps the same map", () => {
     const start = reduceAttention(new Map(), { snapshot: [{ agent: agent("f", { requiresAttention: true, attentionReason: "finished" }) }] });
     expect(reduceAttention(start, upsert(agent("f", { requiresAttention: true, attentionReason: "finished" })))).toBe(start);

@@ -2,6 +2,21 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.10.0 - 2026-11-12
+
+- **Inbox, redesigned:**
+  - Wide screens show the list and the selected item side by side. On a phone, tapping an item opens it, with a back button.
+  - Each row shows a one-line preview: the command or file a permission is for, the error, or that it finished.
+  - Filter by status (with counts), search chats and workspaces, and group by status or by workspace. Grouping is remembered on each device.
+  - **Permissions:** read the request (the command, file, diff or plan) and answer with Allow and Deny, or the agent's own buttons such as "Implement". Questions open the chat, because they need a typed answer.
+  - **Failed and finished chats:** the error and the chat's last answer, a reply box that sends straight to the chat, and Bookmark answer.
+  - **Clear** a finished item, or all finished items at once. It leaves the Inbox and its count until the chat finishes again. Paseo's own unread dot stays until you open the chat, since plugins cannot clear it.
+  - When you answer or clear the selected item, the next one is selected.
+- **Bookmarks tab:** search, Copy, and answers drawn as Markdown.
+- **Done colour:** a darker green, and one colour rule for every place a status is drawn. The settings Status order list now matches the sidebar (it showed "Finished, unread" amber and "Running" in the accent colour).
+
+Rolling back to 0.9.0: `paseo plugin update morphise --ref v0.9.0`. Nothing new is saved that 0.9.0 cannot read: the Inbox keeps its grouping and cleared items in a separate per-device document that 0.9.0 ignores.
+
 ## 0.9.0 - 2026-11-12
 
 - **Steps card:**

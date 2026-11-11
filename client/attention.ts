@@ -3,6 +3,7 @@
 // opening clears it in Paseo, and this list follows. Archived and background agents never appear.
 
 import { chatIndicator, type ChatStatusFields, parentFromLabels } from "../shared/chat-status";
+import { type PermissionSummary, summarizePermission } from "../shared/inbox";
 
 export type AttentionReason = "permission" | "failed" | "finished";
 
@@ -12,8 +13,15 @@ export interface AttentionItem {
   workspaceId: string;
   parentAgentId: string | null;
   reason: AttentionReason;
-  // When Paseo marked it; empty when Paseo gave no time.
+  // When Paseo marked it, else when the chat last changed; empty when Paseo gave neither.
   at: string;
+  // When Paseo marked it only; empty when Paseo gave no time. Clearing keys on it.
+  attentionAt: string;
+  // The newest request still waiting, the one Paseo's own notification names, and how many wait.
+  permission: PermissionSummary | null;
+  permissionCount: number;
+  // Paseo's last error for the chat; empty when it gave none.
+  error: string;
 }
 
 export type AttentionList = ReadonlyMap<string, AttentionItem>;
@@ -30,11 +38,12 @@ export function readAttention(value: unknown): { id: string; item: AttentionItem
   const agent = record(value);
   if (!agent || typeof agent.id !== "string") return null;
   if (agent.archivedAt || agent.background === true) return { id: agent.id, item: null };
+  const pending = Array.isArray(agent.pendingPermissions) ? agent.pendingPermissions : [];
   const indicator = chatIndicator({
     status: agent.status as ChatStatusFields["status"],
     requiresAttention: agent.requiresAttention === true,
     attentionReason: (agent.attentionReason ?? null) as ChatStatusFields["attentionReason"],
-    pendingPermissionCount: Array.isArray(agent.pendingPermissions) ? agent.pendingPermissions.length : 0,
+    pendingPermissionCount: pending.length,
   });
   const reason: AttentionReason | null = indicator === "needs_input" ? "permission" : indicator === "failed" ? "failed" : indicator === "attention" ? "finished" : null;
   if (!reason) return { id: agent.id, item: null };
@@ -47,6 +56,10 @@ export function readAttention(value: unknown): { id: string; item: AttentionItem
       parentAgentId: parentFromLabels(agent.labels),
       reason,
       at: text(agent.attentionTimestamp) || text(agent.updatedAt),
+      attentionAt: text(agent.attentionTimestamp),
+      permission: reason === "permission" ? summarizePermission(pending[pending.length - 1]) : null,
+      permissionCount: reason === "permission" ? pending.length : 0,
+      error: reason === "failed" ? text(agent.lastError) : "",
     },
   };
 }

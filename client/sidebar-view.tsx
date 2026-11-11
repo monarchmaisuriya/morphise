@@ -45,7 +45,7 @@ import { type PickerDeps, ReminderPicker, type ReminderTarget } from "./reminder
 import { followUpTask, followUpWorkspaceTask } from "../shared/task-ops";
 import { type ApplyTaskOperations, type TaskStore, tasksOf } from "./task-store";
 import { Button, Dropdown, Field, IconButton, MenuItem, PopoverHost, Tag, type Tokens, useTokens } from "./ui/kit";
-import { BLUE, PURPLE } from "./ui/hues";
+import { BLUE, PURPLE, statusColor } from "./ui/hues";
 import { usePulse } from "./ui/pulse";
 import { StepsCard } from "./steps-card";
 import type { PullRequestInfo, ServiceInfo, WorkspaceInfo, WorkspaceList } from "./workspaces";
@@ -218,24 +218,13 @@ function RowShell({ selected, child, grandchild, twoLine, label, onPress, onLong
   );
 }
 
-// One colour per status: waiting on you amber, failed red, running white, finished but unread
-// blue, done a dim grey-green (green drawn faint).
-function indicatorColor(colors: Theme["colors"], indicator: Indicator): string {
-  if (indicator === "needs_input") return colors.statusWarning;
-  if (indicator === "failed") return colors.statusDanger;
-  if (indicator === "running") return colors.foreground;
-  if (indicator === "attention") return BLUE;
-  return colors.statusSuccess;
-}
-
-const DONE_OPACITY = 0.45;
 
 // The status mark in the same 16px column as project tiles, as Paseo draws it. Running work pulses.
 function StatusMark({ indicator, shared }: { indicator: Indicator; shared: Shared }) {
   const pulse = usePulse(indicator === "running");
   return (
     <View style={[shared.styles.slot, { height: 20 }]}>
-      <Animated.View accessibilityLabel={STATUS_TITLES[indicator]} style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: indicatorColor(shared.props.theme.colors, indicator), opacity: indicator === "done" ? DONE_OPACITY : pulse }} />
+      <Animated.View accessibilityLabel={STATUS_TITLES[indicator]} style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: statusColor(shared.props.theme.colors, indicator), opacity: pulse }} />
     </View>
   );
 }
@@ -1131,7 +1120,7 @@ function FilterMenu({ state, save, projects, shared }: FilterMenuProps) {
       <MenuSection title="Status" shared={shared}>
         <MenuItem t={t} role="checkbox" icon="Hand" label="Needs me" hint="permission or failed" checked={needsMe} onPress={() => save({ statusFilter: needsMe ? [] : [...NEEDS_ME] })} />
         {INDICATORS.map((indicator) => (
-          <MenuItem key={indicator} t={t} role="checkbox" dot={indicatorColor(props.theme.colors, indicator)} label={STATUS_TITLES[indicator]} checked={!needsMe && statuses.includes(indicator)} onPress={() => toggleStatus(indicator)} />
+          <MenuItem key={indicator} t={t} role="checkbox" dot={statusColor(props.theme.colors, indicator)} label={STATUS_TITLES[indicator]} checked={!needsMe && statuses.includes(indicator)} onPress={() => toggleStatus(indicator)} />
         ))}
       </MenuSection>
       <MenuSection title="Show only" shared={shared}>
@@ -1495,7 +1484,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
 
     const placeholder = config.list === "chats" ? "Search chats" : "Search name, branch or project";
     const activeTags = [
-      ...(needsMeOn(filter.statuses) ? [{ key: "needs", label: "Needs me", color: props.theme.colors.statusWarning, remove: () => saveState({ statusFilter: [] }) }] : filter.statuses.map((indicator) => ({ key: indicator, label: STATUS_TITLES[indicator], color: indicatorColor(props.theme.colors, indicator), remove: () => saveState({ statusFilter: state.statusFilter.filter((item) => item !== indicator) }) }))),
+      ...(needsMeOn(filter.statuses) ? [{ key: "needs", label: "Needs me", color: props.theme.colors.statusWarning, remove: () => saveState({ statusFilter: [] }) }] : filter.statuses.map((indicator) => ({ key: indicator, label: STATUS_TITLES[indicator], color: statusColor(props.theme.colors, indicator), remove: () => saveState({ statusFilter: state.statusFilter.filter((item) => item !== indicator) }) }))),
       ...(filter.projects ?? []).map((key) => ({ key, label: projects.find((project) => project.key === key)?.title ?? "Project", color: tileColor(projects.find((project) => project.key === key)?.title ?? ""), remove: () => saveState({ projectFilter: state.projectFilter.filter((item) => item !== key) }) })),
       ...(filter.hideDone ? [{ key: "hideDone", label: "Done hidden", color: undefined, remove: () => saveState({ hideDone: false }) }] : []),
       ...(filter.changedOnly ? [{ key: "changed", label: "Changed", color: undefined, remove: () => saveState({ changedOnly: false }) }] : []),

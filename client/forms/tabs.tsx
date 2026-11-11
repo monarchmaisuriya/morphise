@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Text, View } from "react-native";
 import type { Action } from "../../shared/actions";
 import { IconButton, tokens } from "../ui/kit";
+import { statusColor } from "../ui/hues";
 import { STATUS_TITLES } from "../../shared/arrange";
 import type { Layout, Prompt } from "../../shared/document";
 import { EMPTY_PROFILE, type Profile, TIMELINE_ITEM_TYPES } from "../../shared/profile";
@@ -115,7 +116,6 @@ function StatusOrder({ form }: { form: Form }) {
     });
   const { theme } = form;
   const t = tokens(theme, false);
-  const dot = { needs_input: t.c.statusWarning, attention: t.c.statusWarning, failed: t.c.statusDanger, running: t.c.accent, done: t.c.statusSuccess } as const;
   return (
     <View style={{ paddingVertical: 10, paddingHorizontal: 16, gap: 6 }}>
       <View style={{ gap: 2 }}>
@@ -126,7 +126,7 @@ function StatusOrder({ form }: { form: Form }) {
         {order.map((indicator, index) => (
           <View key={indicator} style={{ flexDirection: "row", alignItems: "center", gap: 10, minHeight: 36, paddingLeft: 12, paddingRight: 4, borderTopWidth: index === 0 ? 0 : 1, borderTopColor: t.c.border, backgroundColor: t.c.surface1 }}>
             <Text style={[t.text.small, { width: 14 }]}>{index + 1}</Text>
-            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: dot[indicator] }} />
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: statusColor(t.c, indicator) }} />
             <Text style={{ color: t.c.foreground, fontSize: 13, flex: 1 }}>{STATUS_TITLES[indicator]}</Text>
             <IconButton t={t} size="sm" icon="ChevronUp" label={`Move ${STATUS_TITLES[indicator]} up`} disabled={index === 0} onPress={() => move(index, -1)} />
             <IconButton t={t} size="sm" icon="ChevronDown" label={`Move ${STATUS_TITLES[indicator]} down`} disabled={index === order.length - 1} onPress={() => move(index, 1)} />
