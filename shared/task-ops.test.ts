@@ -71,6 +71,13 @@ describe("tasks", () => {
     expect(document.tasks[0].reminder?.at).toBe("2026-11-11T15:29:00.000Z");
   });
 
+  it("sets or clears one link, leaving the task's other links alone", () => {
+    let document = apply(EMPTY_TASKS, add("a", { links: { agentId: "chat-1", url: "https://example.com" } }), { kind: "setLink", id: "a", link: "workspaceId", value: "w1" });
+    expect(document.tasks[0].links).toEqual({ agentId: "chat-1", url: "https://example.com", workspaceId: "w1" });
+    document = apply(document, { kind: "setLink", id: "a", link: "url", value: null }, { kind: "setLink", id: "a", link: "workspaceId", value: "w2" });
+    expect(document.tasks[0].links).toEqual({ agentId: "chat-1", workspaceId: "w2" });
+  });
+
   it("archives, restores and deletes", () => {
     let document = apply(EMPTY_TASKS, add("a"), add("b"), { kind: "archiveTask", id: "a" });
     expect(document.tasks.find((task) => task.id === "a")?.archivedAt).toBe(now.toISOString());

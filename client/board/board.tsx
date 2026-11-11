@@ -1,5 +1,5 @@
 import type { PluginTheme } from "@getpaseo/plugin";
-import { type PluginScreenProps, type PluginWorkspacePanelProps, useWorkspace } from "@getpaseo/plugin/client";
+import type { PluginScreenProps, PluginWorkspacePanelProps } from "@getpaseo/plugin/client";
 import { Icon, useToast } from "@getpaseo/plugin/client/ui";
 import { type ReactNode, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
@@ -17,11 +17,12 @@ import { Button, Field, IconButton, MenuItem, Segmented, Tag, type Tokens, useTo
 import { CardEditor, type EditorTarget, newTaskId } from "./card-editor";
 import { CustomiseBoard } from "./customise";
 import type { BoardDeps } from "./deps";
+import { useWorkspaceName } from "./workspace-picker";
 import { PRIORITY, priorityColor } from "./styles";
 
 type Layout = Pick<TaskView, "filter" | "sort" | "swimlanes" | "density">;
 type Tab = "board" | "today" | "archived";
-type Panel = "views" | "filter" | "display" | null;
+type Panel = "views" | "filter" | "display" | "attach" | null;
 type Run = (...operations: TaskOperation[]) => Promise<boolean>;
 
 const ALL_TASKS: Layout = { filter: DEFAULT_FILTER, sort: "manual", swimlanes: "none", density: "detailed" };
@@ -71,7 +72,12 @@ function MetaItem({ t, icon, text, tone }: { t: Tokens; icon: string; text?: str
   );
 }
 
-function CardView({ t, task, document, now, compact, onOpen, run }: { t: Tokens; task: Task; document: TaskDocument; now: Date; compact: boolean; onOpen(): void; run: Run }) {
+function WorkspaceMeta({ t, workspaces, workspaceId }: { t: Tokens; workspaces: BoardDeps["workspaces"]; workspaceId: string }) {
+  const name = useWorkspaceName(workspaces, workspaceId);
+  return <MetaItem t={t} icon="FolderGit2" text={name ?? "Closed workspace"} />;
+}
+
+function CardView({ t, task, document, now, compact, workspaces, onOpen, run }: { t: Tokens; task: Task; document: TaskDocument; now: Date; compact: boolean; workspaces: BoardDeps["workspaces"] | null; onOpen(): void; run: Run }) {
   const [hovered, setHovered] = useState(false);
   const index = document.columns.findIndex((column) => column.id === task.column);
   const previous = document.columns[index - 1];
@@ -113,6 +119,7 @@ function CardView({ t, task, document, now, compact, onOpen, run }: { t: Tokens;
       ) : null}
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10, minHeight: 20 }}>
         <View style={{ flex: 1, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+          {workspaces && task.links.workspaceId ? <WorkspaceMeta t={t} workspaces={workspaces} workspaceId={task.links.workspaceId} /> : null}
           {task.due ? <MetaItem t={t} icon="Calendar" text={dueText(task.due, today)} tone={dueTone} /> : null}
           {task.reminder ? <MetaItem t={t} icon="AlarmClock" text={inDone ? "Paused" : formatDue(task.reminder, now)} tone={reminderTone} /> : null}
           {task.checklist.length ? <MetaItem t={t} icon="SquareCheck" text={`${checked}/${task.checklist.length}`} tone={checked === task.checklist.length ? t.c.statusSuccess : undefined} /> : null}
@@ -326,6 +333,47 @@ function ViewsPanel({ t, document, layout, changed, clearEdits, run, close }: { 
   );
 }
 
+function AttachRow({ t, task, workspaces, onAttach }: { t: Tokens; task: Task; workspaces: BoardDeps["workspaces"]; onAttach(): void }) {
+  const from = useWorkspaceName(workspaces, task.links.workspaceId);
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, minHeight: t.row, paddingHorizontal: 8, borderRadius: t.radius.control }}>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={t.text.body} numberOfLines={1}>
+          {task.title}
+        </Text>
+        <Text style={t.text.small} numberOfLines={1}>
+          {task.links.workspaceId ? `In ${from ?? "a closed workspace"}; attaching moves it here` : "No workspace"}
+        </Text>
+      </View>
+      <Button t={t} icon="Plus" label="Attach" accessibilityLabel={`Attach ${task.title} to this workspace`} onPress={onAttach} />
+    </View>
+  );
+}
+
+// From a workspace's board: open tasks that belong elsewhere or nowhere, to attach here.
+function AttachPanel({ t, document, workspaceId, workspaces, run }: { t: Tokens; document: TaskDocument; workspaceId: string; workspaces: BoardDeps["workspaces"]; run: Run }) {
+  const [search, setSearch] = useState("");
+  const query = search.trim().toLowerCase();
+  const done = document.columns.find((column) => column.done)?.id;
+  const candidates = document.tasks
+    .filter((task) => task.archivedAt === null && task.column !== done && task.links.workspaceId !== workspaceId)
+    .filter((task) => !query || task.title.toLowerCase().includes(query))
+    // Unattached tasks first, then the most recently changed.
+    .sort((left, right) => Number(Boolean(left.links.workspaceId)) - Number(Boolean(right.links.workspaceId)) || right.updatedAt.localeCompare(left.updatedAt));
+  return (
+    <PanelBox t={t}>
+      <Field t={t} plain icon="Search" value={search} onChangeText={setSearch} placeholder="Find a task to attach to this workspace" accessibilityLabel="Find a task to attach" />
+      <View>
+        {candidates.slice(0, 40).map((task) => (
+          <AttachRow key={task.id} t={t} task={task} workspaces={workspaces} onAttach={() => void run({ kind: "setLink", id: task.id, link: "workspaceId", value: workspaceId })} />
+        ))}
+        {candidates.length === 0 ? <Text style={[t.text.small, { padding: 8 }]}>{query ? "No open task matches" : "Every open task already belongs to this workspace"}</Text> : null}
+        {candidates.length > 40 ? <Text style={[t.text.small, { padding: 8 }]}>Type to find more</Text> : null}
+      </View>
+    </PanelBox>
+  );
+}
+
 // A toolbar button that opens a panel, with a count badge for active settings.
 function PanelButton({ t, icon, label, open, count, onPress }: { t: Tokens; icon: string; label: string; open: boolean; count?: number; onPress(): void }) {
   return (
@@ -374,15 +422,15 @@ function ActiveFilters({ t, layout, setLayout, document }: { t: Tokens; layout: 
 // ---------- Board, Today, Archived ----------
 
 // A swimlane heading: priority names instead of P1..P4, workspace names instead of ids.
-function LaneTitle({ t, laneKey, title }: { t: Tokens; laneKey: string; title: string }) {
+function LaneTitle({ t, laneKey, title, workspaces }: { t: Tokens; laneKey: string; title: string; workspaces: BoardDeps["workspaces"] }) {
   const workspaceId = laneKey.startsWith("w:") ? laneKey.slice(2) : "";
-  const workspace = useWorkspace(workspaceId, (item) => item.title ?? item.name);
+  const workspace = useWorkspaceName(workspaces, workspaceId);
   const priority = /^p([1-4])$/.exec(laneKey)?.[1];
   const text = priority ? PRIORITY[Number(priority) as 1 | 2 | 3 | 4].name : laneKey.startsWith("w:") ? (workspaceId ? workspace ?? "Workspace" : "No workspace") : title;
   return <Text style={[t.text.small, { paddingHorizontal: 6, paddingTop: 4 }]}>{text}</Text>;
 }
 
-function ColumnView({ t, entry, document, now, layout, open, run, workspaceId }: { t: Tokens; entry: BoardColumn; document: TaskDocument; now: Date; layout: Layout; open(target: EditorTarget): void; run: Run; workspaceId: string | null }) {
+function ColumnView({ t, entry, document, now, layout, open, run, workspaceId, workspaceStore }: { t: Tokens; entry: BoardColumn; document: TaskDocument; now: Date; layout: Layout; open(target: EditorTarget): void; run: Run; workspaceId: string | null; workspaceStore: BoardDeps["workspaces"] }) {
   const { column } = entry;
   const empty = entry.lanes.every((lane) => lane.tasks.length === 0);
   const [adding, setAdding] = useState(false);
@@ -432,9 +480,9 @@ function ColumnView({ t, entry, document, now, layout, open, run, workspaceId }:
         ) : null}
         {entry.lanes.map((lane) => (
           <View key={lane.key} style={{ gap: 8 }}>
-            {lane.title ? <LaneTitle t={t} laneKey={lane.key} title={lane.title} /> : null}
+            {lane.title ? <LaneTitle t={t} laneKey={lane.key} title={lane.title} workspaces={workspaceStore} /> : null}
             {lane.tasks.map((task) => (
-              <CardView key={`${lane.key}:${task.id}`} t={t} task={task} document={document} now={now} compact={t.compact || layout.density === "compact"} onOpen={() => open({ kind: "existing", taskId: task.id })} run={run} />
+              <CardView key={`${lane.key}:${task.id}`} t={t} task={task} document={document} now={now} compact={t.compact || layout.density === "compact"} workspaces={workspaceId === null && layout.swimlanes !== "workspace" ? workspaceStore : null} onOpen={() => open({ kind: "existing", taskId: task.id })} run={run} />
             ))}
           </View>
         ))}
@@ -561,6 +609,7 @@ function TasksBoard({ deps, theme, compact, workspaceId, initialTab, openChat }:
                 <PanelButton t={t} icon="Layers" label={activeView ? activeView.name : "All tasks"} open={panel === "views"} onPress={() => togglePanel("views")} />
                 <PanelButton t={t} icon="ListFilter" label="Filter" count={filters} open={panel === "filter"} onPress={() => togglePanel("filter")} />
                 <PanelButton t={t} icon="SlidersHorizontal" label="Display" open={panel === "display"} onPress={() => togglePanel("display")} />
+                {workspaceId ? <PanelButton t={t} icon="FolderInput" label="Attach tasks" open={panel === "attach"} onPress={() => togglePanel("attach")} /> : null}
               </>
             ) : null}
             <IconButton t={t} icon="Settings2" label="Customise board" onPress={() => setCustomising(true)} />
@@ -570,12 +619,13 @@ function TasksBoard({ deps, theme, compact, workspaceId, initialTab, openChat }:
         {tab === "board" && panel === "views" ? <ViewsPanel t={t} document={document} layout={layout} changed={changed} clearEdits={clearEdits} run={run} close={() => setPanel(null)} /> : null}
         {tab === "board" && panel === "filter" ? <FilterPanel t={t} layout={layout} setLayout={setLayout} document={document} /> : null}
         {tab === "board" && panel === "display" ? <DisplayPanel t={t} layout={layout} setLayout={setLayout} /> : null}
+        {tab === "board" && panel === "attach" && workspaceId ? <AttachPanel t={t} document={document} workspaceId={workspaceId} workspaces={deps.workspaces} run={run} /> : null}
         {tab === "board" && panel !== "filter" ? <ActiveFilters t={t} layout={layout} setLayout={setLayout} document={document} /> : null}
       </View>
       {tab === "board" ? (
         <ScrollView horizontal contentContainerStyle={{ paddingHorizontal: pad, paddingBottom: pad, gap: 12, alignItems: "flex-start" }}>
           {columns.map((entry) => (
-            <ColumnView key={entry.column.id} t={t} entry={entry} document={document} now={now} layout={effective} open={setEditing} run={run} workspaceId={workspaceId} />
+            <ColumnView key={entry.column.id} t={t} entry={entry} document={document} now={now} layout={effective} open={setEditing} run={run} workspaceId={workspaceId} workspaceStore={deps.workspaces} />
           ))}
         </ScrollView>
       ) : (

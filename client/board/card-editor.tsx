@@ -11,6 +11,7 @@ import { ReminderPicker } from "../reminder-picker";
 import { tasksOf } from "../task-store";
 import { Button, Field, IconButton, PropertyRow, Segmented, Select, Tag, type Tokens, useTokens } from "../ui/kit";
 import type { BoardDeps } from "./deps";
+import { WorkspacePicker } from "./workspace-picker";
 import { PRIORITY, priorityColor } from "./styles";
 
 export type EditorTarget = { kind: "existing"; taskId: string } | { kind: "new"; column: string; workspaceId: string | null };
@@ -23,9 +24,10 @@ interface Draft {
   labels: string[];
   dueText: string;
   url: string;
+  workspaceId: string | null;
 }
 
-function draftOf(task: Task | null, column: string): Draft {
+function draftOf(task: Task | null, column: string, workspaceId: string | null): Draft {
   return {
     title: task?.title ?? "",
     description: task?.description ?? "",
@@ -34,6 +36,7 @@ function draftOf(task: Task | null, column: string): Draft {
     labels: task?.labels ?? [],
     dueText: task?.due ?? "",
     url: task?.links.url ?? "",
+    workspaceId: task ? task.links.workspaceId ?? null : workspaceId,
   };
 }
 
@@ -47,7 +50,7 @@ export function CardEditor({ deps, target, theme, compact, onClose }: { deps: Bo
   const task = target.kind === "existing" ? document.tasks.find((item) => item.id === target.taskId) ?? null : null;
   // What the card held when the editor opened. Save sends only the fields changed since, so edits
   // made meanwhile elsewhere (a rule moving the card, another app) are kept.
-  const [original] = useState<Draft>(() => draftOf(task, target.kind === "new" ? target.column : ""));
+  const [original] = useState<Draft>(() => draftOf(task, target.kind === "new" ? target.column : "", target.kind === "new" ? target.workspaceId : null));
   const [draft, setDraft] = useState<Draft>(original);
   const [newItem, setNewItem] = useState("");
   const [newLabel, setNewLabel] = useState("");
@@ -83,22 +86,21 @@ export function CardEditor({ deps, target, theme, compact, onClose }: { deps: Bo
     if (target.kind === "existing" && !task) return setError("This task was deleted in another app; nothing was saved");
     const url = draft.url.trim();
     if (!task) {
-      const links = { ...(target.kind === "new" && target.workspaceId ? { workspaceId: target.workspaceId } : {}), ...(url ? { url } : {}) };
+      const links = { ...(draft.workspaceId ? { workspaceId: draft.workspaceId } : {}), ...(url ? { url } : {}) };
       if (await run({ kind: "addTask", task: { id: newTaskId(), column: draft.column, title: draft.title.trim(), description: draft.description, priority: draft.priority, labels, due, links } })) onClose();
       return;
     }
-    const patch: Partial<Pick<Task, "title" | "description" | "priority" | "labels" | "due" | "links">> = {};
+    const patch: Partial<Pick<Task, "title" | "description" | "priority" | "labels" | "due">> = {};
     if (draft.title !== original.title) patch.title = draft.title.trim();
     if (draft.description !== original.description) patch.description = draft.description;
     if (draft.priority !== original.priority) patch.priority = draft.priority;
     if (labels.join() !== original.labels.join()) patch.labels = labels;
     if (draft.dueText !== original.dueText) patch.due = due;
-    if (draft.url !== original.url) {
-      const { url: _old, ...rest } = task.links;
-      patch.links = url ? { ...rest, url } : rest;
-    }
     const operations: TaskOperation[] = [];
     if (Object.keys(patch).length) operations.push({ kind: "updateTask", id: task.id, patch });
+    // Links change one at a time, so a link changed elsewhere while this was open is kept.
+    if (draft.url !== original.url) operations.push({ kind: "setLink", id: task.id, link: "url", value: url || null });
+    if (draft.workspaceId !== original.workspaceId) operations.push({ kind: "setLink", id: task.id, link: "workspaceId", value: draft.workspaceId });
     if (draft.column !== original.column) operations.push({ kind: "moveTask", id: task.id, column: draft.column });
     if (operations.length === 0 || (await run(...operations))) onClose();
   }
@@ -197,6 +199,9 @@ export function CardEditor({ deps, target, theme, compact, onClose }: { deps: Bo
               )}
             </PropertyRow>
           ) : null}
+          <PropertyRow t={t} icon="FolderGit2" label="Workspace">
+            <WorkspacePicker t={t} workspaces={deps.workspaces} value={draft.workspaceId} onChange={(workspaceId) => set({ workspaceId })} />
+          </PropertyRow>
           <PropertyRow t={t} icon="Link" label="Link">
             <Field t={t} plain value={draft.url} onChangeText={(url) => set({ url })} placeholder="https://…" accessibilityLabel="Web address" />
           </PropertyRow>

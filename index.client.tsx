@@ -12,6 +12,7 @@ import { type ActionDeps, EDITOR_SCREEN_ID, JSON_SCREEN_ID } from "./client/run-
 import { createSections } from "./client/sections";
 import { chimeWav } from "./client/chime";
 import { type Chats, reduceChats } from "./client/chats";
+import { reduceWorkspaceInfo, type WorkspaceList } from "./client/workspaces";
 import { type AlertEntry, remindersOf, startReminderAlerts } from "./client/reminder-alerts";
 import { legacyReminders } from "./client/reminders";
 import { createTaskStore, createTaskWriter, tasksOf } from "./client/task-store";
@@ -35,6 +36,11 @@ export default function contribute(client: PluginClientContext) {
   const problems = createValueStore<Problem[]>([]);
   const taskStore = createTaskStore();
   const chats = createValueStore<Chats>(new Map());
+  const workspaceList = createValueStore<WorkspaceList>(new Map());
+  const changeWorkspaceList = (change: Parameters<typeof reduceWorkspaceInfo>[1]) => {
+    const next = reduceWorkspaceInfo(workspaceList.get(), change);
+    if (next !== workspaceList.get()) workspaceList.set(next);
+  };
   const profileRpc = settingsRpc(profileSettings.id);
   const taskRpc = settingsRpc(taskSettings.id);
 
@@ -67,6 +73,7 @@ export default function contribute(client: PluginClientContext) {
     tasks: taskStore,
     apply: applyTasks,
     chats,
+    workspaces: workspaceList,
     announcements,
     reminderSettings: () => profileOf(store.get()).reminders,
   };
@@ -227,9 +234,11 @@ export default function contribute(client: PluginClientContext) {
       profile.reopen();
       taskStream.reopen();
       openKeeper();
+      changeWorkspaceList({ snapshot: snapshot.entries });
       setDirectory({ ...directory, workspaces: reduceWorkspaces(directory.workspaces, { snapshot: snapshot.entries }) });
     },
     update: (message) => {
+      changeWorkspaceList({ message });
       const workspaces = reduceWorkspaces(directory.workspaces, { message });
       if (workspaces !== directory.workspaces) setDirectory({ ...directory, workspaces });
     },

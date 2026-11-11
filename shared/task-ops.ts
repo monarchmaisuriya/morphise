@@ -24,6 +24,8 @@ export type TaskOperation =
   | { kind: "addTask"; task: NewTask; labelNames?: string[] }
   | { kind: "updateTask"; id: string; patch: TaskPatch }
   | { kind: "moveTask"; id: string; column: string; position?: number }
+  // One link at a time, so a workspace change and a web address edited elsewhere both survive.
+  | { kind: "setLink"; id: string; link: "workspaceId" | "url"; value: string | null }
   | { kind: "setReminder"; id: string; reminder: Reminder | null }
   | { kind: "remindAgain"; id: string; minutes: number }
   | { kind: "addChecklistItem"; id: string; item: Pick<ChecklistItem, "id" | "text"> }
@@ -198,6 +200,14 @@ function mutate(document: TaskDocument, operation: TaskOperation, now: Date): vo
     case "updateTask": {
       const task = findTask(document, operation.id);
       Object.assign(task, copy(operation.patch));
+      touch(task, now);
+      return;
+    }
+    case "setLink": {
+      const task = findTask(document, operation.id);
+      if ((task.links[operation.link] ?? null) === operation.value) return;
+      if (operation.value === null) delete task.links[operation.link];
+      else task.links[operation.link] = operation.value;
       touch(task, now);
       return;
     }

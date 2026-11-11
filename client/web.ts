@@ -17,7 +17,14 @@ interface NotificationConstructor {
   permission: "default" | "granted" | "denied";
   requestPermission(): Promise<"default" | "granted" | "denied">;
 }
-declare const globalThis: { Notification?: NotificationConstructor };
+declare const globalThis: { Notification?: NotificationConstructor; matchMedia?(query: string): { matches: boolean } };
+
+// Whether the main pointer cannot hover (a phone or tablet browser), so hover-only controls must
+// always show. Native apps answer from the platform instead.
+export function cannotHover(): boolean {
+  if (Platform.OS !== "web") return true;
+  return globalThis.matchMedia?.("(hover: none)").matches === true;
+}
 
 export function applyStyleSheet(css: string): () => void {
   if (Platform.OS !== "web" || css === "") return () => {};

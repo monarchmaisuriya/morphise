@@ -2,6 +2,20 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.5.0 - 2026-11-11
+
+- Tasks and workspaces:
+  - Link a task to a workspace from the card editor's new Workspace property (searchable, most recently used first), or attach existing tasks from a workspace's Tasks panel with "Attach tasks".
+  - Cards on the main board show their workspace.
+  - Changing a task's workspace or web address no longer overwrites a change made to the other in another app at the same time.
+- Morphise sidebar view, rebuilt to look and work like Paseo's own sidebar, keeping every Morphise feature:
+  - A "Workspaces" (or "Chats") header with search, status filter and Next as icon buttons.
+  - A Pinned section; project groups with letter tiles, with "+" opening Paseo's New workspace screen for that project.
+  - Quiet rows whose buttons (rename, archive after a second press, pin, remind me) appear on hover. Phones show them always.
+- Fixes the card editor crashing the Tasks screen in 0.5 development builds, by reading workspace names from Morphise's own list instead of Paseo hooks that do not work in dialogs.
+
+Rolling back to 0.4.0: `paseo plugin update morphise --ref v0.4.0`. Workspace links on tasks stay saved.
+
 ## 0.4.0 - 2026-11-11
 
 A redesign of every Morphise screen to sit naturally beside Paseo's own. No data changes: 0.3 boards, reminders and settings load as they are.

@@ -8,7 +8,8 @@ Settings are split into tabs: Layouts, Sidebar, Look, Buttons, Commands, Prompts
 - **Sidebar view:** a replacement for the workspace list. Pick "Morphise" in Paseo's Settings, Sidebar, Sidebar view (Morphise's settings remind you while Paseo still shows its own). It lists workspaces or chats.
   - Sort by status (needs permission, failed, running, finished unread, done; the order is yours), by last prompt or by name, with pinned workspaces first.
   - Group by project, status, label, or not at all, with counts in the headers. Groups you fold stay folded on that device.
-  - Search, a status filter menu (with "Needs me"), and a Next button that opens the next workspace waiting for you. Rows look like Paseo's own; pin and alarm buttons show on hover.
+  - It looks like Paseo's own sidebar: a "Workspaces" header with search, a status filter menu (with "Needs me") and a Next button that opens the next workspace waiting for you; a Pinned section; project groups with letter tiles and a "+" for a new workspace in that project.
+  - Rows show their buttons on hover: rename, archive (press twice), pin, and remind me on chats.
   - Shorten long groups with "Show more"; workspaces that need permission or failed always show.
   - Row details: branch, added and removed lines, time in status, project; a pin button.
 - **Theme:** a light or dark palette from eight colours, listed under Settings, Appearance.
@@ -22,7 +23,8 @@ Buttons, rows, commands and controls run one of a small set of actions: open a l
 
 - **Board:** open "Tasks" in the sidebar, the Tasks panel in a workspace (only that workspace's cards), or "Open tasks" in the Command Center.
   - Columns: name, colour, order, a work in progress limit, and which one is Done, under Customise.
-  - Cards: title, description, priority P1 to P4, labels, due date, reminder, checklist, link, and the chat they belong to ("Insert into chat" puts the card in its message box). The arrows on a card move it one column.
+  - Cards: title, description, priority P1 to P4, labels, due date, reminder, checklist, link, workspace, and the chat they belong to ("Insert into chat" puts the card in its message box). The arrows on a card move it one column.
+  - Workspaces: pick a card's workspace in its editor, or use "Attach tasks" in a workspace's Tasks panel to bring existing tasks in. The main board shows each card's workspace.
   - Quick add: `Fix login p1 @bug #review due:fri tomorrow 9am`. The preview under the box shows what each part became.
   - Filter, and Display (order, rows by priority, label or workspace, card size), can be saved as views, which also appear in the Command Center. Active filters show as removable tags, and a column says how many cards a filter hides.
   - Add a card straight into a column with its plus button: type a title, press Enter, keep going.
