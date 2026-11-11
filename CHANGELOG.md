@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.2.1 - 2026-11-11
+
+- Fixes installing and updating from GitHub: 0.2.0 failed to build ("Could not resolve type dependency") because two files imported types from Paseo packages that are not part of the plugin SDK. Use 0.2.1 instead of 0.2.0.
+- A test now fails if plugin code imports any Paseo package other than `@getpaseo/plugin`.
+
 ## 0.2.0 - 2026-11-11
 
 For Paseo 0.16.0-beta.1 and later (the 0.17 upper limit is removed).

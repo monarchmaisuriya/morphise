@@ -1,9 +1,11 @@
-import type { JsonValue } from "@getpaseo/protocol/agent-types";
 import { isDue, readReminder, readReminderRow, type Reminder, REMINDER_ROW_KEY, reminderRowId, rowIsWritten } from "../shared/reminders";
 
 // Writes one row into a chat when its reminder comes due. The daemon gets a Paseo connection
 // only inside handlers, so every app holds the `reminders.keeper` subscription open: while one
 // is open, its connection writes the rows; when none is, due rows wait for the next app.
+
+// Paseo's JSON value type is not part of the plugin SDK, so it is declared here.
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 interface AgentEntry {
   id: string;

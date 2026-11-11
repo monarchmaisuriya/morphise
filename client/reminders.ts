@@ -1,4 +1,4 @@
-import type { PaseoAgentHandle } from "@getpaseo/client";
+import type { PluginPaseoApi } from "@getpaseo/plugin/client";
 import { createReminder, readReminder, REMINDER_KEY, type Reminder } from "../shared/reminders";
 
 // Which chats have a reminder, kept from the SDK's agent list subscription (where plugin
@@ -63,7 +63,7 @@ export function reduceReminders(current: Reminders, change: Change): Reminders {
   return current;
 }
 
-type MetadataWriter = Pick<PaseoAgentHandle, "setMetadata">;
+type MetadataWriter = Pick<ReturnType<PluginPaseoApi["agents"]["ref"]>, "setMetadata">;
 
 export function setReminder(chat: MetadataWriter, minutes: number, now = new Date()) {
   return chat.setMetadata({ [REMINDER_KEY]: createReminder(minutes, now) });
