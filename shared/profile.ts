@@ -208,7 +208,7 @@ const viewSchema = z
       .strictObject({
         show: z.enum(["unfinished", "always"]).optional(),
         doneSeconds: z.int().min(0).max(60).optional(),
-        position: z.enum(["bottom", "top"]).optional(),
+        position: z.enum(["bottom", "top", "chat"]).optional(),
         scope: z.enum(["open", "workspace"]).optional(),
         startFolded: z.boolean().optional(),
         hideCompleted: z.boolean().optional(),

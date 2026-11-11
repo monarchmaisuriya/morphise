@@ -15,7 +15,7 @@ import { Button, Field, Icon, IconButton, Segmented, type Tokens, useTokens } fr
 import { usePulse } from "./ui/pulse";
 import type { WorkspaceList } from "./workspaces";
 
-// The Workbench's "Waiting on you" and "Bookmarks" views: every chat and sub-agent waiting on the user,
+// The Workbench's "Waiting" and "Bookmarks" views: every chat and sub-agent waiting on the user,
 // across workspaces, from Paseo's own attention state. Each one can be answered where it is listed:
 // a permission allowed or denied, a finished or failed chat read and replied to, or a finished one
 // cleared from the list.

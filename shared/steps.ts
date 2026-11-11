@@ -35,6 +35,24 @@ export function latestSteps(entries: readonly unknown[]): Step[] | null {
   return null;
 }
 
+// The latest plan in a page of timeline entries, with when it was posted (the entry's timestamp in
+// milliseconds, or null when it has none); null when the page has no plan.
+export function latestPlan(entries: readonly unknown[]): { steps: Step[]; at: number | null } | null {
+  for (let index = entries.length - 1; index >= 0; index--) {
+    const entry = record(entries[index]);
+    const steps = readSteps(entry?.item);
+    if (steps) return { steps, at: timeOf(entry?.timestamp) };
+  }
+  return null;
+}
+
+// Milliseconds from an ISO timestamp; null when it is missing or not a time.
+export function timeOf(value: unknown): number | null {
+  if (typeof value !== "string") return null;
+  const at = Date.parse(value);
+  return Number.isNaN(at) ? null : at;
+}
+
 export function stepCounts(steps: readonly Step[]): { done: number; total: number } {
   return { done: steps.filter((step) => step.status === "completed").length, total: steps.length };
 }
@@ -51,12 +69,13 @@ export function cardMode(steps: readonly Step[] | null, finishedRecently: boolea
 // ---------- Options ----------
 
 export type StepsShow = "unfinished" | "always";
+export type StepsPosition = "bottom" | "top" | "chat";
 
 // The card's options as saved (every key optional, so older versions still read the profile).
 export interface StepsSettings {
   show?: StepsShow;
   doneSeconds?: number;
-  position?: "bottom" | "top";
+  position?: StepsPosition;
   scope?: "open" | "workspace";
   startFolded?: boolean;
   hideCompleted?: boolean;
@@ -68,7 +87,8 @@ export interface StepsOptions {
   show: StepsShow;
   // How long "All done" stays before the card hides itself (when show is "unfinished").
   doneSeconds: number;
-  position: "bottom" | "top";
+  // In the sidebar, or in the chat: each plan update the agent posts drawn as the card.
+  position: StepsPosition;
   // The open chat's plan, or every chat in the open workspace that has an unfinished plan.
   scope: "open" | "workspace";
   startFolded: boolean;
@@ -84,7 +104,7 @@ export function stepsOptions(saved: StepsSettings | undefined): StepsOptions {
   return {
     show: saved?.show ?? "unfinished",
     doneSeconds: saved?.doneSeconds ?? DEFAULT_DONE_SECONDS,
-    position: saved?.position ?? "bottom",
+    position: saved?.position ?? "chat",
     scope: saved?.scope ?? "open",
     startFolded: saved?.startFolded ?? false,
     hideCompleted: saved?.hideCompleted ?? false,

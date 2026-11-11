@@ -23,6 +23,8 @@ import { createChecksPanel } from "./checks-panel";
 import { createDispatchScreen, DISPATCH_SCREEN_ID } from "./dispatch";
 import { createWorkbenchScreen, createWorkbenchSidebarItem, WORKBENCH_SCREEN_ID, LEGACY_SCREENS } from "./workbench";
 import { createSidebarView } from "./sidebar-view";
+import { CHAT_STEPS_KIND, chatStepsSchema, createChatStepsRow, toChatSteps } from "./steps-card";
+import { stepsOptions } from "../shared/steps";
 import { applyStyleSheet } from "./web";
 
 
@@ -124,6 +126,26 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
             Component: createSidebarView(sidebar.view, tasks),
           }),
         );
+      },
+    },
+    {
+      // With the steps card "In the chat", each plan update an agent posts is drawn as the card.
+      name: "steps.chat",
+      key: ({ profile }) => json([profile.sidebar.view.stepsCard, profile.sidebar.view.steps]),
+      register({ profile }, track) {
+        const options = stepsOptions(profile.sidebar.view.steps);
+        if (profile.sidebar.view.stepsCard === false || options.position !== "chat") return;
+        track(
+          client.addTimelineTransformer({
+            id: "steps-card",
+            query: { itemType: "todo" },
+            transform({ item }) {
+              const data = toChatSteps(item);
+              return data ? { items: [{ type: "plugin", kind: CHAT_STEPS_KIND, version: 1, data }] } : undefined;
+            },
+          }),
+        );
+        track(client.addTimelineRenderer({ kind: CHAT_STEPS_KIND, version: 1, schema: chatStepsSchema, Component: createChatStepsRow(client.paseo, () => options) }));
       },
     },
     {

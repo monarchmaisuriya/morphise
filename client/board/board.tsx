@@ -603,7 +603,7 @@ export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, open
             }}
             options={[
               { value: "board", label: "Board", icon: "Columns3" },
-              { value: "today", label: todayCount ? `Today · ${todayCount}` : "Today", icon: "Sun", tone: todayCount ? t.c.statusWarning : undefined },
+              { value: "today", label: todayCount ? `Today · ${todayCount}` : "Today", icon: "CalendarClock", tone: todayCount ? t.c.statusWarning : undefined },
               { value: "archived", label: archived.length ? `Archived · ${archived.length}` : "Archived", icon: "Archive" },
             ]}
           />}
@@ -647,7 +647,7 @@ export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, open
                 </View>
               ))
             ) : (
-              <EmptyState t={t} icon="Sun" title="Nothing due today" body={"Set a reminder with /remind 45m in a chat, the alarm button in a workspace's header, or on any card. Due and overdue cards show here too."} />
+              <EmptyState t={t} icon="CalendarClock" title="Nothing due today" body={"Set a reminder with /remind 45m in a chat, the alarm button in a workspace's header, or on any card. Due and overdue cards show here too."} />
             )
           ) : archived.length ? (
             archived.map((task) => (

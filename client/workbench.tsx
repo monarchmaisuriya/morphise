@@ -3,6 +3,8 @@ import { useSettings } from "@getpaseo/plugin/client";
 import { SidebarRow, useToast } from "@getpaseo/plugin/client/ui";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
+import { defineSettings } from "@getpaseo/plugin";
+import { z } from "zod";
 import { dueCount, todayGroups } from "../shared/board";
 import { inboxSettings } from "../shared/inbox";
 import { TasksBoard } from "./board/board";
@@ -27,6 +29,11 @@ export type WorkbenchView = "waiting" | "today" | "board" | "bookmarks" | "archi
 const VIEWS: readonly WorkbenchView[] = ["waiting", "today", "board", "bookmarks", "archived"];
 // Below this width the views sit in a row of tabs instead of a list.
 const RAIL_FROM = 720;
+const RAIL_WIDTH = 176;
+const RAIL_FOLDED = 52;
+
+// The rail folded to icons, on this device.
+const workbenchSettings = defineSettings({ id: "workbench", scope: "device", version: 1, schema: z.object({ railFolded: z.boolean().default(false) }) });
 
 function viewParam(params: PluginScreenProps["params"]): WorkbenchView | null {
   const asked = typeof params.view === "string" ? params.view : typeof params.tab === "string" ? params.tab : null;
@@ -54,8 +61,8 @@ function useWorkbenchCounts(deps: SurfaceDeps) {
 type Counts = ReturnType<typeof useWorkbenchCounts>;
 
 const ENTRIES: readonly { view: WorkbenchView; label: string; icon: string; section: "you" | "tasks" | "saved" }[] = [
-  { view: "waiting", label: "Waiting on you", icon: "Inbox", section: "you" },
-  { view: "today", label: "Today", icon: "Sun", section: "tasks" },
+  { view: "waiting", label: "Waiting", icon: "Inbox", section: "you" },
+  { view: "today", label: "Today", icon: "CalendarClock", section: "tasks" },
   { view: "board", label: "Board", icon: "Columns3", section: "tasks" },
   { view: "archived", label: "Archived", icon: "Archive", section: "tasks" },
   { view: "bookmarks", label: "Bookmarks", icon: "Bookmark", section: "saved" },
@@ -73,7 +80,7 @@ function countTone(view: WorkbenchView, counts: Counts, t: Tokens): string {
   return t.c.foregroundMuted;
 }
 
-function RailRow({ t, view, label, icon, count, tone, selected, onPress }: { t: Tokens; view: WorkbenchView; label: string; icon: string; count: number; tone: string; selected: boolean; onPress(): void }) {
+function RailRow({ t, view, label, icon, count, tone, selected, folded, onPress }: { t: Tokens; view: WorkbenchView; label: string; icon: string; count: number; tone: string; selected: boolean; folded: boolean; onPress(): void }) {
   return (
     <Pressable
       accessibilityRole="tab"
@@ -86,16 +93,25 @@ function RailRow({ t, view, label, icon, count, tone, selected, onPress }: { t: 
         gap: 8,
         height: t.row,
         paddingHorizontal: 10,
+        justifyContent: folded ? "center" : "flex-start",
         borderRadius: t.radius.row,
         backgroundColor: selected ? t.c.surface2 : pressed || hovered ? t.c.surface1 : "transparent",
       })}
       testID={`workbench-view-${view}`}
     >
-      <Icon name={icon} size={15} color={selected ? t.c.foreground : t.c.foregroundMuted} />
-      <Text style={{ flex: 1, fontSize: 14, color: t.c.foreground, fontWeight: selected ? "600" : "400" }} numberOfLines={1}>
-        {label}
-      </Text>
-      {count ? <Text style={{ fontSize: 12, color: tone }}>{count}</Text> : null}
+      <View>
+        <Icon name={icon} size={15} color={selected ? t.c.foreground : t.c.foregroundMuted} />
+        {/* Folded, a count becomes a dot on the icon, in the count's colour. */}
+        {folded && count ? <View style={{ position: "absolute", top: -2, right: -3, width: 6, height: 6, borderRadius: 3, backgroundColor: tone === t.c.foregroundMuted ? t.c.foreground : tone }} /> : null}
+      </View>
+      {folded ? null : (
+        <>
+          <Text style={{ flex: 1, fontSize: 14, color: t.c.foreground, fontWeight: selected ? "600" : "400" }} numberOfLines={1}>
+            {label}
+          </Text>
+          {count ? <Text style={{ fontSize: 12, color: tone }}>{count}</Text> : null}
+        </>
+      )}
     </Pressable>
   );
 }
@@ -115,6 +131,18 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: WorkbenchView
     const view: WorkbenchView = picked ?? asked ?? fallback ?? (counts.waiting ? "waiting" : counts.today ? "today" : "board");
     const [width, setWidth] = useState(0);
     const rail = !layout.compact && width >= RAIL_FROM;
+    const railSettings = useSettings(workbenchSettings);
+    const savedFolded = railSettings.status === "ready" ? railSettings.values.railFolded : false;
+    // The fold the user chose here applies at once and is saved until the stored value matches,
+    // so a press before the settings load, or a save refused for an old revision, is not lost.
+    const [chosenFolded, setChosenFolded] = useState<boolean | null>(null);
+    const folded = chosenFolded ?? savedFolded;
+    const toggleFolded = () => setChosenFolded(!folded);
+    useEffect(() => {
+      if (chosenFolded === null || railSettings.status !== "ready" || railSettings.saving || railSettings.values.railFolded === chosenFolded) return;
+      void railSettings.save({ ...railSettings.values, railFolded: chosenFolded }, railSettings.revision);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [chosenFolded, railSettings.status, railSettings.saving, railSettings.status === "ready" ? railSettings.revision : null]);
     const openChat = navigation ? (agentId: string) => navigation.openAgent({ agentId }) : null;
     const workspaces = useValue(deps.workspaces);
 
@@ -130,15 +158,25 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: WorkbenchView
     return (
       <View style={{ flex: 1, flexDirection: rail ? "row" : "column", backgroundColor: theme.colors.surface0 }} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
         {rail ? (
-          <View accessibilityRole="tablist" style={{ width: 210, padding: 8, gap: 2, borderRightWidth: 1, borderRightColor: t.c.border }}>
+          <View accessibilityRole="tablist" style={{ width: folded ? RAIL_FOLDED : RAIL_WIDTH, padding: folded ? 6 : 8, gap: 2, borderRightWidth: 1, borderRightColor: t.c.border }}>
             {(["you", "tasks", "saved"] as const).map((section) => (
               <View key={section} style={{ gap: 2, paddingBottom: 8 }}>
-                <Text style={[t.text.label, { paddingHorizontal: 10, paddingTop: 6, paddingBottom: 4 }]}>{SECTION_TITLES[section]}</Text>
+                {folded ? <View style={{ height: 1, marginVertical: 6, marginHorizontal: 6, backgroundColor: section === "you" ? "transparent" : t.c.border }} /> : <Text style={[t.text.label, { paddingHorizontal: 10, paddingTop: 6, paddingBottom: 4 }]}>{SECTION_TITLES[section]}</Text>}
                 {ENTRIES.filter((entry) => entry.section === section).map((entry) => (
-                  <RailRow key={entry.view} t={t} view={entry.view} label={entry.label} icon={entry.icon} count={countOf(entry.view, counts)} tone={countTone(entry.view, counts, t)} selected={view === entry.view} onPress={() => setView(entry.view)} />
+                  <RailRow key={entry.view} t={t} view={entry.view} label={entry.label} icon={entry.icon} count={countOf(entry.view, counts)} tone={countTone(entry.view, counts, t)} selected={view === entry.view} folded={folded} onPress={() => setView(entry.view)} />
                 ))}
               </View>
             ))}
+            <View style={{ flex: 1 }} />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={folded ? "Show the list of views" : "Fold the list of views to icons"}
+              onPress={toggleFolded}
+              style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => ({ flexDirection: "row", alignItems: "center", justifyContent: folded ? "center" : "flex-start", gap: 8, height: t.control, paddingHorizontal: 10, borderRadius: t.radius.row, backgroundColor: pressed || hovered ? t.c.surface1 : "transparent" })}
+            >
+              <Icon name={folded ? "PanelLeftOpen" : "PanelLeftClose"} size={15} color={t.c.foregroundMuted} />
+              {folded ? null : <Text style={t.text.meta}>Fold</Text>}
+            </Pressable>
           </View>
         ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, borderBottomWidth: 1, borderBottomColor: t.c.border }} contentContainerStyle={{ padding: 8, gap: 4 }} accessibilityRole="tablist">

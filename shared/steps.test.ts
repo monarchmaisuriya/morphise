@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cardMode, latestSteps, listedSteps, readSteps, stepCounts, stepsOptions } from "./steps";
+import { cardMode, latestPlan, latestSteps, listedSteps, readSteps, stepCounts, stepsOptions, timeOf } from "./steps";
 
 const todo = (items: unknown[]) => ({ type: "todo", items });
 
@@ -55,7 +55,7 @@ describe("steps card options", () => {
   });
 
   it("fills unset options with the defaults", () => {
-    expect(stepsOptions(undefined)).toEqual({ show: "unfinished", doneSeconds: 8, position: "bottom", scope: "open", startFolded: false, hideCompleted: false, maxSteps: null, progress: true });
+    expect(stepsOptions(undefined)).toEqual({ show: "unfinished", doneSeconds: 8, position: "chat", scope: "open", startFolded: false, hideCompleted: false, maxSteps: null, progress: true });
     expect(stepsOptions({ doneSeconds: 0, position: "top" })).toMatchObject({ doneSeconds: 0, position: "top" });
   });
 
@@ -66,5 +66,23 @@ describe("steps card options", () => {
     expect(capped.rows.map((item) => item.text)).toEqual(["4", "5", "6"]);
     expect(capped.more).toBe(3);
     expect(listedSteps(plan, { hideCompleted: false, maxSteps: null }).more).toBe(0);
+  });
+});
+
+describe("latestPlan", () => {
+  // Shaped like Paseo's fetched timeline entries: item, timestamp, seqStart, seqEnd.
+  const entry = (item: unknown, timestamp: string) => ({ item, timestamp, seqStart: 1, seqEnd: 1 });
+  const todo = (text: string) => ({ type: "todo", items: [{ text, completed: false }] });
+
+  it("finds the newest plan and when it was posted", () => {
+    const plan = latestPlan([entry(todo("old"), "2026-11-12T10:00:00.000Z"), entry({ type: "assistant_message", text: "hi" }, "2026-11-12T10:01:00.000Z"), entry(todo("new"), "2026-11-12T10:02:00.000Z")]);
+    expect(plan?.steps[0].text).toBe("new");
+    expect(plan?.at).toBe(Date.parse("2026-11-12T10:02:00.000Z"));
+  });
+
+  it("is null without a plan, and has no time for a bad timestamp", () => {
+    expect(latestPlan([entry({ type: "assistant_message", text: "hi" }, "2026-11-12T10:00:00.000Z")])).toBeNull();
+    expect(latestPlan([{ item: todo("x"), timestamp: "soon" }])?.at).toBeNull();
+    expect(timeOf(undefined)).toBeNull();
   });
 });

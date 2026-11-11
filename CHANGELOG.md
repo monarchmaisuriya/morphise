@@ -2,6 +2,17 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.12.0 - 2026-11-12
+
+- **Steps card in the chat** (now the default): each plan update an agent posts is drawn as Morphise's card, right in the chat. The newest one is live (steps, progress, "All done"); older updates shrink to one line, so the chat is not filled with old cards. The card's other options still apply. Choose "Bottom of the sidebar" or "Top of the sidebar" under Settings, Sidebar, Steps card, Where, to keep it in the sidebar instead.
+- **Workbench rail:** slightly narrower, and it folds to icons (the button at its foot); a view with something waiting shows a dot. Folding is remembered on each device.
+- **"Waiting"** replaces "Waiting on you".
+- **Today** has a calendar-and-clock icon instead of the sun.
+- **Project tiles** are always a colour, from 16 hues instead of 8 (the slate gray is gone). Most projects get a new colour once.
+- One live plan feed per chat is shared by every card that shows it, so a chat's history is read once.
+
+Rolling back to 0.11.1: `paseo plugin update morphise --ref v0.11.1`. The steps card goes back to the sidebar. If "In the chat" was chosen explicitly, 0.11.1 reports the profile as invalid and keeps the data; choose a sidebar position first.
+
 ## 0.11.1 - 2026-11-12
 
 - **Done is gray again**, as it was before 0.8 (the theme's muted colour, drawn faint in the sidebar). 0.11.0 brought back 0.9's faint green instead. The filter menu and the settings Status order list use the same gray.

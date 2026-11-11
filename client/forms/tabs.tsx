@@ -374,7 +374,7 @@ function viewFields(form: Form): { [Key in keyof ViewConfig]-?: ReactNode } {
               onChange={(value) => setSteps("doneSeconds", Number(value), DEFAULT_DONE_SECONDS)}
             />
           ) : null}
-          <SelectField
+          {steps.position !== "chat" ? <SelectField
             label="Whose plan"
             value={steps.scope}
             options={[
@@ -382,15 +382,16 @@ function viewFields(form: Form): { [Key in keyof ViewConfig]-?: ReactNode } {
               { value: "workspace", label: "Each chat in the open workspace (up to 3)" },
             ]}
             onChange={(value) => setSteps("scope", value, "open")}
-          />
+          /> : null}
           <SelectField
             label="Where"
             value={steps.position}
             options={[
+              { value: "chat", label: "In the chat, where the agent posts its plan" },
               { value: "bottom", label: "Bottom of the sidebar" },
               { value: "top", label: "Top of the sidebar" },
             ]}
-            onChange={(value) => setSteps("position", value, "bottom")}
+            onChange={(value) => setSteps("position", value, "chat")}
           />
           <SelectField
             label="Steps listed"

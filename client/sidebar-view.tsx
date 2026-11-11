@@ -64,7 +64,25 @@ const DEFAULT_VIEW_STATE: ViewState = { collapsed: [], statusFilter: [], project
 // "compact" on desktop too, so the input decides this (no hover), not the layout.
 const TOUCH = cannotHover();
 // Letter tiles for projects, as Paseo's own sidebar draws them; picked by the project's name.
-const TILE_COLORS = ["#b05c80", "#c08a3e", "#4f9a8f", "#5b7fc7", "#8a6cc7", "#c76b5b", "#6b9a4f", "#7f8496"];
+// Project tiles take a hue, never gray, white or black, so every project reads as its own.
+const TILE_COLORS = [
+  "#b05c80", // rose
+  "#c08a3e", // amber
+  "#4f9a8f", // teal
+  "#5b7fc7", // blue
+  "#8a6cc7", // violet
+  "#c76b5b", // coral
+  "#6b9a4f", // green
+  "#3a9cc4", // cyan
+  "#6a5fd1", // indigo
+  "#b54fb0", // magenta
+  "#c24d5e", // crimson
+  "#d07a2f", // orange
+  "#2e9a76", // emerald
+  "#8e4f8f", // plum
+  "#a5553a", // brick
+  "#b08d2a", // mustard
+];
 function tileColor(name: string): string {
   let hash = 0;
   for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
@@ -1513,7 +1531,8 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     ];
 
     const steps = stepsOptions(config.steps);
-    const stepsCards = config.stepsCard !== false ? <StepsCards open={props.active.agent?.id ?? null} chats={workspaceChats} t={t} options={steps} /> : null;
+    // In the chat, the cards are drawn there instead (see the steps.chat section).
+    const stepsCards = config.stepsCard !== false && steps.position !== "chat" ? <StepsCards open={props.active.agent ?? null} chats={workspaceChats} paseo={paseo} t={t} options={steps} /> : null;
     return (
       <View ref={viewRef} style={styles.scroll}>
         <PopoverHost bounds={viewRef}>
