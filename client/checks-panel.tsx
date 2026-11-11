@@ -1,10 +1,9 @@
 import { openExternalUrl, type PluginClientContext, type PluginWorkspacePanelProps, useAgents } from "@getpaseo/plugin/client";
-import { Icon } from "@getpaseo/plugin/client/ui";
 import { useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { fixRequest, needsWork } from "./checks";
 import { type ValueStore, useValue } from "./profile-store";
-import { Button, type Tokens, useTokens } from "./ui/kit";
+import { Button, Icon, type Tokens, useTokens } from "./ui/kit";
 import { PURPLE } from "./ui/hues";
 import type { CheckRun, PullRequestInfo, WorkspaceList } from "./workspaces";
 

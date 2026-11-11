@@ -1,15 +1,6 @@
 import { type PluginSurfaceProps, useSettings } from "@getpaseo/plugin/client";
-import {
-  Icon,
-  Loading,
-  SettingsAction,
-  SettingsCard,
-  SettingsInput,
-  SettingsSection,
-  SettingsSelect,
-  SettingsSwitch,
-  useToast,
-} from "@getpaseo/plugin/client/ui";
+import { Loading, SettingsAction, SettingsCard, SettingsInput, SettingsSection, SettingsSelect, SettingsSwitch, useToast } from "@getpaseo/plugin/client/ui";
+import { Icon } from "../ui/kit";
 import { type ReactNode, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { Action } from "../../shared/actions";

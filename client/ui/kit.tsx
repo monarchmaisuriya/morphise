@@ -1,5 +1,5 @@
 import type { PluginTheme } from "@getpaseo/plugin";
-import { Icon, TextInput } from "@getpaseo/plugin/client/ui";
+import { type IconProps, Icon as PaseoIcon, TextInput } from "@getpaseo/plugin/client/ui";
 import { createContext, Fragment, type ReactNode, type RefObject, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createValueStore, useValue, type ValueStore } from "../profile-store";
 import { onPressOutside } from "../web";
@@ -9,6 +9,18 @@ import { Modal as Layer, Platform, Pressable, ScrollView, type StyleProp, Text, 
 // 36px rows, 8px radius, 14px row text, 12px muted section labels), so plugin screens sit next to
 // Paseo's without looking foreign. Colours come only from the theme. Controls are 32px tall on
 // desktop and 40px on compact (touch) layouts.
+
+// Paseo's icon is an SVG that a crowded row squeezes (an 11px branch icon drew 6px wide next to a
+// long branch name). Every Morphise icon goes through this box, which keeps its size. Plugin code
+// imports Icon from here, never from Paseo directly (checked in tests).
+export function Icon(props: IconProps) {
+  const size = props.size ?? 16;
+  return (
+    <View style={{ width: size, height: size, flexShrink: 0, alignItems: "center", justifyContent: "center" }}>
+      <PaseoIcon {...props} />
+    </View>
+  );
+}
 
 export function tokens(theme: PluginTheme, compact: boolean) {
   const c = theme.colors;
@@ -158,6 +170,7 @@ export function Field({
   accessibilityLabel,
   maxLength,
   plain,
+  onCommand,
 }: {
   t: Tokens;
   value: string;
@@ -180,6 +193,8 @@ export function Field({
   maxLength?: number;
   // For addresses, times and search terms: no automatic capitals or corrections on phones.
   plain?: boolean;
+  // Cmd+Enter (Ctrl+Enter off macOS) on a hardware keyboard, for "send" in multi-line fields.
+  onCommand?(): void;
 }) {
   const [focused, setFocused] = useState(false);
   const { c } = t;
@@ -209,6 +224,18 @@ export function Field({
             onBlur?.();
           }}
           onSubmitEditing={onSubmit}
+          onKeyPress={
+            onCommand
+              ? (event) => {
+                  // React Native Web passes the browser's modifier keys on the key event.
+                  const key = event.nativeEvent as { key: string; metaKey?: boolean; ctrlKey?: boolean };
+                  if (key.key === "Enter" && (key.metaKey || key.ctrlKey)) {
+                    event.preventDefault();
+                    onCommand();
+                  }
+                }
+              : undefined
+          }
           style={[
             { flex: 1, minWidth: 0, color: c.foreground, fontSize: t.compact ? 15 : 13, paddingVertical: multiline ? 8 : 0, minHeight: multiline ? (bare ? 44 : 72) : t.control - 2, textAlignVertical: multiline ? "top" : "center" },
             // The field's border already shows focus; on the web the input's own outline would draw a

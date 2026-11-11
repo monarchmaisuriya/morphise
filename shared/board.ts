@@ -1,6 +1,5 @@
-import { isDue, type Reminder } from "./reminders";
+import { isDue } from "./reminders";
 import type { Column, Task, TaskDocument, TaskFilter, TaskView } from "./tasks";
-import { formatDue } from "./time-text";
 import { todayDate } from "./when";
 
 // How the board lays out tasks: filtering, sorting, swimlanes, the Today list, and labels.
@@ -130,12 +129,5 @@ export function todayGroups(document: TaskDocument, now: Date): TodayGroup[] {
 export function dueCount(document: TaskDocument, now: Date): number {
   const today = todayDate(now);
   return openTasks(document).filter((task) => (task.reminder !== null && isDue(task.reminder, now)) || (task.due !== null && task.due < today)).length;
-}
-
-// The label on a chat's Remind me pill and header button.
-export function reminderLabel(reminder: Reminder | null, now: Date): string {
-  if (!reminder) return "Remind me";
-  if (isDue(reminder, now)) return "⏰ Due";
-  return `⏰ ${formatDue(reminder, now).replace(/^in /, "")}`;
 }
 

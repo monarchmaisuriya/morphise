@@ -26,4 +26,12 @@ describe("plugin imports", () => {
     );
     expect(offenders).toEqual([]);
   });
+
+  it("take icons from Morphise's kit, which keeps them from being squeezed in crowded rows", () => {
+    const offenders = sources(ROOT)
+      .filter((path) => relative(ROOT, path) !== join("client", "ui", "kit.tsx"))
+      .filter((path) => /import\s*\{[^}]*\bIcon\b[^}]*\}\s*from\s*"@getpaseo\/plugin\/client\/ui"/.test(readFileSync(path, "utf8")))
+      .map((path) => relative(ROOT, path));
+    expect(offenders).toEqual([]);
+  });
 });

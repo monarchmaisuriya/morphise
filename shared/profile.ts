@@ -203,6 +203,19 @@ const viewSchema = z
     autoArchive: z.strictObject({ days: z.int().min(1).max(90) }).optional(),
     // The open chat's steps card at the foot of the view (shown when unset).
     stepsCard: z.boolean().optional(),
+    // How the steps card shows (see shared/steps.ts stepsOptions for the defaults of unset keys).
+    steps: z
+      .strictObject({
+        show: z.enum(["unfinished", "always"]).optional(),
+        doneSeconds: z.int().min(0).max(60).optional(),
+        position: z.enum(["bottom", "top"]).optional(),
+        scope: z.enum(["open", "workspace"]).optional(),
+        startFolded: z.boolean().optional(),
+        hideCompleted: z.boolean().optional(),
+        maxSteps: z.int().min(3).max(50).optional(),
+        progress: z.boolean().optional(),
+      })
+      .optional(),
     subAgentRows: z.int().min(1).max(50).optional(),
   })
   .prefault({});

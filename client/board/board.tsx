@@ -1,6 +1,6 @@
 import type { PluginTheme } from "@getpaseo/plugin";
-import type { PluginScreenProps, PluginWorkspacePanelProps } from "@getpaseo/plugin/client";
-import { Icon, useToast } from "@getpaseo/plugin/client/ui";
+import type { PluginWorkspacePanelProps } from "@getpaseo/plugin/client";
+import { useToast } from "@getpaseo/plugin/client/ui";
 import { type ReactNode, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { type BoardColumn, boardColumns, todayGroups } from "../../shared/board";
@@ -13,7 +13,7 @@ import { todayDate } from "../../shared/when";
 import { useValue } from "../profile-store";
 import { useReminderClock } from "../reminder-clock";
 import { tasksOf } from "../task-store";
-import { Button, Field, IconButton, MenuItem, Segmented, Tag, type Tokens, useTokens } from "../ui/kit";
+import { Button, Field, Icon, IconButton, MenuItem, Segmented, Tag, type Tokens, useTokens } from "../ui/kit";
 import { CardEditor, type EditorTarget, newTaskId } from "./card-editor";
 import { CustomiseBoard } from "./customise";
 import type { BoardDeps } from "./deps";
@@ -551,9 +551,13 @@ interface BoardProps {
   workspaceId: string | null;
   initialTab: Tab;
   openChat: ((agentId: string) => void) | null;
+  // Inside the Workbench, whose own list of views picks Board, Today or Archived: no tabs here.
+  embedded?: boolean;
 }
 
-function TasksBoard({ deps, theme, compact, workspaceId, initialTab, openChat }: BoardProps) {
+export type BoardTab = Tab;
+
+export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, openChat, embedded = false }: BoardProps) {
   const { document, now, run, problem } = useBoardState(deps);
   const t = useTokens(theme, compact);
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -589,7 +593,7 @@ function TasksBoard({ deps, theme, compact, workspaceId, initialTab, openChat }:
       ) : null}
       <View style={{ paddingHorizontal: pad, paddingTop: pad, paddingBottom: 12, gap: 12 }}>
         <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-          <Segmented
+          {embedded ? <View /> : <Segmented
             t={t}
             label="Tasks view"
             value={tab}
@@ -602,7 +606,7 @@ function TasksBoard({ deps, theme, compact, workspaceId, initialTab, openChat }:
               { value: "today", label: todayCount ? `Today · ${todayCount}` : "Today", icon: "Sun", tone: todayCount ? t.c.statusWarning : undefined },
               { value: "archived", label: archived.length ? `Archived · ${archived.length}` : "Archived", icon: "Archive" },
             ]}
-          />
+          />}
           <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
             {tab === "board" ? (
               <>
@@ -643,7 +647,7 @@ function TasksBoard({ deps, theme, compact, workspaceId, initialTab, openChat }:
                 </View>
               ))
             ) : (
-              <EmptyState t={t} icon="Sun" title="Nothing due today" body={'Set a reminder with "Remind me" in a chat, /remind 45m, or on any card. Due and overdue cards show here too.'} />
+              <EmptyState t={t} icon="Sun" title="Nothing due today" body={"Set a reminder with /remind 45m in a chat, the alarm button in a workspace's header, or on any card. Due and overdue cards show here too."} />
             )
           ) : archived.length ? (
             archived.map((task) => (
@@ -665,13 +669,6 @@ function TasksBoard({ deps, theme, compact, workspaceId, initialTab, openChat }:
       {customising ? <CustomiseBoard deps={deps} theme={theme} compact={compact} onClose={() => setCustomising(false)} /> : null}
     </View>
   );
-}
-
-export function createTasksScreen(deps: BoardDeps) {
-  return function TasksScreen({ theme, layout, params, navigation }: PluginScreenProps) {
-    const tab: Tab = params.tab === "today" || params.tab === "archived" ? params.tab : "board";
-    return <TasksBoard key={tab} deps={deps} theme={theme} compact={layout.compact} workspaceId={null} initialTab={tab} openChat={navigation ? (agentId) => navigation.openAgent({ agentId }) : null} />;
-  };
 }
 
 export function createWorkspaceTasksPanel(deps: BoardDeps) {

@@ -11,20 +11,23 @@ Settings are split into tabs: Layouts, Sidebar, Look, Buttons, Commands, Prompts
   - Each group shows 5 workspaces by default, then "Show more"; change the number in settings or in the Display menu.
   - Filter by status, project, hide done, only changed, or only pinned, from the Filter menu; active filters show as tags.
   - It looks like Paseo's own sidebar: a "Workspaces" header with search, a status filter menu (with "Needs me") and a Next button that opens the next workspace waiting for you; a Pinned section; project groups with letter tiles and a "+" for a new workspace in that project.
-  - Two-line rows: the title, then a muted line with what needs you ("Waiting for your permission", "Failed"), "Working" and the latest chat, and the details you chose. Running work pulses. "One line" is an option.
+  - Two-line rows: the title, then a muted line with what needs you ("Waiting for your permission", "Failed"), "Working" and the latest chat, and the details you chose. Running work pulses, on the chat row itself when it is listed. "One line" is an option.
   - Everything Paseo's own rows offer that a plugin can reach: on hover Archive (press twice) and a ⋮ menu, also on right-click or long press, with Copy path, Copy branch name, Rename, Pin to top, Labels, Open pull request, open a service, Archive; a hover card with changes, host, branch, folder, pull request, checks, services and labels.
   - The Display menu follows Paseo's: Grouping, Sort, Title (title or branch name), Rows, Per group, Chats, and Show (Branch, Project, Host, Pull request, Checks, Services, Labels, Diff stats, Last activity), plus Show background per device.
   - Chats under a workspace: the latest 5 (changeable), then "Show more"; each chat's sub-agents under it, also the latest 5 (changeable or hidden); only the open chat or sub-agent is highlighted.
   - Shorten long groups with "Show more"; workspaces that need permission or failed always show.
-  - Colours say what each row needs: needs permission amber, failed red, running white (pulsing), finished but unread blue, done dark green; uncommitted branches amber, unpushed commits blue, merged pull requests purple.
+  - Colours say what each row needs: needs permission amber, failed red, running white (pulsing), finished but unread blue, done dim grey-green; uncommitted branches amber, unpushed commits blue, merged pull requests purple.
   - Mark a workspace done or unread yourself, set a reminder on it, add it to tasks, or select several for bulk actions (pin, mark done, label, archive).
   - Auto-archive (off by default) archives workspaces marked done some days ago, never a worktree with uncommitted, unpushed or unknown changes. Merged pull requests use Paseo's own "Archive merged PR workspaces" setting.
-- **Inbox:** every chat and sub-agent waiting on you (permission, failed, finished unread), answered where it is listed: allow or deny a permission after reading the request, read a failed or finished chat's error and last answer and reply to it, or clear a finished one. Filter, search and group by status or workspace. Plus your bookmarked answers (/bookmark).
-- **Steps card:** the open chat's plan at the foot of the sidebar, shown while it runs.
+- **Workbench** (one row in Paseo's sidebar header): everything that needs you in one screen, with a list of views on the left.
+  - **Waiting on you:** every chat and sub-agent waiting on you (permission, failed, finished unread), answered where it is listed: allow or deny a permission after reading the request, read a failed or finished chat's error and last answer and reply to it, or clear a finished one. Filter, search and group by status or workspace.
+  - **Today, Board, Archived:** your tasks and reminders.
+  - **Bookmarks:** answers you kept with /bookmark.
+- **Steps card:** a chat's plan as a card in the sidebar that shows while it works and hides when it is done. Choose when it shows, how long "All done" stays, top or bottom, the open chat or every chat in the workspace, how many steps, hiding finished steps, starting folded and the progress bar, under Settings, Sidebar, Steps card.
 - **Checks panel:** a workspace tab with the pull request's checks, review and conflicts, and "Ask the agent to fix".
-- **Dispatch:** start several agents at once. Pick a project and an agent your chats use, then write one prompt per new workspace.
+- **Dispatch** (the rocket in the Workspaces bar, or the Command Center): start several agents at once, each in a new workspace. Pick the project, any model your providers offer, the mode, and worktree or project folder (remembered on each device), write or paste the prompts (a pasted list splits into one prompt per item), and start them all with ⌘↵. Each prompt then shows Starting, Started (with Open) or Failed (with Retry).
 - **Theme:** a light or dark palette from eight colours, listed under Settings, Appearance.
-- **Buttons:** sidebar header and footer rows, workspace header buttons or menus, pills above the message box, and message box controls (a button, an on/off switch saved on the chat, or a model, mode or thinking picker).
+- **Buttons:** sidebar header and footer rows, workspace header buttons or menus, your own pills above the message box, and message box controls (a button, an on/off switch saved on the chat, or a model, mode or thinking picker).
 - **Commands:** slash commands, Command Center items, New workspace presets, and hidden timeline row types.
 - **Style layer (unsupported, off by default):** hide built-in parts by their test id and add your own CSS. Desktop and browser only; any Paseo update can rename the ids it relies on.
 
@@ -42,7 +45,7 @@ Buttons, rows, commands and controls run one of a small set of actions: open a l
   - Today lists reminders due, overdue cards, cards due today and reminders later today. Archived lists archived cards; Customise can archive Done cards after some days.
   - Automations: when a linked chat needs permission, fails or finishes, move its card to a column; when a card enters Done, clear its reminder. They run while any Paseo app is open.
 - **Remind me:** every reminder belongs to a card. "Remind me" on a chat sets the reminder on that chat's follow-up card, creating it in the first column if needed.
-  - Open the picker from the chat's pill (it counts down: "⏰ 25m"), the workspace header, the alarm button or a long press on a chat row in Morphise's sidebar view, or a card.
+  - Open the picker from the workspace header, the alarm button or a long press on a chat row in Morphise's sidebar view, or a card.
   - Choose a preset (yours, on the Sidebar tab), "This evening", "Tomorrow morning" or "Next week"; each shows the time it lands on. Or pick "Custom time…" and type `45m`, `17:30`, `5pm`, `tomorrow 9am` or `fri 10:00`. Add a note for when you come back. Reminders can be 1 minute to 7 days ahead.
   - `/remind <time>` and `/remind clear` in a chat; `/task <quick add>` adds a card linked to the chat; the Command Center has the presets and "Clear this chat's reminder".
   - When a reminder is due: "Tasks" in the sidebar shows how many are due; the card is listed under Reminders at the top of the sidebar view; open apps chime, show a toast and, if you allowed it, a desktop notification; a row appears in the linked chat with Done, +15m, +1h and Move to Done.
@@ -60,7 +63,7 @@ Requires Paseo 0.16.0-beta.1 or later, on both the daemon and the app.
 - Settings are stored on the daemon, so every app connected to that host shares them. They are plain JSON, not a secret store. Which groups are folded and which statuses are filtered are kept per device.
 - The task board is one settings document on the daemon, shared by every app; changes from several apps at once are merged. Notes are stored on the chat, so they go when the chat does.
 - Paseo gives plugins no notification or "unread" control, so a reminder cannot make Paseo itself ring; Morphise shows it in its own row, list, view, chime and notification. A reminder row in the chat is written by the daemon; if no app is connected at the time, it is written once one connects.
-- Sorting, filtering and reminders in the list apply to Morphise's own sidebar view; plugins cannot reorder Paseo's built-in list or add items to its right-click menus, so "Remind me" sits on the pill, the header, and Morphise's own rows.
+- Sorting, filtering and reminders in the list apply to Morphise's own sidebar view; plugins cannot reorder Paseo's built-in list or add items to its right-click menus, so "Remind me" sits in the workspace header, /remind, and Morphise's own rows.
 - Paseo's Mark as unread, Manual (drag) order, Open project settings and Remove project have no plugin API, so Morphise's view cannot offer them. Its hover card opens under the row, because a plugin cannot draw beside the sidebar.
 - Cards move with arrows, not drag and drop.
 - Actions from header buttons, sidebar rows and the Command Center act on the focused chat's message box.

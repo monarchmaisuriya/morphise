@@ -7,16 +7,12 @@ import { createComposerControl, createPresetField } from "./composer-surfaces";
 import type { Directory } from "./directory";
 import type { Section } from "./reconciler";
 import { type ActionDeps, type ActionTarget, runAction } from "./run-action";
-import { reminderLabel } from "../shared/board";
 import { reminderRowSchema } from "../shared/reminder-contracts";
 import { presetTitle, reminderAt } from "../shared/reminders";
-import { createTasksScreen, createWorkspaceTasksPanel } from "./board/board";
-import { TASKS_SCREEN_ID } from "./board/deps";
+import { createWorkspaceTasksPanel } from "./board/board";
 import {
-  chatReminder,
   createChatPopover,
   createReminderRow,
-  createTasksSidebarItem,
   runRemindCommand,
   runTaskCommand,
   type SurfaceDeps,
@@ -24,8 +20,8 @@ import {
 import { NotesPanel } from "./notes-panel";
 import { createPromptPicker } from "./prompt-picker";
 import { createChecksPanel } from "./checks-panel";
-import { createDispatchScreen, DISPATCH_SCREEN_ID, DispatchSidebarItem } from "./dispatch";
-import { createInboxScreen, createInboxSidebarItem, INBOX_SCREEN_ID } from "./inbox";
+import { createDispatchScreen, DISPATCH_SCREEN_ID } from "./dispatch";
+import { createWorkbenchScreen, createWorkbenchSidebarItem, WORKBENCH_SCREEN_ID, LEGACY_SCREENS } from "./workbench";
 import { createSidebarView } from "./sidebar-view";
 import { applyStyleSheet } from "./web";
 
@@ -87,21 +83,9 @@ function createRows(rows: readonly Row[], deps: ActionDeps) {
 const json = (value: unknown) => JSON.stringify(value);
 
 export function createSections(client: PluginClientContext, deps: ActionDeps, tasks: SurfaceDeps, switchLayout: (id: string) => Promise<void>): Section<Applied>[] {
-  // A chat's pill and a workspace's header button show its reminder, kept current as tasks
-  // change and as time passes.
+  // A workspace's header button opens the reminder picker for its open chat.
   const ChatPopover = createChatPopover(tasks);
-  function remindButton(agentId: string | null): PluginButton {
-    const reminder = agentId ? chatReminder(tasks, agentId) : null;
-    return { title: "Remind me", icon: "AlarmClock", label: reminderLabel(reminder, new Date()), behavior: { kind: "popover", Content: ChatPopover } };
-  }
-  function keepLabelsCurrent(update: () => void) {
-    const stop = tasks.tasks.subscribe(update);
-    const timer = setInterval(update, 60_000);
-    return () => {
-      stop();
-      clearInterval(timer);
-    };
-  }
+  const remindButton: PluginButton = { title: "Remind me", icon: "AlarmClock", behavior: { kind: "popover", Content: ChatPopover } };
   return [
     {
       name: "theme",
@@ -146,7 +130,9 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
       name: "tasks.surfaces",
       key: () => "always",
       register(_input, track) {
-        track(client.addScreen({ id: TASKS_SCREEN_ID, title: "Tasks", Component: createTasksScreen(tasks) }));
+        track(client.addScreen({ id: WORKBENCH_SCREEN_ID, title: "Workbench", Component: createWorkbenchScreen(tasks) }));
+        // Earlier versions' Tasks and Inbox screens, so links and open tabs from them still work.
+        for (const [id, view] of Object.entries(LEGACY_SCREENS)) track(client.addScreen({ id, title: "Workbench", Component: createWorkbenchScreen(tasks, view) }));
         track(client.addWorkspacePanel({ id: "tasks", title: "Tasks", icon: "ListTodo", context: "workspace", Component: createWorkspaceTasksPanel(tasks) }));
         track(client.addWorkspacePanel({ id: "checks", title: "Checks", icon: "GitPullRequest", context: "workspace", Component: createChecksPanel(tasks) }));
         track(
@@ -159,26 +145,23 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
             onSelect: ({ openPanel }) => openPanel("checks"),
           }),
         );
-        track(client.addSidebarHeaderItem({ id: "tasks", title: "Tasks", Component: createTasksSidebarItem(tasks) }));
-        track(client.addScreen({ id: INBOX_SCREEN_ID, title: "Inbox", Component: createInboxScreen(tasks) }));
-        track(client.addSidebarHeaderItem({ id: "inbox", title: "Inbox", Component: createInboxSidebarItem(tasks) }));
+        track(client.addSidebarHeaderItem({ id: "workbench", title: "Workbench", Component: createWorkbenchSidebarItem(tasks) }));
         track(
           client.addCommandCenterItem({
             id: "morphise-inbox",
-            title: "Open the inbox: chats waiting on you",
+            title: "Open Workbench: chats waiting on you",
             icon: "Inbox",
-            keywords: ["inbox", "waiting", "permission", "failed", "finished", "attention"],
+            keywords: ["workbench", "inbox", "waiting", "permission", "failed", "finished", "attention"],
             context: "global",
-            onSelect: ({ openScreen }) => openScreen({ screenId: INBOX_SCREEN_ID }),
+            onSelect: ({ openScreen }) => openScreen({ screenId: WORKBENCH_SCREEN_ID, params: { view: "waiting" } }),
           }),
         );
         track(client.addScreen({ id: DISPATCH_SCREEN_ID, title: "Dispatch", Component: createDispatchScreen(tasks) }));
-        track(client.addSidebarHeaderItem({ id: "dispatch", title: "Dispatch", Component: DispatchSidebarItem }));
         track(
           client.addCommandCenterItem({
             id: "morphise-dispatch",
-            title: "Dispatch prompts to new workspaces",
-            icon: "Send",
+            title: "Dispatch: start several agents in new workspaces",
+            icon: "Rocket",
             keywords: ["dispatch", "batch", "parallel", "agents", "prompts", "new workspace"],
             context: "global",
             onSelect: ({ openScreen }) => openScreen({ screenId: DISPATCH_SCREEN_ID }),
@@ -186,8 +169,8 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
         );
         track(client.addTimelineRenderer({ kind: "reminder", version: 1, schema: reminderRowSchema, Component: createReminderRow(tasks) }));
         const global = [
-          { id: "morphise-tasks", title: "Open tasks", tab: "board" },
-          { id: "morphise-tasks-today", title: "Open today's tasks and reminders", tab: "today" },
+          { id: "morphise-tasks", title: "Open Workbench: task board", tab: "board" },
+          { id: "morphise-tasks-today", title: "Open Workbench: today's tasks and reminders", tab: "today" },
         ];
         for (const item of global) {
           track(
@@ -195,9 +178,9 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
               id: item.id,
               title: item.title,
               icon: "ListTodo",
-              keywords: ["tasks", "board", "kanban", "todo", "reminders"],
+              keywords: ["workbench", "tasks", "board", "kanban", "todo", "reminders"],
               context: "global",
-              onSelect: ({ openScreen }) => openScreen({ screenId: TASKS_SCREEN_ID, params: { tab: item.tab } }),
+              onSelect: ({ openScreen }) => openScreen({ screenId: WORKBENCH_SCREEN_ID, params: { view: item.tab } }),
             }),
           );
         }
@@ -237,7 +220,7 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
               context: "global",
               onSelect: async ({ openScreen }) => {
                 await tasks.apply({ kind: "setActiveView", id: view.id });
-                openScreen({ screenId: TASKS_SCREEN_ID, params: { tab: "board" } });
+                openScreen({ screenId: WORKBENCH_SCREEN_ID, params: { view: "board" } });
               },
             }),
           );
@@ -288,25 +271,11 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
       },
     },
     {
-      name: "reminders.pills",
-      key: ({ directory }) => json(directory.agents),
-      register({ directory }, track) {
-        const pills: { agentId: string; registration: ReturnType<typeof client.addComposerPill> }[] = [];
-        // Tracked one by one, so pills added before a failing one are still removed.
-        for (const agent of directory.agents) {
-          const registration = client.addComposerPill({ id: "morphise-remind", workspaceId: agent.workspaceId, agentId: agent.id, button: remindButton(agent.id) });
-          track(() => registration.remove());
-          pills.push({ agentId: agent.id, registration });
-        }
-        track(keepLabelsCurrent(() => pills.forEach(({ agentId, registration }) => registration.update({ label: remindButton(agentId).label }))));
-      },
-    },
-    {
       name: "reminders.headerButtons",
       key: ({ directory }) => json(directory.workspaces),
       register({ directory }, track) {
         for (const workspaceId of directory.workspaces) {
-          const registration = client.addHeaderButton({ id: "morphise-remind", workspaceId, button: { ...remindButton(null), label: undefined } });
+          const registration = client.addHeaderButton({ id: "morphise-remind", workspaceId, button: remindButton });
           track(() => registration.remove());
         }
       },
@@ -350,7 +319,7 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
             icon: "Bookmark",
             keywords: ["bookmarks", "saved", "answers"],
             context: "global",
-            onSelect: ({ openScreen }) => openScreen({ screenId: INBOX_SCREEN_ID, params: { tab: "bookmarks" } }),
+            onSelect: ({ openScreen }) => openScreen({ screenId: WORKBENCH_SCREEN_ID, params: { view: "bookmarks" } }),
           }),
         );
         track(

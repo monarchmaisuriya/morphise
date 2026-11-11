@@ -12,5 +12,3 @@ export interface BoardDeps extends PickerDeps {
   // Names for workspaces, readable in modals and popovers, where Paseo's workspace hooks cannot run.
   workspaces: ValueStore<WorkspaceList>;
 }
-
-export const TASKS_SCREEN_ID = "tasks";

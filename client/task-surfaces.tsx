@@ -1,27 +1,24 @@
-import type { PluginButtonContentProps, PluginSidebarItemProps, PluginTimelineItemProps } from "@getpaseo/plugin/client";
-import { Icon, SidebarRow, useToast } from "@getpaseo/plugin/client/ui";
-import { useEffect, useRef } from "react";
+import type { PluginButtonContentProps, PluginTimelineItemProps } from "@getpaseo/plugin/client";
+import { useToast } from "@getpaseo/plugin/client/ui";
 import { Text, View } from "react-native";
 import type { z } from "zod";
 import type { AttentionList } from "./attention";
 import type { ApplyBookmark, BookmarkStore } from "./bookmark-store";
-import { dueCount } from "../shared/board";
 import type { Profile } from "../shared/profile";
 import { parseQuickAdd } from "../shared/quick-add";
 import { reminderAt } from "../shared/reminders";
 import type { reminderRowSchema } from "../shared/reminder-contracts";
-import { firstOpenColumn, followUpTask } from "../shared/task-ops";
+import { firstOpenColumn } from "../shared/task-ops";
 import { formatDue } from "../shared/time-text";
 import { parseWhen } from "../shared/when";
 import { newTaskId } from "./board/card-editor";
-import { type BoardDeps, TASKS_SCREEN_ID } from "./board/deps";
+import type { BoardDeps } from "./board/deps";
 import { chatForWorkspace } from "./chats";
 import { type ValueStore, useValue } from "./profile-store";
 import type { AlertEntry } from "./reminder-alerts";
-import { useReminderClock } from "./reminder-clock";
 import { ReminderPicker } from "./reminder-picker";
 import { tasksOf } from "./task-store";
-import { Button, MenuItem, useTokens } from "./ui/kit";
+import { Button, Icon, MenuItem, useTokens } from "./ui/kit";
 import { requestNotifications } from "./web";
 
 export interface Announcement {
@@ -72,33 +69,6 @@ export async function runTaskCommand(deps: BoardDeps, agentId: string, workspace
     task: { id: newTaskId(), title: parsed.title, column: parsed.column ?? firstOpenColumn(document).id, priority: parsed.priority, due: parsed.due, reminder, links: { agentId, workspaceId } },
     labelNames: parsed.labelNames,
   });
-}
-
-// The "Tasks" row in Paseo's sidebar header, in every sidebar view. While mounted, it also shows
-// the toast for each reminder that comes due.
-export function createTasksSidebarItem(deps: SurfaceDeps) {
-  return function TasksSidebarItem({ currentScreen, openScreen }: PluginSidebarItemProps) {
-    const document = tasksOf(useValue(deps.tasks));
-    const now = useReminderClock(document.tasks.flatMap((task) => (task.reminder ? [task.reminder] : [])), true);
-    const announcement = useValue(deps.announcements);
-    const toast = useToast();
-    // A remount (drawer reopened, view switched) must not replay toasts already shown.
-    const shownSeq = useRef(announcement.seq);
-    useEffect(() => {
-      if (announcement.seq <= shownSeq.current) return;
-      shownSeq.current = announcement.seq;
-      for (const entry of announcement.entries) toast.show(`Reminder: ${entry.title}${entry.reminder.note ? `. ${entry.reminder.note}` : ""}`, { variant: "info", durationMs: 8000 });
-    }, [announcement.seq]);
-    const due = dueCount(document, now);
-    return (
-      <SidebarRow
-        icon="ListTodo"
-        label={due > 0 ? `Tasks · ${due} due` : "Tasks"}
-        active={currentScreen?.screenId === TASKS_SCREEN_ID}
-        onPress={() => openScreen({ screenId: TASKS_SCREEN_ID, params: due > 0 ? { tab: "today" } : {} })}
-      />
-    );
-  };
 }
 
 // The popover behind a chat's "Remind me" pill: the reminder picker, and adding the chat as a task.
@@ -188,9 +158,4 @@ export function createReminderRow(deps: BoardDeps) {
       </View>
     );
   };
-}
-
-// The follow-up task of a chat, for pill labels.
-export function chatReminder(deps: BoardDeps, agentId: string) {
-  return followUpTask(tasksOf(deps.tasks.get()), agentId)?.reminder ?? null;
 }

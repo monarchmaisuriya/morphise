@@ -2,6 +2,29 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.11.0 - 2026-11-12
+
+- **Workbench** replaces the separate Tasks and Inbox rows and screens: one row in Paseo's sidebar header, one screen.
+  - A list of views on the left (tabs on a phone): Waiting on you, Today, Board, Archived, Bookmarks, each with its count.
+  - It opens on what needs you first: waiting chats, then due reminders, then the board.
+  - The sidebar row shows how many chats wait on you (amber while one needs permission) and how many reminders are due.
+  - Links and Command Center items from earlier versions open the Workbench on the view they used to show.
+- **Dispatch, redesigned:**
+  - Open it from the rocket in the Workspaces bar (it left Paseo's sidebar header) or the Command Center.
+  - One row of choices for every new agent: project, model (every model your providers offer, not only the ones your chats use), mode, and its own worktree or the project folder. They are remembered on each device.
+  - Numbered prompts. Paste a list and split it into one prompt per item. ⌘↵ starts them all.
+  - Each prompt then shows Starting, Started (with Open) or Failed (with its error and Retry). A failure no longer stops the rest.
+- **Steps card options** (Settings, Sidebar, Steps card): when it shows, how long "All done" stays, top or bottom of the sidebar, the open chat or every chat in the open workspace (up to 3), how many steps, hiding finished steps, starting folded, and the progress bar.
+- **Settings, Sidebar** now has every sidebar option, in sections: Rows, Chats (including turning chats off), Steps card and Auto-archive. Before, options added since 0.7 were only in the sidebar's Display menu.
+- **Running chats:** when a running chat is listed under its workspace, only the chat's dot pulses, not the workspace's. The same goes for a sub-agent under its chat.
+- **Icons keep their size:** a long branch name squeezed the branch icon to half its width in some rows. Every icon now keeps its size.
+- **Removed the "Remind me" pill** from the message box. Set reminders with the alarm button in the workspace header, /remind, or the sidebar.
+- **Done** is the faint grey-green again, as in 0.9.0.
+- **Settings text boxes** (Extra CSS, preset metadata, prompts) line up with the other rows.
+
+Rolling back to 0.10.0: `paseo plugin update morphise --ref v0.10.0`.
+- **Settings that 0.10.0 cannot read:** the Steps card options (when, after the last step, whose plan, where, steps listed, hide finished, start folded, progress bar). With any of them changed, 0.10.0 reports the profile as invalid and keeps the data. Set them back to their defaults first.
+
 ## 0.10.0 - 2026-11-12
 
 - **Inbox, redesigned:**

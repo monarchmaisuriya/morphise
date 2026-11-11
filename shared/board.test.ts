@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { boardColumns, dueCount, matchesTaskFilter, reminderLabel, todayGroups } from "./board";
+import { boardColumns, dueCount, matchesTaskFilter, todayGroups } from "./board";
 import { applyTaskOperation, type TaskOperation } from "./task-ops";
 import { DEFAULT_FILTER, EMPTY_TASKS, type TaskDocument } from "./tasks";
 
@@ -97,12 +97,3 @@ describe("todayGroups and dueCount", () => {
   });
 });
 
-describe("reminderLabel", () => {
-  it("says Remind me, the time left, or Due", () => {
-    expect(reminderLabel(null, now)).toBe("Remind me");
-    expect(reminderLabel(reminder("2026-11-11T14:55:00.000Z"), now)).toBe("⏰ 25m");
-    expect(reminderLabel(reminder("2026-11-11T17:05:00.000Z"), now)).toBe("⏰ 2h 35m");
-    expect(reminderLabel(reminder("2026-11-12T09:00:00.000Z"), now)).toBe("⏰ Thu 09:00");
-    expect(reminderLabel(reminder("2026-11-11T14:00:00.000Z"), now)).toBe("⏰ Due");
-  });
-});

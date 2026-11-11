@@ -1,9 +1,9 @@
 import { type PluginAgentPanelProps, useAgent, usePaseo } from "@getpaseo/plugin/client";
-import { Icon, TextInput } from "@getpaseo/plugin/client/ui";
+import { TextInput } from "@getpaseo/plugin/client/ui";
 import { useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { MAX_NOTE_LENGTH, notePatch, readNote } from "../shared/notes";
-import { useTokens } from "./ui/kit";
+import { Icon, useTokens } from "./ui/kit";
 
 const SAVE_DELAY_MS = 1000;
 

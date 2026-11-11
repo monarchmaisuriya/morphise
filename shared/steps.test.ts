@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cardMode, latestSteps, readSteps, stepCounts } from "./steps";
+import { cardMode, latestSteps, listedSteps, readSteps, stepCounts, stepsOptions } from "./steps";
 
 const todo = (items: unknown[]) => ({ type: "todo", items });
 
@@ -42,5 +42,29 @@ describe("steps", () => {
     expect(cardMode(finished, false)).toBe("hidden");
     expect(cardMode([], true)).toBe("hidden");
     expect(cardMode(null, true)).toBe("hidden");
+  });
+});
+
+describe("steps card options", () => {
+  const step = (text: string, status: "pending" | "in_progress" | "completed") => ({ text, status });
+  const finished = [step("a", "completed")];
+
+  it("keeps a finished plan when shown always", () => {
+    expect(cardMode(finished, false, "always")).toBe("done");
+    expect(cardMode(finished, false, "unfinished")).toBe("hidden");
+  });
+
+  it("fills unset options with the defaults", () => {
+    expect(stepsOptions(undefined)).toEqual({ show: "unfinished", doneSeconds: 8, position: "bottom", scope: "open", startFolded: false, hideCompleted: false, maxSteps: null, progress: true });
+    expect(stepsOptions({ doneSeconds: 0, position: "top" })).toMatchObject({ doneSeconds: 0, position: "top" });
+  });
+
+  it("hides finished steps and keeps the current step in view past the limit", () => {
+    const plan = ["1", "2", "3", "4", "5", "6"].map((text, index) => step(text, index < 4 ? "completed" : index === 4 ? "in_progress" : "pending"));
+    expect(listedSteps(plan, { hideCompleted: true, maxSteps: null }).rows.map((item) => item.text)).toEqual(["5", "6"]);
+    const capped = listedSteps(plan, { hideCompleted: false, maxSteps: 3 });
+    expect(capped.rows.map((item) => item.text)).toEqual(["4", "5", "6"]);
+    expect(capped.more).toBe(3);
+    expect(listedSteps(plan, { hideCompleted: false, maxSteps: null }).more).toBe(0);
   });
 });

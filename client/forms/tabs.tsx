@@ -1,10 +1,13 @@
-import { Icon, SettingsAction, SettingsCard, SettingsSection, TextInput } from "@getpaseo/plugin/client/ui";
+import { SettingsAction, SettingsCard, SettingsSection, TextInput } from "@getpaseo/plugin/client/ui";
 import type { ReactNode } from "react";
 import { Text, View } from "react-native";
 import type { Action } from "../../shared/actions";
-import { IconButton, tokens } from "../ui/kit";
+import { Icon, IconButton, tokens } from "../ui/kit";
 import { statusColor } from "../ui/hues";
 import { STATUS_TITLES } from "../../shared/arrange";
+import { DEFAULT_CHAT_ROWS, rowShows } from "../../shared/row-meta";
+import { VIEW_SECTIONS } from "./view-sections";
+import { DEFAULT_DONE_SECONDS, type StepsSettings, stepsOptions } from "../../shared/steps";
 import type { Layout, Prompt } from "../../shared/document";
 import { EMPTY_PROFILE, type Profile, TIMELINE_ITEM_TYPES } from "../../shared/profile";
 import { presetTitle } from "../../shared/reminders";
@@ -25,13 +28,14 @@ type Theme = NonNullable<Profile["theme"]>;
 
 const copy = <Value,>(value: Value): Value => JSON.parse(JSON.stringify(value)) as Value;
 
-// A multi-line text box. `parsed` boxes keep their own text (the draft holds a parsed form of it,
-// which would rewrite the text while typing); the others show the draft's value directly.
+// A multi-line text box, padded and labelled like Paseo's own settings rows (16px, 14px text).
+// `parsed` boxes keep their own text (the draft holds a parsed form of it, which would rewrite the
+// text while typing); the others show the draft's value directly.
 function multiline(form: Form, label: string, value: string, onChange: (text: string) => void, error: string | null, minHeight = 96, parsed = false) {
   const { theme } = form;
   return (
-    <View style={{ gap: 4, paddingVertical: 8, paddingRight: 12 }}>
-      <Text style={{ color: theme.colors.foreground, fontSize: 13 }}>{label}</Text>
+    <View style={{ gap: 8, paddingVertical: 12, paddingHorizontal: 16 }}>
+      <Text style={{ color: theme.colors.foreground, fontSize: 14 }}>{label}</Text>
       <TextInput
         accessibilityLabel={label}
         multiline
@@ -44,6 +48,7 @@ function multiline(form: Form, label: string, value: string, onChange: (text: st
           minHeight,
           padding: 8,
           fontSize: 12,
+          lineHeight: 18,
           color: theme.colors.foreground,
           backgroundColor: theme.colors.surface1,
           borderColor: error ? theme.colors.statusDanger : theme.colors.border,
@@ -137,10 +142,29 @@ function StatusOrder({ form }: { form: Form }) {
   );
 }
 
-// One entry per view setting; the type makes a new setting fail to compile until it has a field.
-function viewFields(form: Form): { [Key in keyof ViewConfig]: ReactNode } {
+// One entry per view setting; the type makes a new setting, optional or not, fail to compile until
+// it has a field.
+function viewFields(form: Form): { [Key in keyof ViewConfig]-?: ReactNode } {
   const view = form.profile.sidebar.view;
   const set = <Key extends keyof ViewConfig>(key: Key, value: ViewConfig[Key]) => form.updateProfile((profile) => void (profile.sidebar.view[key] = value));
+  // Keys added after 0.6 are saved only when they differ from their default, so documents nobody
+  // changed stay readable by older versions, which reject keys they do not know.
+  const setOptional = <Key extends keyof ViewConfig>(key: Key, value: ViewConfig[Key], fallback: ViewConfig[Key]) =>
+    form.updateProfile((profile) => {
+      if (JSON.stringify(value) === JSON.stringify(fallback)) delete profile.sidebar.view[key];
+      else profile.sidebar.view[key] = value;
+    });
+  const steps = stepsOptions(view.steps);
+  const setSteps = <Key extends keyof StepsSettings>(key: Key, value: StepsSettings[Key], fallback: StepsSettings[Key]) =>
+    form.updateProfile((profile) => {
+      const next: StepsSettings = { ...(profile.sidebar.view.steps ?? {}) };
+      if (value === fallback) delete next[key];
+      else next[key] = value;
+      if (Object.keys(next).length) profile.sidebar.view.steps = next;
+      else delete profile.sidebar.view.steps;
+    });
+  const shows = rowShows(view);
+  const counts = (values: readonly number[], current: number) => [...new Set([...values, current])].sort((left, right) => left - right).map((count) => ({ value: String(count), label: String(count) }));
   return {
     enabled: (
       <SwitchField
@@ -255,6 +279,130 @@ function viewFields(form: Form): { [Key in keyof ViewConfig]: ReactNode } {
         onChange={(value) => set("agentsFor", value)}
       />
     ) : null,
+    rowStyle: (
+      <SelectField
+        label="Rows"
+        value={view.rowStyle ?? "two-line"}
+        options={[
+          { value: "two-line", label: "Two lines: title, then status and details" },
+          { value: "one-line", label: "One line" },
+        ]}
+        onChange={(value) => setOptional("rowStyle", value, "two-line")}
+      />
+    ),
+    titleSource: (
+      <SelectField
+        label="Name each workspace by"
+        value={view.titleSource ?? "title"}
+        options={[
+          { value: "title", label: "Its title" },
+          { value: "branch", label: "Its branch" },
+        ]}
+        onChange={(value) => setOptional("titleSource", value, "title")}
+      />
+    ),
+    show: (
+      <>
+        {(
+          [
+            ["host", "Show the host"],
+            ["pullRequest", "Show the pull request"],
+            ["checks", "Show pull request checks"],
+            ["services", "Show running services"],
+            ["labels", "Show labels"],
+            ["lastActivity", "Show time since last activity"],
+          ] as const
+        ).map(([key, label]) => (
+          <SwitchField
+            key={key}
+            label={label}
+            value={shows[key]}
+            onChange={(value) =>
+              form.updateProfile((profile) => {
+                profile.sidebar.view.show = { ...(profile.sidebar.view.show ?? {}), [key]: value };
+              })
+            }
+          />
+        ))}
+      </>
+    ),
+    chatRows: view.showAgents ? (
+      <SelectField label="Chats per workspace, then Show more" value={String(view.chatRows ?? DEFAULT_CHAT_ROWS)} options={counts([3, 5, 10, 20], view.chatRows ?? DEFAULT_CHAT_ROWS)} onChange={(value) => setOptional("chatRows", Number(value), DEFAULT_CHAT_ROWS)} />
+    ) : null,
+    showSubAgents: view.showAgents ? (
+      <SelectField
+        label="Sub-agents under their chat"
+        value={view.showSubAgents === false ? "hidden" : view.showSubAgents === "open" ? "open" : "all"}
+        options={[
+          { value: "all", label: "All of them" },
+          { value: "open", label: "Only the open one" },
+          { value: "hidden", label: "Hidden" },
+        ]}
+        onChange={(value) => setOptional("showSubAgents", value === "hidden" ? false : value === "open" ? "open" : true, true)}
+      />
+    ) : null,
+    subAgentRows: view.showAgents && view.showSubAgents !== false && view.showSubAgents !== "open" ? (
+      <SelectField label="Sub-agents per chat, then Show more" value={String(view.subAgentRows ?? DEFAULT_CHAT_ROWS)} options={counts([3, 5, 10, 20], view.subAgentRows ?? DEFAULT_CHAT_ROWS)} onChange={(value) => setOptional("subAgentRows", Number(value), DEFAULT_CHAT_ROWS)} />
+    ) : null,
+    autoArchive: (
+      <SelectField
+        label="Archive workspaces marked done"
+        hint="Never archives a worktree with uncommitted, unpushed or unknown changes. Merged pull requests follow Paseo's own setting."
+        value={view.autoArchive ? String(view.autoArchive.days) : "off"}
+        options={[{ value: "off", label: "Never" }, ...[1, 3, 7, 14, 30].map((days) => ({ value: String(days), label: days === 1 ? "After 1 day" : `After ${days} days` }))]}
+        onChange={(value) => setOptional("autoArchive", value === "off" ? undefined : { days: Number(value) }, undefined)}
+      />
+    ),
+    stepsCard: <SwitchField label="Show the steps card" hint="A chat's plan (its to-do list) as a card in the sidebar." value={view.stepsCard !== false} onChange={(value) => setOptional("stepsCard", value, true)} />,
+    steps:
+      view.stepsCard !== false ? (
+        <>
+          <SelectField
+            label="When"
+            value={steps.show}
+            options={[
+              { value: "unfinished", label: "While the plan has steps left" },
+              { value: "always", label: "Whenever the chat has a plan, finished or not" },
+            ]}
+            onChange={(value) => setSteps("show", value, "unfinished")}
+          />
+          {steps.show === "unfinished" ? (
+            <SelectField
+              label="After the last step"
+              value={String(steps.doneSeconds)}
+              options={[0, 3, 8, 15, 30, 60].map((seconds) => ({ value: String(seconds), label: seconds === 0 ? "Hide at once" : `Say "All done" for ${seconds} seconds` }))}
+              onChange={(value) => setSteps("doneSeconds", Number(value), DEFAULT_DONE_SECONDS)}
+            />
+          ) : null}
+          <SelectField
+            label="Whose plan"
+            value={steps.scope}
+            options={[
+              { value: "open", label: "The open chat" },
+              { value: "workspace", label: "Each chat in the open workspace (up to 3)" },
+            ]}
+            onChange={(value) => setSteps("scope", value, "open")}
+          />
+          <SelectField
+            label="Where"
+            value={steps.position}
+            options={[
+              { value: "bottom", label: "Bottom of the sidebar" },
+              { value: "top", label: "Top of the sidebar" },
+            ]}
+            onChange={(value) => setSteps("position", value, "bottom")}
+          />
+          <SelectField
+            label="Steps listed"
+            value={steps.maxSteps === null ? "all" : String(steps.maxSteps)}
+            options={[{ value: "all", label: "All" }, ...[3, 5, 8, 12].map((count) => ({ value: String(count), label: `${count}, around the current one` }))]}
+            onChange={(value) => setSteps("maxSteps", value === "all" ? undefined : Number(value), undefined)}
+          />
+          <SwitchField label="Hide finished steps" value={steps.hideCompleted} onChange={(value) => setSteps("hideCompleted", value, false)} />
+          <SwitchField label="Start folded" hint="Only the current step shows until the card is opened." value={steps.startFolded} onChange={(value) => setSteps("startFolded", value, false)} />
+          <SwitchField label="Progress bar" value={steps.progress} onChange={(value) => setSteps("progress", value, true)} />
+        </>
+      ) : null,
   };
 }
 
@@ -339,7 +487,19 @@ export function SidebarTab(form: Form): ReactNode {
     <>
       <ViewCallout form={form} />
       <SettingsSection title="Morphise sidebar view" info="These settings apply inside the Morphise sidebar view only.">
-        <SettingsCard>{Object.values(view)}</SettingsCard>
+        <SettingsCard>{VIEW_SECTIONS.general.map((key) => view[key])}</SettingsCard>
+      </SettingsSection>
+      <SettingsSection title="Rows">
+        <SettingsCard>{VIEW_SECTIONS.rows.map((key) => view[key])}</SettingsCard>
+      </SettingsSection>
+      <SettingsSection title="Chats" info="Chats listed under their workspace, and sub-agents under their chat. Turn chats off to list workspaces only.">
+        <SettingsCard>{VIEW_SECTIONS.chats.map((key) => view[key])}</SettingsCard>
+      </SettingsSection>
+      <SettingsSection title="Steps card" info="A chat's plan as a card that shows while it works and hides when it is done.">
+        <SettingsCard>{VIEW_SECTIONS.steps.map((key) => view[key])}</SettingsCard>
+      </SettingsSection>
+      <SettingsSection title="Auto-archive">
+        <SettingsCard>{VIEW_SECTIONS.archive.map((key) => view[key])}</SettingsCard>
       </SettingsSection>
       <SettingsSection title="Reminders">
         <SettingsCard>
@@ -427,7 +587,7 @@ export function LookTab(form: Form): ReactNode {
       <SettingsSection title="Style layer" info="Unsupported: desktop and browser only, and a Paseo update can rename what it hides.">
         <SettingsCard>
           <SwitchField label="Use the style layer" value={style.enabled} onChange={(value) => form.updateProfile((profile) => void (profile.style.enabled = value))} />
-          {multiline(form, "Extra CSS", style.css, (css) => form.updateProfile((profile) => void (profile.style.css = css)), form.profileError("style.css"))}
+          {multiline(form, "Extra CSS", style.css, (css) => form.updateProfile((profile) => void (profile.style.css = css)), form.profileError("style.css"), 120)}
         </SettingsCard>
       </SettingsSection>
       <ListEditor<string>

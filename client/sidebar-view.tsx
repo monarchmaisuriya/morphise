@@ -14,7 +14,7 @@ import {
   useWorkspaces,
 } from "@getpaseo/plugin/client";
 import type { PluginAgentSnapshot, PluginWorkspaceSnapshot } from "@getpaseo/plugin";
-import { copyText, Icon, useToast } from "@getpaseo/plugin/client/ui";
+import { copyText, useToast } from "@getpaseo/plugin/client/ui";
 import { type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import {
@@ -32,8 +32,9 @@ import {
 import { attentionOrder, NEEDS_ME, needsAttention, needsMeOn, nextAttention } from "../shared/attention";
 import { chatGroupKey, chatIndicator, chatMatches, chatName, compareChats, isSidebarChat } from "../shared/chat-status";
 import { INDICATORS, type Indicator, type Profile } from "../shared/profile";
+import { stepsOptions } from "../shared/steps";
 import { type AttentionList, waitingChildren } from "./attention";
-import { chatTree, DEFAULT_CHAT_ROWS, effectiveIndicator, MARK_KEY, markApplies, owningRowKey, type RowShows, rowShows, rowTitle, statusLine, visibleChats } from "../shared/row-meta";
+import { type ChatListing, chatTree, DEFAULT_CHAT_ROWS, effectiveIndicator, listedChatKeys, listedSubAgents, listedTopChats, MARK_KEY, markApplies, owningRowKey, type RowShows, rowShows, rowTitle, runningShownBelow, statusLine } from "../shared/row-meta";
 import { newTaskId } from "./board/card-editor";
 import { isDue, type Reminder } from "../shared/reminders";
 import { formatDue, formatElapsed } from "../shared/time-text";
@@ -44,10 +45,11 @@ import { type AlertEntry, remindersOf } from "./reminder-alerts";
 import { type PickerDeps, ReminderPicker, type ReminderTarget } from "./reminder-picker";
 import { followUpTask, followUpWorkspaceTask } from "../shared/task-ops";
 import { type ApplyTaskOperations, type TaskStore, tasksOf } from "./task-store";
-import { Button, Dropdown, Field, IconButton, MenuItem, PopoverHost, Tag, type Tokens, useTokens } from "./ui/kit";
-import { BLUE, PURPLE, statusColor } from "./ui/hues";
+import { Button, Dropdown, Field, Icon, IconButton, MenuItem, PopoverHost, Tag, type Tokens, useTokens } from "./ui/kit";
+import { BLUE, DONE_OPACITY, PURPLE, statusColor } from "./ui/hues";
 import { usePulse } from "./ui/pulse";
-import { StepsCard } from "./steps-card";
+import { StepsCards } from "./steps-card";
+import { DISPATCH_SCREEN_ID, screenOpener } from "./dispatch";
 import type { PullRequestInfo, ServiceInfo, WorkspaceInfo, WorkspaceList } from "./workspaces";
 import { viewPresence } from "./view-presence";
 import { cannotHover } from "./web";
@@ -177,6 +179,8 @@ interface Shared {
   // "Show more" state for groups and for a workspace's chats.
   isExpanded(key: string): boolean;
   setExpanded(key: string, on: boolean): void;
+  // Which chats and sub-agents are drawn under a workspace.
+  listing: ChatListing;
 }
 
 function report(toast: ReturnType<typeof useToast>, what: string) {
@@ -220,11 +224,12 @@ function RowShell({ selected, child, grandchild, twoLine, label, onPress, onLong
 
 
 // The status mark in the same 16px column as project tiles, as Paseo draws it. Running work pulses.
-function StatusMark({ indicator, shared }: { indicator: Indicator; shared: Shared }) {
-  const pulse = usePulse(indicator === "running");
+// `still`: running work drawn by the rows under this one, which pulse instead.
+function StatusMark({ indicator, still = false, shared }: { indicator: Indicator; still?: boolean; shared: Shared }) {
+  const pulse = usePulse(indicator === "running" && !still);
   return (
     <View style={[shared.styles.slot, { height: 20 }]}>
-      <Animated.View accessibilityLabel={STATUS_TITLES[indicator]} style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: statusColor(shared.props.theme.colors, indicator), opacity: pulse }} />
+      <Animated.View accessibilityLabel={STATUS_TITLES[indicator]} style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: statusColor(shared.props.theme.colors, indicator), opacity: indicator === "done" ? DONE_OPACITY : pulse }} />
     </View>
   );
 }
@@ -284,6 +289,10 @@ function AgentRow({ reference, sub, subs = [], shared }: { reference: AgentRef; 
   const chat = useAgent(reference, (item) => ({ name: chatName(item), indicator: chatIndicator(item), workspaceId: item.workspaceId, last: item.lastActivityAt }));
   const remind = useRemindToggle();
   const attention = useValue(shared.attention);
+  // Every sub-agent listed under this chat, deeper ones too (chatTree files them under it).
+  const subKeys = new Set(subs.map((agent) => agent.key));
+  const runningSubs = useAgents({ hosts: [reference.hostId], where: (agent) => subKeys.has(agent.ref.key) && chatIndicator(agent) === "running" });
+  const listedSubs = new Set(sub ? [] : listedSubAgents(reference.key, subs, shared.listing).rows.map((agent) => agent.key));
   // Sub-agents of this chat blocked on the user (permission or failed).
   const waiting = waitingChildren(attention, reference.id);
   if (!chat) return null;
@@ -301,7 +310,7 @@ function AgentRow({ reference, sub, subs = [], shared }: { reference: AgentRef; 
         showActions={shared.chatReminders.has(reference.id)}
         main={
           <>
-            <StatusMark indicator={indicator} shared={shared} />
+            <StatusMark indicator={indicator} still={runningShownBelow(runningSubs, listedSubs)} shared={shared} />
             <Text style={styles.childLabel} numberOfLines={1}>
               {chat.name}
             </Text>
@@ -325,13 +334,12 @@ function AgentRow({ reference, sub, subs = [], shared }: { reference: AgentRef; 
 // A chat's sub-agents, latest first: the first few (5 unless changed), then Show more, or only the
 // open one when the view shows just that. The open sub-agent stays listed past the limit.
 function SubAgents({ parent, subs, shared }: { parent: AgentRef; subs: readonly AgentRef[]; shared: Shared }) {
-  const { styles, config, props } = shared;
-  const openKey = props.active.agent?.key ?? null;
+  const { styles, config } = shared;
   const key = `subs:${parent.key}`;
   const limit = config.subAgentRows ?? DEFAULT_CHAT_ROWS;
   const expanded = shared.isExpanded(key);
   const openOnly = config.showSubAgents === "open";
-  const { rows, hidden } = openOnly ? { rows: subs.filter((agent) => agent.key === openKey), hidden: 0 } : visibleChats(subs, limit, expanded, openKey);
+  const { rows, hidden } = listedSubAgents(parent.key, subs, shared.listing);
   if (rows.length === 0) return null;
   return (
     <View style={styles.nest}>
@@ -352,7 +360,7 @@ function WorkspaceChats({ workspaceKey, chats, subsOf, openKey, shared }: { work
   const key = `chats:${workspaceKey}`;
   const limit = config.chatRows ?? DEFAULT_CHAT_ROWS;
   const expanded = shared.isExpanded(key);
-  const { rows, hidden } = visibleChats(chats, limit, expanded, openKey);
+  const { rows, hidden } = listedTopChats(workspaceKey, chats, shared.listing, openKey);
   return (
     <View style={styles.nest}>
       <View pointerEvents="none" style={styles.connector} />
@@ -680,6 +688,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   const agents = useAgents({ hosts: [reference.hostId], where: inWorkspace, orderBy: ["lastActivityAt", "desc"] });
   const byParent = useAgents({ hosts: [reference.hostId], where: inWorkspace, groupBy: (agent) => agent.parentAgentId ?? TOP_LEVEL });
   const matching = useAgents({ hosts: [reference.hostId], where: (agent) => inWorkspace(agent) && chatMatches(agent, { statuses: shared.statuses, search: "" }) });
+  const running = useAgents({ hosts: [reference.hostId], where: (agent) => inWorkspace(agent) && chatIndicator(agent) === "running" });
   const tree = chatTree(agents, parentsOf(byParent));
   const matchingKeys = new Set(matching.map((agent) => agent.key));
   const chats = shared.statuses.length ? tree.top.filter((chat) => matchingKeys.has(chat.key)) : tree.top;
@@ -813,7 +822,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
       <Icon name={picked ? "SquareCheck" : "Square"} size={14} color={picked ? c.accent : c.foregroundMuted} />
     </View>
   ) : (
-    <StatusMark indicator={indicator} shared={shared} />
+    <StatusMark indicator={indicator} still={chatsShown && runningShownBelow(running, listedChatKeys(reference.key, { top: chats, children: shared.config.showSubAgents === false ? new Map() : tree.children }, shared.listing))} shared={shared} />
   );
   const main = twoLine ? (
     <>
@@ -1074,9 +1083,11 @@ function Header({ menu, setMenu, searching, setSearching, search, onSearch, filt
   const { styles, props, t, config } = shared;
   const showSearch = searching || search !== "";
   const toggle = (next: Exclude<Menu, null>) => setMenu(menu === next ? null : next);
+  const openScreen = useValue(screenOpener);
   return (
     <View ref={headerRef} style={styles.header}>
       <Text style={styles.headerText}>{config.list === "chats" ? "Chats" : "Workspaces"}</Text>
+      {openScreen ? <IconButton t={t} size="sm" icon="Rocket" label="Dispatch: start several agents in new workspaces" onPress={() => openScreen({ screenId: DISPATCH_SCREEN_ID })} /> : null}
       <IconButton t={t} size="sm" icon="Search" tone={showSearch ? props.theme.colors.foreground : undefined} label={showSearch ? "Close search" : "Search"} onPress={() => (showSearch ? (onSearch(""), setSearching(false)) : setSearching(true))} />
       <View>
         <IconButton t={t} size="sm" icon="ListFilter" tone={filters || menu === "filter" ? props.theme.colors.foreground : undefined} label={filters ? `Filters, ${filters} on` : "Filter"} onPress={() => toggle("filter")} />
@@ -1395,6 +1406,9 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     const projects = useWorkspaces({ where: (workspace) => isVisible(workspace, state.showBackground), groupBy: (workspace) => ({ key: workspace.project.key, title: workspace.projectDisplayName }) }).map((group) => ({ key: group.key, title: group.title ?? "Project" }));
     const toast = useToast();
     const headerRef = useRef<View>(null);
+    // The open workspace's chats, latest first, for steps cards shown for every chat.
+    const openWorkspaceKey = props.active.workspace?.key ?? null;
+    const workspaceChats = useAgents({ where: (agent) => agent.workspace.key === openWorkspaceKey && agent.parentAgentId === null, orderBy: ["lastActivityAt", "desc"] });
     // Unread clears once its workspace is the open one, as Paseo's own unread does, whether or not
     // its row is on screen. A mark made after the workspace became open (marking the open
     // workspace unread) stays until it is opened again.
@@ -1475,6 +1489,13 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
       labels,
       isExpanded: (key) => expanded.has(key),
       setExpanded: setExpandedKey,
+      listing: {
+        limit: config.chatRows ?? DEFAULT_CHAT_ROWS,
+        subLimit: config.subAgentRows ?? DEFAULT_CHAT_ROWS,
+        subAgents: config.showSubAgents ?? true,
+        isExpanded: (key) => expanded.has(key),
+        openKey: props.active.agent?.key ?? null,
+      },
     };
     const collapsed = new Set(state.collapsed);
     const toggleCollapsed = (key: string) =>
@@ -1491,6 +1512,8 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
       ...(filter.pinnedOnly ? [{ key: "pinned", label: "Pinned", color: undefined, remove: () => saveState({ pinnedOnly: false }) }] : []),
     ];
 
+    const steps = stepsOptions(config.steps);
+    const stepsCards = config.stepsCard !== false ? <StepsCards open={props.active.agent?.id ?? null} chats={workspaceChats} t={t} options={steps} /> : null;
     return (
       <View ref={viewRef} style={styles.scroll}>
         <PopoverHost bounds={viewRef}>
@@ -1509,6 +1532,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
             ) : null}
           </View>
         ) : null}
+        {stepsCards && steps.position === "top" ? stepsCards : null}
         <View style={{ flex: 1 }}>
       <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 12 }}>
         {dueEntries.length > 0 ? (
@@ -1543,7 +1567,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
           );
         })}
       </ScrollView>
-          {config.stepsCard !== false ? <StepsCard agentId={props.active.agent?.id ?? null} t={t} /> : null}
+          {stepsCards && steps.position === "bottom" ? stepsCards : null}
           {ui.selecting && config.list === "workspaces" ? <BulkBar shownIds={new Set(sections.flatMap((section) => section.items.map((item) => (item as WorkspaceRef).id)))} shared={shared} /> : null}
           <Dropdown t={t} open={menu !== null} onClose={() => setMenu(null)} anchor={headerRef} width={420} maxHeight={560}>
             {menu === "filter" ? <FilterMenu state={state} save={saveState} projects={projects} shared={shared} /> : <ViewMenu update={updateView} state={state} saveState={saveState} shared={shared} />}

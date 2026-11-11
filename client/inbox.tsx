@@ -1,6 +1,7 @@
-import type { PluginClientContext, PluginScreenProps, PluginSidebarItemProps, useSettings as UseSettings } from "@getpaseo/plugin/client";
+import type { PluginTheme } from "@getpaseo/plugin";
+import type { PluginClientContext, PluginScreenProps, useSettings as UseSettings } from "@getpaseo/plugin/client";
 import { useSettings } from "@getpaseo/plugin/client";
-import { copyText, Icon, Markdown, SidebarRow, useToast } from "@getpaseo/plugin/client/ui";
+import { copyText, Markdown, useToast } from "@getpaseo/plugin/client/ui";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { type Bookmark, lastAnswer } from "../shared/bookmarks";
@@ -10,15 +11,14 @@ import { type AttentionItem, type AttentionList, attentionOrder } from "./attent
 import { ANSWER_TAIL, type ApplyBookmark, type BookmarkStore, bookmarksOf } from "./bookmark-store";
 import { type ValueStore, useValue } from "./profile-store";
 import { statusColor } from "./ui/hues";
-import { Button, Field, IconButton, Segmented, type Tokens, useTokens } from "./ui/kit";
+import { Button, Field, Icon, IconButton, Segmented, type Tokens, useTokens } from "./ui/kit";
 import { usePulse } from "./ui/pulse";
 import type { WorkspaceList } from "./workspaces";
 
-// The Inbox: every chat and sub-agent waiting on the user, across workspaces, from Paseo's own
-// attention state. Each one can be answered where it is listed: a permission allowed or denied, a
-// finished or failed chat read and replied to, or a finished one cleared from the Inbox.
-
-export const INBOX_SCREEN_ID = "inbox";
+// The Workbench's "Waiting on you" and "Bookmarks" views: every chat and sub-agent waiting on the user,
+// across workspaces, from Paseo's own attention state. Each one can be answered where it is listed:
+// a permission allowed or denied, a finished or failed chat read and replied to, or a finished one
+// cleared from the list.
 
 export interface InboxDeps {
   client: PluginClientContext;
@@ -29,7 +29,6 @@ export interface InboxDeps {
   bookmarkLastAnswer(agentId: string, workspaceId: string | null, note: string): Promise<void>;
 }
 
-type Tab = "waiting" | "bookmarks";
 type Entry = AttentionItem & { workspace: string };
 type Settings = ReturnType<typeof UseSettings<typeof inboxSettings.schema>>;
 
@@ -350,7 +349,7 @@ function BookmarkCard({ bookmark, t, workspaces, open, remove }: { bookmark: Boo
   );
 }
 
-function Bookmarks({ t, deps, workspaces, open }: { t: Tokens; deps: InboxDeps; workspaces: WorkspaceList; open: ((agentId: string) => void) | null }) {
+export function Bookmarks({ t, deps, workspaces, open }: { t: Tokens; deps: InboxDeps; workspaces: WorkspaceList; open: ((agentId: string) => void) | null }) {
   const toast = useToast();
   const [search, setSearch] = useState("");
   const all = bookmarksOf(useValue(deps.bookmarks)).bookmarks;
@@ -379,18 +378,23 @@ function saveSettings(settings: Settings, next: Partial<InboxSettings>, onFail: 
   });
 }
 
-export function createInboxScreen(deps: InboxDeps) {
-  return function InboxScreen({ theme, layout, navigation, params }: PluginScreenProps) {
+// Items waiting on the user that the Inbox lists and counts: in open workspaces, not cleared.
+export function waitingItems(list: AttentionList, workspaces: WorkspaceList, cleared: ReadonlySet<string>): AttentionItem[] {
+  return [...list.values()].filter((item) => workspaces.get(item.workspaceId)?.open !== false && !isCleared(item, cleared));
+}
+
+// Chats and sub-agents waiting on the user: filter, search, group, and act on the selected one.
+export function WaitingView({ deps, theme, compact, navigation }: { deps: InboxDeps; theme: PluginTheme; compact: boolean; navigation: PluginScreenProps["navigation"] }) {
+  {
+    const layout = { compact };
     const t = useTokens(theme, layout.compact);
     const toast = useToast();
-    const [tab, setTab] = useState<Tab>(params.tab === "bookmarks" ? "bookmarks" : "waiting");
     const [filter, setFilter] = useState<InboxFilter>("all");
     const [search, setSearch] = useState("");
     const [selected, setSelected] = useState<string | null>(null);
     const [width, setWidth] = useState(0);
     const list = useValue(deps.attention);
     const workspaces = useValue(deps.workspaces);
-    const bookmarkCount = bookmarksOf(useValue(deps.bookmarks)).bookmarks.length;
     const settings = useSettings(inboxSettings);
     const stored = settings.status === "ready" ? settings.values : DEFAULT_SETTINGS;
     const cleared = useMemo(() => new Set(stored.cleared), [stored.cleared]);
@@ -399,8 +403,6 @@ export function createInboxScreen(deps: InboxDeps) {
       .filter((item) => workspaces.get(item.workspaceId)?.open !== false)
       .map((item) => ({ ...item, workspace: workspaces.get(item.workspaceId)?.name ?? "" }));
     const { shown, counts } = inboxView(entries, { filter, search, cleared });
-    // As the sidebar counts it: every item not cleared, whatever the search and filter.
-    const waitingCount = entries.filter((entry) => !isCleared(entry, cleared)).length;
     const wide = !layout.compact && width >= WIDE;
     const open = navigation ? (agentId: string) => navigation.openAgent({ agentId }) : null;
 
@@ -473,19 +475,6 @@ export function createInboxScreen(deps: InboxDeps) {
       }
     }
 
-    const tabs = (
-      <Segmented<Tab>
-        t={t}
-        label="Inbox list"
-        value={tab}
-        onChange={setTab}
-        options={[
-          { value: "waiting", label: `Waiting on you${waitingCount ? ` · ${waitingCount}` : ""}`, icon: "Inbox" },
-          { value: "bookmarks", label: `Bookmarks${bookmarkCount ? ` · ${bookmarkCount}` : ""}`, icon: "Bookmark" },
-        ]}
-      />
-    );
-
     const toolbar = (
       <View style={{ gap: 8, paddingHorizontal: 10 }}>
         <Segmented<InboxFilter>
@@ -538,20 +527,12 @@ export function createInboxScreen(deps: InboxDeps) {
 
     return (
       <View style={{ flex: 1, backgroundColor: theme.colors.surface0 }} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
-        {!wide && detail && tab === "waiting" ? (
+        {!wide && detail ? (
           detail
         ) : (
           <>
-            <View style={{ gap: 10, paddingHorizontal: layout.compact ? 12 : 20, paddingTop: layout.compact ? 12 : 16, paddingBottom: 8 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                {layout.compact ? null : <Text style={t.text.title}>Inbox</Text>}
-                {tabs}
-              </View>
-            </View>
-            {tab === "bookmarks" ? (
-              <Bookmarks t={t} deps={deps} workspaces={workspaces} open={open} />
-            ) : wide ? (
-              <View style={{ flex: 1, flexDirection: "row", borderTopWidth: 1, borderTopColor: t.c.border }}>
+            {wide ? (
+              <View style={{ flex: 1, flexDirection: "row" }}>
                 <View style={{ width: Math.min(420, Math.max(320, width * 0.38)), borderRightWidth: 1, borderRightColor: t.c.border, paddingTop: 10 }}>
                   {toolbar}
                   {listPane}
@@ -559,7 +540,7 @@ export function createInboxScreen(deps: InboxDeps) {
                 <View style={{ flex: 1 }}>{detail ?? <EmptyState t={t} icon="MousePointerClick" title={shown.length ? "Pick an item" : "Nothing selected"} hint="Its request, error or last answer shows here." />}</View>
               </View>
             ) : (
-              <View style={{ flex: 1, gap: 4 }}>
+              <View style={{ flex: 1, gap: 4, paddingTop: 10 }}>
                 {toolbar}
                 {listPane}
               </View>
@@ -568,27 +549,5 @@ export function createInboxScreen(deps: InboxDeps) {
         )}
       </View>
     );
-  };
-}
-
-// "Inbox" in Paseo's sidebar header, with how many items wait; amber while one needs permission.
-// Finished items cleared from the Inbox are not counted.
-export function createInboxSidebarItem(deps: InboxDeps) {
-  return function InboxSidebarItem({ currentScreen, openScreen, theme }: PluginSidebarItemProps) {
-    const list = useValue(deps.attention);
-    const workspaces = useValue(deps.workspaces);
-    const settings = useSettings(inboxSettings);
-    const cleared = new Set(settings.status === "ready" ? settings.values.cleared : []);
-    const shown = [...list.values()].filter((item) => workspaces.get(item.workspaceId)?.open !== false && !isCleared(item, cleared));
-    const count = shown.length;
-    const permission = shown.some((item) => item.reason === "permission");
-    return (
-      <SidebarRow
-        icon="Inbox"
-        active={currentScreen?.screenId === INBOX_SCREEN_ID}
-        onPress={() => openScreen({ screenId: INBOX_SCREEN_ID })}
-        trailing={count ? <Text style={{ fontSize: 12, color: permission ? theme.colors.statusWarning : theme.colors.foregroundMuted, paddingRight: 8 }}>{count}</Text> : null}
-      />
-    );
-  };
+  }
 }

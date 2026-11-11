@@ -39,10 +39,67 @@ export function stepCounts(steps: readonly Step[]): { done: number; total: numbe
   return { done: steps.filter((step) => step.status === "completed").length, total: steps.length };
 }
 
-// What the card shows: the plan while it has unfinished steps, "all done" right after it finishes,
-// and nothing otherwise (no plan, an empty plan, or a finished plan once the moment has passed).
-export function cardMode(steps: readonly Step[] | null, finishedRecently: boolean): "plan" | "done" | "hidden" {
+// What the card shows: the plan while it has unfinished steps; once finished, "all done" for a
+// moment (`finishedRecently`), or for as long as the chat has the plan when `show` is "always".
+// Nothing for no plan or an empty plan.
+export function cardMode(steps: readonly Step[] | null, finishedRecently: boolean, show: StepsShow = "unfinished"): "plan" | "done" | "hidden" {
   if (!steps || steps.length === 0) return "hidden";
   if (steps.some((step) => step.status !== "completed")) return "plan";
-  return finishedRecently ? "done" : "hidden";
+  return finishedRecently || show === "always" ? "done" : "hidden";
+}
+
+// ---------- Options ----------
+
+export type StepsShow = "unfinished" | "always";
+
+// The card's options as saved (every key optional, so older versions still read the profile).
+export interface StepsSettings {
+  show?: StepsShow;
+  doneSeconds?: number;
+  position?: "bottom" | "top";
+  scope?: "open" | "workspace";
+  startFolded?: boolean;
+  hideCompleted?: boolean;
+  maxSteps?: number;
+  progress?: boolean;
+}
+
+export interface StepsOptions {
+  show: StepsShow;
+  // How long "All done" stays before the card hides itself (when show is "unfinished").
+  doneSeconds: number;
+  position: "bottom" | "top";
+  // The open chat's plan, or every chat in the open workspace that has an unfinished plan.
+  scope: "open" | "workspace";
+  startFolded: boolean;
+  hideCompleted: boolean;
+  // At most this many steps listed; null lists them all.
+  maxSteps: number | null;
+  progress: boolean;
+}
+
+export const DEFAULT_DONE_SECONDS = 8;
+
+export function stepsOptions(saved: StepsSettings | undefined): StepsOptions {
+  return {
+    show: saved?.show ?? "unfinished",
+    doneSeconds: saved?.doneSeconds ?? DEFAULT_DONE_SECONDS,
+    position: saved?.position ?? "bottom",
+    scope: saved?.scope ?? "open",
+    startFolded: saved?.startFolded ?? false,
+    hideCompleted: saved?.hideCompleted ?? false,
+    maxSteps: saved?.maxSteps ?? null,
+    progress: saved?.progress ?? true,
+  };
+}
+
+// The steps the list draws, and how many it leaves out. Hidden finished steps are not counted as
+// left out; the current step is always drawn, even past the limit.
+export function listedSteps(steps: readonly Step[], options: Pick<StepsOptions, "hideCompleted" | "maxSteps">): { rows: Step[]; more: number } {
+  const open = options.hideCompleted ? steps.filter((step) => step.status !== "completed") : [...steps];
+  if (options.maxSteps === null || open.length <= options.maxSteps) return { rows: open, more: 0 };
+  const current = open.findIndex((step) => step.status === "in_progress");
+  const start = current < 0 ? 0 : Math.min(Math.max(0, current - 1), open.length - options.maxSteps);
+  const rows = open.slice(start, start + options.maxSteps);
+  return { rows, more: open.length - rows.length };
 }

@@ -73,6 +73,46 @@ export function visibleChats<Ref extends { key: string }>(latestFirst: readonly 
   return { rows, hidden: latestFirst.length - rows.length };
 }
 
+// How a workspace lists its chats and their sub-agents: one rule for the rows drawn and for which
+// row shows a chat's running work.
+export interface ChatListing {
+  limit: number;
+  subLimit: number;
+  // Every sub-agent (up to subLimit), only the open one, or none.
+  subAgents: boolean | "open";
+  isExpanded(key: string): boolean;
+  // The open chat or sub-agent.
+  openKey: string | null;
+}
+
+// `openChatKey` is the listed chat holding the open agent (see owningRowKey), kept listed past the limit.
+export function listedTopChats<Ref extends { key: string }>(workspaceKey: string, chats: readonly Ref[], listing: ChatListing, openChatKey: string | null) {
+  return visibleChats(chats, listing.limit, listing.isExpanded(`chats:${workspaceKey}`), openChatKey);
+}
+
+export function listedSubAgents<Ref extends { key: string }>(parentKey: string, subs: readonly Ref[], listing: ChatListing): { rows: Ref[]; hidden: number } {
+  if (listing.subAgents === false) return { rows: [], hidden: 0 };
+  if (listing.subAgents === "open") return { rows: subs.filter((agent) => agent.key === listing.openKey), hidden: 0 };
+  return visibleChats(subs, listing.subLimit, listing.isExpanded(`subs:${parentKey}`), listing.openKey);
+}
+
+// Every chat and sub-agent row a workspace draws under it.
+export function listedChatKeys(workspaceKey: string, tree: { top: readonly { key: string; id: string }[]; children: ReadonlyMap<string, readonly { key: string }[]> }, listing: ChatListing): Set<string> {
+  const keys = new Set<string>();
+  const openChatKey = owningRowKey(tree, listing.openKey, listing.subAgents !== false) ?? listing.openKey;
+  for (const chat of listedTopChats(workspaceKey, tree.top, listing, openChatKey).rows) {
+    keys.add(chat.key);
+    for (const sub of listedSubAgents(chat.key, tree.children.get(chat.id) ?? [], listing).rows) keys.add(sub.key);
+  }
+  return keys;
+}
+
+// A row's running work is shown by the rows under it when every running chat it covers is drawn
+// there: then only those rows pulse, not this one.
+export function runningShownBelow(running: readonly { key: string }[], listed: ReadonlySet<string>): boolean {
+  return running.length > 0 && running.every((agent) => listed.has(agent.key));
+}
+
 // A workspace's chats as a tree: each sub-agent sits under its top-level ancestor (deeper
 // sub-agents too); a sub-agent whose parent is not listed here (archived, or in another workspace)
 // stands at the top level, so no open sub-agent goes missing. Both keep `latestFirst` order.

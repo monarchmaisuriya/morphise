@@ -1,14 +1,12 @@
-import { usePaseo } from "@getpaseo/plugin/client";
-import { Icon } from "@getpaseo/plugin/client/ui";
+import { type AgentRef, useAgent, usePaseo } from "@getpaseo/plugin/client";
 import { useEffect, useState } from "react";
 import { Animated, Pressable, ScrollView, Text, View } from "react-native";
-import { cardMode, latestSteps, readSteps, type Step, stepCounts } from "../shared/steps";
+import { chatName } from "../shared/chat-status";
+import { cardMode, latestSteps, listedSteps, readSteps, type Step, stepCounts, type StepsOptions } from "../shared/steps";
 import type { Tokens } from "./ui/kit";
-import { IconButton } from "./ui/kit";
+import { Icon, IconButton } from "./ui/kit";
 import { usePulse } from "./ui/pulse";
 
-// How long "All done" stays before the card hides itself.
-const DONE_FOR_MS = 8000;
 // How much history is searched for the current plan when a chat opens.
 const TAIL = 300;
 
@@ -86,26 +84,42 @@ function StepRow({ step, t }: { step: Step; t: Tokens }) {
   );
 }
 
-// The open chat's steps at the foot of the sidebar: shown while its plan has unfinished steps,
-// "All done" for a moment when it finishes, hidden otherwise. × hides this plan until it changes.
-export function StepsCard({ agentId, t }: { agentId: string | null; t: Tokens }) {
+// One chat's steps: shown while its plan has unfinished steps, "All done" for `doneSeconds` when it
+// finishes (or for as long as the plan stands when shown always), hidden otherwise. × hides this
+// plan until it changes. `title` names the chat when several cards are shown.
+// `hidden` keeps the card from drawing while it still follows its plan; `onShown` reports whether
+// it has something to show.
+export function StepsCard({ agentId, t, options, title = null, hidden = false, onShown }: { agentId: string | null; t: Tokens; options: StepsOptions; title?: string | null; hidden?: boolean; onShown?(shown: boolean): void }) {
   const { steps, finishedAt } = usePlan(agentId);
   const [now, setNow] = useState(Date.now());
   const [dismissed, setDismissed] = useState<string | null>(null);
-  const [folded, setFolded] = useState(false);
-  const finishedRecently = finishedAt !== null && now - finishedAt < DONE_FOR_MS;
+  const [folded, setFolded] = useState(options.startFolded);
+  const doneForMs = options.doneSeconds * 1000;
+  const finishedRecently = finishedAt !== null && now - finishedAt < doneForMs;
   useEffect(() => {
     if (finishedAt === null) return;
-    const timer = setTimeout(() => setNow(Date.now()), Math.max(0, DONE_FOR_MS - (Date.now() - finishedAt)) + 50);
+    const timer = setTimeout(() => setNow(Date.now()), Math.max(0, doneForMs - (Date.now() - finishedAt)) + 50);
     return () => clearTimeout(timer);
-  }, [finishedAt]);
-  const mode = cardMode(steps, finishedRecently);
+  }, [finishedAt, doneForMs]);
+  const mode = cardMode(steps, finishedRecently, options.show);
   const planKey = steps ? JSON.stringify(steps) : null;
-  if (mode === "hidden" || !steps || (planKey !== null && dismissed === planKey)) return null;
+  const shown = !(mode === "hidden" || !steps || (planKey !== null && dismissed === planKey));
+  useEffect(() => {
+    onShown?.(shown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shown]);
+  useEffect(() => () => onShown?.(false), []);
+  if (!shown || hidden || !steps) return null;
   const { done, total } = stepCounts(steps);
   const current = steps.find((step) => step.status === "in_progress") ?? steps.find((step) => step.status === "pending") ?? null;
+  const { rows, more } = listedSteps(steps, options);
   return (
-    <View accessibilityLabel={`Steps, ${done} of ${total} done`} style={{ marginHorizontal: 8, marginBottom: 6, padding: 8, gap: 4, borderRadius: 10, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1 }}>
+    <View accessibilityLabel={`Steps${title ? ` of ${title}` : ""}, ${done} of ${total} done`} style={{ marginHorizontal: 8, marginVertical: 3, padding: 8, gap: 4, borderRadius: 10, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1 }}>
+      {title ? (
+        <Text style={{ fontSize: 11, color: t.c.foregroundMuted }} numberOfLines={1}>
+          {title}
+        </Text>
+      ) : null}
       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
         <Pressable accessibilityRole="button" accessibilityLabel={folded ? "Show the steps" : "Hide the step list"} onPress={() => setFolded(!folded)} style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 6, minHeight: 22 }}>
           <Icon name={mode === "done" ? "CircleCheck" : "ListChecks"} size={13} color={mode === "done" ? t.c.statusSuccess : t.c.foregroundMuted} />
@@ -119,14 +133,50 @@ export function StepsCard({ agentId, t }: { agentId: string | null; t: Tokens })
         </Pressable>
         <IconButton t={t} size="sm" icon="X" label="Hide these steps until they change" onPress={() => setDismissed(planKey)} />
       </View>
-      {mode === "plan" ? <View style={{ height: 3, borderRadius: 2, backgroundColor: t.c.surface2, overflow: "hidden" }}><View style={{ width: `${Math.round((done / total) * 100)}%`, height: 3, backgroundColor: t.c.statusSuccess }} /></View> : null}
+      {mode === "plan" && options.progress ? <View style={{ height: 3, borderRadius: 2, backgroundColor: t.c.surface2, overflow: "hidden" }}><View style={{ width: `${Math.round((done / total) * 100)}%`, height: 3, backgroundColor: t.c.statusSuccess }} /></View> : null}
       {mode === "plan" && !folded ? (
         <ScrollView style={{ maxHeight: 200 }}>
-          {steps.map((step, index) => (
+          {rows.map((step, index) => (
             <StepRow key={`${index}:${step.text}`} step={step} t={t} />
           ))}
+          {more > 0 ? <Text style={{ fontSize: 11, color: t.c.foregroundMuted, paddingLeft: 22, paddingTop: 2 }}>{`${more} more`}</Text> : null}
         </ScrollView>
       ) : null}
     </View>
   );
+}
+
+// At most this many cards when every chat in the workspace shows its plan, chosen from the most
+// recent chats this many (each one reads its chat's history).
+const MAX_CARDS = 3;
+const CHATS_CHECKED = 12;
+
+// The cards the options ask for: the open chat's, or the latest chats of the open workspace that
+// have a plan to show, up to MAX_CARDS of them.
+export function StepsCards({ open, chats, t, options }: { open: string | null; chats: readonly AgentRef[]; t: Tokens; options: StepsOptions }) {
+  // Which chats currently draw a card; the first MAX_CARDS of them, latest first, are shown.
+  const [showing, setShowing] = useState<ReadonlySet<string>>(new Set());
+  if (options.scope === "open") return <StepsCard agentId={open} t={t} options={options} />;
+  const checked = chats.slice(0, CHATS_CHECKED);
+  const allowed = new Set(checked.filter((chat) => showing.has(chat.id)).slice(0, MAX_CARDS).map((chat) => chat.id));
+  const report = (id: string, shown: boolean) =>
+    setShowing((current) => {
+      if (current.has(id) === shown) return current;
+      const next = new Set(current);
+      if (shown) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  return (
+    <>
+      {checked.map((chat) => (
+        <NamedStepsCard key={chat.key} chat={chat} t={t} options={options} allowed={allowed.has(chat.id)} report={report} />
+      ))}
+    </>
+  );
+}
+
+function NamedStepsCard({ chat, t, options, allowed, report }: { chat: AgentRef; t: Tokens; options: StepsOptions; allowed: boolean; report(id: string, shown: boolean): void }) {
+  const title = useAgent(chat, (agent) => chatName(agent)) ?? null;
+  return <StepsCard agentId={chat.id} t={t} options={options} title={title} hidden={!allowed} onShown={(shown) => report(chat.id, shown)} />;
 }

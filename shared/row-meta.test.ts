@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { profileSchema } from "./profile";
-import { chatTree, effectiveIndicator, owningRowKey, readMark, rowShows, rowTitle, statusLine, visibleChats } from "./row-meta";
+import { chatTree, effectiveIndicator, listedChatKeys, owningRowKey, readMark, rowShows, rowTitle, runningShownBelow, statusLine, visibleChats } from "./row-meta";
 
 const view = (patch: Record<string, unknown> = {}) => profileSchema.parse({ sidebar: { view: patch } }).sidebar.view;
 
@@ -69,6 +69,26 @@ describe("visibleChats", () => {
   it("keeps the open chat listed even past the limit", () => {
     expect(visibleChats(refs, 5, false, "g")).toEqual({ rows: [...refs.slice(0, 5), { key: "g" }], hidden: 1 });
     expect(visibleChats(refs, 5, false, "b").rows).toEqual(refs.slice(0, 5));
+  });
+});
+
+describe("listedChatKeys and runningShownBelow", () => {
+  const ref = (id: string) => ({ key: `h:${id}`, id });
+  const tree = { top: [ref("a"), ref("b"), ref("c")], children: new Map([["a", [ref("s1"), ref("s2")]]]) };
+  const listing = (patch: Partial<Parameters<typeof listedChatKeys>[2]> = {}) => ({ limit: 2, subLimit: 1, subAgents: true as boolean | "open", isExpanded: () => false, openKey: null, ...patch });
+
+  it("lists the drawn chats and sub-agents, as the rows are drawn", () => {
+    expect([...listedChatKeys("w", tree, listing())]).toEqual(["h:a", "h:s1", "h:b"]);
+    expect([...listedChatKeys("w", tree, listing({ subAgents: false }))]).toEqual(["h:a", "h:b"]);
+    expect([...listedChatKeys("w", tree, listing({ subAgents: "open", openKey: "h:s2" }))]).toEqual(["h:a", "h:s2", "h:b"]);
+    expect([...listedChatKeys("w", tree, listing({ isExpanded: (key) => key === "chats:w" }))]).toContain("h:c");
+  });
+
+  it("leaves the pulse to the rows below only when every running chat is drawn there", () => {
+    const listed = listedChatKeys("w", tree, listing());
+    expect(runningShownBelow([ref("s1")], listed)).toBe(true);
+    expect(runningShownBelow([ref("s1"), ref("c")], listed)).toBe(false);
+    expect(runningShownBelow([], listed)).toBe(false);
   });
 });
 

@@ -1,8 +1,7 @@
-import { Icon } from "@getpaseo/plugin/client/ui";
 import { useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { type ValueStore, useValue } from "../profile-store";
-import { Dropdown, Field, MenuItem, type Tokens } from "../ui/kit";
+import { Dropdown, Field, Icon, MenuItem, type Tokens } from "../ui/kit";
 import { workspaceChoices, type WorkspaceList } from "../workspaces";
 
 // A workspace's name from the plugin's own list, so it works in modals as well as screens.
