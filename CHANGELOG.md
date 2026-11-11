@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.11.1 - 2026-11-12
+
+- **Done is gray again**, as it was before 0.8 (the theme's muted colour, drawn faint in the sidebar). 0.11.0 brought back 0.9's faint green instead. The filter menu and the settings Status order list use the same gray.
+- **Workbench icon:** a dashboard of panels instead of a hammer.
+
 ## 0.11.0 - 2026-11-12
 
 - **Workbench** replaces the separate Tasks and Inbox rows and screens: one row in Paseo's sidebar header, one screen.
@@ -19,7 +24,7 @@ This project follows [semantic versioning](https://semver.org).
 - **Running chats:** when a running chat is listed under its workspace, only the chat's dot pulses, not the workspace's. The same goes for a sub-agent under its chat.
 - **Icons keep their size:** a long branch name squeezed the branch icon to half its width in some rows. Every icon now keeps its size.
 - **Removed the "Remind me" pill** from the message box. Set reminders with the alarm button in the workspace header, /remind, or the sidebar.
-- **Done** is the faint grey-green again, as in 0.9.0.
+- **Done** is the faint grey-green again, as in 0.9.0 (gray from 0.11.1).
 - **Settings text boxes** (Extra CSS, preset metadata, prompts) line up with the other rows.
 
 Rolling back to 0.10.0: `paseo plugin update morphise --ref v0.10.0`.

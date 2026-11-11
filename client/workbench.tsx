@@ -187,7 +187,7 @@ export function createWorkbenchSidebarItem(deps: SurfaceDeps) {
     const active = currentScreen !== null && (currentScreen.screenId === WORKBENCH_SCREEN_ID || currentScreen.screenId in LEGACY_SCREENS);
     return (
       <SidebarRow
-        icon="Hammer"
+        icon="LayoutDashboard"
         label={counts.due ? `Workbench · ${counts.due} due` : "Workbench"}
         active={active}
         onPress={() => openScreen({ screenId: WORKBENCH_SCREEN_ID })}
