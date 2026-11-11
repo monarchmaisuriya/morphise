@@ -20,10 +20,12 @@ import {
 import { NotesPanel } from "./notes-panel";
 import { createPromptPicker } from "./prompt-picker";
 import { createChecksPanel } from "./checks-panel";
-import { createDispatchScreen, DISPATCH_SCREEN_ID } from "./dispatch";
+import { createDispatchScreen, DISPATCH_ICON, DISPATCH_SCREEN_ID } from "./dispatch";
 import { createWorkbenchScreen, createWorkbenchSidebarItem, WORKBENCH_SCREEN_ID, LEGACY_SCREENS } from "./workbench";
 import { createSidebarView } from "./sidebar-view";
-import { CHAT_STEPS_KIND, chatStepsSchema, createChatStepsRow, toChatSteps } from "./steps-card";
+import { CHAT_STEPS_KIND, chatStepsSchema, createChatStepsRow } from "./steps-card";
+import { THINKING_ROW_KIND, ThinkingRow, thinkingRowSchema, TOOL_ROW_KIND, ToolRow, toolRowSchema } from "./chat-rows";
+import { chatView, rowFate, transformedTypes } from "../shared/chat-view";
 import { stepsOptions } from "../shared/steps";
 import { applyStyleSheet } from "./web";
 
@@ -129,23 +131,31 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
       },
     },
     {
-      // With the steps card "In the chat", each plan update an agent posts is drawn as the card.
-      name: "steps.chat",
-      key: ({ profile }) => json([profile.sidebar.view.stepsCard, profile.sidebar.view.steps]),
+      // Every chat row Morphise hides or redraws, from one owner: the Chat settings (hidden row
+      // types, compact tool calls, folded thinking) and the steps card "In the chat". One
+      // transformer per row type, so two rules never compete for the same row.
+      name: "chat.timeline",
+      key: ({ profile }) => json([profile.chat, profile.timeline.hide, profile.sidebar.view.stepsCard, profile.sidebar.view.steps]),
       register({ profile }, track) {
-        const options = stepsOptions(profile.sidebar.view.steps);
-        if (profile.sidebar.view.stepsCard === false || options.position !== "chat") return;
-        track(
-          client.addTimelineTransformer({
-            id: "steps-card",
-            query: { itemType: "todo" },
-            transform({ item }) {
-              const data = toChatSteps(item);
-              return data ? { items: [{ type: "plugin", kind: CHAT_STEPS_KIND, version: 1, data }] } : undefined;
+        const steps = stepsOptions(profile.sidebar.view.steps);
+        const view = chatView(profile.chat, profile.timeline.hide, profile.sidebar.view.stepsCard !== false && steps.position === "chat");
+        for (const itemType of transformedTypes(view)) {
+          const transformer = {
+            id: `chat-${itemType.replaceAll("_", "-")}`,
+            query: { itemType },
+            transform({ item }: { item: unknown }) {
+              const fate = rowFate(itemType, item, view);
+              if (fate.kind === "keep") return undefined;
+              if (fate.kind === "hide") return { items: [] };
+              const kind = fate.kind === "tool" ? TOOL_ROW_KIND : fate.kind === "thinking" ? THINKING_ROW_KIND : CHAT_STEPS_KIND;
+              return { items: [{ type: "plugin", kind, version: 1, data: fate.data }] };
             },
-          }),
-        );
-        track(client.addTimelineRenderer({ kind: CHAT_STEPS_KIND, version: 1, schema: chatStepsSchema, Component: createChatStepsRow(client.paseo, () => options) }));
+          } as PluginTimelineTransformerContribution;
+          track(client.addTimelineTransformer(transformer));
+        }
+        if (view.toolCalls === "compact") track(client.addTimelineRenderer({ kind: TOOL_ROW_KIND, version: 1, schema: toolRowSchema, Component: ToolRow }));
+        if (view.reasoning === "fold") track(client.addTimelineRenderer({ kind: THINKING_ROW_KIND, version: 1, schema: thinkingRowSchema, Component: ThinkingRow }));
+        if (view.stepsInChat) track(client.addTimelineRenderer({ kind: CHAT_STEPS_KIND, version: 1, schema: chatStepsSchema, Component: createChatStepsRow(client.paseo, () => steps) }));
       },
     },
     {
@@ -183,7 +193,7 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
           client.addCommandCenterItem({
             id: "morphise-dispatch",
             title: "Dispatch: start several agents in new workspaces",
-            icon: "Rocket",
+            icon: DISPATCH_ICON,
             keywords: ["dispatch", "batch", "parallel", "agents", "prompts", "new workspace"],
             context: "global",
             onSelect: ({ openScreen }) => openScreen({ screenId: DISPATCH_SCREEN_ID }),
@@ -457,20 +467,6 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
       register({ profile }, track) {
         const presets = profile.newWorkspace.presets;
         if (presets.length) track(client.addNewWorkspaceItem({ id: "presets", Component: createPresetField(presets) }));
-      },
-    },
-    {
-      name: "timeline.hide",
-      key: ({ profile }) => json(profile.timeline.hide),
-      register({ profile }, track) {
-        for (const itemType of profile.timeline.hide) {
-          const transformer = {
-            id: `hide-${itemType.replaceAll("_", "-")}`,
-            query: { itemType },
-            transform: () => ({ items: [] }),
-          } as PluginTimelineTransformerContribution;
-          track(client.addTimelineTransformer(transformer));
-        }
       },
     },
     {

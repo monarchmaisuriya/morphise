@@ -1,7 +1,7 @@
 import type { PluginClientContext, PluginOpenScreenInput, PluginScreenProps } from "@getpaseo/plugin/client";
 import { useSettings } from "@getpaseo/plugin/client";
-import { useEffect, useRef, useState } from "react";
-import { Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import type { Chats } from "./chats";
 import { type DispatchSettings, dispatchSettings, modeChoices, modelChoices, modelsOf, projectsOf, providerStatus, splitPrompts, titleFromPrompt } from "./dispatch-options";
 import { createValueStore, type ValueStore, useValue } from "./profile-store";
@@ -89,7 +89,7 @@ function PromptRow({ t, row, index, count, running, onChange, onRemove, onSplit,
         {editable && count > 1 ? <IconButton t={t} size="sm" icon="X" label={`Remove prompt ${index + 1}`} disabled={running} onPress={onRemove} /> : null}
       </View>
       {editable ? (
-        <Field t={t} bare multiline value={row.text} onChangeText={onChange} placeholder={index === 0 ? "What should the agent do? Paste a list to start several." : "Another task"} accessibilityLabel={`Prompt ${index + 1}`} onCommand={onCommand} />
+        <Field t={t} bare multiline value={row.text} onChangeText={onChange} placeholder={index === 0 ? "What should the agent do? Paste a list to start several." : "Another task"} accessibilityLabel={`Prompt ${index + 1}`} onCommand={onCommand} autoFocus={index === 0 && count === 1 && row.status === "draft" && row.text === ""} />
       ) : (
         <Text style={{ fontSize: 13, lineHeight: 18, color: row.status === "starting" ? t.c.foregroundMuted : t.c.foreground, paddingHorizontal: 6 }} numberOfLines={3}>
           {row.text}
@@ -106,7 +106,7 @@ function PromptRow({ t, row, index, count, running, onChange, onRemove, onSplit,
   );
 }
 
-function Dispatch({ t, deps, openWorkspace }: { t: Tokens; deps: DispatchDeps; openWorkspace: ((workspaceId: string) => void) | null }) {
+function Dispatch({ t, deps, openWorkspace, header }: { t: Tokens; deps: DispatchDeps; openWorkspace: ((workspaceId: string) => void) | null; header: ReactNode }) {
   const paseo = deps.client.paseo;
   const settings = useSettings(dispatchSettings);
   const saved = settings.status === "ready" ? settings.values : DEFAULT_SETTINGS;
@@ -117,6 +117,8 @@ function Dispatch({ t, deps, openWorkspace }: { t: Tokens; deps: DispatchDeps; o
   const [chosen, setChosen] = useState<Partial<DispatchSettings>>({});
   const [rows, setRows] = useState<Row[]>(() => [newRow()]);
   const [running, setRunning] = useState(false);
+  // The current (or last) run: how many prompts it started with, and how many it has dealt with.
+  const [run, setRun] = useState({ total: 0, done: 0 });
   const runningRef = useRef(false);
 
   // Every model Paseo's providers offer, kept current as providers finish loading or change.
@@ -166,12 +168,15 @@ function Dispatch({ t, deps, openWorkspace }: { t: Tokens; deps: DispatchDeps; o
 
   // One at a time, in order. A failure marks its row and the rest still start; a row is never
   // started twice, because only draft and failed rows are picked and each is marked first.
-  const start = async (only: number | null = null) => {
+  // `which`: every draft and failed prompt, only the failed ones, or one row (its Retry).
+  const start = async (which: "all" | "failed" | number = "all") => {
     if (runningRef.current || !project || !model) return;
-    const queue = rows.filter((row) => (only === null || row.id === only) && (row.status === "draft" || row.status === "failed") && row.text.trim());
+    const picked = (row: Row) => (which === "all" ? row.status === "draft" || row.status === "failed" : which === "failed" ? row.status === "failed" : row.id === which && (row.status === "draft" || row.status === "failed"));
+    const queue = rows.filter((row) => picked(row) && row.text.trim());
     if (!queue.length) return;
     runningRef.current = true;
     setRunning(true);
+    setRun({ total: queue.length, done: 0 });
     // The whole queue is marked first, so none of it can be edited or split while it waits.
     const queued = new Set(queue.map((row) => row.id));
     setRows((rows) => rows.map((row) => (queued.has(row.id) ? { ...row, status: "queued", error: null } : row)));
@@ -191,95 +196,123 @@ function Dispatch({ t, deps, openWorkspace }: { t: Tokens; deps: DispatchDeps; o
       } catch (error) {
         update(row.id, { status: "failed", error: error instanceof Error ? error.message : String(error) });
       }
+      setRun((current) => ({ ...current, done: current.done + 1 }));
     }
     runningRef.current = false;
     setRunning(false);
   };
 
   const started = rows.filter((row) => row.status === "started");
+  const failed = rows.filter((row) => row.status === "failed");
+  const retryable = failed.filter((row) => row.text.trim());
   const label = running ? "Starting..." : pending.length > 1 ? `Start ${pending.length} agents` : "Start agent";
+  const problem = !project ? "Open a project in Paseo first; Dispatch starts agents in your projects." : !model && entries !== null && !holding ? "No model is available. Check Settings, Providers in Paseo." : null;
   return (
-    <View style={{ gap: 16 }}>
-      <View style={{ gap: 10, padding: 12, borderRadius: t.radius.card, borderWidth: 1, borderColor: t.c.border }}>
-        <Text style={t.text.label}>Each prompt starts a new workspace with</Text>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          <View style={{ minWidth: 200, flexGrow: 1 }}>
-            <Select t={t} label="Project" placeholder="No project yet" value={project?.id ?? null} onChange={(id) => remember({ project: id })} options={projects.map((item) => ({ value: item.id, label: item.name, icon: "Folder" }))} />
+    // On iOS the keyboard would cover the pinned bar (the first prompt has the cursor on open).
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: t.compact ? 12 : 24, gap: 14, maxWidth: 820, width: "100%", alignSelf: "center" }} keyboardShouldPersistTaps="handled">
+        {header}
+        {/* The prompts come first: what to do, then where and with what. */}
+        <View style={{ gap: 8 }}>
+          {rows.map((row, index) => (
+            <PromptRow
+              key={row.id}
+              t={t}
+              row={row}
+              index={index}
+              count={rows.length}
+              running={running}
+              onChange={(text) => update(row.id, { text, status: row.status === "failed" ? "failed" : "draft" })}
+              onRemove={() => setRows((current) => current.filter((item) => item.id !== row.id))}
+              onSplit={(parts) => setRows((current) => current.flatMap((item) => (item.id === row.id ? parts.map((part) => newRow(part)) : [item])))}
+              onRetry={() => void start(row.id)}
+              onOpen={row.workspaceId && openWorkspace ? () => openWorkspace(row.workspaceId ?? "") : null}
+              onCommand={() => void start()}
+            />
+          ))}
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            <Button t={t} variant="ghost" icon="Plus" label="Add prompt" disabled={running} onPress={() => setRows((current) => [...current, newRow()])} />
+            {started.length ? <Button t={t} variant="ghost" icon="ListX" label="Clear started" disabled={running} onPress={() => setRows((current) => (current.every((row) => row.status === "started") ? [newRow()] : current.filter((row) => row.status !== "started")))} /> : null}
           </View>
-          <View style={{ minWidth: 220, flexGrow: 1 }}>
-            <Select t={t} label="Model" placeholder={entries === null || holding ? "Loading models..." : "No model available"} value={model?.value ?? null} onChange={(value) => remember({ model: value, mode: undefined })} options={models.map((item) => ({ value: item.value, label: item.label, icon: "Bot" }))} />
-          </View>
-          {modes.length ? (
-            <View style={{ minWidth: 160, flexGrow: 1 }}>
-              <Select t={t} label="Mode" value={mode} onChange={(id) => remember({ mode: id })} options={modes.map((item) => ({ value: item.id, label: item.label, icon: "Shield" }))} />
+        </View>
+
+        {/* Where and with what, as one row of choices, like the options under Paseo's own composer. */}
+        <View style={{ gap: 8 }}>
+          <Text style={t.text.label}>Each prompt starts a new workspace with</Text>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+            <View style={{ minWidth: 180, flexGrow: 1, flexBasis: 180 }}>
+              <Select t={t} label="Project" placeholder="No project yet" value={project?.id ?? null} onChange={(id) => remember({ project: id })} options={projects.map((item) => ({ value: item.id, label: item.name, icon: "Folder" }))} />
             </View>
+            <View style={{ minWidth: 200, flexGrow: 2, flexBasis: 220 }}>
+              <Select t={t} label="Model" placeholder={entries === null || holding ? "Loading models..." : "No model available"} value={model?.value ?? null} onChange={(value) => remember({ model: value, mode: undefined })} options={models.map((item) => ({ value: item.value, label: item.label, icon: "Bot" }))} />
+            </View>
+            {modes.length ? (
+              <View style={{ minWidth: 140, flexGrow: 1, flexBasis: 140 }}>
+                <Select t={t} label="Mode" value={mode} onChange={(id) => remember({ mode: id })} options={modes.map((item) => ({ value: item.id, label: item.label, icon: "Shield" }))} />
+              </View>
+            ) : null}
+          </View>
+          {canWorktree ? (
+            <Segmented<Where>
+              t={t}
+              label="Where each agent works"
+              value={where}
+              onChange={(value) => remember({ where: value })}
+              options={[
+                { value: "worktree", label: "Its own worktree", icon: "GitBranch" },
+                { value: "local", label: "The project folder", icon: "Folder" },
+              ]}
+            />
+          ) : project ? (
+            <Text style={t.text.small}>Not a git project, so agents work in the project folder.</Text>
           ) : null}
         </View>
-        {canWorktree ? (
-          <Segmented<Where>
-            t={t}
-            label="Where each agent works"
-            value={where}
-            onChange={(value) => remember({ where: value })}
-            options={[
-              { value: "worktree", label: "Its own worktree", icon: "GitBranch" },
-              { value: "local", label: "The project folder", icon: "Folder" },
-            ]}
-          />
-        ) : project ? (
-          <Text style={t.text.small}>Not a git project, so agents work in the project folder.</Text>
-        ) : null}
-      </View>
+      </ScrollView>
 
-      <View style={{ gap: 8 }}>
-        {rows.map((row, index) => (
-          <PromptRow
-            key={row.id}
-            t={t}
-            row={row}
-            index={index}
-            count={rows.length}
-            running={running}
-            onChange={(text) => update(row.id, { text, status: row.status === "failed" ? "failed" : "draft" })}
-            onRemove={() => setRows((current) => current.filter((item) => item.id !== row.id))}
-            onSplit={(parts) => setRows((current) => current.flatMap((item) => (item.id === row.id ? parts.map((part) => newRow(part)) : [item])))}
-            onRetry={() => void start(row.id)}
-            onOpen={row.workspaceId && openWorkspace ? () => openWorkspace(row.workspaceId ?? "") : null}
-            onCommand={() => void start()}
-          />
-        ))}
+      {/* Always in view: what will start, and the button that starts it. */}
+      <View style={{ borderTopWidth: 1, borderTopColor: t.c.border, backgroundColor: t.c.surface0 }}>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 10, paddingHorizontal: t.compact ? 12 : 24, paddingVertical: 10, maxWidth: 820, width: "100%", alignSelf: "center" }}>
+          <View style={{ flex: 1, minWidth: 160, gap: 2 }}>
+            <Text style={{ fontSize: 13, color: t.c.foreground }} numberOfLines={1}>
+              {running
+                ? `Starting ${Math.min(run.done + 1, run.total)} of ${run.total}...`
+                : started.length || failed.length
+                  ? [started.length ? `${started.length} started` : null, failed.length ? `${failed.length} failed` : null].filter(Boolean).join(" · ")
+                  : pending.length
+                    ? `${pending.length} ${pending.length === 1 ? "prompt" : "prompts"} ready`
+                    : "Write a prompt to start"}
+            </Text>
+            {problem ? <Text style={t.text.danger} numberOfLines={2}>{problem}</Text> : COMMAND_HINT && !t.compact && pending.length ? <Text style={t.text.small}>{COMMAND_HINT}</Text> : null}
+          </View>
+          {retryable.length && !running ? <Button t={t} icon="RotateCcw" label={`Retry ${retryable.length} failed`} disabled={!project || !model} onPress={() => void start("failed")} /> : null}
+          <Button t={t} variant="primary" icon="Send" label={label} disabled={!ready} onPress={() => void start()} />
+        </View>
       </View>
-
-      <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
-        <Button t={t} variant="ghost" icon="Plus" label="Add prompt" disabled={running} onPress={() => setRows((current) => [...current, newRow()])} />
-        {started.length ? <Button t={t} variant="ghost" icon="ListX" label="Clear started" disabled={running} onPress={() => setRows((current) => (current.every((row) => row.status === "started") ? [newRow()] : current.filter((row) => row.status !== "started")))} /> : null}
-        <View style={{ flex: 1 }} />
-        {COMMAND_HINT && !t.compact ? <Text style={t.text.small}>{COMMAND_HINT}</Text> : null}
-        <Button t={t} variant="primary" icon="Send" label={label} disabled={!ready} onPress={() => void start()} />
-      </View>
-      {!model && entries !== null && !holding ? <Text style={t.text.small}>No model is available. Check Settings, Providers in Paseo.</Text> : null}
-      {!project ? <Text style={t.text.small}>Open a project in Paseo first; Dispatch starts agents in your projects.</Text> : null}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
+
+export const DISPATCH_ICON = "CopyPlus";
 
 export function createDispatchScreen(deps: DispatchDeps) {
   return function DispatchScreen({ theme, layout, navigation }: PluginScreenProps) {
     const t = useTokens(theme, layout.compact);
+    const header = (
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+        <View style={{ width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: t.c.surface2 }}>
+          <Icon name={DISPATCH_ICON} size={16} color={t.c.foreground} />
+        </View>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={t.text.title}>Dispatch</Text>
+          <Text style={t.text.small}>Start several agents at once, each in a new workspace.</Text>
+        </View>
+      </View>
+    );
     return (
       <PopoverHost>
-        <ScrollView style={{ flex: 1, backgroundColor: theme.colors.surface0 }} contentContainerStyle={{ padding: layout.compact ? 12 : 24, gap: 16, maxWidth: 820, width: "100%", alignSelf: "center" }} keyboardShouldPersistTaps="handled">
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-            <View style={{ width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: t.c.surface2 }}>
-              <Icon name="Rocket" size={16} color={t.c.foreground} />
-            </View>
-            <View style={{ flex: 1, gap: 2 }}>
-              <Text style={t.text.title}>Dispatch</Text>
-              <Text style={t.text.small}>Start several agents at once, each in a new workspace.</Text>
-            </View>
-          </View>
-          <Dispatch t={t} deps={deps} openWorkspace={navigation ? (id) => navigation.openWorkspace({ workspaceId: id }) : null} />
-        </ScrollView>
+        <View style={{ flex: 1, backgroundColor: theme.colors.surface0 }}>
+          <Dispatch t={t} deps={deps} header={header} openWorkspace={navigation ? (id) => navigation.openWorkspace({ workspaceId: id }) : null} />
+        </View>
       </PopoverHost>
     );
   };

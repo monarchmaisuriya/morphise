@@ -49,7 +49,7 @@ import { Button, Dropdown, Field, Icon, IconButton, MenuItem, PopoverHost, Tag, 
 import { BLUE, DONE_OPACITY, PURPLE, statusColor } from "./ui/hues";
 import { usePulse } from "./ui/pulse";
 import { StepsCards } from "./steps-card";
-import { DISPATCH_SCREEN_ID, screenOpener } from "./dispatch";
+import { DISPATCH_ICON, DISPATCH_SCREEN_ID, screenOpener } from "./dispatch";
 import type { PullRequestInfo, ServiceInfo, WorkspaceInfo, WorkspaceList } from "./workspaces";
 import { viewPresence } from "./view-presence";
 import { cannotHover } from "./web";
@@ -1105,7 +1105,7 @@ function Header({ menu, setMenu, searching, setSearching, search, onSearch, filt
   return (
     <View ref={headerRef} style={styles.header}>
       <Text style={styles.headerText}>{config.list === "chats" ? "Chats" : "Workspaces"}</Text>
-      {openScreen ? <IconButton t={t} size="sm" icon="Rocket" label="Dispatch: start several agents in new workspaces" onPress={() => openScreen({ screenId: DISPATCH_SCREEN_ID })} /> : null}
+      {openScreen ? <IconButton t={t} size="sm" icon={DISPATCH_ICON} label="Dispatch: start several agents in new workspaces" onPress={() => openScreen({ screenId: DISPATCH_SCREEN_ID })} /> : null}
       <IconButton t={t} size="sm" icon="Search" tone={showSearch ? props.theme.colors.foreground : undefined} label={showSearch ? "Close search" : "Search"} onPress={() => (showSearch ? (onSearch(""), setSearching(false)) : setSearching(true))} />
       <View>
         <IconButton t={t} size="sm" icon="ListFilter" tone={filters || menu === "filter" ? props.theme.colors.foreground : undefined} label={filters ? `Filters, ${filters} on` : "Filter"} onPress={() => toggle("filter")} />

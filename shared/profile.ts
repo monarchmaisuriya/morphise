@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { actionSchema } from "./actions";
+import { TOOL_KINDS } from "./chat-view";
 
 const MAX_ITEMS = 50;
 
@@ -257,6 +258,15 @@ export const profileSchema = z.strictObject({
   commandCenter: list(commandCenterSchema),
   newWorkspace: z.strictObject({ presets: list(presetSchema) }).prefault({}),
   timeline: z.strictObject({ hide: z.array(z.enum(TIMELINE_ITEM_TYPES)).max(TIMELINE_ITEM_TYPES.length).default([]) }).prefault({}),
+  // How chat rows are drawn (see shared/chat-view.ts). Optional with no default, so a profile
+  // nobody changed here stays readable by 0.12, which rejects keys it does not know.
+  chat: z
+    .strictObject({
+      toolCalls: z.enum(["paseo", "compact"]).optional(),
+      hideFinished: z.array(z.enum(TOOL_KINDS)).max(TOOL_KINDS.length).optional(),
+      reasoning: z.enum(["show", "fold", "hide"]).optional(),
+    })
+    .optional(),
   style: z
     .strictObject({
       enabled: z.boolean().default(false),

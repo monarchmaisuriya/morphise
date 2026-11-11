@@ -7,7 +7,7 @@ import { createProfileStore, createValueStore, layoutsOf, profileOf, promptsOf }
 import { type Problem, createReconciler } from "./client/reconciler";
 import { createDraftStore } from "./client/draft";
 import { createFormScreen } from "./client/forms/fields";
-import { ButtonsTab, CommandsTab, LayoutsTab, LookTab, PromptsTab, SidebarTab } from "./client/forms/tabs";
+import { ButtonsTab, ChatTab, CommandsTab, GeneralTab, LayoutsTab, LookTab, PromptsTab, SidebarTab } from "./client/forms/tabs";
 import { type ActionDeps, EDITOR_SCREEN_ID, JSON_SCREEN_ID } from "./client/run-action";
 import { createSections } from "./client/sections";
 import { chimeWav } from "./client/chime";
@@ -224,7 +224,9 @@ export default function contribute(client: PluginClientContext) {
   const drafts = createDraftStore();
   const tabs = [
     { id: "layouts", title: "Layouts", icon: "Layers", Component: createFormScreen(drafts, LayoutsTab, { editsProfile: false }) },
+    { id: "general", title: "General", icon: "SlidersHorizontal", Component: createFormScreen(drafts, GeneralTab, { editsProfile: true }) },
     { id: EDITOR_SCREEN_ID, title: "Sidebar", icon: "PanelLeft", Component: createFormScreen(drafts, SidebarTab, { editsProfile: true }) },
+    { id: "chat", title: "Chat", icon: "MessageSquare", Component: createFormScreen(drafts, ChatTab, { editsProfile: true }) },
     { id: "look", title: "Look", icon: "Palette", Component: createFormScreen(drafts, LookTab, { editsProfile: true }) },
     { id: "buttons", title: "Buttons", icon: "MousePointerClick", Component: createFormScreen(drafts, ButtonsTab, { editsProfile: true }) },
     { id: "commands", title: "Commands", icon: "Command", Component: createFormScreen(drafts, CommandsTab, { editsProfile: true }) },

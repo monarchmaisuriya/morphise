@@ -207,7 +207,7 @@ function StepsCardView({ plan, t, options, title = null, inline = false, hidden 
       </View>
       {mode === "plan" && options.progress ? <View style={{ height: 3, borderRadius: 2, backgroundColor: t.c.surface2, overflow: "hidden" }}><View style={{ width: `${Math.round((done / total) * 100)}%`, height: 3, backgroundColor: t.c.statusSuccess }} /></View> : null}
       {mode === "plan" && !folded ? (
-        <ScrollView style={{ maxHeight: inline ? 320 : 200 }}>
+        <ScrollView nestedScrollEnabled style={{ maxHeight: inline ? 320 : 200 }}>
           {rows.map((step, index) => (
             <StepRow key={`${index}:${step.text}`} step={step} t={t} />
           ))}
@@ -277,11 +277,6 @@ export const CHAT_STEPS_KIND = "steps-card";
 export const chatStepsSchema = z.object({ steps: z.array(z.object({ text: z.string(), status: z.enum(["pending", "in_progress", "completed"]) })) });
 type ChatSteps = z.output<typeof chatStepsSchema>;
 
-// An empty plan (the agent cleared it) keeps Paseo's own row.
-export function toChatSteps(item: unknown): ChatSteps | null {
-  const steps = readSteps(item);
-  return steps && steps.length ? { steps } : null;
-}
 
 export function createChatStepsRow(paseo: Paseo, options: () => StepsOptions) {
   return function ChatStepsRow({ agentId, item, timestamp, theme, host, layout }: PluginTimelineItemProps<ChatSteps>) {

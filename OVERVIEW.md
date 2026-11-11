@@ -2,7 +2,7 @@ Morphise reshapes Paseo's interface from settings forms, adds a status-aware sid
 
 ## What you can change
 
-Settings are split into tabs: Layouts, Sidebar, Look, Buttons, Commands, Prompts and Advanced (the whole profile as JSON).
+Settings are split into tabs: Layouts, General, Sidebar, Chat, Look, Buttons, Commands, Prompts and Advanced (the whole profile as JSON).
 
 - **Layouts:** keep several whole setups and switch between them in settings or from the Command Center ("Morphise layout: …"). Your 0.1 profile becomes the layout "Default".
 - **Sidebar view:** a replacement for the workspace list. Pick "Morphise" in Paseo's Settings, Sidebar, Sidebar view (Morphise's settings remind you while Paseo still shows its own). It lists workspaces or chats.
@@ -25,10 +25,11 @@ Settings are split into tabs: Layouts, Sidebar, Look, Buttons, Commands, Prompts
   - **Bookmarks:** answers you kept with /bookmark.
 - **Steps card:** a chat's plan as a card, in the chat where the agent posts it (or in the sidebar), that shows while it works and settles when it is done. Choose when it shows, how long "All done" stays, top or bottom, the open chat or every chat in the workspace, how many steps, hiding finished steps, starting folded and the progress bar, under Settings, Sidebar, Steps card.
 - **Checks panel:** a workspace tab with the pull request's checks, review and conflicts, and "Ask the agent to fix".
-- **Dispatch** (the rocket in the Workspaces bar, or the Command Center): start several agents at once, each in a new workspace. Pick the project, any model your providers offer, the mode, and worktree or project folder (remembered on each device), write or paste the prompts (a pasted list splits into one prompt per item), and start them all with ⌘↵. Each prompt then shows Starting, Started (with Open) or Failed (with Retry).
+- **Dispatch** (the two-cards button in the Workspaces bar, or the Command Center): start several agents at once, each in a new workspace. Pick the project, any model your providers offer, the mode, and worktree or project folder (remembered on each device), write or paste the prompts (a pasted list splits into one prompt per item), and start them all with ⌘↵. Each prompt then shows Starting, Started (with Open) or Failed (with Retry).
+- **Chat:** tool calls as one line each that open to show their output, hide finished tool calls by kind, fold or hide thinking, and hide whole kinds of rows.
 - **Theme:** a light or dark palette from eight colours, listed under Settings, Appearance.
 - **Buttons:** sidebar header and footer rows, workspace header buttons or menus, your own pills above the message box, and message box controls (a button, an on/off switch saved on the chat, or a model, mode or thinking picker).
-- **Commands:** slash commands, Command Center items, New workspace presets, and hidden timeline row types.
+- **Commands:** slash commands, Command Center items and New workspace presets.
 - **Style layer (unsupported, off by default):** hide built-in parts by their test id and add your own CSS. Desktop and browser only; any Paseo update can rename the ids it relies on.
 
 Buttons, rows, commands and controls run one of a small set of actions: open a link, insert or replace text in the message box, set the model, mode or thinking level, or open Morphise's settings. Morphise has no action that runs commands or writes files.

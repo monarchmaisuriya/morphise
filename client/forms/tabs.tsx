@@ -9,6 +9,7 @@ import { DEFAULT_CHAT_ROWS, rowShows } from "../../shared/row-meta";
 import { VIEW_SECTIONS } from "./view-sections";
 import { DEFAULT_DONE_SECONDS, type StepsSettings, stepsOptions } from "../../shared/steps";
 import type { Layout, Prompt } from "../../shared/document";
+import { type ChatSettings, TOOL_KIND_TITLES, TOOL_KINDS } from "../../shared/chat-view";
 import { EMPTY_PROFILE, type Profile, TIMELINE_ITEM_TYPES } from "../../shared/profile";
 import { presetTitle } from "../../shared/reminders";
 import { useValue } from "../profile-store";
@@ -353,7 +354,7 @@ function viewFields(form: Form): { [Key in keyof ViewConfig]-?: ReactNode } {
         onChange={(value) => setOptional("autoArchive", value === "off" ? undefined : { days: Number(value) }, undefined)}
       />
     ),
-    stepsCard: <SwitchField label="Show the steps card" hint="A chat's plan (its to-do list) as a card in the sidebar." value={view.stepsCard !== false} onChange={(value) => setOptional("stepsCard", value, true)} />,
+    stepsCard: <SwitchField label="Show the steps card" hint={steps.position === "chat" ? "A chat's plan (its to-do list) as a card in the chat. The sidebar shows none." : "A chat's plan (its to-do list) as a card in the sidebar."} value={view.stepsCard !== false} onChange={(value) => setOptional("stepsCard", value, true)} />,
     steps:
       view.stepsCard !== false ? (
         <>
@@ -481,6 +482,104 @@ function ViewCallout({ form }: { form: Form }) {
   );
 }
 
+// ---------- Chat ----------
+
+// How chat rows are drawn. Every choice here uses Paseo's timeline API, so it works on phones too
+// and survives Paseo updates; Paseo's own rows stay the default.
+export function ChatTab(form: Form): ReactNode {
+  const chat = form.profile.chat ?? {};
+  const timeline = form.profile.timeline;
+  // Written only when it differs from the default, so 0.12 can still read an unchanged profile.
+  const setChat = <Key extends keyof ChatSettings>(key: Key, value: ChatSettings[Key] | undefined) =>
+    form.updateProfile((profile) => {
+      const next: ChatSettings = { ...(profile.chat ?? {}) };
+      if (value === undefined || (Array.isArray(value) && value.length === 0)) delete next[key];
+      else next[key] = value;
+      if (Object.keys(next).length) profile.chat = next;
+      else delete profile.chat;
+    });
+  const hidden = new Set(chat.hideFinished ?? []);
+  return (
+    <>
+      <SettingsSection title="Tool calls" info="Commands, file reads and edits, searches and other tools an agent uses.">
+        <SettingsCard>
+          <SelectField
+            label="Show them as"
+            value={chat.toolCalls ?? "paseo"}
+            options={[
+              { value: "paseo", label: "Paseo's own rows" },
+              { value: "compact", label: "One line each, opening to show the output" },
+            ]}
+            onChange={(value) => setChat("toolCalls", value === "paseo" ? undefined : value)}
+          />
+          {TOOL_KINDS.map((kind) => (
+            <SwitchField
+              key={kind}
+              label={`Hide finished ${TOOL_KIND_TITLES[kind].toLowerCase()}`}
+              hint={kind === "shell" ? "Running and failed calls always show." : undefined}
+              value={hidden.has(kind)}
+              onChange={(hide) =>
+                form.updateProfile((profile) => {
+                  // Read from the profile being changed, so two quick toggles both count.
+                  const current = new Set(profile.chat?.hideFinished ?? []);
+                  if (hide) current.add(kind);
+                  else current.delete(kind);
+                  const next: ChatSettings = { ...(profile.chat ?? {}), hideFinished: TOOL_KINDS.filter((item) => current.has(item)) };
+                  if (!next.hideFinished?.length) delete next.hideFinished;
+                  if (Object.keys(next).length) profile.chat = next;
+                  else delete profile.chat;
+                })
+              }
+            />
+          ))}
+        </SettingsCard>
+      </SettingsSection>
+      <SettingsSection title="Thinking" info="The agent's reasoning between steps, when the model shows it.">
+        <SettingsCard>
+          <SelectField
+            label="Show thinking"
+            value={chat.reasoning ?? "show"}
+            options={[
+              { value: "show", label: "In full, as Paseo shows it" },
+              { value: "fold", label: "Folded to one line, opening on press" },
+              { value: "hide", label: "Hidden" },
+            ]}
+            onChange={(value) => setChat("reasoning", value === "show" ? undefined : value)}
+          />
+        </SettingsCard>
+      </SettingsSection>
+      <SettingsSection title="Hidden rows" info="Hide whole kinds of rows in every chat.">
+        <SettingsCard>
+          {TIMELINE_ITEM_TYPES.map((type) => (
+            <SwitchField
+              key={type}
+              label={`Hide ${type.replaceAll("_", " ")} rows`}
+              value={timeline.hide.includes(type)}
+              onChange={(hide) =>
+                form.updateProfile((profile) => {
+                  profile.timeline.hide = hide ? [...profile.timeline.hide, type] : profile.timeline.hide.filter((item) => item !== type);
+                })
+              }
+            />
+          ))}
+        </SettingsCard>
+      </SettingsSection>
+    </>
+  );
+}
+
+// ---------- General ----------
+
+// Settings that reach both the chat and the sidebar.
+export function GeneralTab(form: Form): ReactNode {
+  const view = viewFields(form);
+  return (
+    <SettingsSection title="Steps card" info="A chat's plan as a card, in the chat or the sidebar, that shows while it works and settles when it is done.">
+      <SettingsCard>{VIEW_SECTIONS.steps.map((key) => view[key])}</SettingsCard>
+    </SettingsSection>
+  );
+}
+
 export function SidebarTab(form: Form): ReactNode {
   const view = viewFields(form);
   const reminders = reminderFields(form);
@@ -495,9 +594,6 @@ export function SidebarTab(form: Form): ReactNode {
       </SettingsSection>
       <SettingsSection title="Chats" info="Chats listed under their workspace, and sub-agents under their chat. Turn chats off to list workspaces only.">
         <SettingsCard>{VIEW_SECTIONS.chats.map((key) => view[key])}</SettingsCard>
-      </SettingsSection>
-      <SettingsSection title="Steps card" info="A chat's plan as a card that shows while it works and hides when it is done.">
-        <SettingsCard>{VIEW_SECTIONS.steps.map((key) => view[key])}</SettingsCard>
       </SettingsSection>
       <SettingsSection title="Auto-archive">
         <SettingsCard>{VIEW_SECTIONS.archive.map((key) => view[key])}</SettingsCard>
@@ -806,7 +902,7 @@ function metadataText(metadata: Preset["metadata"]): string {
 }
 
 export function CommandsTab(form: Form): ReactNode {
-  const { slashCommands, commandCenter, newWorkspace, timeline } = form.profile;
+  const { slashCommands, commandCenter, newWorkspace } = form.profile;
   return (
     <>
       <ListEditor<SlashCommand>
@@ -905,22 +1001,6 @@ export function CommandsTab(form: Form): ReactNode {
           );
         }}
       />
-      <SettingsSection title="Hidden timeline rows" info="Hide whole kinds of rows in every chat">
-        <SettingsCard>
-          {TIMELINE_ITEM_TYPES.map((type) => (
-            <SwitchField
-              key={type}
-              label={`Hide ${type.replaceAll("_", " ")} rows`}
-              value={timeline.hide.includes(type)}
-              onChange={(hide) =>
-                form.updateProfile((profile) => {
-                  profile.timeline.hide = hide ? [...profile.timeline.hide, type] : profile.timeline.hide.filter((item) => item !== type);
-                })
-              }
-            />
-          ))}
-        </SettingsCard>
-      </SettingsSection>
     </>
   );
 }

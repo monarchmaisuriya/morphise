@@ -2,6 +2,25 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.13.0 - 2026-11-12
+
+- **New Chat settings tab:** how chat rows are drawn, all through Paseo's timeline API, so it works on phones too and survives Paseo updates. Paseo's own rows stay the default.
+  - **Tool calls:** Paseo's rows, or one line each (what ran, on what, and whether it worked) that opens to show the output, diff or error.
+  - **Hide finished tool calls** by kind: commands, file reads, edits, searches, web fetches, sub-agent tasks, other tools. Running and failed calls always show.
+  - **Thinking:** in full, folded to one line that opens on press, or hidden.
+  - **Hidden rows** (moved here from Commands): hide whole kinds of rows in every chat.
+  - Ideas from four published chat plugins (Beautiful Chat, Better Paseo, Chat Polish, Refined Chat). Morphise rebuilt only the ones Paseo's plugin API supports, not the ones that restyle Paseo's own components through internal test ids.
+- **New General settings tab:** the Steps card settings moved here from Sidebar, since the card can sit in the chat or the sidebar.
+- **Dispatch:**
+  - A new icon (two cards with a plus) in the Workspaces bar and the Command Center.
+  - Prompts come first, then one row of choices (project, model, mode, worktree or folder).
+  - A bar pinned at the bottom always shows what will start, the ⌘↵ hint and Start; after a run it says how many started and failed, with "Retry N failed".
+  - The first prompt has the cursor when Dispatch opens.
+- **Steps card hint** in settings says whether the card is in the chat or the sidebar.
+- One owner for every chat row Morphise changes, so two rules never compete for the same row.
+
+Rolling back to 0.12.0: `paseo plugin update morphise --ref v0.12.0`. With any Chat tool-call or thinking option changed, 0.12.0 reports the profile as invalid and keeps the data; set them back to the defaults first.
+
 ## 0.12.0 - 2026-11-12
 
 - **Steps card in the chat** (now the default): each plan update an agent posts is drawn as Morphise's card, right in the chat. The newest one is live (steps, progress, "All done"); older updates shrink to one line, so the chat is not filled with old cards. The card's other options still apply. Choose "Bottom of the sidebar" or "Top of the sidebar" under Settings, Sidebar, Steps card, Where, to keep it in the sidebar instead.
