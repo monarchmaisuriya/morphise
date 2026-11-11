@@ -18,7 +18,15 @@ describe("profileSchema", () => {
           enabled: false,
           groupBy: "project",
           orderBy: "activity",
+          thenBy: "activity",
+          statusOrder: ["needs_input", "failed", "running", "attention", "done"],
+          pinnedFirst: true,
+          counts: true,
+          rowLimit: { enabled: false, rows: 8 },
           density: "compact",
+          details: { branch: false, diff: false, timeInStatus: false, project: false },
+          rowActions: ["pin"],
+          filterBar: true,
           showAgents: false,
         },
       },
@@ -29,7 +37,35 @@ describe("profileSchema", () => {
       newWorkspace: { presets: [] },
       timeline: { hide: [] },
       style: { enabled: false, hideTestIds: [], css: "" },
+      reminders: { presets: [15, 30, 60, 180], sound: true, desktopNotification: true },
     });
+  });
+
+  it("refuses a status order that leaves out or repeats a status", () => {
+    const message = "sidebar.view.statusOrder: Expected each of the five statuses exactly once";
+    expect(issues({ sidebar: { view: { statusOrder: ["running", "done"] } } })).toEqual([message]);
+    expect(issues({ sidebar: { view: { statusOrder: ["running", "running", "failed", "attention", "done"] } } })).toEqual([message]);
+    expect(issues({ sidebar: { view: { statusOrder: ["running", "needs_input", "failed", "attention", "done"] } } })).toEqual([]);
+  });
+
+  it("keeps the row limit between 3 and 100 rows, so a zero cannot mean off", () => {
+    expect(issues({ sidebar: { view: { rowLimit: { enabled: true, rows: 0 } } } })).toHaveLength(1);
+    expect(issues({ sidebar: { view: { rowLimit: { enabled: true, rows: 101 } } } })).toHaveLength(1);
+    expect(issues({ sidebar: { view: { rowLimit: { enabled: true, rows: 3 } } } })).toEqual([]);
+  });
+
+  it("refuses a repeated row action", () => {
+    expect(issues({ sidebar: { view: { rowActions: ["pin", "pin"] } } })).toEqual([
+      "sidebar.view.rowActions: Expected each row action at most once",
+    ]);
+  });
+
+  it("needs at least one reminder preset, each between 1 minute and 7 days, without repeats", () => {
+    expect(issues({ reminders: { presets: [] } })).toHaveLength(1);
+    expect(issues({ reminders: { presets: [0] } })).toHaveLength(1);
+    expect(issues({ reminders: { presets: [10081] } })).toHaveLength(1);
+    expect(issues({ reminders: { presets: [15, 15] } })).toEqual(["reminders.presets: Expected each preset at most once"]);
+    expect(issues({ reminders: { presets: [1, 10080] } })).toEqual([]);
   });
 
   it("accepts a profile that fills every section", () => {
@@ -135,6 +171,20 @@ describe("profileSchema", () => {
       menu: [{ id: "m", title: "M", action: { kind: "open-editor" } }],
     };
     expect(issues({ header: { buttons: [button] } }).length).toBeGreaterThan(0);
+  });
+
+  it("reserves Command Center ids that start with morphise- for Morphise's own commands", () => {
+    expect(issues({ commandCenter: [{ id: "morphise-remind-15", title: "T", icon: "Box", action: { kind: "open-editor" } }] })).toEqual([
+      'commandCenter.0.id: Ids starting with "morphise-" are reserved for Morphise\'s own items',
+    ]);
+  });
+
+  it("reserves the pill ids and the slash command that reminders use", () => {
+    const pill = { id: "morphise-remind", title: "R", icon: "Box", action: { kind: "open-editor" } };
+    expect(issues({ composer: { pills: [pill] } })).toHaveLength(1);
+    expect(issues({ slashCommands: [{ name: "remind", description: "d", argumentHint: "", action: { kind: "open-editor" } }] })).toEqual([
+      'slashCommands.0.name: "/remind" is Morphise\'s own reminder command',
+    ]);
   });
 
   it("refuses an id that Paseo would reject", () => {

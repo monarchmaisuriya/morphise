@@ -1,16 +1,36 @@
 import type { PluginButton, PluginClientContext, PluginTimelineTransformerContribution } from "@getpaseo/plugin/client";
 import { SidebarRow, useToast } from "@getpaseo/plugin/client/ui";
+import type { Prompt } from "../shared/document";
 import type { Profile } from "../shared/profile";
 import { buildStyleSheet } from "../shared/style-sheet";
 import { createComposerControl, createPresetField } from "./composer-surfaces";
 import type { Directory } from "./directory";
 import type { Section } from "./reconciler";
 import { type ActionDeps, type ActionTarget, runAction } from "./run-action";
+import { reminderRowSchema, remindersArm } from "../shared/reminder-contracts";
+import { presetTitle } from "../shared/reminders";
+import {
+  changeReminder,
+  createReminderRow,
+  createRemindersScreen,
+  createRemindersSidebarItem,
+  REMINDERS_SCREEN_ID,
+  type ReminderDeps,
+  reminderMenu,
+  runRemindCommand,
+} from "./reminder-surfaces";
+import { NotesPanel } from "./notes-panel";
+import { createPromptPicker } from "./prompt-picker";
 import { createSidebarView } from "./sidebar-view";
 import { applyStyleSheet } from "./web";
 
+
 export interface Applied {
   profile: Profile;
+  // Every layout's id and name, and which one applies.
+  layouts: { active: string; list: readonly { id: string; name: string }[] };
+  // Shared by every layout.
+  prompts: readonly Prompt[];
   directory: Directory;
 }
 
@@ -59,7 +79,14 @@ function createRows(rows: readonly Row[], deps: ActionDeps) {
 
 const json = (value: unknown) => JSON.stringify(value);
 
-export function createSections(client: PluginClientContext, deps: ActionDeps): Section<Applied>[] {
+export function createSections(client: PluginClientContext, deps: ActionDeps, reminderDeps: ReminderDeps, switchLayout: (id: string) => Promise<void>): Section<Applied>[] {
+  // The reminder settings in effect right now, for surfaces registered once.
+  let reminderSettings: Profile["reminders"] | null = null;
+  const settingsOf = () => {
+    if (!reminderSettings) throw new Error("Morphise has not received its profile yet");
+    return reminderSettings;
+  };
+  const arm = (agentId: string) => client.rpc(remindersArm, { agentId });
   return [
     {
       name: "theme",
@@ -87,14 +114,128 @@ export function createSections(client: PluginClientContext, deps: ActionDeps): S
     {
       name: "sidebar.view",
       key: ({ profile }) => json(profile.sidebar.view),
-      register({ profile: { sidebar } }, track) {
+      register({ profile }, track) {
+        const { sidebar } = profile;
         if (!sidebar.view.enabled) return;
         track(
           client.addSidebarView({
             id: "profile-view",
             title: "Morphise",
             description: "Workspaces laid out by your Morphise profile",
-            Component: createSidebarView(sidebar.view),
+            Component: createSidebarView(sidebar.view, { reminders: reminderDeps.reminders, arm }),
+          }),
+        );
+      },
+    },
+    {
+      // Kept current for the surfaces below, which are registered once.
+      name: "reminders.settings",
+      key: ({ profile }) => json(profile.reminders),
+      register({ profile }) {
+        reminderSettings = profile.reminders;
+      },
+    },
+    {
+      name: "reminders.surfaces",
+      key: () => "always",
+      register(_input, track) {
+        track(client.addScreen({ id: REMINDERS_SCREEN_ID, title: "Reminders", Component: createRemindersScreen(reminderDeps, settingsOf) }));
+        track(client.addSidebarHeaderItem({ id: "reminders", title: "Reminders", Component: createRemindersSidebarItem(reminderDeps) }));
+        track(client.addTimelineRenderer({ kind: "reminder", version: 1, schema: reminderRowSchema, Component: createReminderRow(client, settingsOf) }));
+      },
+    },
+    {
+      name: "prompts",
+      key: ({ prompts }) => json(prompts),
+      register({ prompts }, track) {
+        if (prompts.length) track(client.addComposerItem({ id: "morphise-prompts", Component: createPromptPicker(prompts) }));
+      },
+    },
+    {
+      name: "layouts.commands",
+      key: ({ layouts }) => json(layouts),
+      register({ layouts }, track) {
+        if (layouts.list.length < 2) return;
+        for (const layout of layouts.list) {
+          track(
+            client.addCommandCenterItem({
+              id: `morphise-layout-${layout.id}`,
+              title: `Morphise layout: ${layout.name}${layout.id === layouts.active ? " (active)" : ""}`,
+              icon: "Layers",
+              keywords: ["layout", "morphise", "switch"],
+              context: "global",
+              onSelect: () => switchLayout(layout.id),
+            }),
+          );
+        }
+      },
+    },
+    {
+      name: "notes",
+      key: () => "always",
+      register(_input, track) {
+        track(client.addAgentPanel({ id: "notes", title: "Notes", icon: "NotebookPen", Component: NotesPanel }));
+        track(
+          client.addCommandCenterItem({
+            id: "morphise-notes",
+            title: "Open this chat's notes",
+            icon: "NotebookPen",
+            keywords: ["notes", "todo", "scratch"],
+            context: "agent",
+            onSelect: ({ openPanel }) => openPanel("notes"),
+          }),
+        );
+      },
+    },
+    {
+      name: "reminders.pills",
+      key: ({ profile, directory }) => json([profile.reminders, directory.agents]),
+      register({ profile, directory }, track) {
+        for (const agent of directory.agents) {
+          const registration = client.addComposerPill({
+            id: "morphise-remind",
+            workspaceId: agent.workspaceId,
+            agentId: agent.id,
+            button: reminderMenu(client, agent.id, profile.reminders),
+          });
+          track(() => registration.remove());
+        }
+      },
+    },
+    {
+      name: "reminders.commands",
+      key: ({ profile }) => json(profile.reminders),
+      register({ profile }, track) {
+        const settings = profile.reminders;
+        track(
+          client.addSlashCommand({
+            name: "remind",
+            description: "Remind me about this chat later",
+            argumentHint: "45m, 2h or clear",
+            context: "agent",
+            onSubmit: ({ agent, args }) => runRemindCommand(client, agent.id, args, settings),
+          }),
+        );
+        for (const minutes of settings.presets) {
+          track(
+            client.addCommandCenterItem({
+              id: `morphise-remind-${minutes}`,
+              title: `Remind me about this chat in ${presetTitle(minutes)}`,
+              icon: "AlarmClock",
+              keywords: ["remind", "reminder", "later"],
+              context: "agent",
+              onSelect: ({ agent }) => changeReminder(client, agent.id, minutes, settings),
+            }),
+          );
+        }
+        track(
+          client.addCommandCenterItem({
+            id: "morphise-remind-clear",
+            title: "Clear this chat's reminder",
+            icon: "BellOff",
+            keywords: ["remind", "reminder", "done"],
+            context: "agent",
+            onSelect: ({ agent }) => changeReminder(client, agent.id, null, settings),
           }),
         );
       },

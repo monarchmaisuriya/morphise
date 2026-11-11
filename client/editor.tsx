@@ -8,11 +8,12 @@ import {
   copyText,
   useToast,
 } from "@getpaseo/plugin/client/ui";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Platform, Text, View } from "react-native";
-import { EMPTY_PROFILE, profileSettings } from "../shared/profile";
-import { formatProfile, parseProfileText } from "../shared/profile-text";
-import { STARTER_PROFILE } from "../shared/starter-profile";
+import { activeProfile, EMPTY_DOCUMENT, profileSettings } from "../shared/document";
+import { formatDocument, parseDocumentText } from "../shared/document-text";
+import { STARTER_DOCUMENT } from "../shared/starter-profile";
+import type { DraftStore, Saved } from "./draft";
 import type { Problem } from "./reconciler";
 import { type ProfileStore, type ValueStore, useValue } from "./profile-store";
 
@@ -21,20 +22,30 @@ const MONOSPACE = Platform.select({ ios: "Menlo", default: "monospace" });
 interface EditorDeps {
   store: ProfileStore;
   problems: ValueStore<Problem[]>;
+  drafts: DraftStore;
   reconnect(): void;
 }
 
-export function createProfileEditor({ store, problems, reconnect }: EditorDeps) {
+// The Advanced tab: the whole settings document as JSON, editing the same draft as the forms.
+export function createProfileEditor({ store, problems, drafts, reconnect }: EditorDeps) {
   return function ProfileEditor({ theme, layout }: PluginSurfaceProps) {
     const settings = useSettings(profileSettings);
     const registrationProblems = useValue(problems);
     const connectionError = useValue(store).connectionError;
+    const draftState = useValue(drafts);
     const toast = useToast();
-    const [draft, setDraft] = useState<string | null>(null);
+    // What is typed, kept while it is being edited so the text is not reformatted mid-typing.
+    const [typed, setTyped] = useState<string | null>(null);
+    // The draft document this editor last wrote; any other draft came from another tab.
+    const written = useRef<unknown>(null);
+    useEffect(() => setTyped(null), [draftState.generation]);
+    useEffect(() => {
+      if (draftState.draft && draftState.draft.document !== written.current) setTyped(null);
+    }, [draftState.draft]);
 
-    const savedText = settings.status === "ready" ? formatProfile(settings.values) : formatProfile(EMPTY_PROFILE);
-    const text = draft ?? savedText;
-    const parsed = useMemo(() => parseProfileText(text), [text]);
+    const saved: Saved | null = settings.status === "ready" ? { document: settings.values, revision: settings.revision } : null;
+    const text = typed ?? formatDocument(saved ? drafts.working(saved) : EMPTY_DOCUMENT);
+    const parsed = useMemo(() => parseDocumentText(text), [text]);
 
     const styles = useMemo(
       () => ({
@@ -70,10 +81,30 @@ export function createProfileEditor({ store, problems, reconnect }: EditorDeps) 
       );
     }
 
+    // Typing valid JSON updates the shared draft; invalid text stays here with its errors.
+    function change(next: string) {
+      setTyped(next);
+      const result = parseDocumentText(next);
+      if (result.ok && saved) {
+        drafts.replace(saved, result.document);
+        written.current = drafts.get().draft?.document ?? null;
+      }
+    }
+    const load = change;
+
     async function save() {
-      if (!parsed.ok || settings.status === "loading" || settings.status === "error") return;
-      if (await settings.save(parsed.profile, settings.revision)) {
-        setDraft(null);
+      const draft = drafts.get().draft;
+      if (settings.status === "ready" && draft && parsed.ok) {
+        if (await settings.save(draft.document, draft.revision)) {
+          drafts.saved();
+          setTyped(null);
+          toast.show("Profile saved and applied", { variant: "success" });
+        }
+        return;
+      }
+      // A stored document that no longer validates can only be replaced as a whole.
+      if (settings.status === "invalid" && parsed.ok && (await settings.save(parsed.document, settings.revision))) {
+        setTyped(null);
         toast.show("Profile saved and applied", { variant: "success" });
       }
     }
@@ -87,7 +118,8 @@ export function createProfileEditor({ store, problems, reconnect }: EditorDeps) 
       }
     }
 
-    const profile = parsed.ok ? parsed.profile : null;
+    const dirty = draftState.draft !== null || (settings.status === "invalid" && typed !== null);
+    const profile = parsed.ok ? activeProfile(parsed.document) : null;
     return (
       <View style={styles.list}>
         {connectionError ? (
@@ -109,7 +141,7 @@ export function createProfileEditor({ store, problems, reconnect }: EditorDeps) 
           </SettingsSection>
         ) : null}
 
-        <SettingsSection title="Profile" info="One JSON document describes every customisation. Saving applies it on every connected app.">
+        <SettingsSection title="Profile" info="Every layout and prompt as one JSON document; the other tabs edit the same changes.">
           <TextInput
             accessibilityLabel="Profile JSON"
             multiline
@@ -117,7 +149,7 @@ export function createProfileEditor({ store, problems, reconnect }: EditorDeps) 
             autoCorrect={false}
             spellCheck={false}
             value={text}
-            onChangeText={setDraft}
+            onChangeText={change}
             style={styles.input}
           />
           <View style={styles.list}>
@@ -129,9 +161,6 @@ export function createProfileEditor({ store, problems, reconnect }: EditorDeps) 
                 rename the test ids it hides.
               </Text>
             ) : null}
-            {profile?.sidebar.view.enabled ? (
-              <Text style={styles.muted}>To show the sidebar view, pick Morphise in Settings, Sidebar, Sidebar view.</Text>
-            ) : null}
           </View>
         </SettingsSection>
 
@@ -139,23 +168,31 @@ export function createProfileEditor({ store, problems, reconnect }: EditorDeps) 
           <SettingsCard>
             <SettingsAction
               label="Save profile"
-              hint={draft === null ? "No unsaved changes" : parsed.ok ? "Applies on every connected app" : "Fix the errors above first"}
+              hint={!dirty ? "No unsaved changes" : parsed.ok ? "Applies on every connected app" : "Fix the errors above first"}
               actionLabel={settings.saving ? "Saving" : "Save"}
-              disabled={draft === null || !parsed.ok || settings.saving}
+              disabled={!dirty || !parsed.ok || settings.saving}
               onPress={() => void save()}
             />
-            <SettingsAction label="Discard unsaved changes" actionLabel="Discard" disabled={draft === null} onPress={() => setDraft(null)} />
+            <SettingsAction
+              label="Discard unsaved changes"
+              actionLabel="Discard"
+              disabled={!dirty}
+              onPress={() => {
+                drafts.discard();
+                setTyped(null);
+              }}
+            />
             <SettingsAction
               label="Load the starter profile"
-              hint="An example of every section; review it, then save"
+              hint="An example of every section, with two prompts; review it, then save"
               actionLabel="Load"
-              onPress={() => setDraft(formatProfile(STARTER_PROFILE))}
+              onPress={() => load(formatDocument(STARTER_DOCUMENT))}
             />
             <SettingsAction
               label="Clear every customisation"
               hint="Loads an empty profile; save to apply"
               actionLabel="Clear"
-              onPress={() => setDraft(formatProfile(EMPTY_PROFILE))}
+              onPress={() => load(formatDocument(EMPTY_DOCUMENT))}
             />
             <SettingsAction label="Copy the profile" actionLabel="Copy" onPress={() => void copy()} />
           </SettingsCard>

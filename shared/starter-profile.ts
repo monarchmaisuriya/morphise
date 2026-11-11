@@ -1,3 +1,4 @@
+import { documentSchema, type ProfileDocument } from "./document";
 import { type Profile, profileSchema } from "./profile";
 
 // A working example of every section, offered in the editor. Provider-specific values (models,
@@ -22,7 +23,7 @@ export const STARTER_PROFILE: Profile = profileSchema.parse({
       { id: "paseo-docs", label: "Paseo docs", icon: "BookOpen", action: { kind: "open-url", url: "https://paseo.sh/docs" } },
     ],
     footerRows: [{ id: "edit-layout", label: "Edit layout", icon: "Palette", action: { kind: "open-editor" } }],
-    view: { enabled: true, groupBy: "project", orderBy: "activity", density: "compact", showAgents: true },
+    view: { enabled: true, groupBy: "project", orderBy: "status", density: "compact", showAgents: true, details: { branch: true, timeInStatus: true } },
   },
   header: {
     buttons: [
@@ -50,4 +51,14 @@ export const STARTER_PROFILE: Profile = profileSchema.parse({
   newWorkspace: { presets: [{ id: "spike", label: "Spike in a worktree", isolation: "worktree", metadata: { "morphise.kind": "spike" } }] },
   timeline: { hide: [] },
   style: { enabled: false, hideTestIds: ["sidebar-help"], css: "" },
+});
+
+// The starter profile as the only layout, with two prompts for the prompt library.
+export const STARTER_DOCUMENT: ProfileDocument = documentSchema.parse({
+  activeLayout: "default",
+  layouts: [{ id: "default", name: "Starter", profile: STARTER_PROFILE }],
+  prompts: [
+    { id: "review", title: "Review the last change", text: "Review the last change for bugs and missing tests.", starred: true },
+    { id: "summary", title: "Summarise progress", text: "Summarise what you have done so far and what is left." },
+  ],
 });

@@ -1,7 +1,9 @@
 import type { PluginComposer, PluginComposerSelector } from "@getpaseo/plugin/client";
 import type { Action } from "../shared/actions";
 
-export const EDITOR_SCREEN_ID = "profile";
+// "Edit layout" opens the Sidebar settings tab; the JSON tab keeps the 0.1 screen id.
+export const EDITOR_SCREEN_ID = "sidebar";
+export const JSON_SCREEN_ID = "profile";
 
 // Which message box (composer) a composer action changes.
 export type ActionTarget =

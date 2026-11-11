@@ -1,19 +1,18 @@
-import { defineSettings } from "@getpaseo/plugin";
 import { z } from "zod";
 import { actionSchema } from "./actions";
 
 const MAX_ITEMS = 50;
 
 // Paseo rejects contribution ids outside this pattern, so the profile rejects them first.
-const contributionId = z
+export const contributionId = z
   .string()
   .regex(/^[a-z][a-z0-9-]*$/, "Expected lowercase letters, digits and hyphens, starting with a letter")
   .max(64);
-const icon = z.string().min(1).max(64);
-const label = z.string().min(1).max(80);
+const icon = z.string().min(1, "Required: a Lucide icon name such as BookOpen").max(64, "At most 64 characters");
+export const label = z.string().min(1, "Required").max(80, "At most 80 characters");
 const hexColour = z.string().regex(/^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i, "Expected a hex colour such as #1e1e2e");
 
-function uniqueBy<Item>(key: keyof Item & string, noun: string) {
+export function uniqueBy<Item>(key: keyof Item & string, noun: string) {
   return (items: Item[], context: z.RefinementCtx) => {
     const seen = new Set<unknown>();
     items.forEach((item, index) => {
@@ -34,11 +33,22 @@ function list<Schema extends z.ZodType<{ id: string }>>(item: Schema) {
   return z.array(item).max(MAX_ITEMS).superRefine(uniqueBy<z.infer<Schema>>("id", "id")).default([]);
 }
 
+// Morphise registers its own reminder and layout commands under this prefix.
+export const RESERVED_COMMAND_PREFIX = "morphise-";
+
+// Ids Morphise uses for its own pills and Command Center items.
+const ownId = contributionId.refine((id) => !id.startsWith(RESERVED_COMMAND_PREFIX), {
+  message: `Ids starting with "${RESERVED_COMMAND_PREFIX}" are reserved for Morphise's own items`,
+});
+
+// Morphise's own slash command.
+export const RESERVED_SLASH_COMMAND = "remind";
+
 const rowSchema = z.strictObject({ id: contributionId, label, icon, action: actionSchema });
 
 const menuEntrySchema = z.strictObject({ id: contributionId, title: label, icon: icon.optional(), action: actionSchema });
 
-const buttonBase = { id: contributionId, title: label, icon, label: label.optional() };
+const buttonBase = { id: ownId, title: label, icon, label: label.optional() };
 const buttonSchema = z.union([
   z.strictObject({ ...buttonBase, action: actionSchema }),
   z.strictObject({
@@ -48,17 +58,17 @@ const buttonSchema = z.union([
 ]);
 
 const controlSchema = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("action"), id: contributionId, title: label, icon, action: actionSchema }),
+  z.strictObject({ kind: z.literal("action"), id: ownId, title: label, icon, action: actionSchema }),
   z.strictObject({
     kind: z.literal("toggle"),
-    id: contributionId,
+    id: ownId,
     title: label,
     icon,
     metadataKey: z.string().min(1).max(200),
   }),
   z.strictObject({
     kind: z.literal("select"),
-    id: contributionId,
+    id: ownId,
     title: label,
     icon,
     target: z.enum(["model", "mode", "thinking"]),
@@ -85,14 +95,14 @@ const themeSchema = z.strictObject({
 });
 
 const slashCommandSchema = z.strictObject({
-  name: contributionId,
+  name: contributionId.refine((name) => name !== RESERVED_SLASH_COMMAND, { message: `"/${RESERVED_SLASH_COMMAND}" is Morphise's own reminder command` }),
   description: label,
   argumentHint: z.string().max(80),
   action: actionSchema,
 });
 
 const commandCenterSchema = z.strictObject({
-  id: contributionId,
+  id: ownId,
   title: label,
   icon,
   keywords: z.array(z.string().min(1).max(40)).max(20).optional(),
@@ -117,21 +127,75 @@ export const TIMELINE_ITEM_TYPES = [
   "compaction",
 ] as const;
 
+// Paseo's own workspace statuses, in the priority order its app uses (needs_input is a pending
+// permission request; attention is a finished turn the user has not looked at yet).
+export const INDICATORS = ["needs_input", "failed", "running", "attention", "done"] as const;
+export type Indicator = (typeof INDICATORS)[number];
+
+const distinct = (values: readonly unknown[]) => new Set(values).size === values.length;
+
+const statusOrderSchema = z
+  .array(z.enum(INDICATORS))
+  .refine((order) => order.length === INDICATORS.length && new Set(order).size === INDICATORS.length, {
+    message: "Expected each of the five statuses exactly once",
+  })
+  .default([...INDICATORS]);
+
+const viewSchema = z
+  .strictObject({
+    enabled: z.boolean().default(false),
+    groupBy: z.enum(["project", "label", "status", "none"]).default("project"),
+    orderBy: z.enum(["status", "activity", "name"]).default("activity"),
+    // Breaks ties left by orderBy.
+    thenBy: z.enum(["activity", "name"]).default("activity"),
+    statusOrder: statusOrderSchema,
+    pinnedFirst: z.boolean().default(true),
+    counts: z.boolean().default(true),
+    // Off by `enabled`, never by a zero row count.
+    rowLimit: z.strictObject({ enabled: z.boolean().default(false), rows: z.int().min(3).max(100).default(8) }).prefault({}),
+    density: z.enum(["compact", "comfortable"]).default("compact"),
+    details: z
+      .strictObject({
+        branch: z.boolean().default(false),
+        diff: z.boolean().default(false),
+        timeInStatus: z.boolean().default(false),
+        project: z.boolean().default(false),
+      })
+      .prefault({}),
+    rowActions: z
+      .array(z.enum(["pin"]))
+      .refine(distinct, { message: "Expected each row action at most once" })
+      .default(["pin"]),
+    filterBar: z.boolean().default(true),
+    showAgents: z.boolean().default(false),
+  })
+  .prefault({});
+
+// A reminder can be at most a week away, so none is open-ended.
+export const MAX_REMINDER_MINUTES = 7 * 24 * 60;
+
+const remindersSchema = z
+  .strictObject({
+    // The choices offered by the "Remind me" pill and Command Center items. At least one;
+    // zero minutes is not a reminder.
+    presets: z
+      .array(z.int().min(1).max(MAX_REMINDER_MINUTES))
+      .min(1)
+      .max(8)
+      .refine(distinct, { message: "Expected each preset at most once" })
+      .default([15, 30, 60, 180]),
+    sound: z.boolean().default(true),
+    desktopNotification: z.boolean().default(true),
+  })
+  .prefault({});
+
 export const profileSchema = z.strictObject({
   theme: themeSchema.nullable().default(null),
   sidebar: z
     .strictObject({
       headerRows: list(rowSchema),
       footerRows: list(rowSchema),
-      view: z
-        .strictObject({
-          enabled: z.boolean().default(false),
-          groupBy: z.enum(["project", "label", "status", "none"]).default("project"),
-          orderBy: z.enum(["activity", "name"]).default("activity"),
-          density: z.enum(["compact", "comfortable"]).default("compact"),
-          showAgents: z.boolean().default(false),
-        })
-        .prefault({}),
+      view: viewSchema,
     })
     .prefault({}),
   header: z.strictObject({ buttons: list(buttonSchema) }).prefault({}),
@@ -155,15 +219,9 @@ export const profileSchema = z.strictObject({
       css: z.string().max(64 * 1024).default(""),
     })
     .prefault({}),
+  reminders: remindersSchema,
 });
 
 export type Profile = z.infer<typeof profileSchema>;
 
 export const EMPTY_PROFILE: Profile = profileSchema.parse({});
-
-export const profileSettings = defineSettings({
-  id: "profile",
-  scope: "host",
-  version: 1,
-  schema: profileSchema,
-});

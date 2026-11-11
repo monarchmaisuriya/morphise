@@ -1,22 +1,22 @@
 import type { PluginSettings, PluginSettingsState } from "@getpaseo/plugin/server";
-import type { profileSchema } from "../shared/profile";
+import type { documentSchema } from "../shared/document";
 import type { ProfileEvent } from "../shared/watch";
 
-export type ProfileSettings = Pick<PluginSettings<typeof profileSchema>, "read" | "subscribe">;
+export type ProfileSettings = Pick<PluginSettings<typeof documentSchema>, "read" | "subscribe">;
 
 interface WatchContext {
   push(event: ProfileEvent): Promise<void>;
   signal: AbortSignal;
 }
 
-function toEvent(state: PluginSettingsState<typeof profileSchema>): ProfileEvent {
+function toEvent(state: PluginSettingsState<typeof documentSchema>): ProfileEvent {
   return state.status === "ready"
-    ? { status: "ready", revision: state.revision, profile: state.values }
+    ? { status: "ready", revision: state.revision, document: state.values }
     : { status: "invalid", revision: state.revision, error: state.error };
 }
 
 // Paseo does not replay events after a reconnect, so every subscriber starts with the stored
-// profile. Listening starts before the read, and a save seen first wins over the older read.
+// document. Listening starts before the read, and a save seen first wins over the older read.
 export function watchProfile(settings: ProfileSettings) {
   return (_input: unknown, { push, signal }: WatchContext): Promise<void> =>
     new Promise<void>((resolve, reject) => {

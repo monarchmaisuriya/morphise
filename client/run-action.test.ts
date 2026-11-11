@@ -36,7 +36,7 @@ describe("runAction", () => {
   it("opens the profile editor", async () => {
     const d = deps();
     await runAction({ kind: "open-editor" }, { kind: "focused" }, d.value);
-    expect(d.calls.settings).toEqual(["profile"]);
+    expect(d.calls.settings).toEqual(["sidebar"]);
   });
 
   it("inserts text into the focused composer and puts the cursor there", async () => {

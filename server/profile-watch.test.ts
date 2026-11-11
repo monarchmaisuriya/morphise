@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { EMPTY_DOCUMENT } from "../shared/document";
 import { EMPTY_PROFILE } from "../shared/profile";
 import type { ProfileEvent } from "../shared/watch";
 import { watchProfile, type ProfileSettings } from "./profile-watch";
@@ -38,7 +39,10 @@ function subscriber() {
 const ready = (revision: string, name = "x") => ({
   status: "ready" as const,
   revision,
-  values: { ...EMPTY_PROFILE, commandCenter: [{ id: name, title: name, icon: "Box", action: { kind: "open-editor" as const } }] },
+  values: {
+    ...EMPTY_DOCUMENT,
+    layouts: [{ id: "default", name: "Default", profile: { ...EMPTY_PROFILE, commandCenter: [{ id: name, title: name, icon: "Box", action: { kind: "open-editor" as const } }] } }],
+  },
 });
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -49,7 +53,7 @@ describe("watchProfile", () => {
     const client = subscriber();
     void watchProfile(fake.settings)({}, client.context);
     await flush();
-    expect(client.events).toEqual([{ status: "ready", revision: "r1", profile: ready("r1").values }]);
+    expect(client.events).toEqual([{ status: "ready", revision: "r1", document: ready("r1").values }]);
   });
 
   it("sends every later save", async () => {

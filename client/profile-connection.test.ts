@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EMPTY_PROFILE } from "../shared/profile";
+import { EMPTY_DOCUMENT } from "../shared/document";
 import type { ProfileEvent } from "../shared/watch";
 import { connectProfile, type OpenProfileStream, type ProfileStreamHandle } from "./profile-connection";
 import { createProfileStore } from "./profile-store";
@@ -24,7 +24,7 @@ function fakeDaemon(options: { failOpen?: string } = {}) {
   return { open, streams };
 }
 
-const ready = (revision: string): ProfileEvent => ({ status: "ready", revision, profile: EMPTY_PROFILE });
+const ready = (revision: string): ProfileEvent => ({ status: "ready", revision, document: EMPTY_DOCUMENT });
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("connectProfile", () => {
