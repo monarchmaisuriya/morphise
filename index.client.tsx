@@ -192,7 +192,6 @@ export default function contribute(client: PluginClientContext) {
       prompts: promptsOf(store.get()),
       layouts: layoutsOf(store.get()),
       directory,
-      taskViews: tasksOf(taskStore.get()).views.map(({ id, name }) => ({ id, name })),
     });
   store.subscribe(apply);
   taskStore.subscribe(apply);

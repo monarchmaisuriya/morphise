@@ -26,16 +26,11 @@ import { PRIORITY, priorityColor } from "./styles";
 
 type Layout = Pick<TaskView, "filter" | "sort" | "swimlanes" | "density">;
 type Tab = "board" | "today" | "archived";
-type Panel = "views" | "filter" | "display" | "attach" | null;
+type Panel = "filter" | "display" | "attach" | null;
 type Run = (...operations: TaskOperation[]) => Promise<boolean>;
 
 const ALL_TASKS: Layout = { filter: DEFAULT_FILTER, sort: "manual", swimlanes: "none", density: "detailed" };
 const DUE_FILTERS = { overdue: "Overdue", today: "Due today", week: "This week", none: "No date" } as const;
-
-function layoutOf(document: TaskDocument): Layout {
-  const view = document.views.find((item) => item.id === document.activeView);
-  return view ? { filter: view.filter, sort: view.sort, swimlanes: view.swimlanes, density: view.density } : ALL_TASKS;
-}
 
 function useBoardState(deps: BoardDeps) {
   const state = useValue(deps.tasks);
@@ -250,11 +245,30 @@ function activeFilterCount(filter: TaskFilter): number {
   return (filter.text ? 1 : 0) + filter.priorities.length + filter.labels.length + (filter.due !== "any" ? 1 : 0) + (filter.hasReminder !== null ? 1 : 0);
 }
 
-function FilterPanel({ t, layout, setLayout, document }: { t: Tokens; layout: Layout; setLayout(layout: Layout): void; document: TaskDocument }) {
+// Filter: what Tasks shows (its open cards, Today's list, or the archived cards), then, for open cards, which ones.
+function FilterPanel({ t, layout, setLayout, document, tab, setTab, todayCount, archivedCount }: { t: Tokens; layout: Layout; setLayout(layout: Layout): void; document: TaskDocument; tab: Tab; setTab(tab: Tab): void; todayCount: number; archivedCount: number }) {
   const filter = layout.filter;
   const setFilter = (patch: Partial<TaskFilter>) => setLayout({ ...layout, filter: { ...filter, ...patch } });
+  const show = (
+    <PanelRow t={t} label="Show">
+      <Segmented<Tab>
+        t={t}
+        label="Show"
+        value={tab}
+        onChange={setTab}
+        options={[
+          { value: "board", label: "Open cards", icon: "Columns3" },
+          { value: "today", label: todayCount ? `Today · ${todayCount}` : "Today", icon: "CalendarClock", tone: todayCount ? t.c.statusWarning : undefined },
+          { value: "archived", label: archivedCount ? `Archived · ${archivedCount}` : "Archived", icon: "Archive" },
+        ]}
+      />
+    </PanelRow>
+  );
+  // Today and Archived are lists of their own; the filters below are for the open cards.
+  if (tab !== "board") return <PanelBox t={t}>{show}</PanelBox>;
   return (
     <PanelBox t={t}>
+      {show}
       <Field t={t} plain icon="Search" value={filter.text} onChangeText={(text) => setFilter({ text })} placeholder="Search titles and descriptions" accessibilityLabel="Search tasks" />
       <PanelRow t={t} label="Priority">
         {([1, 2, 3, 4] as const).map((priority) => (
@@ -326,43 +340,6 @@ function DisplayPanel({ t, layout, setLayout }: { t: Tokens; layout: Layout; set
           ]}
         />
       </PanelRow>
-    </PanelBox>
-  );
-}
-
-function ViewsPanel({ t, document, layout, changed, clearEdits, run, close }: { t: Tokens; document: TaskDocument; layout: Layout; changed: boolean; clearEdits(): void; run: Run; close(): void }) {
-  const [name, setName] = useState("");
-  const active = document.views.find((view) => view.id === document.activeView) ?? null;
-  const choose = (id: string | null) => {
-    clearEdits();
-    void run({ kind: "setActiveView", id }).then((ok) => ok && close());
-  };
-  const save = () => {
-    const id = `view-${Date.now().toString(36)}`;
-    void run({ kind: "saveView", view: { id, name: name.trim(), ...layout } }, { kind: "setActiveView", id }).then((ok) => {
-      if (!ok) return;
-      setName("");
-      clearEdits();
-    });
-  };
-  return (
-    <PanelBox t={t}>
-      <View>
-        <MenuItem t={t} role="radio" icon="LayoutGrid" label="All tasks" checked={!active} onPress={() => choose(null)} />
-        {document.views.map((view) => (
-          <MenuItem key={view.id} t={t} role="radio" icon="ListFilter" label={view.name} checked={active?.id === view.id} onPress={() => choose(view.id)} />
-        ))}
-      </View>
-      <View style={{ flexDirection: "row", gap: 8, alignItems: "flex-start" }}>
-        <Field t={t} grow value={name} onChangeText={setName} onSubmit={() => name.trim() && save()} placeholder="Save the current filters as…" accessibilityLabel="Name for a new view" />
-        <Button t={t} label="Save view" disabled={!name.trim()} onPress={save} />
-      </View>
-      {active ? (
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          <Button t={t} icon="Save" label={`Update “${active.name}”`} accessibilityLabel={`Update view ${active.name}`} disabled={!changed} onPress={() => void run({ kind: "saveView", view: { ...active, ...layout } }).then((ok) => ok && clearEdits())} />
-          <Button t={t} variant="danger" icon="Trash2" label="Delete view" accessibilityLabel={`Delete view ${active.name}`} onPress={() => void run({ kind: "deleteView", id: active.id }).then((ok) => ok && clearEdits())} />
-        </View>
-      ) : null}
     </PanelBox>
   );
 }
@@ -442,9 +419,18 @@ function PanelButton({ t, icon, label, open = false, count, iconOnly = false, on
 }
 
 // The active filters as removable tags, so they stay visible with the panel closed.
-function ActiveFilters({ t, layout, setLayout, document }: { t: Tokens; layout: Layout; setLayout(layout: Layout): void; document: TaskDocument }) {
+// What Filter narrows the view to, as removable chips while the Filter panel is closed: Today or Archived, or the filters on open cards.
+function ActiveFilters({ t, layout, setLayout, document, tab, setTab }: { t: Tokens; layout: Layout; setLayout(layout: Layout): void; document: TaskDocument; tab: Tab; setTab(tab: Tab): void }) {
   const filter = layout.filter;
   const setFilter = (patch: Partial<TaskFilter>) => setLayout({ ...layout, filter: { ...filter, ...patch } });
+  if (tab !== "board") {
+    return (
+      <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+        <Text style={t.text.small}>Showing</Text>
+        <Tag t={t} label={tab === "today" ? "Today" : "Archived"} color={tab === "today" ? t.c.statusWarning : undefined} onRemove={() => setTab("board")} />
+      </View>
+    );
+  }
   const tags = [
     ...(filter.text ? [{ key: "text", label: `“${filter.text}”`, remove: () => setFilter({ text: "" }) }] : []),
     ...filter.priorities.map((priority) => ({ key: `p${priority}`, label: PRIORITY[priority as 1 | 2 | 3 | 4].name, color: priorityColor(t.c, priority), remove: () => setFilter({ priorities: toggle(filter.priorities, priority) }) })),
@@ -554,9 +540,9 @@ function ColumnView({ t, entry, document, now, layout, open, run, workspaceId, w
 // ---------- Tasks as a list ----------
 
 // One card as a list row (the grouped list the Agents tab uses too): priority, title, and its facts on the same
-// line, labels at the right. A press opens the editor; the check (on hover, or always on touch) moves it to the
+// line, labels at the right. Compact cards (Display, Cards) are the title alone in a shorter row. A press opens the editor; the check (on hover, or always on touch) moves it to the
 // done column. Dragging stays on the board.
-function TaskRow({ t, task, document, now, workspaces, onOpen, run, onLongPress }: { t: Tokens; task: Task; document: TaskDocument; now: Date; workspaces: BoardDeps["workspaces"] | null; onOpen(): void; run: Run; onLongPress?(): void }) {
+function TaskRow({ t, task, document, now, workspaces, onOpen, run, onLongPress, compactCards = false }: { t: Tokens; task: Task; document: TaskDocument; now: Date; workspaces: BoardDeps["workspaces"] | null; onOpen(): void; run: Run; onLongPress?(): void; compactCards?: boolean }) {
   const column = document.columns.find((item) => item.id === task.column);
   const done = document.columns.find((item) => item.done);
   const inDone = column?.done === true;
@@ -581,8 +567,9 @@ function TaskRow({ t, task, document, now, workspaces, onOpen, run, onLongPress 
       title={task.title}
       struck={inDone}
       dim={inDone}
-      detail={facts.length ? <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 12, overflow: "hidden" }}>{facts}</View> : undefined}
-      facts={labels.length ? <View style={{ flexDirection: "row", gap: 4 }}>{labels.slice(0, 3).map((label) => <Tag key={label.id} t={t} label={label.name} color={label.color} />)}</View> : undefined}
+      dense={compactCards}
+      detail={!compactCards && facts.length ? <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 12, overflow: "hidden" }}>{facts}</View> : undefined}
+      facts={!compactCards && labels.length ? <View style={{ flexDirection: "row", gap: 4 }}>{labels.slice(0, 3).map((label) => <Tag key={label.id} t={t} label={label.name} color={label.color} />)}</View> : undefined}
       actions={done && !inDone ? <IconButton t={t} size="sm" icon="Check" label={`Move ${task.title} to ${done.name}`} onPress={() => void run({ kind: "moveTask", id: task.id, column: done.id })} /> : undefined}
       label={`Open ${task.title}`}
       onPress={onOpen}
@@ -605,11 +592,11 @@ function DragRow({ closes, ...props }: Parameters<typeof TaskRow>[0] & { closes:
   );
 }
 
-// The board's columns as boxes of rows: the same filters, order, rows (swimlanes) and saved views, and the same drag
+// The board's columns as boxes of rows: the same filters, order and rows (swimlanes), and the same drag
 // and drop: a row lands before the row under the pointer's lower half, at a section's start over its header, and at
 // its end below its last row or over a folded section. The section it would land in has an accent border. An empty
 // column starts folded.
-function TaskList({ t, columns, document, now, open, run, workspaceId, workspaceStore, swimlanes, manual }: { t: Tokens; columns: BoardColumn[]; document: TaskDocument; now: Date; open(target: EditorTarget): void; run: Run; workspaceId: string | null; workspaceStore: BoardDeps["workspaces"]; swimlanes: Layout["swimlanes"]; manual: boolean }) {
+function TaskList({ t, columns, document, now, open, run, workspaceId, workspaceStore, swimlanes, manual, compactCards }: { t: Tokens; columns: BoardColumn[]; document: TaskDocument; now: Date; open(target: EditorTarget): void; run: Run; workspaceId: string | null; workspaceStore: BoardDeps["workspaces"]; swimlanes: Layout["swimlanes"]; manual: boolean; compactCards: boolean }) {
   const [folds, setFolds] = useState<Record<string, boolean>>({});
   const drag = useDrag();
   return (
@@ -649,7 +636,7 @@ function TaskList({ t, columns, document, now, open, run, workspaceId, workspace
                 {lane.tasks.map((task) => (
                   <Fragment key={`${lane.key}:${task.id}`}>
                     {slot !== null && target?.before === task.id ? <DropSlot t={t} height={slot} /> : null}
-                    <DragRow t={t} task={task} document={document} now={now} workspaces={workspaceId === null && swimlanes !== "workspace" ? workspaceStore : null} onOpen={() => open({ kind: "existing", taskId: task.id })} run={run} closes={manual} />
+                    <DragRow t={t} task={task} document={document} now={now} workspaces={workspaceId === null && swimlanes !== "workspace" ? workspaceStore : null} onOpen={() => open({ kind: "existing", taskId: task.id })} run={run} closes={manual} compactCards={compactCards} />
                     {slot !== null && target?.before === null && task.id === lastId ? <DropSlot t={t} height={slot} /> : null}
                   </Fragment>
                 ))}
@@ -720,25 +707,18 @@ interface BoardProps {
   workspaceId: string | null;
   initialTab: Tab;
   openChat: ((agentId: string) => void) | null;
-  // Inside the Workbench, whose own list of views picks Board, Today or Archived: no tabs here.
-  embedded?: boolean;
 }
 
 export type BoardTab = Tab;
 
-export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, openChat, embedded = false }: BoardProps) {
+export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, openChat }: BoardProps) {
   const { document, now, run, problem } = useBoardState(deps);
   const t = useTokens(theme, compact);
   const [tab, setTab] = useState<Tab>(initialTab);
   // List or columns, on this device, picked in Settings, General.
   const [shape, , shapeLoading] = useDeviceChoice(useSettings(workbenchSettings), "tasksLayout");
-  // The board shows the active saved view (shared by every app) plus changes made here and not
-  // saved yet; those are dropped when the active view changes, here or elsewhere.
-  const [edits, setEdits] = useState<{ viewId: string | null; layout: Layout } | null>(null);
-  const changed = edits !== null && edits.viewId === document.activeView;
-  const layout = changed ? edits.layout : layoutOf(document);
-  const setLayout = (next: Layout) => setEdits({ viewId: document.activeView, layout: next });
-  const clearEdits = () => setEdits(null);
+  // Filter and Display choices for this screen.
+  const [layout, setLayout] = useState<Layout>(ALL_TASKS);
   const [editing, setEditing] = useState<EditorTarget | null>(null);
   const [customising, setCustomising] = useState(false);
   const [panel, setPanel] = useState<Panel>(null);
@@ -750,8 +730,10 @@ export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, open
     .filter((group) => group.tasks.length);
   const archived = document.tasks.filter((task) => task.archivedAt !== null && (!workspaceId || task.links.workspaceId === workspaceId));
   const todayCount = today.reduce((sum, group) => sum + group.tasks.length, 0);
-  const activeView = document.views.find((view) => view.id === document.activeView) ?? null;
-  const filters = activeFilterCount(layout.filter);
+  // List rows follow Display, Cards alone: a phone gets taller touch rows (GroupRow), not fewer details.
+  const compactRows = layout.density === "compact";
+  // Today or Archived counts as one filter: Filter is where they are picked.
+  const filters = tab === "board" ? activeFilterCount(layout.filter) : 1;
   const pad = compact ? 12 : 16;
   const shownIn = (column: string) => columns.find((entry) => entry.column.id === column)?.lanes.flatMap((lane) => lane.tasks.map((task) => task.id)) ?? [];
   const manual = effective.sort === "manual";
@@ -777,22 +759,6 @@ export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, open
         </View>
       ) : null}
       <View style={{ paddingHorizontal: pad, paddingTop: pad, paddingBottom: 12, gap: 12 }}>
-        {embedded ? null : (
-          <Segmented
-            t={t}
-            label="Tasks view"
-            value={tab}
-            onChange={(next) => {
-              setTab(next);
-              setPanel(null);
-            }}
-            options={[
-              { value: "board", label: "Board", icon: "Columns3" },
-              { value: "today", label: todayCount ? `Today · ${todayCount}` : "Today", icon: "CalendarClock", tone: todayCount ? t.c.statusWarning : undefined },
-              { value: "archived", label: archived.length ? `Archived · ${archived.length}` : "Archived", icon: "Archive" },
-            ]}
-          />
-        )}
         <QuickAdd
           t={t}
           document={document}
@@ -800,14 +766,9 @@ export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, open
           workspaceId={workspaceId}
           trailing={
             <>
-            {/* In the Workbench, Today and Archived are toggles on Tasks: what is due (with reminders due), or the archived
-                cards, instead of the columns. Pressing the one that is on goes back to the columns. */}
-            {embedded ? <PanelButton t={t} icon="CalendarClock" label="Today" count={todayCount || undefined} open={tab === "today"} onPress={() => (setTab(tab === "today" ? "board" : "today"), setPanel(null))} /> : null}
-            {embedded ? <PanelButton t={t} icon="Archive" label="Archived" count={archived.length || undefined} open={tab === "archived"} onPress={() => (setTab(tab === "archived" ? "board" : "archived"), setPanel(null))} /> : null}
+            <PanelButton t={t} icon="ListFilter" label="Filter" count={filters} open={panel === "filter"} onPress={() => togglePanel("filter")} />
             {tab === "board" ? (
               <>
-                <PanelButton t={t} icon="Layers" label={activeView ? activeView.name : "All tasks"} open={panel === "views"} onPress={() => togglePanel("views")} />
-                <PanelButton t={t} icon="ListFilter" label="Filter" count={filters} open={panel === "filter"} onPress={() => togglePanel("filter")} />
                 <PanelButton t={t} icon="SlidersHorizontal" label="Display" open={panel === "display"} onPress={() => togglePanel("display")} />
                 {workspaceId ? <PanelButton t={t} icon="FolderInput" label="Attach tasks" open={panel === "attach"} onPress={() => togglePanel("attach")} /> : null}
               </>
@@ -816,17 +777,16 @@ export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, open
             </>
           }
         />
-        {tab === "board" && panel === "views" ? <ViewsPanel t={t} document={document} layout={layout} changed={changed} clearEdits={clearEdits} run={run} close={() => setPanel(null)} /> : null}
-        {tab === "board" && panel === "filter" ? <FilterPanel t={t} layout={layout} setLayout={setLayout} document={document} /> : null}
+        {panel === "filter" ? <FilterPanel t={t} layout={layout} setLayout={setLayout} document={document} tab={tab} setTab={setTab} todayCount={todayCount} archivedCount={archived.length} /> : null}
         {tab === "board" && panel === "display" ? <DisplayPanel t={t} layout={layout} setLayout={setLayout} /> : null}
         {tab === "board" && panel === "attach" && workspaceId ? <AttachPanel t={t} document={document} workspaceId={workspaceId} workspaces={deps.workspaces} run={run} /> : null}
-        {tab === "board" && panel !== "filter" ? <ActiveFilters t={t} layout={layout} setLayout={setLayout} document={document} /> : null}
+        {panel !== "filter" ? <ActiveFilters t={t} layout={layout} setLayout={setLayout} document={document} tab={tab} setTab={setTab} /> : null}
       </View>
       {tab === "board" && shapeLoading ? (
         // Neither layout until the device's pick loads, so a list never flashes as columns first.
         <View style={{ flex: 1 }} />
       ) : tab === "board" && shape === "list" ? (
-        <TaskList t={t} columns={columns} document={document} now={now} open={setEditing} run={run} workspaceId={workspaceId} workspaceStore={deps.workspaces} swimlanes={effective.swimlanes} manual={manual} />
+        <TaskList t={t} columns={columns} document={document} now={now} open={setEditing} run={run} workspaceId={workspaceId} workspaceStore={deps.workspaces} swimlanes={effective.swimlanes} manual={manual} compactCards={compactRows} />
       ) : tab === "board" ? (
         <ScrollView horizontal {...drag.value.scroller("board", true)} contentContainerStyle={{ paddingHorizontal: pad, paddingBottom: pad, gap: 12, alignItems: "flex-start" }}>
           {columns.map((entry) => (
@@ -869,7 +829,7 @@ export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, open
       <DragGhost>
         {(taskId) => {
           const task = document.tasks.find((item) => item.id === taskId);
-          if (task && shape === "list") return <TaskRow t={t} task={task} document={document} now={now} workspaces={null} onOpen={() => undefined} run={run} />;
+          if (task && shape === "list") return <TaskRow t={t} task={task} document={document} now={now} workspaces={null} onOpen={() => undefined} run={run} compactCards={compactRows} />;
           return task ? <CardView t={t} task={task} document={document} now={now} compact={t.compact || layout.density === "compact"} workspaces={workspaceId === null && layout.swimlanes !== "workspace" ? deps.workspaces : null} onOpen={() => undefined} run={run} lifted /> : null;
         }}
       </DragGhost>

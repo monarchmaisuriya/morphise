@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyTaskOperation, firstOpenColumn, followUpTask, type TaskOperation, workspaceTask } from "./task-ops";
-import { EMPTY_TASKS, type TaskDocument } from "./tasks";
+import { EMPTY_TASKS, type TaskDocument, viewSchema } from "./tasks";
 
 const now = new Date("2026-11-11T14:30:00.000Z");
 const later = new Date("2026-11-11T15:00:00.000Z");
@@ -117,16 +117,16 @@ describe("columns, labels, views", () => {
     expect(document.columns.map((column) => column.id)).toEqual(["backlog", "todo", "review", "doing", "done"]);
   });
 
+  it("removes a deleted label from views older versions saved, as they still read them", () => {
+    const withView: TaskDocument = { ...EMPTY_TASKS, labels: [{ id: "bug", name: "bug", color: "#8b8ca3" }], views: [viewSchema.parse({ id: "v", name: "Bugs", filter: { labels: ["bug"] } })] };
+    const document = apply(withView, { kind: "deleteLabel", id: "bug" });
+    expect(document.views[0].filter.labels).toEqual([]);
+  });
+
   it("removes a deleted label from every task", () => {
     const document = apply(EMPTY_TASKS, { kind: "addTask", task: { id: "a", title: "A", column: "todo" }, labelNames: ["bug"] }, { kind: "deleteLabel", id: "bug" });
     expect(document.labels).toEqual([]);
     expect(document.tasks[0].labels).toEqual([]);
-  });
-
-  it("clears the active view when it is deleted", () => {
-    const view = { id: "urgent", name: "Urgent" };
-    const document = apply(EMPTY_TASKS, { kind: "saveView", view }, { kind: "setActiveView", id: "urgent" }, { kind: "deleteView", id: "urgent" });
-    expect(document.activeView).toBeNull();
   });
 });
 

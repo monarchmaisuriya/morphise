@@ -1,5 +1,5 @@
 import { type Reminder, reminderAt } from "./reminders";
-import { type ChecklistItem, type Column, type Label, type Rule, type Task, type TaskDocument, taskDocumentSchema, type TaskView, viewSchema } from "./tasks";
+import { type ChecklistItem, type Column, type Label, type Rule, type Task, type TaskDocument, taskDocumentSchema } from "./tasks";
 
 // Every change to the task document, as plain data. An app applies one to the latest document and
 // saves with its revision; on a conflict it applies the same operation again to the newer
@@ -43,9 +43,6 @@ export type TaskOperation =
   | { kind: "deleteColumn"; id: string }
   | { kind: "saveLabel"; label: Pick<Label, "id" | "name"> & Partial<Label> }
   | { kind: "deleteLabel"; id: string }
-  | { kind: "saveView"; view: Pick<TaskView, "id" | "name"> & Partial<TaskView> }
-  | { kind: "deleteView"; id: string }
-  | { kind: "setActiveView"; id: string | null }
   | { kind: "saveRule"; rule: Rule }
   | { kind: "deleteRule"; id: string }
   | { kind: "setArchiveDone"; enabled: boolean; days: number }
@@ -349,16 +346,8 @@ function mutate(document: TaskDocument, operation: TaskOperation, now: Date): vo
     case "deleteLabel":
       document.labels = document.labels.filter((label) => label.id !== operation.id);
       for (const task of document.tasks) task.labels = task.labels.filter((label) => label !== operation.id);
+      // Saved views are gone from this version (0.21), but older versions on other devices still read them.
       for (const view of document.views) view.filter.labels = view.filter.labels.filter((label) => label !== operation.id);
-      return;
-    case "saveView":
-      return upsert(document.views, viewSchema.parse(copy(operation.view)));
-    case "deleteView":
-      document.views = document.views.filter((view) => view.id !== operation.id);
-      if (document.activeView === operation.id) document.activeView = null;
-      return;
-    case "setActiveView":
-      document.activeView = operation.id;
       return;
     case "saveRule":
       return upsert(document.rules, copy(operation.rule));

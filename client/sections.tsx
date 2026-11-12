@@ -45,8 +45,6 @@ export interface Applied {
   // Shared by every layout.
   prompts: readonly Prompt[];
   directory: Directory;
-  // Saved board views, offered in the Command Center.
-  taskViews: readonly { id: string; name: string }[];
 }
 
 type Button = Profile["header"]["buttons"][number];
@@ -344,27 +342,6 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
             onSelect: ({ agent, workspace }) => runTaskCommand(tasks, agent.id, workspace.id, ""),
           }),
         );
-      },
-    },
-    {
-      name: "tasks.views",
-      key: ({ taskViews }) => json(taskViews),
-      register({ taskViews }, track) {
-        for (const view of taskViews) {
-          track(
-            client.addCommandCenterItem({
-              id: `morphise-task-view-${view.id}`,
-              title: `Tasks view: ${view.name}`,
-              icon: "ListFilter",
-              keywords: ["tasks", "view", "board"],
-              context: "global",
-              onSelect: async ({ openScreen }) => {
-                await tasks.apply({ kind: "setActiveView", id: view.id });
-                openScreen({ screenId: WORKBENCH_SCREEN_ID, params: { view: "board" } });
-              },
-            }),
-          );
-        }
       },
     },
     {

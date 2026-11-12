@@ -2,6 +2,12 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.21.0 - 2026-11-13
+
+- **No saved views in Tasks:** the "All tasks" button (save, pick, update and delete named views) and the Command Center "Tasks view" items are gone. Filter and Display choices apply to the screen you are on. Views saved before stay in the task document, unused here, so older versions on other devices still read them.
+- **Today and Archived are picked in Filter:** Filter opens with Show: Open cards, Today (with its count) or Archived. The other filters apply to open cards. While Today or Archived shows, a "Showing Today" or "Showing Archived" chip under the toolbar takes you back to the open cards, and the Filter button counts it. This replaces the Today and Archived buttons in the Workbench and the Board / Today / Archived tabs in a workspace's Tasks panel.
+- **Display, Cards works in the list:** Compact shows each card as its title alone in a shorter row; Detailed adds its workspace, dates, checklist and labels, as before.
+
 ## 0.20.2 - 2026-11-12
 
 - **Today and Archived live in Tasks:** they are no longer Workbench views of their own; Tasks has a Today toggle (reminders due, overdue cards and cards due today, with its count) and an Archived toggle in its toolbar, and pressing the one that is on goes back to the columns. The Workbench lists Agents, Tasks and Bookmarks; Tasks carries the count of what is due (amber while a reminder is due). The Workbench opens on Tasks with Today on when something is due and nothing waits on you, and links to the old Today and Archived views open Tasks with that toggle on.

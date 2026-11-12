@@ -21,8 +21,8 @@ import { StackViewerHost } from "./polish/media/views";
 import { FOCUS_SCOPE, useTooltip } from "./web";
 
 // Workbench: everything that needs the user, in one place. Chats waiting on them (raised by agents) and
-// their own tasks (Agents, Tasks with its Today and Archived toggles), plus bookmarked answers. A list of views on the left on
-// wide screens, tabs along the top on phones.
+// their own tasks (Agents, Tasks, whose Filter shows Today and Archived too), plus bookmarked answers. Tabs along the top,
+// or a list at the side on wide screens when picked in Settings.
 
 export const WORKBENCH_SCREEN_ID = "workbench";
 // Earlier versions opened these two; they still open the Workbench, on the view that now holds what they showed.
@@ -42,8 +42,8 @@ const RAIL_FOLDED = 52;
 const askedName = (params: PluginScreenProps["params"]) => (typeof params.view === "string" ? params.view : typeof params.tab === "string" ? params.tab : null);
 
 // The view a link or an old screen asks for. "waiting" (the Inbox, before 0.20) opens Agents, which lists what waits
-// on the user first; "tasks" opens Tasks, and "today" and "archived" (views of their own before 0.20.2) open Tasks with
-// that toggle on.
+// on the user first; "tasks" opens Tasks, and "today" and "archived" (views of their own before 0.20.2) open Tasks showing
+// that list (Filter, Show).
 function viewParam(params: PluginScreenProps["params"]): WorkbenchView | null {
   const asked = askedName(params);
   if (asked === "waiting" || asked === "inbox") return "agents";
@@ -88,7 +88,7 @@ const ENTRIES: readonly { view: WorkbenchView; label: string; icon: string }[] =
 
 // Agents counts the agents waiting on the user (it lists them first).
 function countOf(view: WorkbenchView, counts: Counts): number {
-  // Tasks counts what is due today (its Today toggle lists it).
+  // Tasks counts what is due today (its Filter, Show, Today lists it).
   return view === "agents" ? counts.waiting ?? 0 : view === "board" ? counts.today : view === "bookmarks" ? counts.bookmarks : 0;
 }
 
@@ -180,11 +180,14 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
     // null until either happens.
     const [tasksStartChosen, setTasksStart] = useState<TasksStart | null>(null);
     const startOf = (name: string | null): TasksStart => (name === "today" || name === "archived" ? name : "board");
-    // Each opening asks again, even for the view it asked for last time.
+    // Each opening asks again, even for the view it asked for last time; counting openings lets a link start Tasks on its
+    // list again after the user switched away from it.
+    const [openings, setOpenings] = useState(0);
     useEffect(() => {
       if (!asked) return;
       setView(asked);
       setTasksStart(startOf(askedName(params)));
+      setOpenings((count) => count + 1);
     }, [asked, params]);
     const [width, setWidth] = useState(0);
     const railSettings = useSettings(workbenchSettings);
@@ -225,9 +228,9 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
       ) : (view === "agents" || view === "board") && !ready ? null : view === "agents" ? (
         <AgentsBoardView client={deps.client} workspaces={deps.workspaces} theme={theme} compact={layout.compact} navigation={navigation} layout={agentsLayout} bookmarkLastAnswer={deps.bookmarkLastAnswer} />
       ) : view === "board" ? (
-        // Today or Archived starts on when a link asked for it, or Today when the Workbench opened for what is due; the
-        // toggles change it after.
-        <TasksBoard key={`board:${tasksStart}`} deps={deps} theme={theme} compact={layout.compact} workspaceId={null} initialTab={tasksStart} openChat={openChat} embedded />
+        // Today or Archived shows when a link asked for it, or Today when the Workbench opened for what is due; Filter
+        // changes it after.
+        <TasksBoard key={`board:${tasksStart}:${openings}`} deps={deps} theme={theme} compact={layout.compact} workspaceId={null} initialTab={tasksStart} openChat={openChat} />
       ) : null;
 
     return (

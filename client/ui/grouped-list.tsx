@@ -109,12 +109,14 @@ interface GroupRowProps {
   selected?: boolean;
   focused?: boolean;
   dim?: boolean;
+  // A shorter row, for a compact list.
+  dense?: boolean;
   label: string;
   onPress(): void;
   onLongPress?(): void;
 }
 
-export function GroupRow({ t, nodeRef, leading, title, detail, struck, meta, facts, pinned, actions, selected, focused, dim, label, onPress, onLongPress }: GroupRowProps) {
+export function GroupRow({ t, nodeRef, leading, title, detail, struck, meta, facts, pinned, actions, selected, focused, dim, dense, label, onPress, onLongPress }: GroupRowProps) {
   const [hovered, setHovered] = useState(false);
   const touch = cannotHover();
   const [pressed, setPressed] = useState(false);
@@ -139,7 +141,7 @@ export function GroupRow({ t, nodeRef, leading, title, detail, struck, meta, fac
       onHoverOut={() => setHovered(false)}
       onPressIn={() => setPressed(true)}
       onPressOut={() => setPressed(false)}
-      style={{ flexDirection: "row", alignItems: "center", gap: 10, minHeight: t.compact ? 60 : 48, paddingVertical: t.compact ? 11 : 10, paddingHorizontal: 12, borderTopWidth: 1, borderTopColor: t.c.border, backgroundColor: background, opacity: dim ? 0.7 : 1 }}
+      style={{ flexDirection: "row", alignItems: "center", gap: 10, minHeight: dense ? (t.compact ? 48 : 36) : t.compact ? 60 : 48, paddingVertical: dense ? (t.compact ? 8 : 6) : t.compact ? 11 : 10, paddingHorizontal: 12, borderTopWidth: 1, borderTopColor: t.c.border, backgroundColor: background, opacity: dim ? 0.7 : 1 }}
     >
       {focused ? <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 2, backgroundColor: t.c.accent }} /> : null}
       <View style={{ width: 16, alignItems: "center" }}>{leading}</View>
