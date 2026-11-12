@@ -22,6 +22,7 @@ interface BoardNode {
 interface Editable {
   tagName?: string;
   isContentEditable?: boolean;
+  getAttribute?(name: string): string | null;
 }
 interface IntersectionObserverLike {
   observe(node: unknown): void;
@@ -44,6 +45,13 @@ const editing = (target: unknown) => {
   return node?.isContentEditable === true || node?.tagName === "INPUT" || node?.tagName === "TEXTAREA" || node?.tagName === "SELECT";
 };
 
+// Enter on a focused button, tab or link presses that control; it does not also open the focused card's chat.
+const control = (target: unknown) => {
+  const node = target as Editable | null;
+  const role = node?.getAttribute?.("role");
+  return node?.tagName === "BUTTON" || node?.tagName === "A" || role === "button" || role === "tab" || role === "link";
+};
+
 // Calls `handle` for the board's keys while `root` is shown; a handled key does nothing else.
 // Typing in a field only reaches it with Escape, which leaves the field.
 export function onBoardKeys(root: () => unknown, handle: (key: BoardKey) => boolean): () => void {
@@ -52,6 +60,7 @@ export function onBoardKeys(root: () => unknown, handle: (key: BoardKey) => bool
     const key = KEYS[event.key];
     if (!key || event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
     if (editing(event.target) && key !== "back") return;
+    if (key === "open" && control(event.target)) return;
     // A screen Paseo keeps mounted behind another one has no layout boxes.
     const node = root() as BoardNode | null;
     if (!node?.isConnected || !node.getClientRects?.().length) return;

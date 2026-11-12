@@ -16,6 +16,11 @@ export function stylePluginViews() {
 /* Paseo rings every focused button (:focus-visible, 2px accent), and its desktop app does so after a click on a row too, which
    boxed in the whole row. A focused row shows the soft fill it has on hover instead, so the keyboard still sees where it is. */
 [data-cp-row]:focus-visible { outline: none; background-color: rgb(127 127 127 / 0.12); }
+/* The same for Morphise's own screens (data-mx-focus-scope, client/web.ts): a button there shows a quiet inset line for the
+   keyboard instead of Paseo's ring after a click. Text fields keep Paseo's ring. */
+[data-mx-focus-scope] :focus-visible:not(input, textarea, [contenteditable="true"]) { outline: none !important; box-shadow: inset 0 0 0 2px rgb(127 127 127 / 0.75); }
+/* An agent card's buttons stay laid out but transparent until hovered; keyboard focus inside the card shows them too. */
+[data-mx-card]:focus-within [data-mx-card-actions] { opacity: 1 !important; }
 /* One scroller for both axes keeps the horizontal bar visible with tall diffs. */
 [data-cp-nowrap] { overflow: auto !important; }
 [data-cp-nowrap] > div { width: max-content; min-width: 100%; }

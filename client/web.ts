@@ -124,6 +124,11 @@ function showTooltip(target: TipTarget, label: string, colors: TooltipColors) {
   page().addEventListener("scroll", hideTooltip, true);
 }
 
+// Spread on the root view of a Morphise screen: its buttons show a quiet keyboard outline instead of Paseo's
+// focus ring, which the desktop app draws after a click too (rule in client/polish/web/plugin-views.ts).
+// A data attribute only; other platforms ignore it.
+export const FOCUS_SCOPE = { dataSet: { mxFocusScope: "" } } as object;
+
 // The ref to pass to a button: stable across renders, so hovering (which re-renders the button)
 // never resets it. The label and colours are read when the pointer arrives, so a changed label
 // shows; no label means no tooltip. React calls the returned cleanup when the button goes away or

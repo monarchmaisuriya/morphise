@@ -21,6 +21,13 @@ import {
   applyAgentUpdate,
   entriesFromSnapshot,
   setCardSetting,
+  folderAddsSomething,
+  foldedLanes,
+  LANE_MAX,
+  LANE_MIN,
+  modelLabel,
+  laneFolded,
+  openLaneWidth,
 } from "./agents-board";
 
 const NOW = Date.parse("2026-11-12T12:00:00Z");
@@ -344,5 +351,58 @@ describe("agent list updates", () => {
     expect(readUsage({ inputTokens: 1200, cachedInputTokens: 800, outputTokens: 300, totalCostUsd: 0.12, contextWindowUsedTokens: 9, contextWindowMaxTokens: 10 })).toEqual({ context: { used: 9, max: 10 }, inputTokens: 1200, cachedInputTokens: 800, outputTokens: 300, costUsd: 0.12 });
     expect(readUsage({ outputTokens: 3 })).toEqual({ context: null, inputTokens: null, cachedInputTokens: null, outputTokens: 3, costUsd: null });
     expect(readUsage(undefined)).toBeNull();
+  });
+});
+
+describe("lane layout", () => {
+  it("folds an empty lane, and Done and Archived at first, unless the user chose otherwise", () => {
+    expect(laneFolded("running", 0, undefined)).toBe(true);
+    expect(laneFolded("running", 3, undefined)).toBe(false);
+    expect(laneFolded("done", 49, undefined)).toBe(true);
+    expect(laneFolded("archived", 6, undefined)).toBe(true);
+    expect(laneFolded("done", 49, false)).toBe(false);
+    expect(laneFolded("waiting", 2, true)).toBe(true);
+  });
+
+  it("shares the width between open lanes, within the minimum and the setting's maximum", () => {
+    // M's case: 1,500 pt, everything folded but one open lane.
+    expect(openLaneWidth({ width: 1500, open: 1, folded: 4, gap: 12, padding: 12, max: LANE_MAX.default })).toEqual({ width: 420, scrolls: false });
+    // Three open lanes on 1,100 pt: (1100 − 24 − 4×12 − 2×44) / 3 = 313.
+    expect(openLaneWidth({ width: 1100, open: 3, folded: 2, gap: 12, padding: 12, max: LANE_MAX.default })).toEqual({ width: 313, scrolls: false });
+    // Too narrow even at the minimum: the board scrolls.
+    expect(openLaneWidth({ width: 700, open: 5, folded: 0, gap: 12, padding: 12, max: LANE_MAX.wide })).toEqual({ width: LANE_MIN, scrolls: true });
+    expect(openLaneWidth({ width: 900, open: 0, folded: 5, gap: 12, padding: 12, max: 420 })).toEqual({ width: 0, scrolls: false });
+  });
+});
+
+describe("card text", () => {
+  it("says the model once and short, from ids seen on M's board", () => {
+    expect(modelLabel("claude", "claude-opus-5-5")).toBe("Opus 5.5");
+    expect(modelLabel("claude/claude-opus-5-5", "claude-opus-5-5")).toBe("Opus 5.5");
+    expect(modelLabel("claude", "claude-fable-5-1")).toBe("Fable 5.1");
+    expect(modelLabel("codex", "gpt-5.5")).toBe("codex · gpt-5.5");
+    expect(modelLabel("opencode", "opencode-mini")).toBe("opencode-mini");
+    expect(modelLabel("claude", null)).toBe("claude");
+    expect(modelLabel(null, null)).toBeNull();
+  });
+
+  it("shows the folder only when it is not the project's or workspace's name", () => {
+    expect(folderAddsSomething("Develop", "Develop", "Add super user tool")).toBe(false);
+    expect(folderAddsSomething("lucky-catfish", "pushowl-backend", "Scan Slack thread")).toBe(true);
+    expect(folderAddsSomething("develop", null, "Develop")).toBe(false);
+  });
+});
+
+describe("folded lanes", () => {
+  const lanes = (counts: Partial<Record<"waiting" | "running" | "review" | "done" | "archived", number>>, choices: Partial<Record<string, boolean>> = {}) =>
+    (["waiting", "running", "review", "done", "archived"] as const).map((lane) => ({ lane, count: counts[lane] ?? 0, choice: choices[lane] }));
+
+  it("opens Done when nothing else would be open, as on M's quiet board", () => {
+    expect([...foldedLanes(lanes({ done: 49, archived: 6 }))].sort()).toEqual(["archived", "review", "running", "waiting"]);
+  });
+
+  it("keeps Done folded while another lane is open, or when the user folded it", () => {
+    expect(foldedLanes(lanes({ running: 2, done: 49 })).has("done")).toBe(true);
+    expect(foldedLanes(lanes({ done: 49 }, { done: true })).has("done")).toBe(true);
   });
 });

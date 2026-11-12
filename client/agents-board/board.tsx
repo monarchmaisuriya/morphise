@@ -17,13 +17,16 @@ import {
   indicatorOf,
   type Lane,
   LANES,
-  type LaneWidth,
   matchesFilter,
   moveFocus,
   NO_FILTER,
   readBoardAgent,
   SORT_KEYS,
   type SortKey,
+  LANE_MAX,
+  LANE_STRIP,
+  foldedLanes,
+  openLaneWidth,
 } from "../../shared/agents-board";
 import { summarizePermission } from "../../shared/inbox";
 import { type ValueStore, useValue } from "../profile-store";
@@ -41,7 +44,8 @@ import { observeOnScreen, onBoardKeys } from "./web";
 export const AGENTS_SETTINGS_TAB = "agents";
 
 const LANE_TITLES: Record<Lane, string> = { waiting: "Waiting", running: "Running", review: "To review", done: "Done", archived: "Archived" };
-const LANE_PX: Record<LaneWidth, number> = { narrow: 270, default: 320, wide: 380 };
+const LANE_GAP = 12;
+const BOARD_PADDING = 12;
 const SORT_TITLES: Record<SortKey, string> = { updated: "Updated", created: "Created", title: "Title", workspace: "Workspace", project: "Project", branch: "Branch", folder: "Folder", context: "Context", duration: "Duration" };
 // A lane draws this many cards, then a button for the next ones.
 const PAGE = 50;
@@ -153,6 +157,8 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
   const [focused, setFocused] = useState<string | null>(null);
   const [phoneLane, setPhoneLane] = useState<Lane>("waiting");
   const [shown, setShown] = useState<Partial<Record<Lane, number>>>({});
+  // Lanes the user opened or folded while the view is open; the rest follow laneFolded's defaults.
+  const [foldChoice, setFoldChoice] = useState<Partial<Record<Lane, boolean>>>({});
   const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
   const [width, setWidth] = useState(0);
   const root = useRef<View>(null);
@@ -188,6 +194,10 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
 
   const sideDetails = !compact && width >= SIDE_DETAILS_FROM;
   const visibleLanes = compact ? [phoneLane] : laneList;
+  const foldedSet = foldedLanes(laneList.map((lane) => ({ lane, count: lanes[lane].length, choice: foldChoice[lane] })));
+  const folded = (lane: Lane) => !compact && foldedSet.has(lane);
+  const setFolded = (lane: Lane, value: boolean) => setFoldChoice((current) => ({ ...current, [lane]: value }));
+
   const openChat = navigation ? (agentId: string) => navigation.openAgent({ agentId }) : null;
 
   const run = (agentId: string, what: string, action: () => Promise<{ ok: true } | { ok: false; error: string }>) => {
@@ -267,7 +277,8 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
 
   // The keys read the board as last drawn: the cards each shown lane lists, and the focus.
   const keyState = useRef<{ lanes: string[][]; focused: string | null; selected: string | null }>({ lanes: [], focused: null, selected: null });
-  keyState.current = { lanes: visibleLanes.map((lane) => lanes[lane].slice(0, shown[lane] ?? PAGE).map((agent) => agent.id)), focused, selected };
+  // A folded lane's cards are not drawn, so the keys skip them.
+  keyState.current = { lanes: visibleLanes.map((lane) => (folded(lane) ? [] : lanes[lane].slice(0, shown[lane] ?? PAGE).map((agent) => agent.id))), focused, selected };
   const openRef = useRef(openChat);
   openRef.current = openChat;
   useEffect(
@@ -316,7 +327,7 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
             style={[{ flex: 1, minWidth: 0, color: t.c.foreground, fontSize: t.compact ? 15 : 13, height: t.control - 2 }, Platform.OS === "web" ? (WEB_NO_OUTLINE as TextStyle) : null]}
           />
         </View>
-        <IconButton t={t} icon="Settings2" label="Agents view settings" onPress={() => client.openSettings(AGENTS_SETTINGS_TAB)} />
+        <IconButton t={t} icon="Settings2" label="Agents tab settings" onPress={() => client.openSettings(AGENTS_SETTINGS_TAB)} />
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, alignItems: "center" }}>
         <FilterMenu t={t} label="Agent" icon="Bot" groups={groups.providers} picked={filter.providers} onChange={(providers) => setFilter({ ...filter, providers })} />
@@ -339,15 +350,40 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
     </View>
   );
 
+  const boardWidth = Math.max(0, width - (current && sideDetails ? DETAILS_WIDTH : 0));
+  const openLanes = laneList.filter((lane) => !folded(lane));
+  const layout = openLaneWidth({ width: boardWidth, open: openLanes.length, folded: laneList.length - openLanes.length, gap: LANE_GAP, padding: BOARD_PADDING, max: LANE_MAX[settings.board.laneWidth] });
+
+  // A folded lane: a narrow strip with its count and its name written downward; a press opens it.
+  const laneStrip = (lane: Lane) => (
+    <Pressable
+      key={lane}
+      accessibilityRole="button"
+      accessibilityLabel={`${LANE_TITLES[lane]}, ${lanes[lane].length}. Open the lane`}
+      onPress={() => setFolded(lane, false)}
+      style={({ hovered }: { pressed: boolean; hovered?: boolean }) => ({ width: LANE_STRIP, alignItems: "center", paddingTop: 6, borderRadius: t.radius.card, backgroundColor: hovered ? t.c.surface1 : "transparent" })}
+    >
+      <Text style={[t.text.meta, { fontVariant: ["tabular-nums"] }]}>{lanes[lane].length}</Text>
+      <View style={{ width: 160, marginTop: 78, transform: [{ rotate: "90deg" }] }}>
+        <Text style={[t.text.heading, { fontSize: 13 }]} numberOfLines={1}>
+          {LANE_TITLES[lane]}
+        </Text>
+      </View>
+    </Pressable>
+  );
+
   const laneView = (lane: Lane) => {
     const cards = lanes[lane];
     const limit = shown[lane] ?? PAGE;
+    if (folded(lane)) return laneStrip(lane);
     return (
-      <View key={lane} style={{ width: compact ? undefined : LANE_PX[settings.board.laneWidth], flex: compact ? 1 : undefined, gap: 8 }}>
+      <View key={lane} style={{ width: compact ? undefined : layout.width, flex: compact ? 1 : undefined, gap: 8 }}>
         {compact ? null : (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 4 }}>
             <Text style={t.text.heading}>{LANE_TITLES[lane]}</Text>
             <Text style={t.text.meta}>{cards.length}</Text>
+            <View style={{ flex: 1 }} />
+            <IconButton t={t} size="sm" icon="ChevronsLeftRight" label={`Fold ${LANE_TITLES[lane]}`} onPress={() => setFolded(lane, true)} />
           </View>
         )}
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 8, paddingBottom: 16 }}>
@@ -381,10 +417,15 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
       <Text style={[t.text.meta, { padding: 16 }]}>Loading agents</Text>
     ) : list.status === "error" ? (
       <Text style={[t.text.danger, { padding: 16 }]}>Could not list the agents: {list.error}</Text>
+    ) : onBoard.length === 0 ? (
+      // Outside the lanes' sideways scroller, so the line wraps at any width.
+      <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 8 }}>
+        <Text style={t.text.meta}>{settings.board.doneWindow === "all" ? "No agents on this host yet." : "No agents in this window. Older finished agents show with Done and Archived set to Everything in this tab's settings."}</Text>
+      </View>
     ) : compact ? (
       <View style={{ flex: 1, paddingHorizontal: 12 }}>{laneView(phoneLane)}</View>
     ) : (
-      <ScrollView horizontal style={{ flex: 1 }} contentContainerStyle={{ gap: 12, paddingHorizontal: 12, paddingBottom: 8 }}>
+      <ScrollView horizontal scrollEnabled={layout.scrolls} style={{ flex: 1 }} contentContainerStyle={{ gap: LANE_GAP, paddingHorizontal: BOARD_PADDING, paddingBottom: 8, flexGrow: 1 }}>
         {laneList.map(laneView)}
       </ScrollView>
     );

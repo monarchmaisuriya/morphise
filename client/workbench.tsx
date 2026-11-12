@@ -19,7 +19,7 @@ import { tasksOf } from "./task-store";
 import { lendScreenOpener } from "./dispatch";
 import { Icon, type Tokens, useTokens } from "./ui/kit";
 import { StackViewerHost } from "./polish/media/views";
-import { useTooltip } from "./web";
+import { FOCUS_SCOPE, useTooltip } from "./web";
 
 // Workbench: everything that needs the user, in one place. Chats waiting on them (raised by agents) and
 // their own tasks (Today, Board, Archived), plus bookmarked answers. A list of views on the left on
@@ -29,19 +29,25 @@ export const WORKBENCH_SCREEN_ID = "workbench";
 // Earlier versions opened these two; they still open the Workbench, on the view they used to show.
 export const LEGACY_SCREENS = { tasks: "board", inbox: "waiting" } as const;
 
-export type WorkbenchView = "waiting" | "agents" | "today" | "board" | "bookmarks" | "archived";
-const VIEWS: readonly WorkbenchView[] = ["waiting", "agents", "today", "board", "bookmarks", "archived"];
+export type WorkbenchView = "waiting" | "today" | "board" | "bookmarks" | "archived";
+const VIEWS: readonly WorkbenchView[] = ["board", "waiting", "today", "bookmarks", "archived"];
+// Board shows the user's tasks or every agent, by a pair of tabs at its top.
+type BoardTab = "tasks" | "agents";
 // Below this width the views sit in a row of tabs instead of a list.
 const RAIL_FROM = 720;
 const RAIL_WIDTH = 176;
 const RAIL_FOLDED = 52;
 
 // The rail folded to icons, on this device.
-const workbenchSettings = defineSettings({ id: "workbench", scope: "device", version: 1, schema: z.object({ railFolded: z.boolean().default(false) }) });
+// The rail folded to icons, and the Board's last tab, on this device.
+const workbenchSettings = defineSettings({ id: "workbench", scope: "device", version: 1, schema: z.object({ railFolded: z.boolean().default(false), boardTab: z.enum(["tasks", "agents"]).catch("agents").default("agents") }) });
 
-function viewParam(params: PluginScreenProps["params"]): WorkbenchView | null {
+// "agents" was a view of its own before 0.19.2; it now opens Board on its Agents tab.
+function viewParam(params: PluginScreenProps["params"]): { view: WorkbenchView; tab?: BoardTab } | null {
   const asked = typeof params.view === "string" ? params.view : typeof params.tab === "string" ? params.tab : null;
-  return VIEWS.find((view) => view === asked) ?? null;
+  if (asked === "agents") return { view: "board", tab: "agents" };
+  const view = VIEWS.find((item) => item === asked);
+  return view ? { view, tab: view === "board" ? "tasks" : undefined } : null;
 }
 
 // The counts each view shows, kept current.
@@ -64,15 +70,14 @@ function useWorkbenchCounts(deps: SurfaceDeps) {
 
 type Counts = ReturnType<typeof useWorkbenchCounts>;
 
-const ENTRIES: readonly { view: WorkbenchView; label: string; icon: string; section: "you" | "tasks" | "saved" }[] = [
-  { view: "waiting", label: "Waiting", icon: "Inbox", section: "you" },
-  { view: "agents", label: "Agents", icon: "SquareKanban", section: "you" },
-  { view: "today", label: "Today", icon: "CalendarClock", section: "tasks" },
-  { view: "board", label: "Board", icon: "Columns3", section: "tasks" },
-  { view: "archived", label: "Archived", icon: "Archive", section: "tasks" },
-  { view: "bookmarks", label: "Bookmarks", icon: "Bookmark", section: "saved" },
+// One list, without group headings, in this order.
+const ENTRIES: readonly { view: WorkbenchView; label: string; icon: string }[] = [
+  { view: "board", label: "Board", icon: "Columns3" },
+  { view: "waiting", label: "Waiting", icon: "Inbox" },
+  { view: "today", label: "Today", icon: "CalendarClock" },
+  { view: "archived", label: "Archived", icon: "Archive" },
+  { view: "bookmarks", label: "Bookmarks", icon: "Bookmark" },
 ];
-const SECTION_TITLES = { you: "Agents", tasks: "Tasks", saved: "Saved" } as const;
 
 function countOf(view: WorkbenchView, counts: Counts): number {
   return view === "waiting" ? counts.waiting : view === "today" ? counts.today : view === "bookmarks" ? counts.bookmarks : view === "archived" ? counts.archived : 0;
@@ -83,6 +88,28 @@ function countTone(view: WorkbenchView, counts: Counts, t: Tokens): string {
   if (view === "waiting" && counts.permission) return t.c.statusWarning;
   if (view === "today" && counts.due) return t.c.statusWarning;
   return t.c.foregroundMuted;
+}
+
+// Board's two tabs: plain words with a thin line under the chosen one.
+function BoardTabs({ t, tab, onChange }: { t: Tokens; tab: BoardTab; onChange(tab: BoardTab): void }) {
+  return (
+    <View accessibilityRole="tablist" style={{ flexDirection: "row", gap: 18, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: t.c.border }}>
+      {(["tasks", "agents"] as const).map((item) => {
+        const selected = item === tab;
+        return (
+          <Pressable
+            key={item}
+            accessibilityRole="tab"
+            accessibilityState={{ selected }}
+            onPress={() => onChange(item)}
+            style={({ hovered }: { pressed: boolean; hovered?: boolean }) => ({ height: 36, justifyContent: "center", borderBottomWidth: 2, marginBottom: -1, borderBottomColor: selected ? t.c.foreground : "transparent", opacity: selected || hovered ? 1 : 0.7 })}
+          >
+            <Text style={{ fontSize: 13, color: selected ? t.c.foreground : t.c.foregroundMuted, fontWeight: selected ? "600" : "400" }}>{item === "tasks" ? "Tasks" : "Agents"}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
 }
 
 function RailRow({ t, view, label, icon, count, tone, selected, folded, onPress }: { t: Tokens; view: WorkbenchView; label: string; icon: string; count: number; tone: string; selected: boolean; folded: boolean; onPress(): void }) {
@@ -131,17 +158,21 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: WorkbenchView
     // The view picked here or asked for when opened; until then, what needs the user first, then
     // what is due, then the board, following the counts as they arrive.
     const [picked, setView] = useState<WorkbenchView | null>(null);
-    // The Agents view is listed unless its setting turns it off.
+    // Board's Agents tab shows unless its setting turns it off.
     const boardSettings = useSettings(agentsBoardSettings);
     const agentsShown = boardSettings.status !== "ready" || boardSettings.values.enabled;
-    const entries = agentsShown ? ENTRIES : ENTRIES.filter((entry) => entry.view !== "agents");
+    const entries = ENTRIES;
     const asked = viewParam(params);
+    // A tab the user pressed is remembered on the device; one a link asked for applies to that opening only.
+    const [pickedTab, setPickedTab] = useState<BoardTab | null>(null);
+    const [linkedTab, setLinkedTab] = useState<BoardTab | null>(null);
     // Each opening asks again, even for the view it asked for last time.
     useEffect(() => {
-      if (asked) setView(asked);
-    }, [asked, params]);
-    const chosen: WorkbenchView = picked ?? asked ?? fallback ?? (counts.waiting ? "waiting" : counts.today ? "today" : "board");
-    const view: WorkbenchView = chosen === "agents" && !agentsShown ? "waiting" : chosen;
+      if (!asked) return;
+      setView(asked.view);
+      setLinkedTab(asked.tab ?? null);
+    }, [asked?.view, asked?.tab, params]);
+    const view: WorkbenchView = picked ?? asked?.view ?? fallback ?? (counts.waiting ? "waiting" : counts.today ? "today" : "board");
     const [width, setWidth] = useState(0);
     const rail = !layout.compact && width >= RAIL_FROM;
     const railSettings = useSettings(workbenchSettings);
@@ -158,29 +189,45 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: WorkbenchView
     }, [chosenFolded, railSettings.status, railSettings.saving, railSettings.status === "ready" ? railSettings.revision : null]);
     const openChat = navigation ? (agentId: string) => navigation.openAgent({ agentId }) : null;
     const workspaces = useValue(deps.workspaces);
+    // The Board's tab: the one picked here, else the one last used on this device; saved like the fold.
+    const savedTab: BoardTab = railSettings.status === "ready" ? railSettings.values.boardTab : "agents";
+    const boardTab: BoardTab = agentsShown ? linkedTab ?? pickedTab ?? savedTab : "tasks";
+    // Board waits for both settings, so it never shows the Agents tab for a moment when it is off or not the saved tab.
+    const boardReady = boardSettings.status !== "loading" && railSettings.status !== "loading";
+    const pickTab = (tab: BoardTab) => {
+      setLinkedTab(null);
+      setPickedTab(tab);
+    };
+    useEffect(() => {
+      if (pickedTab === null || railSettings.status !== "ready" || railSettings.saving || railSettings.values.boardTab === pickedTab) return;
+      void railSettings.save({ ...railSettings.values, boardTab: pickedTab }, railSettings.revision);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pickedTab, railSettings.status, railSettings.saving, railSettings.status === "ready" ? railSettings.revision : null]);
 
     const content =
       view === "waiting" ? (
         <WaitingView deps={deps} theme={theme} compact={layout.compact} navigation={navigation} />
-      ) : view === "agents" ? (
-        <AgentsBoardView client={deps.client} workspaces={deps.workspaces} theme={theme} compact={layout.compact} navigation={navigation} />
       ) : view === "bookmarks" ? (
         <Bookmarks t={t} deps={deps} workspaces={workspaces} open={openChat} />
+      ) : view === "board" ? (
+        !boardReady ? null : <View style={{ flex: 1 }}>
+          {agentsShown ? <BoardTabs t={t} tab={boardTab} onChange={pickTab} /> : null}
+          {boardTab === "agents" ? (
+            <AgentsBoardView client={deps.client} workspaces={deps.workspaces} theme={theme} compact={layout.compact} navigation={navigation} />
+          ) : (
+            <TasksBoard key="board" deps={deps} theme={theme} compact={layout.compact} workspaceId={null} initialTab="board" openChat={openChat} embedded />
+          )}
+        </View>
       ) : (
         <TasksBoard key={view} deps={deps} theme={theme} compact={layout.compact} workspaceId={null} initialTab={view} openChat={openChat} embedded />
       );
 
     return (
-      <View style={{ flex: 1, flexDirection: rail ? "row" : "column", backgroundColor: theme.colors.surface0 }} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
+      <View {...FOCUS_SCOPE} style={{ flex: 1, flexDirection: rail ? "row" : "column", backgroundColor: theme.colors.surface0 }} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
         {rail ? (
           <View accessibilityRole="tablist" style={{ width: folded ? RAIL_FOLDED : RAIL_WIDTH, padding: folded ? 6 : 8, gap: 2, borderRightWidth: 1, borderRightColor: t.c.border }}>
-            {(["you", "tasks", "saved"] as const).map((section) => (
-              <View key={section} style={{ gap: 2, paddingBottom: 8 }}>
-                {folded ? <View style={{ height: 1, marginVertical: 6, marginHorizontal: 6, backgroundColor: section === "you" ? "transparent" : t.c.border }} /> : <Text style={[t.text.label, { paddingHorizontal: 10, paddingTop: 6, paddingBottom: 4 }]}>{SECTION_TITLES[section]}</Text>}
-                {entries.filter((entry) => entry.section === section).map((entry) => (
-                  <RailRow key={entry.view} t={t} view={entry.view} label={entry.label} icon={entry.icon} count={countOf(entry.view, counts)} tone={countTone(entry.view, counts, t)} selected={view === entry.view} folded={folded} onPress={() => setView(entry.view)} />
-                ))}
-              </View>
+            {entries.map((entry) => (
+              <RailRow key={entry.view} t={t} view={entry.view} label={entry.label} icon={entry.icon} count={countOf(entry.view, counts)} tone={countTone(entry.view, counts, t)} selected={view === entry.view} folded={folded} onPress={() => setView(entry.view)} />
             ))}
             <View style={{ flex: 1 }} />
             <Pressable

@@ -36,7 +36,8 @@ const fields = (on: readonly CardField[]): CardFieldSwitches => Object.fromEntri
 // Minimal keeps the header and the timer; Standard leaves Git status, full path and the linked PR off.
 export const CARD_PRESETS: Readonly<Record<DensityPreset, { fields: CardFieldSwitches; labelLimit: LabelLimit }>> = {
   minimal: { fields: fields(["model", "thinking", "timer"]), labelLimit: "2" },
-  standard: { fields: fields(CARD_FIELDS.filter((field) => field !== "gitStatus" && field !== "path" && field !== "pullRequest")), labelLimit: "2" },
+  // Folder is off: the fact line already names the project and workspace, which is usually the folder.
+  standard: { fields: fields(CARD_FIELDS.filter((field) => field !== "gitStatus" && field !== "path" && field !== "pullRequest" && field !== "folder")), labelLimit: "2" },
   full: { fields: fields(CARD_FIELDS), labelLimit: "all" },
 };
 
@@ -412,3 +413,61 @@ export const USAGE_REFRESH_MS = 60_000;
 
 // A card on screen reads its agent's usage again at most once a minute.
 export const dueForRefresh = (lastAt: number | undefined, now: number) => lastAt === undefined || now - lastAt >= USAGE_REFRESH_MS;
+
+// ---------- Lane layout ----------
+
+// An empty lane, and Done and Archived until opened, fold to a strip with the lane's name and count.
+export const LANE_STRIP = 44;
+export const LANE_MIN = 240;
+// The Lane width setting is the widest an open lane grows to.
+export const LANE_MAX: Record<LaneWidth, number> = { narrow: 300, default: 420, wide: 520 };
+const FOLDED_AT_START: ReadonlySet<Lane> = new Set(["done", "archived"]);
+
+/** Whether a lane shows as a strip: the user's own choice for it, else folded when empty, and Done and Archived folded at first. */
+export function laneFolded(lane: Lane, count: number, choice: boolean | undefined): boolean {
+  if (choice !== undefined) return choice;
+  return count === 0 || FOLDED_AT_START.has(lane);
+}
+
+/** Which lanes show as strips. When none would be open but Done has agents, Done opens, so the board never shows only strips with work in them. */
+export function foldedLanes(lanes: readonly { lane: Lane; count: number; choice: boolean | undefined }[]): Set<Lane> {
+  const folded = new Set(lanes.filter((item) => laneFolded(item.lane, item.count, item.choice)).map((item) => item.lane));
+  const done = lanes.find((item) => item.lane === "done");
+  if (folded.size === lanes.length && done && done.count > 0 && done.choice === undefined) folded.delete("done");
+  return folded;
+}
+
+/**
+ * Each open lane's width when they share the board: what is left after the strips and gaps, split evenly, between LANE_MIN and
+ * the setting's maximum. `scrolls` is true when even LANE_MIN does not fit, so the board scrolls sideways.
+ */
+export function openLaneWidth(input: { width: number; open: number; folded: number; gap: number; padding: number; max: number }): { width: number; scrolls: boolean } {
+  if (input.open === 0) return { width: 0, scrolls: false };
+  const lanes = input.open + input.folded;
+  const free = input.width - 2 * input.padding - input.gap * Math.max(0, lanes - 1) - input.folded * LANE_STRIP;
+  const share = Math.floor(free / input.open);
+  if (share < LANE_MIN) return { width: LANE_MIN, scrolls: true };
+  return { width: Math.min(share, input.max), scrolls: false };
+}
+
+// ---------- Card text ----------
+
+const capital = (word: string) => word.charAt(0).toUpperCase() + word.slice(1);
+
+/**
+ * The agent's model as a card says it: "claude-opus-5-5" reads "Opus 5.5", with the provider left out when the id already
+ * names it. Ids of another shape are shown as given, after the provider when they do not start with it.
+ */
+export function modelLabel(provider: string | null, model: string | null): string | null {
+  const name = provider?.split("/")[0] ?? null;
+  if (!model) return name;
+  const shaped = /^([a-z]+)-([a-z]+)-(\d+)-(\d+)$/.exec(model);
+  if (shaped && (!name || shaped[1] === name)) return `${capital(shaped[2]!)} ${shaped[3]}.${shaped[4]}`;
+  return name && !model.startsWith(name) ? `${name} · ${model}` : model;
+}
+
+/** Whether the folder adds anything: not when it is the project's or the workspace's name. */
+export function folderAddsSomething(folder: string, project: string | null, workspace: string | null): boolean {
+  const same = (other: string | null) => !!other && other.toLowerCase() === folder.toLowerCase();
+  return !same(project) && !same(workspace);
+}

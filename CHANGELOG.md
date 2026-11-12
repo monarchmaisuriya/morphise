@@ -2,6 +2,13 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.19.2 - 2026-11-12
+
+- **Board holds tasks and agents:** the Workbench's Board has two small tabs at its top, Tasks and Agents, in place of a separate Agents view. It remembers the last tab on each device. Board is listed first, and the Workbench list has no group headings: Board, Waiting, Today, Archived, Bookmarks.
+- **Agent lanes fit the window:** open lanes share the width (240 pt up to the Lane width setting, now a maximum of 300, 420 or 520 pt), so the board scrolls sideways only when they cannot fit. An empty lane, and Done and Archived until you open them, fold to a narrow strip with the lane's name and count; when nothing else is open, Done opens by itself.
+- **Quieter agent cards:** the title comes first, with one line under it for the project, workspace, model and time. The model is said once and short ("Opus 5.5 high", not "claude · claude-opus-5-5 · high"). The folder shows only when it differs from the project and workspace (and is off in the Standard preset). The context ring shows only while the agent works, as "44%", with a tooltip. A dot marks only a waiting permission or a failure. A card's buttons show on hover on desktop, and always on phones and tablets.
+- **No green ring after a click in the Workbench:** its buttons show a quiet outline for the keyboard instead of Paseo's focus ring; text fields keep Paseo's.
+
 ## 0.19.1 - 2026-11-12
 
 - **Switch hints no longer read like the switch's state:** "Show the Agents view" said "Off, the Workbench lists no Agents view…" even while on. Seven settings hints now say what the switch does, with "When this is off, …" for the other case (Agents view, sub-agents, minimal phone cards, Morphise's chat rows, wrapping in rows and previews, failed calls).

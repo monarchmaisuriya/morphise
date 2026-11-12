@@ -97,8 +97,8 @@ function AgentsBoardSettingsForm({ form }: { form: Form }) {
   if (stored.status === "error" || stored.status === "invalid" || !values) {
     const invalid = stored.status === "invalid";
     return (
-      <SettingsSection title="Agents view">
-        <Text style={t.text.danger}>Could not read the Agents view settings{stored.status === "error" || invalid ? `: ${stored.error}` : ""}.</Text>
+      <SettingsSection title="Agents tab">
+        <Text style={t.text.danger}>Could not read the Agents tab settings{stored.status === "error" || invalid ? `: ${stored.error}` : ""}.</Text>
         <SettingsCard>
           {invalid ? <SettingsAction label="Put back the defaults" actionLabel="Reset" onPress={() => void stored.reset()} /> : <SettingsAction label="Try again" actionLabel="Retry" onPress={() => void stored.reload()} />}
         </SettingsCard>
@@ -111,9 +111,9 @@ function AgentsBoardSettingsForm({ form }: { form: Form }) {
   const densityOptions = [...DENSITY_PRESETS, ...(values.density === "custom" ? (["custom"] as const) : [])].map((density) => ({ value: density, label: DENSITY_TITLES[density] }));
   return (
     <View style={{ gap: 12 }}>
-      <SettingsSection title="Agents view" info="A Workbench view with every agent on this host in lanes: Waiting, Running, To review, Done and Archived.">
+      <SettingsSection title="Agents tab" info="The Workbench Board's Agents tab: every agent on this host in lanes (Waiting, Running, To review, Done and Archived).">
         <SettingsCard>
-          <SwitchField label="Show the Agents view" hint="Adds the Agents view to the Workbench. When this is off, the view is not listed and no agents are read for it." value={values.enabled} onChange={(enabled) => set({ enabled })} />
+          <SwitchField label="Show the Agents tab" hint="Adds an Agents tab beside Tasks on the Workbench Board. When this is off, Board shows only tasks and no agents are read for it." value={values.enabled} onChange={(enabled) => set({ enabled })} />
         </SettingsCard>
       </SettingsSection>
       {values.enabled ? (
