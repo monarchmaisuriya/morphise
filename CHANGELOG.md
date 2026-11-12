@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.20.1 - 2026-11-12
+
+- **Workbench tabs:** the Workbench lists its views (Agents, Tasks, Today, Archived, Bookmarks) as tabs along the top, drawn like Paseo's chat tabs: a filled chip for the chosen one, a lighter fill on hover, the waiting count beside Agents. Settings, General, Workbench, Views switches this device to the list at the side instead; phones and narrow windows always use tabs.
+- **Roomier list rows:** rows in the Agents and Tasks lists are a little taller, with more space between their title and details lines.
+
 ## 0.20.0 - 2026-11-12
 
 - **Agents and Tasks are views of their own:** the Workbench lists Agents, Tasks, Today, Archived and Bookmarks; Launchpad and its two tabs are gone. The Workbench opens on Agents while something waits on you, else on Today when something is due, else on whichever of Agents and Tasks you opened last. Links to Launchpad, its tabs, the old Waiting view and the Inbox still land on the right view.

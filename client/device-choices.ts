@@ -13,6 +13,9 @@ const workbenchSchema = z.object({
   agentsLayout: z.enum(VIEW_LAYOUTS).catch("list").default("list"),
   // Tasks keep the board until the user picks the list.
   tasksLayout: z.enum(VIEW_LAYOUTS).catch("board").default("board"),
+  // How the Workbench lists its views: tabs along the top (as Paseo's chat tabs) or a list at the side. Phones and
+  // narrow windows always use tabs.
+  workbenchNav: z.enum(["tabs", "rail"]).catch("tabs").default("tabs"),
 });
 type WorkbenchValues = z.output<typeof workbenchSchema>;
 const WORKBENCH_DEFAULTS: WorkbenchValues = workbenchSchema.parse({});

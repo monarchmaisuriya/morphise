@@ -139,18 +139,18 @@ export function GroupRow({ t, nodeRef, leading, title, detail, struck, meta, fac
       onHoverOut={() => setHovered(false)}
       onPressIn={() => setPressed(true)}
       onPressOut={() => setPressed(false)}
-      style={{ flexDirection: "row", alignItems: "center", gap: 10, minHeight: t.compact ? 56 : 42, paddingVertical: t.compact ? 8 : 6, paddingHorizontal: 12, borderTopWidth: 1, borderTopColor: t.c.border, backgroundColor: background, opacity: dim ? 0.7 : 1 }}
+      style={{ flexDirection: "row", alignItems: "center", gap: 10, minHeight: t.compact ? 60 : 48, paddingVertical: t.compact ? 11 : 10, paddingHorizontal: 12, borderTopWidth: 1, borderTopColor: t.c.border, backgroundColor: background, opacity: dim ? 0.7 : 1 }}
     >
       {focused ? <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 2, backgroundColor: t.c.accent }} /> : null}
       <View style={{ width: 16, alignItems: "center" }}>{leading}</View>
       {t.compact ? (
-        <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+        <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
           {titleNode}
           {detail}
           {meta}
         </View>
       ) : (
-        <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+        <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10, overflow: "hidden" }}>
             {titleNode}
             {detail}

@@ -96,6 +96,30 @@ function countTone(view: WorkbenchView, counts: Counts, t: Tokens): string {
   return t.c.foregroundMuted;
 }
 
+// One view as a tab along the top, drawn as Paseo draws its chat tabs: a 28 pt chip with a 14 pt icon and a muted
+// label; the chosen one filled and in the text colour, a hovered one lightly filled.
+function WorkbenchTab({ t, label, icon, count, countTone, selected, onPress }: { t: Tokens; label: string; icon: string; count: number; countTone: string; selected: boolean; onPress(): void }) {
+  const [hovered, setHovered] = useState(false);
+  const lit = selected || hovered;
+  return (
+    <Pressable
+      accessibilityRole="tab"
+      accessibilityState={{ selected }}
+      accessibilityLabel={count ? `${label}, ${count}` : label}
+      onPress={onPress}
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
+      style={{ flexDirection: "row", alignItems: "center", gap: 4, height: t.compact ? 32 : 28, paddingHorizontal: 8, marginHorizontal: 2, borderRadius: 6, backgroundColor: selected ? t.c.surface2 : hovered ? t.c.surface1 : "transparent" }}
+    >
+      <Icon name={icon} size={14} color={lit ? t.c.foreground : t.c.foregroundMuted} />
+      <Text style={{ fontSize: 14, color: lit ? t.c.foreground : t.c.foregroundMuted }} numberOfLines={1}>
+        {label}
+      </Text>
+      {count ? <Text style={{ fontSize: 12, color: countTone, fontVariant: ["tabular-nums"] }}>{count}</Text> : null}
+    </Pressable>
+  );
+}
+
 function RailRow({ t, view, label, icon, count, tone, selected, folded, onPress }: { t: Tokens; view: WorkbenchView; label: string; icon: string; count: number; tone: string; selected: boolean; folded: boolean; onPress(): void }) {
   // Folded to an icon, the view's name shows on hover.
   const tooltip = useTooltip(folded ? (count ? `${label}, ${count}` : label) : undefined, t.c);
@@ -154,8 +178,10 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
       if (asked) setView(asked);
     }, [asked, params]);
     const [width, setWidth] = useState(0);
-    const rail = !layout.compact && width >= RAIL_FROM;
     const railSettings = useSettings(workbenchSettings);
+    // Tabs along the top unless this device picked the side list (Settings, General), which needs a wide window.
+    const [nav] = useDeviceChoice(railSettings, "workbenchNav");
+    const rail = nav === "rail" && !layout.compact && width >= RAIL_FROM;
     const [folded, setFolded] = useDeviceChoice(railSettings, "railFolded");
     const toggleFolded = () => setFolded(!folded);
     const [lastBoard, saveLastBoard] = useDeviceChoice(railSettings, "boardTab");
@@ -208,25 +234,10 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
             </Pressable>
           </View>
         ) : (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, borderBottomWidth: 1, borderBottomColor: t.c.border }} contentContainerStyle={{ padding: 8, gap: 4 }} accessibilityRole="tablist">
-            {entries.map((entry) => {
-              const count = countOf(entry.view, counts);
-              const selected = view === entry.view;
-              return (
-                <Pressable
-                  key={entry.view}
-                  accessibilityRole="tab"
-                  accessibilityState={{ selected }}
-                  accessibilityLabel={count ? `${entry.label}, ${count}` : entry.label}
-                  onPress={() => pick(entry.view)}
-                  style={{ flexDirection: "row", alignItems: "center", gap: 6, height: t.control, paddingHorizontal: 10, borderRadius: t.radius.control, backgroundColor: selected ? t.c.surface2 : "transparent" }}
-                >
-                  <Icon name={entry.icon} size={14} color={selected ? t.c.foreground : t.c.foregroundMuted} />
-                  <Text style={{ fontSize: 13, color: selected ? t.c.foreground : t.c.foregroundMuted, fontWeight: selected ? "600" : "400" }}>{entry.label}</Text>
-                  {count ? <Text style={{ fontSize: 12, color: countTone(entry.view, counts, t) }}>{count}</Text> : null}
-                </Pressable>
-              );
-            })}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, borderBottomWidth: 1, borderBottomColor: t.c.border, backgroundColor: t.c.surface0 }} contentContainerStyle={{ height: t.compact ? 44 : 36, alignItems: "center", paddingHorizontal: 4 }} accessibilityRole="tablist">
+            {entries.map((entry) => (
+              <WorkbenchTab key={entry.view} t={t} label={entry.label} icon={entry.icon} count={countOf(entry.view, counts)} countTone={countTone(entry.view, counts, t)} selected={decided && view === entry.view} onPress={() => pick(entry.view)} />
+            ))}
           </ScrollView>
         )}
         <View style={{ flex: 1 }}>{content}</View>

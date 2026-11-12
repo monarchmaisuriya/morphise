@@ -872,13 +872,24 @@ function WorkbenchLayouts() {
   const stored = useSettings(workbenchSettings);
   const [agents, setAgents] = useDeviceChoice(stored, "agentsLayout");
   const [tasks, setTasks] = useDeviceChoice(stored, "tasksLayout");
+  const [nav, setNav] = useDeviceChoice(stored, "workbenchNav");
   const options: { value: ViewLayout; label: string }[] = [
     { value: "list", label: "List, grouped by status" },
     { value: "board", label: "Board, in columns" },
   ];
   return (
-    <SettingsSection title="Workbench" info="How the Workbench's Agents and Tasks views show their items, on this device.">
+    <SettingsSection title="Workbench" info="How the Workbench shows its views and their items, on this device.">
       <SettingsCard>
+        <SelectField<"tabs" | "rail">
+          label="Views"
+          hint="Phones and narrow windows always use tabs."
+          value={nav}
+          options={[
+            { value: "tabs", label: "Tabs along the top" },
+            { value: "rail", label: "A list at the side" },
+          ]}
+          onChange={setNav}
+        />
         <SelectField<ViewLayout> label="Agents" value={agents} options={options} onChange={setAgents} />
         <SelectField<ViewLayout> label="Tasks" value={tasks} options={options} onChange={setTasks} />
       </SettingsCard>
