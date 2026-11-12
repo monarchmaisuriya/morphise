@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.19.1 - 2026-11-12
+
+- **Switch hints no longer read like the switch's state:** "Show the Agents view" said "Off, the Workbench lists no Agents view…" even while on. Seven settings hints now say what the switch does, with "When this is off, …" for the other case (Agents view, sub-agents, minimal phone cards, Morphise's chat rows, wrapping in rows and previews, failed calls).
+
 ## 0.19.0 - 2026-11-12
 
 Better Paseo's options and board, rebuilt in Morphise (credit in NOTICE.md). Everything Morphise already drew looks the same until you change a setting, and Paseo still draws prompts and replies with their Fork and Copy.

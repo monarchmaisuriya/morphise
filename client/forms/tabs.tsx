@@ -689,7 +689,7 @@ export function ChatTab(form: Form): ReactNode {
       </SettingsSection>
       <SettingsSection title="Chat rows" info="Morphise draws tool calls, thinking and notices only where you choose below. Prompts and replies are never redrawn.">
         <SettingsCard>
-          <SwitchField label="Let Morphise draw chat rows" hint="Off: every row stays as Paseo draws it. Hidden rows still apply." value={on} onChange={(value) => setChat("enabled", value ? undefined : false)} />
+          <SwitchField label="Let Morphise draw chat rows" hint="When this is off, every row stays as Paseo draws it; hidden rows still apply." value={on} onChange={(value) => setChat("enabled", value ? undefined : false)} />
         </SettingsCard>
       </SettingsSection>
       {on ? (
@@ -742,7 +742,7 @@ export function ChatTab(form: Form): ReactNode {
               <SettingsCard>
                 <SelectField label="Terminal output" value={String(look.outputLines ?? 0)} options={lineChoices([6, 12, 20, 40])} onChange={(value) => setChat("outputLines", Number(value) === 12 ? undefined : Number(value))} />
                 <SelectField label="Code and diffs" value={String(look.codeLines ?? 0)} options={lineChoices([15, 30, 60, 120])} onChange={(value) => setChat("codeLines", Number(value) === 30 ? undefined : Number(value))} />
-                <SwitchField label="Wrap long lines" hint="Off: long lines scroll sideways." value={look.wrap} onChange={(value) => setChat("wrap", value ? undefined : false)} />
+                <SwitchField label="Wrap long lines" hint="Long lines wrap. When this is off, they scroll sideways." value={look.wrap} onChange={(value) => setChat("wrap", value ? undefined : false)} />
               </SettingsCard>
             </SettingsSection>
           ) : null}

@@ -113,7 +113,7 @@ function AgentsBoardSettingsForm({ form }: { form: Form }) {
     <View style={{ gap: 12 }}>
       <SettingsSection title="Agents view" info="A Workbench view with every agent on this host in lanes: Waiting, Running, To review, Done and Archived.">
         <SettingsCard>
-          <SwitchField label="Show the Agents view" hint="Off, the Workbench lists no Agents view and reads no agents for it." value={values.enabled} onChange={(enabled) => set({ enabled })} />
+          <SwitchField label="Show the Agents view" hint="Adds the Agents view to the Workbench. When this is off, the view is not listed and no agents are read for it." value={values.enabled} onChange={(enabled) => set({ enabled })} />
         </SettingsCard>
       </SettingsSection>
       {values.enabled ? (
@@ -134,14 +134,14 @@ function AgentsBoardSettingsForm({ form }: { form: Form }) {
             <SettingsCard>
               <SelectField<DoneWindow> label="Done and Archived show" value={values.board.doneWindow} options={[{ value: "24h", label: "The last 24 hours" }, { value: "7d", label: "The last 7 days" }, { value: "all", label: "Everything" }]} onChange={(doneWindow) => board({ doneWindow })} />
               <SelectField<LaneWidth> label="Lane width" hint="Desktop and web; phones show one lane at a time." value={values.board.laneWidth} options={[{ value: "narrow", label: "Narrow" }, { value: "default", label: "Default" }, { value: "wide", label: "Wide" }]} onChange={(laneWidth) => board({ laneWidth })} />
-              <SwitchField label="Show sub-agents" hint="Off, a sub-agent folds into its parent's card unless it runs, waits or failed in another lane." value={values.board.showSubtasks} onChange={(showSubtasks) => board({ showSubtasks })} />
+              <SwitchField label="Show sub-agents" hint="Gives each sub-agent its own card. When this is off, a sub-agent folds into its parent's card unless it runs, waits or failed in another lane." value={values.board.showSubtasks} onChange={(showSubtasks) => board({ showSubtasks })} />
               <SwitchField label="Show the Archived lane" hint="Archived agents within the done window." value={values.board.showArchived} onChange={(showArchived) => board({ showArchived })} />
               <SwitchField label="List groups with no agents" hint="The filter menus also list Paseo's other labels, projects and workspaces, at 0." value={values.board.showEmptyGroups} onChange={(showEmptyGroups) => board({ showEmptyGroups })} />
             </SettingsCard>
           </SettingsSection>
           <SettingsSection title="Phone">
             <SettingsCard>
-              <SwitchField label="Minimal cards on phones" hint="On, phones draw the Minimal card whatever the density." value={values.phone.minimalCards} onChange={(minimalCards) => set({ phone: { minimalCards } })} />
+              <SwitchField label="Minimal cards on phones" hint="Phones draw the Minimal card, whatever the card density above." value={values.phone.minimalCards} onChange={(minimalCards) => set({ phone: { minimalCards } })} />
             </SettingsCard>
           </SettingsSection>
         </>

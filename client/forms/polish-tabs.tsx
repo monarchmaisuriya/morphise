@@ -54,7 +54,7 @@ export function PolishRowSettings({ form }: { form: Form }): ReactNode {
       <SettingsCard>
         <SwitchField label={t("prefs.row.merge")} hint={t("prefs.hint.merge")} value={prefs.merge === "on"} onChange={(value) => set("merge", value)} />
         {prefs.merge === "on" ? <SelectField label="Merge only runs of at least" hint="Shorter runs stay as separate rows." value={String(prefs.mergeMin)} options={[2, 3, 5].map((count) => ({ value: String(count), label: `${count} steps` }))} onChange={(value) => set("mergeMin", Number(value) as 2 | 3 | 5)} /> : null}
-        <SwitchField label="Failed calls start open" hint="Off: they follow the folding rules like any other row." value={prefs.failedOpen} onChange={(value) => set("failedOpen", value)} />
+        <SwitchField label="Failed calls start open" hint="When this is off, failed calls follow the folding rules like any other row." value={prefs.failedOpen} onChange={(value) => set("failedOpen", value)} />
         <SwitchField label="Line numbers in diffs" value={prefs.diffLineNumbers} onChange={(value) => set("diffLineNumbers", value)} />
         <SwitchField label="A folded thought shows its first line" value={prefs.thoughtFirstLine} onChange={(value) => set("thoughtFirstLine", value)} />
         {/* "Each row starts with: A label" (Tool calls) hides every icon; the chips apply otherwise. */}
@@ -132,7 +132,7 @@ export function MessagesTab(form: Form): ReactNode {
           {prefs.hoverPreviews ? (
             <>
               <SelectField label="Delay" value={String(prefs.hoverDelay)} options={[0, 0.3, 0.5, 1, 1.5, 2, 3, 5, 10].map((seconds) => ({ value: String(seconds), label: seconds === 0 ? "None" : `${seconds} s` }))} onChange={(value) => set("hoverDelay", Number(value))} />
-              <SwitchField label="Wrap long lines" hint="Off: long lines scroll sideways." value={prefs.previewWrap} onChange={(value) => set("previewWrap", value)} />
+              <SwitchField label="Wrap long lines" hint="Long lines wrap. When this is off, they scroll sideways." value={prefs.previewWrap} onChange={(value) => set("previewWrap", value)} />
               <SwitchField label="Line numbers" value={prefs.previewLineNumbers} onChange={(value) => set("previewLineNumbers", value)} />
               <SwitchField label="Shade every other line" value={prefs.previewStripes} onChange={(value) => set("previewStripes", value)} />
             </>
