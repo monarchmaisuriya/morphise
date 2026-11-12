@@ -2,9 +2,8 @@ import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { useState } from "react";
 import { Text, View } from "react-native";
 import { z } from "zod";
-import { type ChatLook, chatLook, relativePath } from "../shared/chat-view";
-import { createValueStore, useValue, type ValueStore } from "./profile-store";
-import { alpha, Expand, PMONO, Row, useIndent, useSpacing, useStyles } from "./polish/rows/row";
+import { shortPath } from "./polish/rows/model";
+import { alpha, Expand, Row, useIndent, useSpacing, useStyles } from "./polish/rows/row";
 
 // What Morphise's chat rows can do beyond drawing, and the turn recap row. The rows themselves are
 // Chat Polish's design (client/polish/rows/); prompts and replies are never drawn here, so Paseo's
@@ -28,36 +27,37 @@ export const recapRowSchema = z.object({
   error: z.string(),
 });
 
-const duration = (seconds: number) => (seconds < 60 ? `${seconds}s` : seconds < 3600 ? `${Math.floor(seconds / 60)}m ${seconds % 60}s` : `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`);
 
-// The chat look the recap rows draw with, set by the chat-row section whenever the Chat settings
-// change. The recap's renderer is registered once and reads it here, so it never goes missing while
-// the chat rows re-register (Paseo would show "Plugin timeline item unavailable" meanwhile).
-export const recapLook: ValueStore<ChatLook> = createValueStore(chatLook(undefined));
 
-// The turn recap: "Worked 38m 34s  1 file +40 −2 · 25 calls", drawn with the same row as the merged steps around it (icon slot,
-// text, hover, chevron, spacing), so it lines up with them and with Paseo's own rows. It opens to the files and failed commands.
-// `look` is fixed for the settings preview; the chat passes none and follows recapLook.
-export function createRecapRow(actions: RowActions | null, fixedLook?: ChatLook) {
-  return function RecapRow({ agentId, item, theme, layout }: PluginTimelineItemProps<z.output<typeof recapRowSchema>>) {
-    const liveLook = useValue(recapLook);
-    const look = fixedLook ?? liveLook;
+// Paseo leaves this much space under every plugin row (getGapBetweenStreamItems, Paseo 0.16); a recap with nothing to say
+// takes it back so it leaves no hole.
+const PASEO_ROW_GAP = 16;
+
+const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+
+// The turn recap: what the turn left behind, drawn with the same rows as merged steps so it lines up with them.
+// "Changed 3 files +40 −2" (and "1 command failed"), opening to an "Edited" row per file and a "Ran" row per failed
+// command, as the steps list draws them. Paseo's own footer already says how long the turn took, so the recap does
+// not; a turn that changed nothing and had no failure has no recap. Its look is the chat rows' (useRowSetup).
+export function RecapRow({ item, theme, layout }: PluginTimelineItemProps<z.output<typeof recapRowSchema>>) {
     const s = useStyles(theme);
     const c = theme.colors;
     const spacing = useSpacing();
     const icons = !!useIndent("steps");
     const [open, setOpen] = useState(false);
     const recap = item.data;
+    const ended = recap.outcome === "failed" ? "Failed" : recap.outcome === "canceled" ? "Stopped" : null;
+    // Recaps added before 0.18.1 exist for turns that changed nothing; they draw nothing now.
+    if (!recap.files.length && !recap.failed.length && !ended) return <View style={{ marginBottom: -PASEO_ROW_GAP }} />;
     const added = recap.files.reduce((sum, file) => sum + file.added, 0);
     const removed = recap.files.reduce((sum, file) => sum + file.removed, 0);
-    const folder = actions?.workspaceFolder(agentId) ?? null;
-    const canOpen = recap.files.length > 0 || recap.failed.length > 0 || !!recap.error;
-    const lead = recap.outcome === "canceled" ? "Stopped after" : recap.outcome === "failed" ? "Failed after" : "Worked";
-    const verb = recap.seconds !== null ? `${lead} ${duration(recap.seconds)}` : recap.outcome === "failed" ? "Failed" : recap.outcome === "canceled" ? "Stopped" : "Worked";
-    const files = recap.files.length ? [`${recap.files.length} ${recap.files.length === 1 ? "file" : "files"}`, added ? `+${added}` : "", removed ? `−${removed}` : ""].filter(Boolean).join(" ") : null;
-    const calls = recap.calls ? `${recap.calls} ${recap.calls === 1 ? "call" : "calls"}` : null;
-    const target = [files, calls].filter(Boolean).join(" · ") || undefined;
-    const icon = recap.outcome === "failed" ? "CircleX" : recap.outcome === "canceled" ? "CircleStop" : "FileDiff";
+    const failedWords = recap.failed.length ? `${plural(recap.failed.length, "command", "commands")} failed` : null;
+    const verb = recap.files.length ? `Changed ${plural(recap.files.length, "file", "files")}` : ended ?? failedWords!;
+    const target = recap.files.length ? [added ? `+${added}` : "", removed ? `−${removed}` : ""].filter(Boolean).join(" ") || undefined : ended ? recap.error || undefined : undefined;
+    const meta = [recap.files.length || ended ? failedWords : null, recap.files.length ? ended : null].filter(Boolean).join(" · ") || undefined;
+    const icon = recap.outcome === "failed" ? "CircleX" : recap.outcome === "canceled" ? "CircleStop" : recap.files.length ? "FileDiff" : "SquareTerminal";
+    const danger = !recap.files.length;
+    const canOpen = recap.files.length > 0 || recap.failed.length > 0 || (!!recap.error && recap.files.length > 0);
     return (
       <View style={spacing}>
         <Row
@@ -65,40 +65,29 @@ export function createRecapRow(actions: RowActions | null, fixedLook?: ChatLook)
           compact={layout.compact}
           kind="steps"
           icon={icon}
-          iconColor={recap.outcome === "failed" ? c.statusDanger : undefined}
+          iconColor={danger ? c.statusDanger : undefined}
           verb={verb}
           target={target}
-          prose
-          meta={recap.failed.length ? `${recap.failed.length} failed` : undefined}
+          mono={!!recap.files.length}
+          prose={!recap.files.length}
+          meta={meta}
           metaColor={c.statusDanger}
           open={open}
           onToggle={canOpen ? () => setOpen(!open) : undefined}
         />
-        <Expand open={open} style={{ marginLeft: icons ? 9 : 0, paddingLeft: icons ? 15 : 13, paddingTop: 3, paddingBottom: 3, gap: 4, borderLeftWidth: 1, borderLeftColor: alpha(c.border, 0.6) }}>
+        <Expand open={open} style={{ marginLeft: icons ? 9 : 0, paddingLeft: icons ? 15 : 13, paddingTop: 3, paddingBottom: 3, borderLeftWidth: 1, borderLeftColor: alpha(c.border, 0.6) }}>
           {() => (
             <>
-              {recap.error ? <Text selectable style={[s.target, { color: c.statusDanger }]}>{recap.error}</Text> : null}
+              {recap.error && recap.files.length ? <Text selectable style={[s.target, { color: c.statusDanger }]}>{recap.error}</Text> : null}
               {recap.files.map((file) => (
-                <View key={file.path} style={{ flexDirection: "row", gap: 8, alignItems: "baseline" }}>
-                  <Text {...PMONO} style={[s.target, s.mono, { flexShrink: 1 }]} numberOfLines={1} ellipsizeMode="middle">
-                    {look.paths === "relative" ? relativePath(file.path, folder) : file.path}
-                  </Text>
-                  {file.added ? <Text style={[s.meta, { marginLeft: 0, color: c.statusSuccess }]}>+{file.added}</Text> : null}
-                  {file.removed ? <Text style={[s.meta, { marginLeft: 0, color: c.statusDanger }]}>−{file.removed}</Text> : null}
-                </View>
+                <Row key={file.path} theme={theme} compact={layout.compact} kind="tool" icon="Pencil" verb="Edited" target={shortPath(file.path)} mono meta={[file.added ? `+${file.added}` : "", file.removed ? `−${file.removed}` : ""].filter(Boolean).join(" ") || undefined} />
               ))}
               {recap.failed.map((command, index) => (
-                <View key={index} style={{ flexDirection: "row", gap: 8, alignItems: "baseline" }}>
-                  <Text {...PMONO} style={[s.target, s.mono, { flexShrink: 1 }]} numberOfLines={1}>
-                    {command.command}
-                  </Text>
-                  {command.exitCode !== null ? <Text style={[s.meta, { marginLeft: 0, color: c.statusDanger }]}>exit {command.exitCode}</Text> : null}
-                </View>
+                <Row key={index} theme={theme} compact={layout.compact} kind="tool" icon="SquareTerminal" verb="Ran" target={command.command} mono shell meta={command.exitCode !== null ? `exit ${command.exitCode}` : "failed"} metaColor={c.statusDanger} />
               ))}
             </>
           )}
         </Expand>
       </View>
     );
-  };
 }

@@ -13,6 +13,9 @@ export function stylePluginViews() {
 @supports (corner-shape: squircle) { [data-cp-squircle="card"] { border-radius: 28px !important; corner-shape: squircle; } }
 [data-cp-row] { transition: opacity 80ms ease-out, background-color 80ms ease-out; }
 [data-cp-row] [dir] { transition: color 80ms ease-out; }
+/* Paseo rings every focused button (:focus-visible, 2px accent), and its desktop app does so after a click on a row too, which
+   boxed in the whole row. A focused row shows the soft fill it has on hover instead, so the keyboard still sees where it is. */
+[data-cp-row]:focus-visible { outline: none; background-color: rgb(127 127 127 / 0.12); }
 /* One scroller for both axes keeps the horizontal bar visible with tall diffs. */
 [data-cp-nowrap] { overflow: auto !important; }
 [data-cp-nowrap] > div { width: max-content; min-width: 100%; }

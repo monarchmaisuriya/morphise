@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.18.1 - 2026-11-12
+
+- **The turn recap says what happened:** "Changed 7 files +466 −24 · 1 command failed", opening to an Edited row per file and a Ran row per failed command, drawn like the merged steps above it. It no longer repeats the turn's duration (Paseo's footer shows "Worked for …") or counts calls. A turn that changed no file and had no failed command gets no recap, and recaps like that already in a chat draw nothing, so there is no row left that cannot open.
+- **No green box around a clicked row:** Paseo's desktop app rings a focused button after a click, which boxed in the whole recap or step row. Morphise's rows show their soft hover fill when focused instead.
+
 ## 0.18.0 - 2026-11-12
 
 - **Drag and drop on the board:** drag a card to another column, or to a new place in its own column. A lifted copy follows the pointer, a gap opens where the card will land, and the board (or a long column) scrolls when the card is held near its edge. On a phone, a long press picks the card up. The arrow buttons on cards are gone; screen readers still move a card a column at a time. With an order other than Manual, a drop changes only the card's column.

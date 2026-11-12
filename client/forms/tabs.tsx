@@ -31,7 +31,7 @@ import { contrast, PRESETS as POLISH_PRESETS } from "../../shared/polish/theme";
 import { PolishLookSettings, PolishRowSettings, UpdateSection } from "./polish-tabs";
 import { StepsCardPreview } from "./previews";
 import { runSplits } from "../polish/rows/steps";
-import { createRecapRow } from "../chat-rows";
+import { RecapRow } from "../chat-rows";
 
 type ViewConfig = Profile["sidebar"]["view"];
 type Row = Profile["sidebar"]["headerRows"][number];
@@ -540,7 +540,17 @@ const PREVIEW_DIFF = "@@ -12,4 +12,5 @@\n export function total(items) {\n-  ret
 const previewCall = (callId: string, name: string, detail: ToolCallItem["detail"], status: "running" | "completed" | "failed" = "completed", error: unknown = null) => ({ type: "tool_call", callId, name, detail, status, error }) as ToolCallItem;
 const PREVIEW_THOUGHT: AgentTimelineItem = { type: "reasoning", text: "The total breaks when an item has no price.\n\nDefault the price to zero before summing." };
 // A sample turn recap: 38 minutes, one file changed, 25 calls.
-const PREVIEW_RECAP = { seconds: 2314, files: [{ path: "src/middleware/requireAuth.ts", added: 40, removed: 0 }], failed: [], calls: 25, outcome: "completed" as const, error: "" };
+const PREVIEW_RECAP = {
+  seconds: 2314,
+  files: [
+    { path: "src/middleware/requireAuth.ts", added: 40, removed: 0 },
+    { path: "src/cart/total.ts", added: 2, removed: 1 },
+  ],
+  failed: [{ command: 'npm test -- --grep "total"', exitCode: 1 }],
+  calls: 25,
+  outcome: "completed" as const,
+  error: "",
+};
 
 const PREVIEW_CALLS = [
   previewCall("search", "Grep", { type: "search", query: "item.price", numMatches: 4, numFiles: 2, filePaths: ["src/cart/total.ts", "src/cart/total.test.ts"] }),
@@ -565,8 +575,6 @@ function ChatPreview({ form, look, chat }: { form: Form; look: ReturnType<typeof
   // Paseo's 16pt gap under each plugin row, which the rows take back, is added here so the
   // preview spaces rows as the chat does.
   const gap = { paddingBottom: 16 };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const RecapRow = useMemo(() => createRecapRow(null, look), [lookKey]);
   // Four steps: merged with "at least 2 or 3 steps", separate rows with "at least 5".
   const runSteps = [PREVIEW_THOUGHT, ...PREVIEW_CALLS.slice(0, 3)];
   const merged = tools && view.merge && !runSplits(runSteps.length, prefs.mergeMin);
@@ -774,7 +782,7 @@ export function ChatTab(form: Form): ReactNode {
               </SettingsCard>
             </SettingsSection>
           ) : null}
-          <SettingsSection title="Turn recap" info="After each turn, one row that sums it up: how long it took, files changed, commands that failed.">
+          <SettingsSection title="Turn recap" info="After a turn that changed files or had a command fail, one row that sums it up: the files changed (+ and − lines) and the commands that failed. It opens to an Edited row per file and a Ran row per failed command. Turns that changed nothing get none; Paseo already shows how long each turn took.">
             <SettingsCard>
               <SwitchField label="Add a recap after each turn" hint="Written into the chat by this host's daemon, so every app sees it." value={chat.recap === true} onChange={(value) => setChat("recap", value ? true : undefined)} />
             </SettingsCard>

@@ -31,8 +31,9 @@ export function createTurnRecap(profile: ProfileReader) {
       const page = await handle.timeline.refetch({ direction: "tail", limit: 1000 });
       const recap = turnRecap(page.entries, endedAt, outcome.kind, outcome.kind === "failed" ? outcome.error.message : outcome.kind === "canceled" ? outcome.reason : "");
       if (!recap) return console.warn(`[morphise] No turn recap for ${agent.id}: its prompt is not in the last 1000 timeline entries`);
-      // A finished turn that ran no tool calls has nothing to sum up.
-      if (recap.calls === 0 && recap.outcome === "completed") return;
+      // The recap tells what a turn left behind: changed files and failures. A finished turn with neither has
+      // nothing to add to Paseo's own "Worked for …".
+      if (recap.files.length === 0 && recap.failed.length === 0 && recap.outcome === "completed") return;
       // The recap is plain data (numbers, strings, arrays), so it goes into the timeline as JSON.
       const data = JSON.parse(JSON.stringify(recap)) as Record<string, never>;
       await handle.timeline.append({ type: "plugin", id: `${TURN_RECAP_KIND}:${recap.prompt}:${turnId ?? ""}`, kind: TURN_RECAP_KIND, version: 1, data });
