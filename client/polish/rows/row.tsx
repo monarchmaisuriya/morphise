@@ -12,6 +12,7 @@ import { usePrefs } from "../prefs";
 import { readHostAppearance, type HostAppearance } from "../web/host";
 import { followExpansionAtBottom } from "../web/prompts";
 import { highlight, highlightShell, highlightShellBlock, SYNTAX_THEMES, type Span, type SyntaxColors } from "./highlight";
+import { HoverPreview, useHoverPreview } from "./hover-preview";
 import { type RowLook, useRowSetup } from "./look";
 import type { Tone } from "./model";
 
@@ -79,8 +80,8 @@ export function sunken(color: string) {
 function makeStyles(c: Colors, a: HostAppearance, look: RowLook) {
   const ui = a.uiFont ? { fontFamily: a.uiFont } : {};
   const mono = { fontFamily: a.monoFont ? `${a.monoFont}, ${MONO}` : MONO };
-  const body = a.contentSize - 1 + TEXT_STEP[look.textSize];
-  const codeSize = a.codeSize + CODE_STEP[look.codeSize];
+  const body = look.textPx ?? a.contentSize - 1 + TEXT_STEP[look.textSize];
+  const codeSize = look.codePx ?? a.codeSize + CODE_STEP[look.codeSize];
   const code = { ...mono, fontSize: codeSize, lineHeight: Math.round(codeSize * 1.5) };
   const rule = alpha(c.border, 0.6);
   const tight = look.style === "compact";
@@ -120,7 +121,7 @@ export function useStyles(theme: PluginTheme) {
   const { look } = useRowSetup();
   return useMemo(() => {
     const a = readHostAppearance();
-    const key = JSON.stringify([a, look.textSize, look.codeSize, look.style]);
+    const key = JSON.stringify([a, look.textSize, look.codeSize, look.textPx, look.codePx, look.style]);
     const hit = styleCache.get(theme.colors);
     if (hit?.key === key) return hit.styles;
     const styles = makeStyles(theme.colors, a, look);
@@ -294,6 +295,8 @@ interface RowProps {
   kind: IconKind;
   /** When the row arrived (Chat settings, Show the time); nested rows leave it out. */
   time?: Date;
+  /** What the folded row shows while the pointer rests on it (Chat settings, Hover previews); unset while open or empty. */
+  preview?: () => ReactNode;
 }
 
 /** Left inset for a row's details: under the verb, past the icon when it shows. */
@@ -342,13 +345,22 @@ export function Row(p: RowProps) {
   const chevronOpacity = useTween(hovered || p.open || p.compact ? 0.7 : 0, 80);
   // All idle rows, including failures, follow Strength; hover, open and running rows come back to full strength.
   const quiet = steps !== "full" && !(hovered || p.open || p.pulsing);
+  const hover = useHoverPreview(!!p.preview);
   return (
+    <>
     <Pressable
       {...ROW_HOVER}
+      ref={hover.row}
       disabled={!p.onToggle}
       onPress={p.onToggle}
-      onHoverIn={() => setHovered(true)}
-      onHoverOut={() => setHovered(false)}
+      onHoverIn={() => {
+        setHovered(true);
+        hover.enterRow();
+      }}
+      onHoverOut={() => {
+        setHovered(false);
+        hover.leaveRow();
+      }}
       accessibilityRole={p.onToggle ? "button" : undefined}
       accessibilityState={p.onToggle ? { expanded: !!p.open } : undefined}
       accessibilityLabel={[p.verb, p.target, p.meta].filter(Boolean).join(" ")}
@@ -396,6 +408,8 @@ export function Row(p: RowProps) {
         </Animated.View>
       ) : null}
     </Pressable>
+    {hover.open && p.preview ? <HoverPreview theme={p.theme} hover={hover}>{p.preview()}</HoverPreview> : null}
+    </>
   );
 }
 

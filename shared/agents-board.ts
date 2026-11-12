@@ -1,0 +1,414 @@
+// Ported from Better Paseo (RoundRedDot/better-paseo, MIT, see NOTICE.md): shared/tasks-settings.ts
+import { defineSettings } from "@getpaseo/plugin";
+import { z } from "zod";
+import { chatIndicator, type ChatStatusFields, parentFromLabels } from "./chat-status";
+import type { Indicator } from "./profile";
+
+// The Workbench's Agents view: its settings, and the rules that place, filter and sort agents.
+// Plain values only, so the board, the settings preview and tests share them.
+
+// ---------- Settings ----------
+
+export const CARD_FIELDS = ["provider", "model", "thinking", "project", "projectIcon", "workspace", "branch", "gitStatus", "folder", "path", "labels", "pullRequest", "timer", "context", "plan", "subtasks"] as const;
+export type CardField = (typeof CARD_FIELDS)[number];
+
+// How many labels a card shows before folding the rest into +N.
+export const LABEL_LIMITS = ["1", "2", "3", "all"] as const;
+export type LabelLimit = (typeof LABEL_LIMITS)[number];
+
+export const DENSITY_PRESETS = ["minimal", "standard", "full"] as const;
+export type DensityPreset = (typeof DENSITY_PRESETS)[number];
+export const DENSITIES = [...DENSITY_PRESETS, "custom"] as const;
+export type Density = (typeof DENSITIES)[number];
+
+export const DONE_WINDOWS = ["24h", "7d", "all"] as const;
+export type DoneWindow = (typeof DONE_WINDOWS)[number];
+
+// Phones show one lane at a time and ignore the width.
+export const LANE_WIDTHS = ["narrow", "default", "wide"] as const;
+export type LaneWidth = (typeof LANE_WIDTHS)[number];
+
+export type CardFieldSwitches = Record<CardField, boolean>;
+export type CardSettings = CardFieldSwitches & { labelLimit: LabelLimit };
+
+const fields = (on: readonly CardField[]): CardFieldSwitches => Object.fromEntries(CARD_FIELDS.map((field) => [field, on.includes(field)])) as CardFieldSwitches;
+
+// Minimal keeps the header and the timer; Standard leaves Git status, full path and the linked PR off.
+export const CARD_PRESETS: Readonly<Record<DensityPreset, { fields: CardFieldSwitches; labelLimit: LabelLimit }>> = {
+  minimal: { fields: fields(["model", "thinking", "timer"]), labelLimit: "2" },
+  standard: { fields: fields(CARD_FIELDS.filter((field) => field !== "gitStatus" && field !== "path" && field !== "pullRequest")), labelLimit: "2" },
+  full: { fields: fields(CARD_FIELDS), labelLimit: "all" },
+};
+
+const flag = (fallback: boolean) => z.boolean().catch(fallback);
+const STANDARD_CARD: CardSettings = { ...CARD_PRESETS.standard.fields, labelLimit: CARD_PRESETS.standard.labelLimit };
+const BOARD_DEFAULTS = { doneWindow: "7d", laneWidth: "default", showSubtasks: true, showArchived: true, showEmptyGroups: true } as const;
+
+// Every field falls back to its default on its own, so one unusable value never invalidates the record.
+export const agentsBoardSchema = z.object({
+  // Off, the Workbench lists no Agents view and nothing subscribes to agents for it.
+  enabled: flag(true),
+  // The preset the card switches were last set from; "custom" after a hand edit.
+  density: z.enum(DENSITIES).catch("standard"),
+  card: z
+    .object({
+      ...(Object.fromEntries(CARD_FIELDS.map((field) => [field, flag(STANDARD_CARD[field])])) as Record<CardField, z.ZodCatch<z.ZodBoolean>>),
+      labelLimit: z.enum(LABEL_LIMITS).catch(STANDARD_CARD.labelLimit),
+    })
+    .catch({ ...STANDARD_CARD }),
+  board: z
+    .object({
+      doneWindow: z.enum(DONE_WINDOWS).catch(BOARD_DEFAULTS.doneWindow),
+      laneWidth: z.enum(LANE_WIDTHS).catch(BOARD_DEFAULTS.laneWidth),
+      showSubtasks: flag(BOARD_DEFAULTS.showSubtasks),
+      showArchived: flag(BOARD_DEFAULTS.showArchived),
+      showEmptyGroups: flag(BOARD_DEFAULTS.showEmptyGroups),
+    })
+    .catch({ ...BOARD_DEFAULTS }),
+  phone: z.object({ minimalCards: flag(false) }).catch({ minimalCards: false }),
+});
+
+export type AgentsBoardSettings = z.output<typeof agentsBoardSchema>;
+
+export const DEFAULT_AGENTS_BOARD: AgentsBoardSettings = agentsBoardSchema.parse({});
+
+export const agentsBoardSettings = defineSettings({ id: "agents-board", scope: "host", version: 1, schema: agentsBoardSchema });
+
+export function applyDensity(settings: AgentsBoardSettings, density: DensityPreset): AgentsBoardSettings {
+  const preset = CARD_PRESETS[density];
+  return { ...settings, density, card: { ...preset.fields, labelLimit: preset.labelLimit } };
+}
+
+// The preset the switches match exactly, else "custom". The label limit only counts while labels show.
+export function densityOf(card: CardSettings): Density {
+  for (const density of DENSITY_PRESETS) {
+    const preset = CARD_PRESETS[density];
+    const sameFields = CARD_FIELDS.every((field) => preset.fields[field] === card[field]);
+    if (sameFields && (!card.labels || preset.labelLimit === card.labelLimit)) return density;
+  }
+  return "custom";
+}
+
+export function setCardSetting<Key extends keyof CardSettings>(settings: AgentsBoardSettings, key: Key, value: CardSettings[Key]): AgentsBoardSettings {
+  const card = { ...settings.card, [key]: value };
+  return { ...settings, card, density: densityOf(card) };
+}
+
+// The card a client draws: the minimal preset on a phone when that switch is on.
+export function effectiveCard(settings: AgentsBoardSettings, compact: boolean): CardSettings {
+  if (compact && settings.phone.minimalCards) return { ...CARD_PRESETS.minimal.fields, labelLimit: CARD_PRESETS.minimal.labelLimit };
+  return settings.card;
+}
+
+export const labelLimitCount = (limit: LabelLimit) => (limit === "all" ? Number.POSITIVE_INFINITY : Number(limit));
+
+// How far back Done and Archived reach, in milliseconds; null for no limit.
+export function doneWindowMs(window: DoneWindow): number | null {
+  if (window === "24h") return 24 * 3_600_000;
+  if (window === "7d") return 7 * 24 * 3_600_000;
+  return null;
+}
+
+// ---------- Agents ----------
+
+// One agent as the board draws it, from an entry of Paseo's agent list (an agent and its project
+// placement). Null fields are ones Paseo did not give; the board leaves them blank.
+export interface BoardAgent {
+  id: string;
+  title: string;
+  provider: string;
+  model: string | null;
+  thinking: string | null;
+  status: ChatStatusFields["status"];
+  requiresAttention: boolean;
+  attentionReason: ChatStatusFields["attentionReason"];
+  pendingPermissions: readonly unknown[];
+  parentId: string | null;
+  workspaceId: string | null;
+  cwd: string;
+  projectKey: string | null;
+  project: string | null;
+  workspace: string | null;
+  branch: string | null;
+  // The labels of the agent's workspace, as Paseo's sidebar shows them.
+  labels: readonly string[];
+  createdAt: string;
+  updatedAt: string;
+  lastUserMessageAt: string | null;
+  attentionAt: string | null;
+  archivedAt: string | null;
+  // When the running turn began; null between turns.
+  turnStartedAt: string | null;
+  // The provider's own session id.
+  sessionId: string | null;
+  lastError: string | null;
+  context: { used: number; max: number } | null;
+}
+
+// What the workspace list adds to an agent: its name, project and labels.
+export interface WorkspaceFacts {
+  name: string;
+  project: string;
+  labels: readonly string[];
+}
+
+function record(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+}
+
+const text = (value: unknown) => (typeof value === "string" && value ? value : null);
+const count = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : null);
+
+function readContext(usage: unknown): BoardAgent["context"] {
+  const used = count(record(usage)?.contextWindowUsedTokens);
+  const max = count(record(usage)?.contextWindowMaxTokens);
+  return used !== null && max !== null ? { used, max } : null;
+}
+
+// An agent's `lastUsage`: its latest context and token counts; null when Paseo gave none.
+export interface UsageFacts {
+  context: BoardAgent["context"];
+  inputTokens: number | null;
+  cachedInputTokens: number | null;
+  outputTokens: number | null;
+  costUsd: number | null;
+}
+
+export function readUsage(usage: unknown): UsageFacts | null {
+  const value = record(usage);
+  if (!value) return null;
+  return { context: readContext(value), inputTokens: count(value.inputTokens), cachedInputTokens: count(value.cachedInputTokens), outputTokens: count(value.outputTokens), costUsd: count(value.totalCostUsd) };
+}
+
+// Paseo's agent list as the board keeps it: each entry by agent id, as Paseo sent it.
+export type AgentEntry = { agent: unknown; project?: unknown };
+export type AgentEntries = ReadonlyMap<string, AgentEntry>;
+
+const idOf = (entry: AgentEntry) => {
+  const id = record(entry.agent)?.id;
+  return typeof id === "string" ? id : null;
+};
+
+export function entriesFromSnapshot(entries: readonly AgentEntry[]): AgentEntries {
+  return new Map(entries.flatMap((entry) => (idOf(entry) ? [[idOf(entry) as string, entry] as const] : [])));
+}
+
+// One `agent_update` message applied: an upsert keeps the project it had when the message has none.
+export function applyAgentUpdate(entries: AgentEntries, message: { type: string; payload?: unknown }): AgentEntries {
+  const payload = record(message.payload);
+  if (message.type !== "agent_update" || !payload) return entries;
+  if (payload.kind === "remove" && typeof payload.agentId === "string") {
+    if (!entries.has(payload.agentId)) return entries;
+    const next = new Map(entries);
+    next.delete(payload.agentId);
+    return next;
+  }
+  const id = payload.kind === "upsert" ? idOf({ agent: payload.agent }) : null;
+  if (!id) return entries;
+  return new Map(entries).set(id, { agent: payload.agent, project: payload.project ?? entries.get(id)?.project });
+}
+
+export function readBoardAgent(entry: unknown, workspaceOf: (id: string) => WorkspaceFacts | undefined): BoardAgent | null {
+  const agent = record(record(entry)?.agent);
+  const project = record(record(entry)?.project);
+  if (!agent || typeof agent.id !== "string") return null;
+  const workspaceId = text(agent.workspaceId);
+  const workspace = workspaceId ? workspaceOf(workspaceId) : undefined;
+  const checkout = record(project?.checkout);
+  const provider = text(agent.provider) ?? "agent";
+  return {
+    id: agent.id,
+    title: text(agent.title) ?? provider,
+    provider,
+    model: text(agent.model) ?? text(record(agent.runtimeInfo)?.model),
+    thinking: text(agent.effectiveThinkingOptionId) ?? text(agent.thinkingOptionId),
+    status: (text(agent.status) ?? "idle") as ChatStatusFields["status"],
+    requiresAttention: agent.requiresAttention === true,
+    attentionReason: (text(agent.attentionReason) ?? null) as ChatStatusFields["attentionReason"],
+    pendingPermissions: Array.isArray(agent.pendingPermissions) ? agent.pendingPermissions : [],
+    parentId: parentFromLabels(agent.labels),
+    workspaceId,
+    cwd: text(agent.cwd) ?? "",
+    projectKey: text(project?.projectKey),
+    project: text(project?.projectName) ?? workspace?.project ?? null,
+    workspace: text(project?.workspaceName) ?? workspace?.name ?? null,
+    branch: text(checkout?.currentBranch),
+    labels: workspace?.labels ?? [],
+    createdAt: text(agent.createdAt) ?? "",
+    updatedAt: text(agent.updatedAt) ?? "",
+    lastUserMessageAt: text(agent.lastUserMessageAt),
+    attentionAt: text(agent.attentionTimestamp),
+    archivedAt: text(agent.archivedAt),
+    turnStartedAt: text(record(agent.activeTurn)?.startedAt),
+    sessionId: text(record(agent.runtimeInfo)?.sessionId) ?? text(record(agent.persistence)?.sessionId),
+    lastError: text(agent.lastError),
+    context: readContext(agent.lastUsage),
+  };
+}
+
+export function indicatorOf(agent: BoardAgent): Indicator {
+  return chatIndicator({ status: agent.status, requiresAttention: agent.requiresAttention, attentionReason: agent.attentionReason, pendingPermissionCount: agent.pendingPermissions.length });
+}
+
+export const folderOf = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+
+// ---------- Lanes ----------
+
+export const LANES = ["waiting", "running", "review", "done", "archived"] as const;
+export type Lane = (typeof LANES)[number];
+
+const busy = (indicator: Indicator) => indicator === "running" || indicator === "needs_input";
+
+export interface LaneOptions {
+  now: number;
+  doneWindow: DoneWindow;
+  showArchived: boolean;
+  showSubtasks: boolean;
+}
+
+// Waiting: needs input. Running: running, or a parent whose sub-agent still runs or waits. To
+// review: finished unseen, or failed (a failed parent stays here). Done and Archived: within the
+// done window. Null: not on the board.
+function laneOf(agent: BoardAgent, childBusy: boolean, options: LaneOptions): Lane | null {
+  const windowMs = doneWindowMs(options.doneWindow);
+  const within = (at: string) => windowMs === null || Date.parse(at) >= options.now - windowMs;
+  if (agent.archivedAt) return options.showArchived && within(agent.archivedAt) ? "archived" : null;
+  const indicator = indicatorOf(agent);
+  if (indicator === "needs_input") return "waiting";
+  if (indicator === "running") return "running";
+  if (indicator === "failed") return "review";
+  if (childBusy) return "running";
+  if (indicator === "attention") return "review";
+  return within(agent.updatedAt) ? "done" : null;
+}
+
+// Each lane's agents, in the order given. With subtasks hidden, a sub-agent folds into its parent's
+// card, unless it runs, waits or failed and its parent's card is in another lane.
+export function assignLanes(agents: readonly BoardAgent[], options: LaneOptions): Record<Lane, BoardAgent[]> {
+  const busyParents = new Set(agents.filter((agent) => agent.parentId && !agent.archivedAt && busy(indicatorOf(agent))).map((agent) => agent.parentId));
+  const placed = new Map(agents.map((agent) => [agent.id, laneOf(agent, busyParents.has(agent.id), options)]));
+  const lanes: Record<Lane, BoardAgent[]> = { waiting: [], running: [], review: [], done: [], archived: [] };
+  for (const agent of agents) {
+    const lane = placed.get(agent.id);
+    if (!lane) continue;
+    const parentLane = agent.parentId ? placed.get(agent.parentId) : undefined;
+    if (!options.showSubtasks && parentLane) {
+      const indicator = indicatorOf(agent);
+      if (!(busy(indicator) || indicator === "failed") || parentLane === lane) continue;
+    }
+    lanes[lane].push(agent);
+  }
+  return lanes;
+}
+
+// ---------- Filters and sort ----------
+
+export interface BoardFilter {
+  providers: readonly string[];
+  labels: readonly string[];
+  // Project names: Paseo's project keys and project ids are not the same value.
+  projects: readonly string[];
+  // Workspace ids.
+  workspaces: readonly string[];
+  search: string;
+}
+
+export const NO_FILTER: BoardFilter = { providers: [], labels: [], projects: [], workspaces: [], search: "" };
+
+export function matchesFilter(agent: BoardAgent, filter: BoardFilter): boolean {
+  if (filter.providers.length && !filter.providers.includes(agent.provider)) return false;
+  if (filter.labels.length && !agent.labels.some((label) => filter.labels.includes(label))) return false;
+  if (filter.projects.length && !(agent.project && filter.projects.includes(agent.project))) return false;
+  if (filter.workspaces.length && !(agent.workspaceId && filter.workspaces.includes(agent.workspaceId))) return false;
+  const haystack = [agent.title, agent.provider, agent.project, agent.workspace, agent.branch].filter(Boolean).join(" ").toLowerCase();
+  return filter.search.trim().toLowerCase().split(/\s+/).filter(Boolean).every((word) => haystack.includes(word));
+}
+
+export interface FilterGroup {
+  value: string;
+  label: string;
+  count: number;
+}
+
+// What each filter menu lists, with how many agents on the board fall in it. With empty groups
+// shown, Paseo's other labels, projects and workspaces are listed too, at 0.
+export function filterGroups(agents: readonly BoardAgent[], known: { labels: readonly string[]; projects: readonly string[]; workspaces: readonly { id: string; name: string }[] }, showEmpty: boolean) {
+  const tally = (values: { value: string; label: string }[], extra: { value: string; label: string }[]): FilterGroup[] => {
+    const groups = new Map<string, FilterGroup>();
+    if (showEmpty) for (const item of extra) groups.set(item.value, { ...item, count: 0 });
+    for (const item of values) {
+      const group = groups.get(item.value) ?? { ...item, count: 0 };
+      groups.set(item.value, { ...group, count: group.count + 1 });
+    }
+    return [...groups.values()].sort((left, right) => left.label.localeCompare(right.label));
+  };
+  const named = (value: string) => ({ value, label: value });
+  const workspaceName = new Map(known.workspaces.map((item) => [item.id, item.name]));
+  return {
+    providers: tally(agents.map((agent) => named(agent.provider)), []),
+    labels: tally(agents.flatMap((agent) => agent.labels.map(named)), known.labels.map(named)),
+    projects: tally(agents.flatMap((agent) => (agent.project ? [named(agent.project)] : [])), known.projects.map(named)),
+    workspaces: tally(
+      agents.flatMap((agent) => (agent.workspaceId ? [{ value: agent.workspaceId, label: workspaceName.get(agent.workspaceId) ?? agent.workspace ?? agent.workspaceId }] : [])),
+      known.workspaces.map((item) => ({ value: item.id, label: item.name })),
+    ),
+  };
+}
+
+export const SORT_KEYS = ["updated", "created", "title", "workspace", "project", "branch", "folder", "context", "duration"] as const;
+export type SortKey = (typeof SORT_KEYS)[number];
+
+export function contextShare(context: BoardAgent["context"]): number | null {
+  if (!context || context.max <= 0) return null;
+  return Math.min(1, Math.max(0, context.used / context.max));
+}
+
+// Names A to Z; times newest first; context and the running turn's duration largest first.
+// Missing values go last; ties go by id, so the order never flickers.
+export function compareAgents(key: SortKey, now: number) {
+  const time = (at: string) => (Number.isNaN(Date.parse(at)) ? null : Date.parse(at));
+  const values: Record<SortKey, (agent: BoardAgent) => string | number | null> = {
+    title: (agent) => agent.title,
+    workspace: (agent) => agent.workspace,
+    project: (agent) => agent.project,
+    branch: (agent) => agent.branch,
+    folder: (agent) => (agent.cwd ? folderOf(agent.cwd) : null),
+    created: (agent) => time(agent.createdAt),
+    updated: (agent) => time(agent.updatedAt),
+    context: (agent) => contextShare(agent.context),
+    duration: (agent) => (agent.turnStartedAt ? now - Date.parse(agent.turnStartedAt) : null),
+  };
+  const value = values[key];
+  return (left: BoardAgent, right: BoardAgent): number => {
+    const a = value(left);
+    const b = value(right);
+    if (a !== b) {
+      if (a === null) return 1;
+      if (b === null) return -1;
+      const order = typeof a === "string" && typeof b === "string" ? a.localeCompare(b) : Number(b) - Number(a);
+      if (order !== 0) return order;
+    }
+    return left.id.localeCompare(right.id);
+  };
+}
+
+// ---------- Keys and refreshes ----------
+
+// The card focused after J/K (up, down) or H/L (left, right): within a lane it stops at the ends;
+// across lanes it skips empty ones and keeps the row where it can. Nothing focused starts on the first card.
+export function moveFocus(lanes: readonly (readonly string[])[], focused: string | null, move: "up" | "down" | "left" | "right"): string | null {
+  const laneIndex = focused === null ? -1 : lanes.findIndex((lane) => lane.includes(focused));
+  if (laneIndex < 0) return lanes.find((lane) => lane.length)?.[0] ?? null;
+  const row = lanes[laneIndex].indexOf(focused as string);
+  if (move === "up" || move === "down") return lanes[laneIndex][Math.max(0, Math.min(lanes[laneIndex].length - 1, row + (move === "down" ? 1 : -1)))];
+  const step = move === "right" ? 1 : -1;
+  for (let index = laneIndex + step; index >= 0 && index < lanes.length; index += step) {
+    if (lanes[index].length) return lanes[index][Math.min(row, lanes[index].length - 1)];
+  }
+  return focused;
+}
+
+export const USAGE_REFRESH_MS = 60_000;
+
+// A card on screen reads its agent's usage again at most once a minute.
+export const dueForRefresh = (lastAt: number | undefined, now: number) => lastAt === undefined || now - lastAt >= USAGE_REFRESH_MS;

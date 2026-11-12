@@ -16,6 +16,7 @@ import { usePrefs } from "../prefs";
 import { gutterDigits } from "./diff";
 import { useRowSetup } from "./look";
 import { detailBody, shownTarget, type ToolData, type ToolDetailData } from "./model";
+import { numberedLines, striped } from "./preview-lines";
 import { alpha, CodeLine, Expand, PMONO, Prose, Row, Scroll, type Styles, toneColor, useDisclosure, useEnter, useIndent, useSpacing, useStyles } from "./row";
 
 /** Rows inside an open merged run sit flush in its list, without the timeline spacing. */
@@ -29,12 +30,28 @@ function ShowAll({ s, hidden, onPress }: { s: Styles; hidden: number; onPress():
   );
 }
 
-/** Output or file content, folded to its first and last `keep` lines until Show all; code is colored line by line. */
-function LongText({ s, text, keep, wrap, code, theme, color }: { s: Styles; text: string; keep: number | null; wrap: boolean; code: boolean; theme: PluginTheme; color: string }) {
+/** Output or file content, folded to its first and last `keep` lines until Show all; code is colored line by line. Hover previews
+ * number and shade the lines. */
+function LongText({ s, text, keep, wrap, code, theme, color, numbers = false, stripes = false }: { s: Styles; text: string; keep: number | null; wrap: boolean; code: boolean; theme: PluginTheme; color: string; numbers?: boolean; stripes?: boolean }) {
   const [all, setAll] = useState(false);
   const folded = foldLines(text, all ? null : keep);
-  const lines = (part: string[]) =>
-    code ? (
+  const total = folded.head.length + folded.hidden + folded.tail.length;
+  const lineStyle = wrap ? { flex: 1, minWidth: 0 } : { flexGrow: 1, flexShrink: 0 };
+  const lines = (part: string[], from: number) =>
+    numbers || stripes ? (
+      numberedLines(part, from, stripes).map((line) => (
+        <View key={line.n} style={{ flexDirection: "row", gap: 12, backgroundColor: line.shaded ? theme.colors.surface1 : undefined }}>
+          {numbers ? <Text {...PMONO} style={s.gutter}>{String(line.n).padStart(String(total).length, " ")}</Text> : null}
+          {code ? (
+            <CodeLine text={line.text || " "} theme={theme} style={[s.code, lineStyle]} />
+          ) : (
+            <Text {...PMONO} selectable style={[s.code, lineStyle, { color }]}>
+              {line.text || " "}
+            </Text>
+          )}
+        </View>
+      ))
+    ) : code ? (
       part.map((line, i) => <CodeLine key={i} text={line || " "} theme={theme} style={s.code} />)
     ) : (
       <Text {...PMONO} style={[s.code, { color }]} selectable>
@@ -44,12 +61,12 @@ function LongText({ s, text, keep, wrap, code, theme, color }: { s: Styles; text
   return (
     <>
       <Scroll nowrap={!wrap}>
-        <View style={s.blockBody}>{lines(folded.head)}</View>
+        <View style={s.blockBody}>{lines(folded.head, 0)}</View>
       </Scroll>
       {folded.hidden ? <ShowAll s={s} hidden={folded.hidden} onPress={() => setAll(true)} /> : null}
       {folded.tail.length ? (
         <Scroll nowrap={!wrap}>
-          <View style={[s.blockBody, { paddingTop: 0 }]}>{lines(folded.tail)}</View>
+          <View style={[s.blockBody, { paddingTop: 0 }]}>{lines(folded.tail, total - folded.tail.length)}</View>
         </Scroll>
       ) : null}
     </>
@@ -76,7 +93,7 @@ function changedWords(lines: readonly DiffRow[]) {
   return pairs;
 }
 
-function Diff({ s, lines, theme, keep, wrap, numbers }: { s: Styles; lines: DiffRow[]; theme: PluginTheme; keep: number | null; wrap: boolean; numbers: boolean }) {
+function Diff({ s, lines, theme, keep, wrap, numbers, stripes = false }: { s: Styles; lines: DiffRow[]; theme: PluginTheme; keep: number | null; wrap: boolean; numbers: boolean; stripes?: boolean }) {
   const c = theme.colors;
   const [all, setAll] = useState(false);
   const shown = !all && keep !== null && lines.length > keep + 2 ? lines.slice(0, keep) : lines;
@@ -92,7 +109,7 @@ function Diff({ s, lines, theme, keep, wrap, numbers }: { s: Styles; lines: Diff
             const words = pairs.get(i);
             const parts = words ? (l.sign === "-" ? words.before : words.after) : undefined;
             return (
-              <View key={i} style={{ flexDirection: "row", gap: 12, paddingHorizontal: 12, paddingVertical: 1, backgroundColor: color ? alpha(color, 0.12) : undefined }}>
+              <View key={i} style={{ flexDirection: "row", gap: 12, paddingHorizontal: 12, paddingVertical: 1, backgroundColor: color ? alpha(color, 0.12) : striped(i, stripes) ? c.surface1 : undefined }}>
                 <Text {...PMONO} style={[s.code, { color: color ?? c.foregroundMuted, width: s.code.fontSize, flexShrink: 0, marginRight: -6 }]}>{l.sign}</Text>
                 {numberDigits ? <Text {...PMONO} style={s.gutter}>{String(l.n ?? "").padStart(numberDigits, " ")}</Text> : null}
                 {/* Added and removed lines read in their color, their changed words marked; context lines keep the highlight theme. */}
@@ -113,13 +130,17 @@ function Diff({ s, lines, theme, keep, wrap, numbers }: { s: Styles; lines: Diff
   );
 }
 
-export function ToolDetail({ data, theme }: { data: ToolDetailData; theme: PluginTheme }) {
+/** A tool call's details. In a hover preview everything shows (the preview scrolls), with the preview's wrapping, line numbers and stripes. */
+export function ToolDetail({ data, theme, preview = false }: { data: ToolDetailData; theme: PluginTheme; preview?: boolean }) {
   const s = useStyles(theme);
   const c = theme.colors;
   const t = useT();
   const { look } = useRowSetup();
   const prefs = usePrefs();
-  const wrap = prefs.diffWrap === "on";
+  const wrap = preview ? prefs.previewWrap : prefs.diffWrap === "on";
+  const numbers = preview && prefs.previewLineNumbers;
+  const stripes = preview && prefs.previewStripes;
+  const keep = (lines: number | null) => (preview ? null : lines);
   switch (data.kind) {
     case "output":
       return (
@@ -131,19 +152,19 @@ export function ToolDetail({ data, theme }: { data: ToolDetailData; theme: Plugi
               {data.cwd ? <Text {...PMONO} style={[s.code, { color: c.foregroundMuted, fontSize: s.code.fontSize - 0.5 }]}>{data.cwd.split("/").pop()}</Text> : null}
             </View>
           ) : null}
-          {data.text ? <LongText s={s} text={data.text} keep={look.outputLines} wrap={wrap} code={false} theme={theme} color={c.foregroundMuted} /> : null}
+          {data.text ? <LongText s={s} text={data.text} keep={keep(look.outputLines)} wrap={wrap} code={false} theme={theme} color={c.foregroundMuted} numbers={numbers} stripes={stripes} /> : null}
         </View>
       );
     case "file":
       return (
         <View style={s.block}>
-          <LongText s={s} text={data.text} keep={look.codeLines} wrap={wrap} code theme={theme} color={c.foreground} />
+          <LongText s={s} text={data.text} keep={keep(look.codeLines)} wrap={wrap} code theme={theme} color={c.foreground} numbers={numbers} stripes={stripes} />
         </View>
       );
     case "diff":
       return (
         <View style={s.block}>
-          <Diff s={s} lines={data.lines} theme={theme} keep={look.codeLines} wrap={wrap} numbers={prefs.diffLineNumbers} />
+          <Diff s={s} lines={data.lines} theme={theme} keep={keep(look.codeLines)} wrap={wrap} numbers={preview ? prefs.previewLineNumbers : prefs.diffLineNumbers} stripes={stripes} />
         </View>
       );
     case "io":
@@ -266,6 +287,8 @@ export function ToolItem({ item, theme, layout, agentId, timestamp, nested }: Pl
   const indent = useIndent("tool");
   const c = theme.colors;
   const target = shownTarget(d, look.paths, d.path ? actions?.workspaceFolder(agentId) ?? null : null);
+  const body = (preview: boolean) =>
+    picture && actions ? <ImagePreview s={s} path={d.path!} actions={actions} theme={theme} /> : d.detail ? <ToolDetail data={d.detail} theme={theme} preview={preview} /> : null;
   return (
     <Animated.View style={[spacing, enter, d.status === "canceled" ? { opacity: 0.55 } : null]}>
       <Row
@@ -285,6 +308,7 @@ export function ToolItem({ item, theme, layout, agentId, timestamp, nested }: Pl
         open={open}
         onToggle={opens ? toggle : undefined}
         time={nested ? undefined : timestamp}
+        preview={opens && !open ? () => body(true) : undefined}
       />
       {d.error ? (
         <Text style={[s.small, { color: c.statusDanger, paddingLeft: indent }]} numberOfLines={open ? undefined : 2}>
@@ -294,7 +318,7 @@ export function ToolItem({ item, theme, layout, agentId, timestamp, nested }: Pl
       {opens ? (
         <Expand open={open} style={[s.detail, { paddingLeft: indent, marginBottom: 12, gap: 8 }]}>
           <Actions s={s} theme={theme} data={d} agentId={agentId} actions={actions}>
-            {picture && actions ? <ImagePreview s={s} path={d.path!} actions={actions} theme={theme} /> : d.detail ? <ToolDetail data={d.detail} theme={theme} /> : null}
+            {body(false)}
           </Actions>
         </Expand>
       ) : null}

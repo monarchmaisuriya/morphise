@@ -26,7 +26,8 @@ export type Density = "compact" | "normal" | "spacious";
 
 export type Reasoning = "show" | "fold" | "expand" | "hide";
 export type Strength = "full" | "soft" | "faded" | "dim";
-export const ACCENTS = { jade: "#3fb68b", violet: "#8b7cf6", amber: "#d9a23b", rose: "#e0607e" } as const;
+// The last five follow Better Paseo's presets (see NOTICE.md).
+export const ACCENTS = { jade: "#3fb68b", violet: "#8b7cf6", amber: "#d9a23b", rose: "#e0607e", zinc: "#808080", midnight: "#4a6ba8", claude: "#d97757", ghostty: "#8caaee", black: "#000000" } as const;
 export type FoldKind = ToolKind | "thinking";
 export const FOLD_KINDS: readonly FoldKind[] = [...TOOL_KINDS, "thinking"];
 
@@ -91,6 +92,9 @@ export interface ChatLook {
   accent: string | null;
   textSize: TextSize;
   codeSize: TextSize;
+  // Exact sizes in px over the steps above; null follows them.
+  textPx: number | null;
+  codePx: number | null;
   density: Density;
   timestamps: boolean;
   images: boolean;
@@ -124,6 +128,8 @@ export function chatLook(saved: ChatSettings | undefined): ChatLook {
     accent: accentColor(saved?.accent),
     textSize: saved?.textSize ?? "medium",
     codeSize: saved?.codeSize ?? saved?.textSize ?? "medium",
+    textPx: saved?.polish?.textPx ?? null,
+    codePx: saved?.polish?.codePx ?? null,
     density: saved?.density ?? "normal",
     timestamps: saved?.timestamps ?? false,
     images: saved?.images ?? true,

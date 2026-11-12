@@ -2,6 +2,23 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.19.0 - 2026-11-12
+
+Better Paseo's options and board, rebuilt in Morphise (credit in NOTICE.md). Everything Morphise already drew looks the same until you change a setting, and Paseo still draws prompts and replies with their Fork and Copy.
+
+- **Agents view in the Workbench:** every agent on this host in lanes (Waiting, Running, To review, Done, Archived).
+  - Cards show the fields you pick: provider, model, thinking, project, workspace, branch, Git status, folder, path, labels, PR, timer, context ring, plan and sub-agents, with Minimal, Standard and Full presets and a label limit.
+  - Actions: Open, Archive, Allow and Deny, and Stop and Rename through Paseo's command line (Paseo's plugin SDK has neither). Unarchive and Mark as read are not offered: Paseo gives plugins no way to do them.
+  - Filters by agent, label, project and workspace, search, nine sort orders, keys (J/K, H/L, Enter, /, Esc), a details pane, a done window, lane width, sub-agents, the Archived lane and minimal phone cards. Settings: Settings → Agents.
+- **Generate a title:** in an agent's details, a short background agent reads the chat's start and writes a title, then the agent is renamed. Choose its provider, model and instructions under Settings → Agents. It uses tokens and runs only when you ask.
+- **Turn details:** an opened recap shows the model, thinking level, time, tokens in (and cached), tokens out and cost, as Paseo reported them when the turn ended.
+- **More look options:** exact text sizes (9–20 px) and code sizes (10–22 px) for Morphise's rows; accent presets Zinc, Midnight, Claude, Ghostty and Black; the system font for prompts and replies; a reading style for replies (Document, Compact, Terminal), made with CSS only.
+- **Hover previews** (desktop and web, off by default): rest on a folded tool or thought row to read its content in a floating preview; delay, wrap, line numbers and shading are yours to set. Escape, scrolling or moving away closes it.
+- **Tables** (desktop and web, off by default): a copy button copies a table as Markdown; double-click a cell or drag across cells (Cmd or Ctrl adds more), then Copy or Add to chat.
+- **Phone-width previews:** a Desktop / Phone switch above every settings preview.
+- **Safer settings:** a Chat Polish option this version cannot read (from a newer or older Morphise, or a hand edit) now falls back to its default on its own, and options it does not know are kept, so the rest of your settings still apply.
+- **Not possible:** inline code colour on phones. Paseo draws replies there and plugins cannot restyle them.
+
 ## 0.18.2 - 2026-11-12
 
 - **The steps card gets a plan to show:** Claude Code lists its task-list tools only by name (the model has to load them first), and agents never loaded them unasked, so no chat ever had a plan. While the steps card is on, each new Claude chat is now asked to keep a task list with them; Paseo adds this to Claude Code's own instructions, it does not replace them. It applies to chats started after the update; turn the steps card off to start chats without it.

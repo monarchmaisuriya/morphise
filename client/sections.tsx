@@ -216,9 +216,9 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
     {
       // Settings, Chat, "Experimental (web)": Paseo's own prompts and replies styled, not redrawn.
       name: "chat.web",
-      key: ({ profile }) => json(profile.chat?.enabled === false ? null : profile.chat?.web ?? null),
+      key: ({ profile }) => json(profile.chat?.enabled === false ? null : [profile.chat?.web ?? null, profile.chat?.polish?.uiFont ?? null, profile.chat?.polish?.markdownStyle ?? null]),
       register({ profile }, track) {
-        if (profile.chat?.enabled !== false) track(applyStyleSheet(buildChatWebCss(profile.chat?.web)));
+        if (profile.chat?.enabled !== false) track(applyStyleSheet(buildChatWebCss(profile.chat?.web, polishPrefs(profile.chat))));
       },
     },
     {

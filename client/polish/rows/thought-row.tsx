@@ -24,6 +24,18 @@ export function ThoughtItem({ item, theme, layout, timestamp, nested }: PluginTi
   const text = useRevealedText(item.data.text, item.data.phase);
   const inset = useIndent("thought") ? 9 : 0;
   const firstLine = usePrefs().thoughtFirstLine && !open && !streaming ? thoughtFirstLine(text) : "";
+  const paragraphs = () => (
+    <View style={[s.ruled, { gap: 10 }]}>
+      {text
+        .trim()
+        .split(/\n\s*\n/)
+        .map((para, i) => (
+          <Text key={i} style={s.prose} selectable>
+            {para}
+          </Text>
+        ))}
+    </View>
+  );
   return (
     <Animated.View style={[spacing, enter]}>
       <Row
@@ -38,21 +50,9 @@ export function ThoughtItem({ item, theme, layout, timestamp, nested }: PluginTi
         open={open}
         onToggle={text.trim() ? toggle : undefined}
         time={nested ? undefined : timestamp}
+        preview={!open && text.trim() ? paragraphs : undefined}
       />
-      {open ? (
-        <FadeIn style={[s.detail, { paddingLeft: inset, paddingTop: 0 }]}>
-          <View style={[s.ruled, { gap: 10 }]}>
-            {text
-              .trim()
-              .split(/\n\s*\n/)
-              .map((para, i) => (
-                <Text key={i} style={s.prose} selectable>
-                  {para}
-                </Text>
-              ))}
-          </View>
-        </FadeIn>
-      ) : null}
+      {open ? <FadeIn style={[s.detail, { paddingLeft: inset, paddingTop: 0 }]}>{paragraphs()}</FadeIn> : null}
     </Animated.View>
   );
 }

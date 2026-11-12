@@ -18,6 +18,7 @@ import { bindPromptKeys } from "./web/prompts";
 import { restyleNative } from "./web/restyle";
 import { setLanguage, setRichText } from "./web/rich-text";
 import { paintSidebar } from "./web/sidebar";
+import { watchTables } from "./web/tables";
 import { tagWindow } from "./web/window";
 
 // Chat Polish's restyle of Paseo's own page (lthieu96/paseo-chat-polish, MIT, see NOTICE.md), wired
@@ -73,6 +74,8 @@ export const registerWeb: PolishPart = ({ client }) => {
   const showLanguage = () => setLanguage(languageFor(i18n.locale));
   showLanguage();
   const unfollowLanguage = i18n.subscribe?.(showLanguage) ?? (() => {});
+  // Copy and cell selection on Paseo's tables, while "Tables" (Messages) is on.
+  const unwatchTables = watchTables(client);
 
   // Only while the restyle is on and Morphise's theme is Paseo's app theme (Settings, Appearance).
   const unpaintSidebar = paintSidebar(
@@ -168,6 +171,7 @@ export const registerWeb: PolishPart = ({ client }) => {
   });
 
   return () => {
+    unwatchTables();
     unsubscribePrefs();
     unsubscribeProviders();
     unsetCompact();

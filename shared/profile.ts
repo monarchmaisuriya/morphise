@@ -287,7 +287,7 @@ export const profileSchema = z.strictObject({
       commandColors: z.boolean().optional(),
       strength: z.enum(["full", "soft", "faded", "dim"]).optional(),
       // "theme", a named accent (see ACCENTS) or a #rrggbb colour.
-      accent: z.string().regex(/^(theme|jade|violet|amber|rose|#[0-9a-fA-F]{6})$/, "Expected theme, jade, violet, amber, rose or a #rrggbb colour").optional(),
+      accent: z.string().regex(/^(theme|jade|violet|amber|rose|zinc|midnight|claude|ghostty|black|#[0-9a-fA-F]{6})$/, "Expected theme, a preset name (jade, violet, amber, rose, zinc, midnight, claude, ghostty, black) or a #rrggbb colour").optional(),
       textSize: z.enum(["small", "medium", "large"]).optional(),
       codeSize: z.enum(["small", "medium", "large"]).optional(),
       density: z.enum(["compact", "normal", "spacious"]).optional(),
@@ -297,7 +297,7 @@ export const profileSchema = z.strictObject({
       recap: z.boolean().optional(),
       phones: z.enum(["same", "paseo"]).optional(),
       // Chat Polish's options that Morphise had no key for (see shared/polish/prefs.ts).
-      polish: polishSchema.optional(),
+      polish: polishSchema.optional().catch(undefined),
       // Web and desktop only, through Paseo's page structure; may break when Paseo changes.
       web: z
         .strictObject({

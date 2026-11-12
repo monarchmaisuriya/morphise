@@ -28,8 +28,8 @@ import { viewPresence } from "../view-presence";
 import { ActionFields, ChipRow, type Form, ListEditor, NumberField, SelectField, SwitchField, TextField } from "./fields";
 import { parseMetadataText, uniqueId } from "./form-values";
 import { contrast, PRESETS as POLISH_PRESETS } from "../../shared/polish/theme";
-import { PolishLookSettings, PolishRowSettings, UpdateSection } from "./polish-tabs";
-import { StepsCardPreview } from "./previews";
+import { PolishLookSettings, PolishRowSettings, polishEditor, UpdateSection } from "./polish-tabs";
+import { PreviewWidth, StepsCardPreview } from "./previews";
 import { runSplits } from "../polish/rows/steps";
 import { RecapRow } from "../chat-rows";
 
@@ -550,6 +550,7 @@ const PREVIEW_RECAP = {
   calls: 25,
   outcome: "completed" as const,
   error: "",
+  details: { model: "claude-opus-5-5", thinking: "high", usage: { input: 12400, cached: 9100, output: 3200, cost: 0.42 } },
 };
 
 const PREVIEW_CALLS = [
@@ -560,15 +561,15 @@ const PREVIEW_CALLS = [
 ];
 const PREVIEW_RUNNING = previewCall("status", "Bash", { type: "shell", command: "git status --short" }, "running");
 const PREVIEW_TODO = { items: [{ text: "Find the bug", status: "completed" as const }, { text: "Default missing prices to zero", status: "in_progress" as const }, { text: "Run the tests", status: "pending" as const }], active: "Default missing prices to zero" };
-function ChatPreview({ form, look, chat }: { form: Form; look: ReturnType<typeof chatLook>; chat: ChatSettings }) {
-  const t = tokens(form.theme, false);
+function ChatPreview({ form, look, chat, compact }: { form: Form; look: ReturnType<typeof chatLook>; chat: ChatSettings; compact: boolean }) {
+  const t = tokens(form.theme, compact);
   const view = chatView(chat, form.profile.timeline.hide, false);
   const prefs = polishPrefs(chat);
   // Made once per look, so a sample row keeps being open or folded while the form re-renders.
   const lookKey = JSON.stringify([look, view.toolCalls]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const setup = useMemo(() => ({ look: { ...look, style: view.toolCalls === "compact" ? ("compact" as const) : ("cards" as const) }, actions: null }), [lookKey]);
-  const props = { agentId: "preview", timestamp: PREVIEW_TIME, theme: form.theme, host: { id: "preview", label: "Preview" }, layout: { compact: false, platform: "web" as const } };
+  const props = { agentId: "preview", timestamp: PREVIEW_TIME, theme: form.theme, host: { id: "preview", label: "Preview" }, layout: { compact, platform: "web" as const } };
   const plugin = <Data,>(kind: string, data: Data) => ({ type: "plugin" as const, kind, version: 1, data });
   const tools = view.toolCalls !== "paseo";
   const thinking = view.reasoning === "fold" || view.reasoning === "expand";
@@ -633,6 +634,7 @@ function ChatPreview({ form, look, chat }: { form: Form; look: ReturnType<typeof
 export function ChatTab(form: Form): ReactNode {
   const chat = form.profile.chat ?? {};
   const look = chatLook(chat);
+  const polish = polishEditor(form);
   const timeline = form.profile.timeline;
   // Written only when it differs from the default, so older versions can still read an unchanged
   // profile. Every change reads the profile being changed, so quick changes all count.
@@ -682,7 +684,7 @@ export function ChatTab(form: Form): ReactNode {
     <>
       <SettingsSection title="Preview" info="Sample rows drawn with the choices below. Prompts and replies always stay Paseo's own, with Fork and Copy.">
         <SettingsCard>
-          <ChatPreview form={form} look={look} chat={chat} />
+          <PreviewWidth theme={form.theme} compact={form.compact}>{(compact) => <ChatPreview form={form} look={look} chat={chat} compact={compact} />}</PreviewWidth>
         </SettingsCard>
       </SettingsSection>
       <SettingsSection title="Chat rows" info="Morphise draws tool calls, thinking and notices only where you choose below. Prompts and replies are never redrawn.">
@@ -768,13 +770,15 @@ export function ChatTab(form: Form): ReactNode {
             <SettingsSection title="Look" info="For the rows Morphise draws.">
               <SettingsCard>
                 <SelectField label="Text size" value={look.textSize} options={[{ value: "small", label: "Small" }, { value: "medium", label: "Medium" }, { value: "large", label: "Large" }]} onChange={(value) => setChat("textSize", value === "medium" ? undefined : value)} />
+                <SelectField label="Exact text size" hint="Over Text size, for rows, thoughts, checklists and notices." value={String(look.textPx ?? "")} options={[{ value: "", label: "Follow Text size" }, ...Array.from({ length: 12 }, (_, index) => ({ value: String(index + 9), label: `${index + 9} px` }))]} onChange={(value) => polish.set("textPx", value ? Number(value) : undefined)} />
                 <SelectField label="Code size" value={look.codeSize} options={[{ value: "small", label: "Small" }, { value: "medium", label: "Medium" }, { value: "large", label: "Large" }]} onChange={(value) => setChat("codeSize", value === (chat.textSize ?? "medium") ? undefined : value)} />
+                <SelectField label="Exact code size" hint="Over Code size, for code, diffs, output and paths." value={String(look.codePx ?? "")} options={[{ value: "", label: "Follow Code size" }, ...Array.from({ length: 13 }, (_, index) => ({ value: String(index + 10), label: `${index + 10} px` }))]} onChange={(value) => polish.set("codePx", value ? Number(value) : undefined)} />
                 <SelectField label="Spacing" value={look.density} options={[{ value: "compact", label: "Tight" }, { value: "normal", label: "Normal" }, { value: "spacious", label: "Roomy" }]} onChange={(value) => setChat("density", value === "normal" ? undefined : value)} />
                 <SelectField label="Strength until hovered" value={look.strength} options={[{ value: "full", label: "Full" }, { value: "soft", label: "Soft" }, { value: "faded", label: "Faded" }, { value: "dim", label: "Dim" }]} onChange={(value) => setChat("strength", value === "full" ? undefined : value)} />
                 <SelectField
                   label="Accent"
                   value={chat.accent && !chat.accent.startsWith("#") ? chat.accent : chat.accent ? "custom" : "theme"}
-                  options={[{ value: "theme", label: "Theme" }, { value: "jade", label: "Jade" }, { value: "violet", label: "Violet" }, { value: "amber", label: "Amber" }, { value: "rose", label: "Rose" }, { value: "custom", label: "Custom colour" }]}
+                  options={[{ value: "theme", label: "Theme" }, { value: "jade", label: "Jade" }, { value: "violet", label: "Violet" }, { value: "amber", label: "Amber" }, { value: "rose", label: "Rose" }, { value: "zinc", label: "Zinc" }, { value: "midnight", label: "Midnight" }, { value: "claude", label: "Claude" }, { value: "ghostty", label: "Ghostty" }, { value: "black", label: "Black" }, { value: "custom", label: "Custom colour" }]}
                   onChange={(value) => setChat("accent", value === "theme" ? undefined : value === "custom" ? "#6366f1" : value)}
                 />
                 {chat.accent?.startsWith("#") ? <TextField form={form} label="Custom accent (#rrggbb)" value={chat.accent} error={form.profileError("chat.accent")} onChange={(value) => setChat("accent", value.trim() || undefined)} /> : null}
@@ -827,7 +831,9 @@ export function ChatTab(form: Form): ReactNode {
           <TextField form={form} label="Bold text colour (#rrggbb)" placeholder="As Paseo shows it" value={web.boldColor ?? ""} error={form.profileError("chat.web.boldColor")} onChange={(value) => setWeb("boldColor", value.trim() || undefined)} />
           <SelectField label="Links" value={web.linkStyle ?? "paseo"} options={[{ value: "paseo", label: "As Paseo shows them" }, { value: "dashed", label: "Dashed underline" }]} onChange={(value) => setWeb("linkStyle", value === "paseo" ? undefined : value)} />
           <SelectField label="Long prompts" value={String(web.clampPrompts ?? 0)} options={[{ value: "0", label: "In full" }, ...[4, 6, 10].map((lines) => ({ value: String(lines), label: `First ${lines} lines, the rest on hover` }))]} onChange={(value) => setWeb("clampPrompts", value === "0" ? undefined : Number(value))} />
+          <SelectField label="Reading style" hint="Paseo still draws replies, with their Fork and Copy; only spacing and fonts change." value={polish.prefs.markdownStyle} options={[{ value: "paseo", label: "As Paseo shows them" }, { value: "document", label: "Document (roomy)" }, { value: "compact", label: "Compact" }, { value: "terminal", label: "Terminal (code font)" }]} onChange={(value) => polish.set("markdownStyle", value)} />
           <TextField form={form} label="Chat font" hint="For prompts and replies: any font installed on this computer, by its name." placeholder="As Paseo shows it" value={web.uiFont ?? ""} error={form.profileError("chat.web.uiFont")} onChange={(value) => setWeb("uiFont", value.trim() || undefined)} />
+          {web.uiFont ? null : <SwitchField label="Use the system font" hint="The computer's own interface font, when no chat font is named." value={polish.prefs.uiFont === "system"} onChange={(value) => polish.set("uiFont", value ? "system" : undefined)} />}
           <TextField form={form} label="Chat code font" placeholder="As Paseo shows it" value={web.codeFont ?? ""} error={form.profileError("chat.web.codeFont")} onChange={(value) => setWeb("codeFont", value.trim() || undefined)} />
         </SettingsCard>
       </SettingsSection>
@@ -845,7 +851,7 @@ export function GeneralTab(form: Form): ReactNode {
       {form.profile.sidebar.view.stepsCard !== false ? (
         <SettingsSection title="Preview" info="The steps card with a sample plan, where and how the choices below show it.">
           <SettingsCard>
-            <StepsCardPreview theme={form.theme} steps={form.profile.sidebar.view.steps} compact={form.compact} />
+            <PreviewWidth theme={form.theme} compact={form.compact}>{(compact) => <StepsCardPreview theme={form.theme} steps={form.profile.sidebar.view.steps} compact={compact} />}</PreviewWidth>
           </SettingsCard>
         </SettingsSection>
       ) : null}

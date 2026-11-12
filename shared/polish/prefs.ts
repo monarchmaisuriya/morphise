@@ -21,9 +21,18 @@ export type SelectionAction = (typeof SELECTION_ACTIONS)[number];
 const variant = z.enum(["a", "b", "c"]);
 const shown = z.enum(["show", "hide"]);
 
+// Each key on its own: a value this version cannot read (from a newer or older Morphise, or a
+// hand edit) falls back to its default instead of failing the whole profile. A key this version does
+// not know is kept as it is, so a newer version's new option survives a save here; a new value of a
+// key this version knows does not (it is read, and then saved, as the default).
+function tolerant<Shape extends z.ZodRawShape>(shape: Shape) {
+  const fields = Object.fromEntries(Object.entries(shape).map(([key, schema]) => [key, (schema as z.ZodType).catch(undefined)]));
+  return z.object(fields as unknown as { [Key in keyof Shape]: z.ZodCatch<Shape[Key]> }).catchall(z.json());
+}
+
 // As saved: every key optional, written only when it differs from the default, so older
 // Morphise versions that do not know a key are not handed one by default.
-export const polishSchema = z.strictObject({
+export const polishSchema = tolerant({
   // Thoughts and tool calls between two replies folded into one row.
   merge: z.boolean().optional(),
   rowIcons: z.strictObject({ steps: shown.optional(), tool: shown.optional(), thought: shown.optional() }).optional(),
@@ -67,12 +76,27 @@ export const polishSchema = z.strictObject({
   loaderColor: z.enum(["paseo", "accent", "text", "muted"]).optional(),
   // HTML pages taller than this scroll inside their frame; 0 (the default, as in 0.16) is no limit.
   pageHeight: z.union([z.literal(500), z.literal(800), z.literal(0)]).optional(),
+  // Web: Paseo's prompts and replies in the system font ("Chat font" text, when set, wins).
+  uiFont: z.enum(["paseo", "system"]).optional(),
+  // Exact sizes for Morphise's rows, in px; unset follows "Text size" and "Code size".
+  textPx: z.int().min(9).max(20).optional(),
+  codePx: z.int().min(10).max(22).optional(),
+  // Web: a reading style for Paseo's replies, in CSS only (Paseo still draws them).
+  markdownStyle: z.enum(["paseo", "document", "compact", "terminal"]).optional(),
+  // Web: resting on a folded row shows its content after `hoverDelay` seconds.
+  hoverPreviews: z.boolean().optional(),
+  hoverDelay: z.number().min(0).max(10).optional(),
+  previewWrap: z.boolean().optional(),
+  previewLineNumbers: z.boolean().optional(),
+  previewStripes: z.boolean().optional(),
+  // Web: copy and cell selection on Paseo's tables.
+  tableCopy: z.boolean().optional(),
 });
 export type PolishSettings = z.output<typeof polishSchema>;
 
 // Each option's default; a saved value equal to it is removed (older Morphise versions reject keys
 // they do not know, so an unchanged profile carries none).
-export const POLISH_DEFAULTS: Partial<Record<keyof PolishSettings, unknown>> = { mergeMin: 2, diffLineNumbers: true, thoughtFirstLine: false, barButtons: "both", barPosition: "above", sideModel: "", thumbCorners: "rounded", replyWidth: "paseo", floatingRadius: 10, floatingGap: 8, loaderColor: "paseo", pageHeight: 0, merge: true, failedOpen: true, images: "native", imageStacks: false, imageStackOpen: "hover", selection: true, restyle: false, window: "paseo", loader: "dots", loaderSize: "s", diagrams: "mermaid", iconSet: "lucide", html: false, syntax: "one-dark-darker-mariana" };
+export const POLISH_DEFAULTS: Partial<Record<keyof PolishSettings, unknown>> = { mergeMin: 2, diffLineNumbers: true, thoughtFirstLine: false, barButtons: "both", barPosition: "above", sideModel: "", thumbCorners: "rounded", replyWidth: "paseo", floatingRadius: 10, floatingGap: 8, loaderColor: "paseo", pageHeight: 0, uiFont: "paseo", markdownStyle: "paseo", hoverPreviews: false, hoverDelay: 1, previewWrap: true, previewLineNumbers: true, previewStripes: false, tableCopy: false, merge: true, failedOpen: true, images: "native", imageStacks: false, imageStackOpen: "hover", selection: true, restyle: false, window: "paseo", loader: "dots", loaderSize: "s", diagrams: "mermaid", iconSet: "lucide", html: false, syntax: "one-dark-darker-mariana" };
 
 // Chat Polish's Prefs, as its ported code reads them.
 export interface Prefs {
@@ -114,6 +138,17 @@ export interface Prefs {
   floatingGap: 4 | 8 | 12;
   loaderColor: "paseo" | "accent" | "text" | "muted";
   pageHeight: 500 | 800 | 0;
+  uiFont: "paseo" | "system";
+  // null follows the step sizes.
+  textPx: number | null;
+  codePx: number | null;
+  markdownStyle: "paseo" | "document" | "compact" | "terminal";
+  hoverPreviews: boolean;
+  hoverDelay: number;
+  previewWrap: boolean;
+  previewLineNumbers: boolean;
+  previewStripes: boolean;
+  tableCopy: boolean;
 }
 
 const hidden = (kinds: readonly string[] | undefined): Hideable[] => HIDEABLE.filter((kind) => kinds?.includes(kind));
@@ -159,5 +194,15 @@ export function polishPrefs(chat: ChatSettings | undefined): Prefs {
     floatingGap: polish.floatingGap ?? 8,
     loaderColor: polish.loaderColor ?? "paseo",
     pageHeight: polish.pageHeight ?? 0,
+    uiFont: polish.uiFont ?? "paseo",
+    textPx: polish.textPx ?? null,
+    codePx: polish.codePx ?? null,
+    markdownStyle: polish.markdownStyle ?? "paseo",
+    hoverPreviews: polish.hoverPreviews === true,
+    hoverDelay: Math.round((polish.hoverDelay ?? 1) * 10) / 10,
+    previewWrap: polish.previewWrap !== false,
+    previewLineNumbers: polish.previewLineNumbers !== false,
+    previewStripes: polish.previewStripes === true,
+    tableCopy: polish.tableCopy === true,
   };
 }

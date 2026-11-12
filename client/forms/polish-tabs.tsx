@@ -9,14 +9,14 @@ import { t, type MessageKey } from "../polish/i18n";
 import { BrowserControl } from "../polish/pages/browser-control";
 import { PLAIN_SYNTAX, SYNTAX_THEMES } from "../polish/rows/highlight";
 import { tokens } from "../ui/kit";
-import { LookPreview, MessagesPreview, PagesPreview } from "./previews";
+import { LookPreview, MessagesPreview, PagesPreview, PreviewWidth } from "./previews";
 import { ChipRow, type Form, SelectField, SwitchField, TextField } from "./fields";
 
 // Settings for the features ported from Chat Polish and Quote (see NOTICE.md). They live in the
 // profile's `chat.polish`; a value equal to its default is removed, so older Morphise versions
 // can still read an unchanged profile.
 
-function polishEditor(form: Form) {
+export function polishEditor(form: Form) {
   const polish = form.profile.chat?.polish ?? {};
   const prefs = polishPrefs(form.profile.chat);
   const change = (apply: (next: PolishSettings) => void) =>
@@ -91,7 +91,7 @@ export function MessagesTab(form: Form): ReactNode {
     <>
       <SettingsSection title="Preview" info="A sample chat drawn with the choices below, before they save.">
         <SettingsCard>
-          <MessagesPreview theme={form.theme} prefs={prefs} chat={form.profile.chat} compact={form.compact} />
+          <PreviewWidth theme={form.theme} compact={form.compact}>{(compact) => <MessagesPreview theme={form.theme} prefs={prefs} chat={form.profile.chat} compact={compact} />}</PreviewWidth>
         </SettingsCard>
       </SettingsSection>
       <SettingsSection title="Selection bar" info="Select text in a chat (desktop and web) to quote it into the message box, reply to it, ask a side chat about it, copy it, or bookmark it.">
@@ -126,6 +126,24 @@ export function MessagesTab(form: Form): ReactNode {
           {prefs.imageStacks === "on" ? <SelectField label={t("prefs.row.spreadOn")} hint={t("prefs.hint.spreadOn")} value={prefs.imageStackOpen} options={[{ value: "hover", label: t("prefs.option.hover") }, { value: "click", label: t("prefs.option.click") }]} onChange={(value) => set("imageStackOpen", value)} /> : null}
         </SettingsCard>
       </SettingsSection>
+      <SettingsSection title="Hover previews" info="Desktop and web: rest the pointer on a folded tool or thought row to read its content in a floating preview. It closes when the pointer leaves, on scroll, or with Escape.">
+        <SettingsCard>
+          <SwitchField label="Preview folded rows on hover" value={prefs.hoverPreviews} onChange={(value) => set("hoverPreviews", value)} />
+          {prefs.hoverPreviews ? (
+            <>
+              <SelectField label="Delay" value={String(prefs.hoverDelay)} options={[0, 0.3, 0.5, 1, 1.5, 2, 3, 5, 10].map((seconds) => ({ value: String(seconds), label: seconds === 0 ? "None" : `${seconds} s` }))} onChange={(value) => set("hoverDelay", Number(value))} />
+              <SwitchField label="Wrap long lines" hint="Off: long lines scroll sideways." value={prefs.previewWrap} onChange={(value) => set("previewWrap", value)} />
+              <SwitchField label="Line numbers" value={prefs.previewLineNumbers} onChange={(value) => set("previewLineNumbers", value)} />
+              <SwitchField label="Shade every other line" value={prefs.previewStripes} onChange={(value) => set("previewStripes", value)} />
+            </>
+          ) : null}
+        </SettingsCard>
+      </SettingsSection>
+      <SettingsSection title="Tables" info="Desktop and web: copy Paseo's tables as Markdown, and pick cells to copy or add to the message box. Tables look as Paseo draws them.">
+        <SettingsCard>
+          <SwitchField label="Copy and cell selection on tables" hint="A copy button at a table's top-left corner. Double-click a cell, or drag across cells (Cmd or Ctrl adds more), then Copy or Add to chat." value={prefs.tableCopy} onChange={(value) => set("tableCopy", value)} />
+        </SettingsCard>
+      </SettingsSection>
       <SettingsSection title="Diagrams" info="Mermaid diagrams in replies, in your theme's colours while Paseo's items are restyled (Look tab).">
         <SettingsCard>
           <SelectField label={t("prefs.row.renderer")} hint={t("prefs.hint.renderer")} value={prefs.diagrams} options={[{ value: "mermaid", label: "Paseo's mermaid" }, { value: "pele", label: "Pele, on this host's daemon" }]} onChange={(value) => set("diagrams", value)} />
@@ -156,7 +174,7 @@ export function PolishLookSettings({ form }: { form: Form }): ReactNode {
     <>
       <SettingsSection title="Look preview" info="A sample window in your theme, window style, loader, icons and code colours, before they save.">
         <SettingsCard>
-          <LookPreview theme={form.theme} prefs={prefs} profileTheme={form.profile.theme} compact={form.compact} />
+          <PreviewWidth theme={form.theme} compact={form.compact}>{(compact) => <LookPreview theme={form.theme} prefs={prefs} profileTheme={form.profile.theme} compact={compact} />}</PreviewWidth>
         </SettingsCard>
       </SettingsSection>
       <SettingsSection title="Restyle Paseo (experimental)" info="Chat Polish's design for Paseo's own message box, cards, menus, tool groups and replies, on desktop and web. It works through Paseo's page structure, so a Paseo update can break parts of it.">
@@ -199,7 +217,7 @@ export function PagesTab(form: Form): ReactNode {
     <>
       <SettingsSection title="Preview" info="A sample page as the chat draws it, at the height below.">
         <SettingsCard>
-          <PagesPreview theme={form.theme} prefs={prefs} compact={form.compact} />
+          <PreviewWidth theme={form.theme} compact={form.compact}>{(compact) => <PagesPreview theme={form.theme} prefs={prefs} compact={compact} />}</PreviewWidth>
         </SettingsCard>
       </SettingsSection>
     <SettingsSection title="HTML pages (experimental)" info="Ask an agent to chart, visualise or mock up something, and it draws an interactive page in the chat. Pages show on desktop and web; phones show the page's name.">

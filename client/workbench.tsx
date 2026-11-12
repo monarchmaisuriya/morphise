@@ -6,7 +6,9 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { defineSettings } from "@getpaseo/plugin";
 import { z } from "zod";
 import { dueCount, todayGroups } from "../shared/board";
+import { agentsBoardSettings } from "../shared/agents-board";
 import { inboxSettings } from "../shared/inbox";
+import { AgentsBoardView } from "./agents-board/board";
 import { TasksBoard } from "./board/board";
 import { bookmarksOf } from "./bookmark-store";
 import { Bookmarks, waitingItems, WaitingView } from "./inbox";
@@ -27,8 +29,8 @@ export const WORKBENCH_SCREEN_ID = "workbench";
 // Earlier versions opened these two; they still open the Workbench, on the view they used to show.
 export const LEGACY_SCREENS = { tasks: "board", inbox: "waiting" } as const;
 
-export type WorkbenchView = "waiting" | "today" | "board" | "bookmarks" | "archived";
-const VIEWS: readonly WorkbenchView[] = ["waiting", "today", "board", "bookmarks", "archived"];
+export type WorkbenchView = "waiting" | "agents" | "today" | "board" | "bookmarks" | "archived";
+const VIEWS: readonly WorkbenchView[] = ["waiting", "agents", "today", "board", "bookmarks", "archived"];
 // Below this width the views sit in a row of tabs instead of a list.
 const RAIL_FROM = 720;
 const RAIL_WIDTH = 176;
@@ -64,6 +66,7 @@ type Counts = ReturnType<typeof useWorkbenchCounts>;
 
 const ENTRIES: readonly { view: WorkbenchView; label: string; icon: string; section: "you" | "tasks" | "saved" }[] = [
   { view: "waiting", label: "Waiting", icon: "Inbox", section: "you" },
+  { view: "agents", label: "Agents", icon: "SquareKanban", section: "you" },
   { view: "today", label: "Today", icon: "CalendarClock", section: "tasks" },
   { view: "board", label: "Board", icon: "Columns3", section: "tasks" },
   { view: "archived", label: "Archived", icon: "Archive", section: "tasks" },
@@ -128,12 +131,17 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: WorkbenchView
     // The view picked here or asked for when opened; until then, what needs the user first, then
     // what is due, then the board, following the counts as they arrive.
     const [picked, setView] = useState<WorkbenchView | null>(null);
+    // The Agents view is listed unless its setting turns it off.
+    const boardSettings = useSettings(agentsBoardSettings);
+    const agentsShown = boardSettings.status !== "ready" || boardSettings.values.enabled;
+    const entries = agentsShown ? ENTRIES : ENTRIES.filter((entry) => entry.view !== "agents");
     const asked = viewParam(params);
     // Each opening asks again, even for the view it asked for last time.
     useEffect(() => {
       if (asked) setView(asked);
     }, [asked, params]);
-    const view: WorkbenchView = picked ?? asked ?? fallback ?? (counts.waiting ? "waiting" : counts.today ? "today" : "board");
+    const chosen: WorkbenchView = picked ?? asked ?? fallback ?? (counts.waiting ? "waiting" : counts.today ? "today" : "board");
+    const view: WorkbenchView = chosen === "agents" && !agentsShown ? "waiting" : chosen;
     const [width, setWidth] = useState(0);
     const rail = !layout.compact && width >= RAIL_FROM;
     const railSettings = useSettings(workbenchSettings);
@@ -154,6 +162,8 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: WorkbenchView
     const content =
       view === "waiting" ? (
         <WaitingView deps={deps} theme={theme} compact={layout.compact} navigation={navigation} />
+      ) : view === "agents" ? (
+        <AgentsBoardView client={deps.client} workspaces={deps.workspaces} theme={theme} compact={layout.compact} navigation={navigation} />
       ) : view === "bookmarks" ? (
         <Bookmarks t={t} deps={deps} workspaces={workspaces} open={openChat} />
       ) : (
@@ -167,7 +177,7 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: WorkbenchView
             {(["you", "tasks", "saved"] as const).map((section) => (
               <View key={section} style={{ gap: 2, paddingBottom: 8 }}>
                 {folded ? <View style={{ height: 1, marginVertical: 6, marginHorizontal: 6, backgroundColor: section === "you" ? "transparent" : t.c.border }} /> : <Text style={[t.text.label, { paddingHorizontal: 10, paddingTop: 6, paddingBottom: 4 }]}>{SECTION_TITLES[section]}</Text>}
-                {ENTRIES.filter((entry) => entry.section === section).map((entry) => (
+                {entries.filter((entry) => entry.section === section).map((entry) => (
                   <RailRow key={entry.view} t={t} view={entry.view} label={entry.label} icon={entry.icon} count={countOf(entry.view, counts)} tone={countTone(entry.view, counts, t)} selected={view === entry.view} folded={folded} onPress={() => setView(entry.view)} />
                 ))}
               </View>
@@ -185,7 +195,7 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: WorkbenchView
           </View>
         ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, borderBottomWidth: 1, borderBottomColor: t.c.border }} contentContainerStyle={{ padding: 8, gap: 4 }} accessibilityRole="tablist">
-            {ENTRIES.map((entry) => {
+            {entries.map((entry) => {
               const count = countOf(entry.view, counts);
               const selected = view === entry.view;
               return (

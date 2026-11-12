@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { EMPTY_DOCUMENT, type ProfileDocument } from "../shared/document";
-import { createTurnRecap } from "./turn-recap";
+import { createTurnRecap, turnDetails } from "./turn-recap";
 
 const documentWith = (recap: boolean): ProfileDocument => {
   const document = structuredClone(EMPTY_DOCUMENT);
@@ -37,6 +37,13 @@ describe("turn recap hook", () => {
     const { paseo, append } = fakePaseo(LS);
     await createTurnRecap({ read: async () => ({ status: "ready", revision: "1", values: documentWith(true) }) })(turn(), { paseo });
     expect(append).not.toHaveBeenCalled();
+  });
+
+  it("reads the turn's model, thinking level and tokens, and leaves them out when Paseo cannot give them", async () => {
+    const handle = { refresh: async () => undefined, current: () => ({ model: "claude-opus-5-5", effectiveThinkingOptionId: "high", lastUsage: { inputTokens: 12400, cachedInputTokens: 9100, outputTokens: 3200, totalCostUsd: 0.42 } }) };
+    expect(await turnDetails(handle)).toEqual({ model: "claude-opus-5-5", thinking: "high", usage: { input: 12400, cached: 9100, output: 3200, cost: 0.42 } });
+    expect(await turnDetails({ refresh: async () => undefined, current: () => ({ model: null }) })).toEqual({ model: null, thinking: null, usage: null });
+    expect(await turnDetails({ refresh: async () => Promise.reject(new Error("gone")), current: () => null })).toBeNull();
   });
 
   it("adds nothing when the setting is off, or for a sub-agent", async () => {

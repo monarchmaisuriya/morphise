@@ -2,6 +2,7 @@ import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { useState } from "react";
 import { Text, View } from "react-native";
 import { z } from "zod";
+import { turnDetailsLine } from "../shared/turn-details";
 import { shortPath } from "./polish/rows/model";
 import { alpha, Expand, Row, useIndent, useSpacing, useStyles } from "./polish/rows/row";
 
@@ -25,6 +26,15 @@ export const recapRowSchema = z.object({
   calls: z.number(),
   outcome: z.enum(["completed", "failed", "canceled"]),
   error: z.string(),
+  // Since 0.19: the model, thinking level and token use Paseo reported when the turn ended.
+  details: z
+    .object({
+      model: z.string().nullable(),
+      thinking: z.string().nullable(),
+      usage: z.object({ input: z.number().nullable(), cached: z.number().nullable(), output: z.number().nullable(), cost: z.number().nullable() }).nullable(),
+    })
+    .nullable()
+    .optional(),
 });
 
 
@@ -57,6 +67,7 @@ export function RecapRow({ item, theme, layout }: PluginTimelineItemProps<z.outp
     const meta = [recap.files.length || ended ? failedWords : null, recap.files.length ? ended : null].filter(Boolean).join(" · ") || undefined;
     const icon = recap.outcome === "failed" ? "CircleX" : recap.outcome === "canceled" ? "CircleStop" : recap.files.length ? "FileDiff" : "SquareTerminal";
     const danger = !recap.files.length;
+    const detailsLine = turnDetailsLine(recap);
     const canOpen = recap.files.length > 0 || recap.failed.length > 0 || (!!recap.error && recap.files.length > 0);
     return (
       <View style={spacing}>
@@ -78,6 +89,7 @@ export function RecapRow({ item, theme, layout }: PluginTimelineItemProps<z.outp
         <Expand open={open} style={{ marginLeft: icons ? 9 : 0, paddingLeft: icons ? 15 : 13, paddingTop: 3, paddingBottom: 3, borderLeftWidth: 1, borderLeftColor: alpha(c.border, 0.6) }}>
           {() => (
             <>
+              {detailsLine ? <Text selectable style={[s.target, { paddingVertical: 2 }]}>{detailsLine}</Text> : null}
               {recap.error && recap.files.length ? <Text selectable style={[s.target, { color: c.statusDanger }]}>{recap.error}</Text> : null}
               {recap.files.map((file) => (
                 <Row key={file.path} theme={theme} compact={layout.compact} kind="tool" icon="Pencil" verb="Edited" target={shortPath(file.path)} mono meta={[file.added ? `+${file.added}` : "", file.removed ? `−${file.removed}` : ""].filter(Boolean).join(" ") || undefined} />
