@@ -21,7 +21,7 @@ import { StackViewerHost } from "./polish/media/views";
 import { FOCUS_SCOPE, useTooltip } from "./web";
 
 // Workbench: everything that needs the user, in one place. Chats waiting on them (raised by agents) and
-// their own tasks (Agents, Tasks, Today, Archived), plus bookmarked answers. A list of views on the left on
+// their own tasks (Agents, Tasks with its Today and Archived toggles), plus bookmarked answers. A list of views on the left on
 // wide screens, tabs along the top on phones.
 
 export const WORKBENCH_SCREEN_ID = "workbench";
@@ -29,20 +29,25 @@ export const WORKBENCH_SCREEN_ID = "workbench";
 export const LEGACY_SCREENS = { tasks: "board", inbox: "waiting" } as const;
 
 // "board" is the Tasks view: its id from before 0.20, so links to it keep working.
-export type WorkbenchView = "agents" | "board" | "today" | "bookmarks" | "archived";
-const VIEWS: readonly WorkbenchView[] = ["agents", "board", "today", "bookmarks", "archived"];
+export type WorkbenchView = "agents" | "board" | "bookmarks";
+const VIEWS: readonly WorkbenchView[] = ["agents", "board", "bookmarks"];
+// What Tasks shows when it opens: its columns, or the Today or Archived list (views of their own before 0.20.2).
+type TasksStart = "board" | "today" | "archived";
 // Below this width the views sit in a row of tabs instead of a list.
 const RAIL_FROM = 720;
 const RAIL_WIDTH = 176;
 const RAIL_FOLDED = 52;
 
 
+const askedName = (params: PluginScreenProps["params"]) => (typeof params.view === "string" ? params.view : typeof params.tab === "string" ? params.tab : null);
+
 // The view a link or an old screen asks for. "waiting" (the Inbox, before 0.20) opens Agents, which lists what waits
-// on the user first; "tasks" opens Tasks.
+// on the user first; "tasks" opens Tasks, and "today" and "archived" (views of their own before 0.20.2) open Tasks with
+// that toggle on.
 function viewParam(params: PluginScreenProps["params"]): WorkbenchView | null {
-  const asked = typeof params.view === "string" ? params.view : typeof params.tab === "string" ? params.tab : null;
+  const asked = askedName(params);
   if (asked === "waiting" || asked === "inbox") return "agents";
-  if (asked === "tasks") return "board";
+  if (asked === "tasks" || asked === "today" || asked === "archived") return "board";
   return VIEWS.find((item) => item === asked) ?? null;
 }
 
@@ -69,7 +74,6 @@ function useWorkbenchCounts(deps: SurfaceDeps) {
     today: todayGroups(document, now).reduce((sum, group) => sum + group.tasks.length, 0),
     due: dueCount(document, now),
     bookmarks: bookmarksOf(useValue(deps.bookmarks)).bookmarks.length,
-    archived: document.tasks.filter((task) => task.archivedAt !== null).length,
   };
 }
 
@@ -79,20 +83,19 @@ type Counts = ReturnType<typeof useWorkbenchCounts>;
 const ENTRIES: readonly { view: WorkbenchView; label: string; icon: string }[] = [
   { view: "agents", label: "Agents", icon: "Bot" },
   { view: "board", label: "Tasks", icon: "SquareKanban" },
-  { view: "today", label: "Today", icon: "CalendarClock" },
-  { view: "archived", label: "Archived", icon: "Archive" },
   { view: "bookmarks", label: "Bookmarks", icon: "Bookmark" },
 ];
 
 // Agents counts the agents waiting on the user (it lists them first).
 function countOf(view: WorkbenchView, counts: Counts): number {
-  return view === "agents" ? counts.waiting ?? 0 : view === "today" ? counts.today : view === "bookmarks" ? counts.bookmarks : view === "archived" ? counts.archived : 0;
+  // Tasks counts what is due today (its Today toggle lists it).
+  return view === "agents" ? counts.waiting ?? 0 : view === "board" ? counts.today : view === "bookmarks" ? counts.bookmarks : 0;
 }
 
 // The count's colour: amber while something needs permission or a reminder is due.
 function countTone(view: WorkbenchView, counts: Counts, t: Tokens): string {
   if (view === "agents" && counts.permission) return t.c.statusWarning;
-  if (view === "today" && counts.due) return t.c.statusWarning;
+  if (view === "board" && counts.due) return t.c.statusWarning;
   return t.c.foregroundMuted;
 }
 
@@ -165,7 +168,7 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
     const t = useTokens(theme, layout.compact);
     const counts = useWorkbenchCounts(deps);
     // The view picked here or asked for when opened. Until then, decided once when the counts load: Agents while
-    // something waits on the user, else Today when something is due, else whichever of Agents and Tasks was last
+    // something waits on the user, else Tasks with Today on when something is due, else whichever of Agents and Tasks was last
     // opened on this device. It holds for this opening, even as the user clears what waited.
     const [picked, setView] = useState<WorkbenchView | null>(null);
     // The Agents view is listed unless its setting turns it off; it still opens when something waits on the user or
@@ -173,9 +176,15 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
     const boardSettings = useSettings(agentsBoardSettings);
     const agentsShown = boardSettings.status !== "ready" || boardSettings.values.enabled;
     const asked = viewParam(params);
+    // Which list Tasks starts on: the one a link asked for ("today", "archived"), the columns once the user picks Tasks;
+    // null until either happens.
+    const [tasksStartChosen, setTasksStart] = useState<TasksStart | null>(null);
+    const startOf = (name: string | null): TasksStart => (name === "today" || name === "archived" ? name : "board");
     // Each opening asks again, even for the view it asked for last time.
     useEffect(() => {
-      if (asked) setView(asked);
+      if (!asked) return;
+      setView(asked);
+      setTasksStart(startOf(askedName(params)));
     }, [asked, params]);
     const [width, setWidth] = useState(0);
     const railSettings = useSettings(workbenchSettings);
@@ -190,19 +199,25 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
     const lastOpened: WorkbenchView = lastBoard === "agents" && agentsShown ? "agents" : "board";
     const countsReady = counts.waiting !== null && counts.tasksLoaded && railSettings.status !== "loading" && boardSettings.status !== "loading";
     const opening = useRef<WorkbenchView | null>(null);
-    if (opening.current === null && countsReady) opening.current = (counts.waiting ?? 0) > 0 ? "agents" : counts.today ? "today" : lastOpened;
+    const openedForToday = useRef(false);
+    if (opening.current === null && countsReady) {
+      openedForToday.current = (counts.waiting ?? 0) === 0 && counts.today > 0;
+      opening.current = (counts.waiting ?? 0) > 0 ? "agents" : openedForToday.current ? "board" : lastOpened;
+    }
     const view: WorkbenchView = picked ?? asked ?? fallbackView ?? opening.current ?? lastOpened;
     // No entry looks chosen until the view is known, so the selection does not jump once the counts load.
     const decided = picked !== null || asked !== null || fallbackView !== null || opening.current !== null;
     const entries = agentsShown || (counts.waiting ?? 0) > 0 || view === "agents" ? ENTRIES : ENTRIES.filter((entry) => entry.view !== "agents");
     const pick = (next: WorkbenchView) => {
       setView(next);
+      if (next === "board") setTasksStart("board");
       if (next === "agents" || next === "board") saveLastBoard(next === "agents" ? "agents" : "tasks");
     };
     const openChat = navigation ? (agentId: string) => navigation.openAgent({ agentId }) : null;
     const workspaces = useValue(deps.workspaces);
     // Agents and Tasks wait for the settings and counts, so neither shows for a moment before the opening view is known.
     const ready = countsReady;
+    const tasksStart: TasksStart = tasksStartChosen ?? (asked ? startOf(askedName(params)) : openedForToday.current ? "today" : "board");
 
     const content =
       view === "bookmarks" ? (
@@ -210,10 +225,10 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
       ) : (view === "agents" || view === "board") && !ready ? null : view === "agents" ? (
         <AgentsBoardView client={deps.client} workspaces={deps.workspaces} theme={theme} compact={layout.compact} navigation={navigation} layout={agentsLayout} bookmarkLastAnswer={deps.bookmarkLastAnswer} />
       ) : view === "board" ? (
-        <TasksBoard key="board" deps={deps} theme={theme} compact={layout.compact} workspaceId={null} initialTab="board" openChat={openChat} embedded />
-      ) : (
-        <TasksBoard key={view} deps={deps} theme={theme} compact={layout.compact} workspaceId={null} initialTab={view} openChat={openChat} embedded />
-      );
+        // Today or Archived starts on when a link asked for it, or Today when the Workbench opened for what is due; the
+        // toggles change it after.
+        <TasksBoard key={`board:${tasksStart}`} deps={deps} theme={theme} compact={layout.compact} workspaceId={null} initialTab={tasksStart} openChat={openChat} embedded />
+      ) : null;
 
     return (
       <View {...FOCUS_SCOPE} style={{ flex: 1, flexDirection: rail ? "row" : "column", backgroundColor: theme.colors.surface0 }} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>

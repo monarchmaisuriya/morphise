@@ -800,6 +800,10 @@ export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, open
           workspaceId={workspaceId}
           trailing={
             <>
+            {/* In the Workbench, Today and Archived are toggles on Tasks: what is due (with reminders due), or the archived
+                cards, instead of the columns. Pressing the one that is on goes back to the columns. */}
+            {embedded ? <PanelButton t={t} icon="CalendarClock" label="Today" count={todayCount || undefined} open={tab === "today"} onPress={() => (setTab(tab === "today" ? "board" : "today"), setPanel(null))} /> : null}
+            {embedded ? <PanelButton t={t} icon="Archive" label="Archived" count={archived.length || undefined} open={tab === "archived"} onPress={() => (setTab(tab === "archived" ? "board" : "archived"), setPanel(null))} /> : null}
             {tab === "board" ? (
               <>
                 <PanelButton t={t} icon="Layers" label={activeView ? activeView.name : "All tasks"} open={panel === "views"} onPress={() => togglePanel("views")} />

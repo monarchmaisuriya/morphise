@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.20.2 - 2026-11-12
+
+- **Today and Archived live in Tasks:** they are no longer Workbench views of their own; Tasks has a Today toggle (reminders due, overdue cards and cards due today, with its count) and an Archived toggle in its toolbar, and pressing the one that is on goes back to the columns. The Workbench lists Agents, Tasks and Bookmarks; Tasks carries the count of what is due (amber while a reminder is due). The Workbench opens on Tasks with Today on when something is due and nothing waits on you, and links to the old Today and Archived views open Tasks with that toggle on.
+
 ## 0.20.1 - 2026-11-12
 
 - **Workbench tabs:** the Workbench lists its views (Agents, Tasks, Today, Archived, Bookmarks) as tabs along the top, drawn like Paseo's chat tabs: a filled chip for the chosen one, a lighter fill on hover, the waiting count beside Agents. Settings, General, Workbench, Views switches this device to the list at the side instead; phones and narrow windows always use tabs.
