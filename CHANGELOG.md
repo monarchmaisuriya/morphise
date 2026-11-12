@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.17.1 - 2026-11-12
+
+- **Settings previews look right:** every preview sits inside its card with the same padding as the Chat tab's, so no note or sample touches the card's edge. The steps card preview has its own Preview section on the General tab and is drawn on a sample chat line, not as a card inside the settings card.
+
 ## 0.17.0 - 2026-11-12
 
 - **Previews on every tab that changes a look:** Messages (a sample chat with a long prompt, a reply using every rich-text element and a diagram, an image-only reply and the selection bar), Look (a sample window in your theme with its window style, reply width, working indicator, icons and code colours), Pages (a sample page at your height limit) and General (the steps card with sample steps). Chat's preview now follows "Merge only runs of at least". Each is drawn by the same parts the real feature uses, and changes as you pick.

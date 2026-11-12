@@ -823,11 +823,15 @@ export function GeneralTab(form: Form): ReactNode {
   const view = viewFields(form);
   return (
     <>
+      {form.profile.sidebar.view.stepsCard !== false ? (
+        <SettingsSection title="Preview" info="The steps card with a sample plan, where and how the choices below show it.">
+          <SettingsCard>
+            <StepsCardPreview theme={form.theme} steps={form.profile.sidebar.view.steps} compact={form.compact} />
+          </SettingsCard>
+        </SettingsSection>
+      ) : null}
       <SettingsSection title="Steps card" info="A chat's plan as a card, in the chat or the sidebar, that shows while it works and settles when it is done. While it is on, Claude agents start with Claude Code's task-list tools, so they publish a plan.">
-        <SettingsCard>
-          {form.profile.sidebar.view.stepsCard !== false ? <StepsCardPreview theme={form.theme} steps={form.profile.sidebar.view.steps} compact={form.compact} /> : null}
-          {VIEW_SECTIONS.steps.map((key) => view[key])}
-        </SettingsCard>
+        <SettingsCard>{VIEW_SECTIONS.steps.map((key) => view[key])}</SettingsCard>
       </SettingsSection>
       <UpdateSection form={form} />
     </>

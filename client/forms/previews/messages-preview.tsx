@@ -9,7 +9,7 @@ import { ImagesItem } from "../../polish/media/views";
 import { PrefsOverride } from "../../polish/prefs";
 import { promptClampLines, shownRichText } from "./helpers";
 import { MockChat, PromptBubble } from "./mock-chat";
-import { PreviewNote, rowProps } from "./parts";
+import { PreviewNote, rowProps, PREVIEW_FRAME } from "./parts";
 import { RichSample } from "./rich-sample";
 import { PREVIEW_IMAGES } from "./samples";
 import { SelectionBarMock } from "./selection-bar-mock";
@@ -21,7 +21,7 @@ export function MessagesPreview({ theme, prefs, chat, compact = false }: { theme
   const diagram = DiagramSample ? <DiagramSample theme={theme} pele={restyled && prefs.diagrams === "pele"} /> : <PreviewNote theme={theme} text="Diagrams preview on desktop and web." />;
   return (
     <PrefsOverride.Provider value={prefs}>
-      <View style={{ gap: 12 }}>
+      <View style={{ ...PREVIEW_FRAME, gap: 12 }}>
         {restyled ? null : <PreviewNote theme={theme} text="Rich text styles apply while Restyle Paseo is on (Look tab)." />}
         <MockChat theme={theme} compact={compact}>
           <PromptBubble theme={theme} clamp={promptClampLines(chat)} />

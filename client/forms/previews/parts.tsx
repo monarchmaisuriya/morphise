@@ -11,6 +11,10 @@ export function rowProps<Data>(theme: PluginTheme, compact: boolean, kind: strin
   return { agentId: "preview", timestamp: PREVIEW_TIME, theme, host: { id: "preview", label: "Preview" }, layout: { compact, platform }, item: { type: "plugin" as const, kind, version: 1, data } };
 }
 
+// Every preview's frame inside its settings card: the same 16pt the Chat tab's preview has, so no
+// note or sample touches the card's edge.
+export const PREVIEW_FRAME = { padding: 16 } as const;
+
 export function PreviewNote({ theme, text }: { theme: PluginTheme; text: string }) {
   return <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12, lineHeight: 17 }}>{text}</Text>;
 }

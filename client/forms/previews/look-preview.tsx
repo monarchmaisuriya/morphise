@@ -11,7 +11,7 @@ import { PrefsOverride } from "../../polish/prefs";
 import { CodeLine, useStyles } from "../../polish/rows/row";
 import { Icon } from "../../ui/kit";
 import { loaderTint, mockTheme, replyColumnShare, syntaxShown } from "./helpers";
-import { PreviewNote } from "./parts";
+import { PreviewNote, PREVIEW_FRAME } from "./parts";
 import { SAMPLE_CODE } from "./samples";
 import { IconSetRow } from "./web/icon-set-row";
 import { LoaderTile } from "./web/loader-tile";
@@ -98,7 +98,7 @@ export function LookPreview({ theme, prefs, profileTheme, compact = false }: { t
   const swapped = restyled && prefs.iconSet !== "lucide" ? prefs.iconSet : null;
   return (
     <PrefsOverride.Provider value={prefs}>
-      <View style={{ gap: 12 }}>
+      <View style={{ ...PREVIEW_FRAME, gap: 12 }}>
         {profileTheme ? <PreviewNote theme={theme} text={`In ${profileTheme.name}, this profile's theme.`} /> : null}
         {restyled ? null : <PreviewNote theme={theme} text="Window, reply width, working indicator and icon set apply while Restyle Paseo is on." />}
         {restyled && !LoaderTile ? <PreviewNote theme={theme} text="The working indicator runs here on desktop and web." /> : null}
