@@ -2,6 +2,24 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.14.0 - 2026-11-12
+
+- **Tool call cards** (Settings, Chat, Tool calls, "Cards"): each tool call as a card that says what it did and on what.
+  - The header carries the facts: lines added and removed for edits, the exit code of a failed command, matches, files and time for searches, the HTTP code and time for fetches.
+  - Edits open as a coloured diff with line numbers. Long output shows its first and last lines with "Show all". Every card has Copy.
+  - Open while running and folded when done (or always folded, or always open). A failed call always opens; your own open or fold wins.
+  - "One line each" draws the same details behind a single line.
+  - Plans, sub-agent tasks and unknown tools keep Paseo's rows.
+- **Thinking card:** open while the model thinks, folded to its opening line when done, with a word count.
+- **Look** of Morphise's rows: text size, spacing, and the time on each card.
+- **Phones:** keep the chat as Paseo draws it on iOS and Android, if you prefer.
+- **A live preview** at the top of the Chat tab, drawn with your current choices. "Hide when finished" and "Hidden rows" are now one row of chips each.
+- **Prompts and replies are never redrawn,** so Paseo's Fork and Copy always stay on them.
+- **Copy this chat's last turn as Markdown** from the Command Center: the prompt, the replies, and one line per tool call.
+- **Dispatch:** one card like Paseo's message box. The prompts sit inside it, with a toolbar at its foot for project, model, mode, worktree or folder, and Start.
+
+Rolling back to 0.13.0: `paseo plugin update morphise --ref v0.13.0`. With "Cards", or any new Chat option (open or folded, output lines, text size, spacing, time, phones) changed, 0.13.0 reports the profile as invalid and keeps the data; set them back first.
+
 ## 0.13.0 - 2026-11-12
 
 - **New Chat settings tab:** how chat rows are drawn, all through Paseo's timeline API, so it works on phones too and survives Paseo updates. Paseo's own rows stay the default.

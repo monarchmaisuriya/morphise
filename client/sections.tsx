@@ -24,10 +24,12 @@ import { createDispatchScreen, DISPATCH_ICON, DISPATCH_SCREEN_ID } from "./dispa
 import { createWorkbenchScreen, createWorkbenchSidebarItem, WORKBENCH_SCREEN_ID, LEGACY_SCREENS } from "./workbench";
 import { createSidebarView } from "./sidebar-view";
 import { CHAT_STEPS_KIND, chatStepsSchema, createChatStepsRow } from "./steps-card";
-import { THINKING_ROW_KIND, ThinkingRow, thinkingRowSchema, TOOL_ROW_KIND, ToolRow, toolRowSchema } from "./chat-rows";
-import { chatView, rowFate, transformedTypes } from "../shared/chat-view";
+import { createThinkingRow, createToolRow, THINKING_ROW_KIND, thinkingRowSchema, TOOL_ROW_KIND, toolRowSchema } from "./chat-rows";
+import { chatLook, chatView, lastTurnMarkdown, rowFate, transformedTypes } from "../shared/chat-view";
 import { stepsOptions } from "../shared/steps";
 import { applyStyleSheet } from "./web";
+import { copyText } from "@getpaseo/plugin/client/ui";
+import { Platform } from "react-native";
 
 
 export interface Applied {
@@ -132,29 +134,32 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
     },
     {
       // Every chat row Morphise hides or redraws, from one owner: the Chat settings (hidden row
-      // types, compact tool calls, folded thinking) and the steps card "In the chat". One
-      // transformer per row type, so two rules never compete for the same row.
+      // types, tool call cards or lines, thinking cards) and the steps card "In the chat". One
+      // transformer per row type, so two rules never compete for the same row. Prompts and
+      // replies are never redrawn, so Paseo's Fork and Copy on them always stay.
       name: "chat.timeline",
       key: ({ profile }) => json([profile.chat, profile.timeline.hide, profile.sidebar.view.stepsCard, profile.sidebar.view.steps]),
       register({ profile }, track) {
         const steps = stepsOptions(profile.sidebar.view.steps);
-        const view = chatView(profile.chat, profile.timeline.hide, profile.sidebar.view.stepsCard !== false && steps.position === "chat");
+        const view = chatView(profile.chat, profile.timeline.hide, profile.sidebar.view.stepsCard !== false && steps.position === "chat", Platform.OS === "ios" || Platform.OS === "android");
+        const look = chatLook(profile.chat);
         for (const itemType of transformedTypes(view)) {
           const transformer = {
             id: `chat-${itemType.replaceAll("_", "-")}`,
             query: { itemType },
-            transform({ item }: { item: unknown }) {
+            transform({ item, phase }: { item: unknown; phase: "streaming" | "complete" }) {
               const fate = rowFate(itemType, item, view);
               if (fate.kind === "keep") return undefined;
               if (fate.kind === "hide") return { items: [] };
-              const kind = fate.kind === "tool" ? TOOL_ROW_KIND : fate.kind === "thinking" ? THINKING_ROW_KIND : CHAT_STEPS_KIND;
-              return { items: [{ type: "plugin", kind, version: 1, data: fate.data }] };
+              if (fate.kind === "thinking") return { items: [{ type: "plugin", kind: THINKING_ROW_KIND, version: 2, data: { ...fate.data, streaming: phase === "streaming" } }] };
+              return { items: [{ type: "plugin", kind: fate.kind === "tool" ? TOOL_ROW_KIND : CHAT_STEPS_KIND, version: fate.kind === "tool" ? 2 : 1, data: fate.data }] };
             },
           } as PluginTimelineTransformerContribution;
           track(client.addTimelineTransformer(transformer));
         }
-        if (view.toolCalls === "compact") track(client.addTimelineRenderer({ kind: TOOL_ROW_KIND, version: 1, schema: toolRowSchema, Component: ToolRow }));
-        if (view.reasoning === "fold") track(client.addTimelineRenderer({ kind: THINKING_ROW_KIND, version: 1, schema: thinkingRowSchema, Component: ThinkingRow }));
+        // Version 2: the cards' data (0.14) differs from 0.13's one-line rows.
+        if (view.toolCalls !== "paseo") track(client.addTimelineRenderer({ kind: TOOL_ROW_KIND, version: 2, schema: toolRowSchema, Component: createToolRow(look) }));
+        if (view.reasoning === "fold") track(client.addTimelineRenderer({ kind: THINKING_ROW_KIND, version: 2, schema: thinkingRowSchema, Component: createThinkingRow(look) }));
         if (view.stepsInChat) track(client.addTimelineRenderer({ kind: CHAT_STEPS_KIND, version: 1, schema: chatStepsSchema, Component: createChatStepsRow(client.paseo, () => steps) }));
       },
     },
@@ -342,6 +347,22 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
             keywords: ["bookmark", "save", "answer", "keep"],
             context: "agent",
             onSelect: ({ agent, workspace }) => tasks.bookmarkLastAnswer(agent.id, workspace.id, ""),
+          }),
+        );
+        track(
+          client.addCommandCenterItem({
+            id: "morphise-copy-turn",
+            title: "Copy this chat's last turn as Markdown",
+            icon: "ClipboardCopy",
+            keywords: ["copy", "turn", "markdown", "share", "answer"],
+            context: "agent",
+            // The prompt, the replies and one line per tool call, from the chat's recent history.
+            onSelect: async ({ agent, paseo }) => {
+              const page = await paseo.agents.ref(agent.id).timeline.refetch({ direction: "tail", limit: 400 });
+              const markdown = lastTurnMarkdown(page.entries);
+              if (!markdown) throw new Error("This chat has no prompt in its recent history to copy");
+              await copyText(markdown);
+            },
           }),
         );
         track(

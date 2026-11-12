@@ -1,6 +1,8 @@
 import { SettingsAction, SettingsCard, SettingsSection, TextInput } from "@getpaseo/plugin/client/ui";
-import type { ReactNode } from "react";
-import { Text, View } from "react-native";
+import { type ReactNode, useMemo } from "react";
+import { Pressable, Text, View } from "react-native";
+import type { z } from "zod";
+import { createThinkingRow, createToolRow, type toolRowSchema } from "../chat-rows";
 import type { Action } from "../../shared/actions";
 import { Icon, IconButton, tokens } from "../ui/kit";
 import { statusColor } from "../ui/hues";
@@ -9,7 +11,7 @@ import { DEFAULT_CHAT_ROWS, rowShows } from "../../shared/row-meta";
 import { VIEW_SECTIONS } from "./view-sections";
 import { DEFAULT_DONE_SECONDS, type StepsSettings, stepsOptions } from "../../shared/steps";
 import type { Layout, Prompt } from "../../shared/document";
-import { type ChatSettings, TOOL_KIND_TITLES, TOOL_KINDS } from "../../shared/chat-view";
+import { type ChatSettings, chatLook, TOOL_KIND_TITLES, TOOL_KINDS } from "../../shared/chat-view";
 import { EMPTY_PROFILE, type Profile, TIMELINE_ITEM_TYPES } from "../../shared/profile";
 import { presetTitle } from "../../shared/reminders";
 import { useValue } from "../profile-store";
@@ -484,12 +486,83 @@ function ViewCallout({ form }: { form: Form }) {
 
 // ---------- Chat ----------
 
+const ROW_TYPE_TITLES: Record<(typeof TIMELINE_ITEM_TYPES)[number], string> = {
+  user_message: "Prompts",
+  assistant_message: "Replies",
+  reasoning: "Thinking",
+  tool_call: "Tool calls",
+  todo: "Plans",
+  notification: "Notices",
+  error: "Errors",
+  compaction: "Compaction",
+};
+
+// A settings row holding a set of on/off chips: one line instead of a switch per choice.
+function ChipRow({ form, label, hint, chips }: { form: Form; label: string; hint?: string; chips: { key: string; label: string; on: boolean; toggle(): void }[] }) {
+  const t = tokens(form.theme, false);
+  return (
+    <View style={{ paddingVertical: 14, paddingHorizontal: 16, gap: 10 }}>
+      <View style={{ gap: 2 }}>
+        <Text style={{ color: t.c.foreground, fontSize: 14 }}>{label}</Text>
+        {hint ? <Text style={t.text.small}>{hint}</Text> : null}
+      </View>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+        {chips.map((chip) => (
+          <Pressable
+            key={chip.key}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: chip.on }}
+            accessibilityLabel={chip.label}
+            onPress={chip.toggle}
+            style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => ({ flexDirection: "row", alignItems: "center", gap: 6, height: 28, paddingHorizontal: 10, borderRadius: 14, borderWidth: 1, borderColor: chip.on ? t.c.accent : t.c.border, backgroundColor: chip.on ? t.c.surface2 : pressed || hovered ? t.c.surface1 : "transparent" })}
+          >
+            {chip.on ? <Icon name="Check" size={12} color={t.c.accent} /> : null}
+            <Text style={{ fontSize: 12, color: chip.on ? t.c.foreground : t.c.foregroundMuted }}>{chip.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+// Sample rows drawn by the real renderers with the current (unsaved) choices.
+const PREVIEW_TIME = new Date("2026-11-12T10:42:00");
+const PREVIEW_DIFF = "@@ -12,4 +12,5 @@\n export function total(items) {\n-  return items.reduce((sum, item) => sum + item.price, 0);\n+  const prices = items.map((item) => item.price ?? 0);\n+  return prices.reduce((sum, price) => sum + price, 0);\n }";
+function ChatPreview({ form, look, chat }: { form: Form; look: ReturnType<typeof chatLook>; chat: ChatSettings }) {
+  const t = tokens(form.theme, false);
+  const style = chat.toolCalls === "compact" ? "compact" : "cards";
+  // Made once per look, so a sample card keeps being open or folded while the form re-renders.
+  const lookKey = JSON.stringify(look);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const ToolRow = useMemo(() => createToolRow(look), [lookKey]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const ThinkingRow = useMemo(() => createThinkingRow(look), [lookKey]);
+  const props = { agentId: "preview", timestamp: PREVIEW_TIME, theme: form.theme, host: { id: "preview", label: "Preview" }, layout: { compact: false, platform: "web" as const } };
+  const tool = (data: Omit<z.output<typeof toolRowSchema>, "style">) => <ToolRow {...props} item={{ type: "plugin", kind: "tool-call", version: 2, data: { ...data, style } }} />;
+  return (
+    <View style={{ padding: 16, gap: 4 }}>
+      {chat.toolCalls === undefined || chat.toolCalls === "paseo" ? (
+        <Text style={t.text.small}>Tool calls show as Paseo's own rows. Choose cards or one line each below to change them.</Text>
+      ) : (
+        <>
+          {tool({ kind: "edit", detail: "edit", name: "Edit", subject: "src/cart/total.ts", status: "completed", error: "", body: PREVIEW_DIFF, bodyKind: "diff", facts: ["+2 −1"] })}
+          {tool({ kind: "shell", detail: "shell", name: "Bash", subject: "npm test -- cart", status: "failed", error: "1 test failed", body: "FAIL src/cart/total.test.ts\n  total() > ignores items without a price\n    expected 30, got NaN", bodyKind: "output", facts: ["exit 1"] })}
+          {tool({ kind: "search", detail: "search", name: "Grep", subject: "item.price", status: "running", error: "", body: "", bodyKind: "output", facts: [] })}
+        </>
+      )}
+      {chat.reasoning === "fold" ? <ThinkingRow {...props} item={{ type: "plugin", kind: "thinking", version: 2, data: { text: "The total breaks when an item has no price, so default it to zero before summing.", streaming: false } }} /> : null}
+    </View>
+  );
+}
+
 // How chat rows are drawn. Every choice here uses Paseo's timeline API, so it works on phones too
-// and survives Paseo updates; Paseo's own rows stay the default.
+// and survives Paseo updates; Paseo's own rows stay the default. Prompts and replies are never
+// redrawn, so Paseo's Fork and Copy on them always stay.
 export function ChatTab(form: Form): ReactNode {
   const chat = form.profile.chat ?? {};
+  const look = chatLook(chat);
   const timeline = form.profile.timeline;
-  // Written only when it differs from the default, so 0.12 can still read an unchanged profile.
+  // Written only when it differs from the default, so 0.13 can still read an unchanged profile.
   const setChat = <Key extends keyof ChatSettings>(key: Key, value: ChatSettings[Key] | undefined) =>
     form.updateProfile((profile) => {
       const next: ChatSettings = { ...(profile.chat ?? {}) };
@@ -498,70 +571,114 @@ export function ChatTab(form: Form): ReactNode {
       if (Object.keys(next).length) profile.chat = next;
       else delete profile.chat;
     });
-  const hidden = new Set(chat.hideFinished ?? []);
+  const drawn = (chat.toolCalls ?? "paseo") !== "paseo" || chat.reasoning === "fold";
+  const toggleHidden = (kind: (typeof TOOL_KINDS)[number]) =>
+    form.updateProfile((profile) => {
+      // Read from the profile being changed, so two quick toggles both count.
+      const current = new Set(profile.chat?.hideFinished ?? []);
+      if (current.has(kind)) current.delete(kind);
+      else current.add(kind);
+      const next: ChatSettings = { ...(profile.chat ?? {}), hideFinished: TOOL_KINDS.filter((item) => current.has(item)) };
+      if (!next.hideFinished?.length) delete next.hideFinished;
+      if (Object.keys(next).length) profile.chat = next;
+      else delete profile.chat;
+    });
+  const hiddenKinds = new Set(chat.hideFinished ?? []);
   return (
     <>
-      <SettingsSection title="Tool calls" info="Commands, file reads and edits, searches and other tools an agent uses.">
+      <SettingsSection title="Preview" info="Sample rows drawn with the choices below. Prompts and replies always stay Paseo's own, with Fork and Copy.">
+        <SettingsCard>
+          <ChatPreview form={form} look={look} chat={chat} />
+        </SettingsCard>
+      </SettingsSection>
+      <SettingsSection title="Tool calls" info="Commands, file reads and edits, searches and other tools an agent uses. Plans and sub-agent tasks keep Paseo's rows.">
         <SettingsCard>
           <SelectField
             label="Show them as"
             value={chat.toolCalls ?? "paseo"}
             options={[
               { value: "paseo", label: "Paseo's own rows" },
-              { value: "compact", label: "One line each, opening to show the output" },
+              { value: "cards", label: "Cards with a summary, diff and output" },
+              { value: "compact", label: "One line each, opening to the details" },
             ]}
             onChange={(value) => setChat("toolCalls", value === "paseo" ? undefined : value)}
           />
-          {TOOL_KINDS.map((kind) => (
-            <SwitchField
-              key={kind}
-              label={`Hide finished ${TOOL_KIND_TITLES[kind].toLowerCase()}`}
-              hint={kind === "shell" ? "Running and failed calls always show." : undefined}
-              value={hidden.has(kind)}
-              onChange={(hide) =>
-                form.updateProfile((profile) => {
-                  // Read from the profile being changed, so two quick toggles both count.
-                  const current = new Set(profile.chat?.hideFinished ?? []);
-                  if (hide) current.add(kind);
-                  else current.delete(kind);
-                  const next: ChatSettings = { ...(profile.chat ?? {}), hideFinished: TOOL_KINDS.filter((item) => current.has(item)) };
-                  if (!next.hideFinished?.length) delete next.hideFinished;
-                  if (Object.keys(next).length) profile.chat = next;
-                  else delete profile.chat;
-                })
-              }
-            />
-          ))}
+          {(chat.toolCalls ?? "paseo") !== "paseo" ? (
+            <>
+              <SelectField
+                label="Output before Show all"
+                value={String(look.outputLines ?? 0)}
+                options={[...[6, 12, 20, 40].map((lines) => ({ value: String(lines), label: `${lines} lines, first and last` })), { value: "0", label: "All of it" }]}
+                onChange={(value) => setChat("outputLines", Number(value) === 12 ? undefined : Number(value))}
+              />
+            </>
+          ) : null}
+          <ChipRow form={form} label="Hide when finished" hint="Running and failed calls always show." chips={TOOL_KINDS.map((kind) => ({ key: kind, label: TOOL_KIND_TITLES[kind], on: hiddenKinds.has(kind), toggle: () => toggleHidden(kind) }))} />
         </SettingsCard>
       </SettingsSection>
-      <SettingsSection title="Thinking" info="The agent's reasoning between steps, when the model shows it.">
+      <SettingsSection title="Thinking" info="The model's reasoning between steps, when it shows it.">
         <SettingsCard>
           <SelectField
             label="Show thinking"
             value={chat.reasoning ?? "show"}
             options={[
               { value: "show", label: "In full, as Paseo shows it" },
-              { value: "fold", label: "Folded to one line, opening on press" },
+              { value: "fold", label: "As a card, open while thinking" },
               { value: "hide", label: "Hidden" },
             ]}
             onChange={(value) => setChat("reasoning", value === "show" ? undefined : value)}
           />
         </SettingsCard>
       </SettingsSection>
-      <SettingsSection title="Hidden rows" info="Hide whole kinds of rows in every chat.">
-        <SettingsCard>
-          {TIMELINE_ITEM_TYPES.map((type) => (
-            <SwitchField
-              key={type}
-              label={`Hide ${type.replaceAll("_", " ")} rows`}
-              value={timeline.hide.includes(type)}
-              onChange={(hide) =>
-                form.updateProfile((profile) => {
-                  profile.timeline.hide = hide ? [...profile.timeline.hide, type] : profile.timeline.hide.filter((item) => item !== type);
-                })
-              }
+      {drawn ? (
+        <SettingsSection title="Look" info="For the cards and lines Morphise draws.">
+          <SettingsCard>
+            <SelectField
+              label="Open or folded"
+              hint="For tool cards and thinking. A failed call always opens."
+              value={look.fold}
+              options={[
+                { value: "finished", label: "Open while working, folded when done" },
+                { value: "always", label: "Always folded" },
+                { value: "never", label: "Always open" },
+              ]}
+              onChange={(value) => setChat("fold", value === "finished" ? undefined : value)}
             />
-          ))}
+            <SelectField label="Text size" value={look.textSize} options={[{ value: "small", label: "Small" }, { value: "medium", label: "Medium" }, { value: "large", label: "Large" }]} onChange={(value) => setChat("textSize", value === "medium" ? undefined : value)} />
+            <SelectField label="Spacing" value={look.density} options={[{ value: "compact", label: "Tight" }, { value: "normal", label: "Normal" }, { value: "spacious", label: "Roomy" }]} onChange={(value) => setChat("density", value === "normal" ? undefined : value)} />
+            <SwitchField label="Show the time" value={look.timestamps} onChange={(value) => setChat("timestamps", value ? true : undefined)} />
+          </SettingsCard>
+        </SettingsSection>
+      ) : null}
+      <SettingsSection title="Phones" info="On iOS and Android.">
+        <SettingsCard>
+          <SelectField
+            label="Chat rows on phones"
+            value={chat.phones ?? "same"}
+            options={[
+              { value: "same", label: "The same as here" },
+              { value: "paseo", label: "Paseo's own rows" },
+            ]}
+            onChange={(value) => setChat("phones", value === "same" ? undefined : value)}
+          />
+        </SettingsCard>
+      </SettingsSection>
+      <SettingsSection title="Hidden rows" info="Whole kinds of rows hidden in every chat.">
+        <SettingsCard>
+          <ChipRow
+            form={form}
+            label="Hide"
+            hint={timeline.hide.some((type) => type === "user_message" || type === "assistant_message") ? "Hidden prompts and replies take their Fork and Copy with them." : undefined}
+            chips={TIMELINE_ITEM_TYPES.map((type) => ({
+              key: type,
+              label: ROW_TYPE_TITLES[type],
+              on: timeline.hide.includes(type),
+              toggle: () =>
+                form.updateProfile((profile) => {
+                  profile.timeline.hide = profile.timeline.hide.includes(type) ? profile.timeline.hide.filter((item) => item !== type) : [...profile.timeline.hide, type];
+                }),
+            }))}
+          />
         </SettingsCard>
       </SettingsSection>
     </>

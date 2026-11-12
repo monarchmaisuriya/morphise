@@ -477,7 +477,9 @@ export function Select<Value extends string>({ t, value, options, onChange, labe
       >
         {current?.dot ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: current.dot }} /> : null}
         {current?.icon ? <Icon name={current.icon} size={14} color={t.c.foregroundMuted} /> : null}
-        <Text style={{ color: current ? t.c.foreground : t.c.foregroundMuted, fontSize: 13 }}>{current?.label ?? placeholder ?? "None"}</Text>
+        <Text style={{ color: current ? t.c.foreground : t.c.foregroundMuted, fontSize: 13, flexShrink: 1 }} numberOfLines={1}>
+          {current?.label ?? placeholder ?? "None"}
+        </Text>
         <Icon name={open ? "ChevronUp" : "ChevronDown"} size={14} color={t.c.foregroundMuted} />
       </Pressable>
       <Dropdown t={t} open={open} onClose={() => setOpen(false)} anchor={anchor} width={260}>

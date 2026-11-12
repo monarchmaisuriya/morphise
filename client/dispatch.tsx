@@ -72,36 +72,40 @@ function StatusChip({ t, status }: { t: Tokens; status: RowStatus }) {
   );
 }
 
+// One prompt inside the Dispatch card: its number, the text (or, once started, what it said),
+// its status and actions, separated from the next by a hairline.
 function PromptRow({ t, row, index, count, running, onChange, onRemove, onSplit, onRetry, onOpen, onCommand }: { t: Tokens; row: Row; index: number; count: number; running: boolean; onChange(text: string): void; onRemove(): void; onSplit(parts: string[]): void; onRetry(): void; onOpen: (() => void) | null; onCommand(): void }) {
   const parts = row.status === "draft" && !running ? splitPrompts(row.text) : null;
   // A failed row stays editable for Retry, except while it is part of a run.
   const editable = row.status === "draft" || row.status === "failed";
   return (
-    <View style={{ gap: 6, padding: 10, borderRadius: t.radius.card, borderWidth: 1, borderColor: row.status === "failed" ? t.c.statusDanger : t.c.border, backgroundColor: t.c.surface1 }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, minHeight: 22 }}>
-        <View style={{ width: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: t.c.surface2 }}>
-          <Text style={{ fontSize: 11, color: t.c.foregroundMuted }}>{index + 1}</Text>
+    <View style={{ borderTopWidth: index === 0 ? 0 : 1, borderTopColor: t.c.border, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 8, gap: 6 }}>
+      {row.status === "failed" ? <View pointerEvents="none" style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: 2, backgroundColor: t.c.statusDanger }} /> : null}
+      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 10 }}>
+        <Text style={{ width: 16, paddingTop: t.compact ? 10 : 8, fontSize: 12, color: t.c.foregroundMuted, textAlign: "right" }}>{index + 1}</Text>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          {editable ? (
+            <Field t={t} bare multiline value={row.text} onChangeText={onChange} placeholder={index === 0 ? "What should the agent do? Paste a list to start several." : "Another task"} accessibilityLabel={`Prompt ${index + 1}`} onCommand={onCommand} autoFocus={index === 0 && count === 1 && row.status === "draft" && row.text === ""} />
+          ) : (
+            <Text style={{ fontSize: 13, lineHeight: 20, paddingVertical: 8, paddingHorizontal: 6, color: row.status === "started" ? t.c.foreground : t.c.foregroundMuted }} numberOfLines={3}>
+              {row.text}
+            </Text>
+          )}
         </View>
-        <StatusChip t={t} status={row.status} />
-        <View style={{ flex: 1 }} />
-        {row.status === "started" && onOpen ? <Button t={t} variant="ghost" icon="ArrowUpRight" label="Open" accessibilityLabel={`Open the workspace for prompt ${index + 1}`} onPress={onOpen} /> : null}
-        {row.status === "failed" ? <Button t={t} variant="ghost" icon="RotateCcw" label="Retry" accessibilityLabel={`Retry prompt ${index + 1}`} disabled={running} onPress={onRetry} /> : null}
-        {editable && count > 1 ? <IconButton t={t} size="sm" icon="X" label={`Remove prompt ${index + 1}`} disabled={running} onPress={onRemove} /> : null}
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingTop: 4 }}>
+          <StatusChip t={t} status={row.status} />
+          {row.status === "started" && onOpen ? <Button t={t} variant="ghost" icon="ArrowUpRight" label="Open" accessibilityLabel={`Open the workspace for prompt ${index + 1}`} onPress={onOpen} /> : null}
+          {row.status === "failed" ? <Button t={t} variant="ghost" icon="RotateCcw" label="Retry" accessibilityLabel={`Retry prompt ${index + 1}`} disabled={running} onPress={onRetry} /> : null}
+          {editable && count > 1 ? <IconButton t={t} size="sm" icon="X" label={`Remove prompt ${index + 1}`} disabled={running} onPress={onRemove} /> : null}
+        </View>
       </View>
-      {editable ? (
-        <Field t={t} bare multiline value={row.text} onChangeText={onChange} placeholder={index === 0 ? "What should the agent do? Paste a list to start several." : "Another task"} accessibilityLabel={`Prompt ${index + 1}`} onCommand={onCommand} autoFocus={index === 0 && count === 1 && row.status === "draft" && row.text === ""} />
-      ) : (
-        <Text style={{ fontSize: 13, lineHeight: 18, color: row.status === "starting" ? t.c.foregroundMuted : t.c.foreground, paddingHorizontal: 6 }} numberOfLines={3}>
-          {row.text}
-        </Text>
-      )}
       {parts ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={`Split into ${parts.length} prompts`} onPress={() => onSplit(parts)} style={{ flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", paddingHorizontal: 6 }}>
-          <Icon name="Split" size={12} color={t.c.accent} />
-          <Text style={{ fontSize: 12, color: t.c.accent }}>Looks like {parts.length} tasks · Split into {parts.length} prompts</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Split into ${parts.length} prompts`} onPress={() => onSplit(parts)} style={{ flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", marginLeft: 26, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, backgroundColor: t.c.surface2 }}>
+          <Icon name="Split" size={12} color={t.c.foreground} />
+          <Text style={{ fontSize: 12, color: t.c.foreground }}>Split into {parts.length} prompts</Text>
         </Pressable>
       ) : null}
-      {row.status === "failed" && row.error ? <Text style={[t.text.danger, { paddingHorizontal: 6 }]}>{row.error}</Text> : null}
+      {row.status === "failed" && row.error ? <Text style={[t.text.danger, { marginLeft: 26 }]}>{row.error}</Text> : null}
     </View>
   );
 }
@@ -205,15 +209,23 @@ function Dispatch({ t, deps, openWorkspace, header }: { t: Tokens; deps: Dispatc
   const started = rows.filter((row) => row.status === "started");
   const failed = rows.filter((row) => row.status === "failed");
   const retryable = failed.filter((row) => row.text.trim());
-  const label = running ? "Starting..." : pending.length > 1 ? `Start ${pending.length} agents` : "Start agent";
+  const label = running ? "Starting..." : pending.length > 1 ? `Start ${pending.length}` : "Start";
   const problem = !project ? "Open a project in Paseo first; Dispatch starts agents in your projects." : !model && entries !== null && !holding ? "No model is available. Check Settings, Providers in Paseo." : null;
+  const status = running
+    ? `Starting ${Math.min(run.done + 1, run.total)} of ${run.total}...`
+    : started.length || failed.length
+      ? [started.length ? `${started.length} started` : null, failed.length ? `${failed.length} failed` : null].filter(Boolean).join(" · ")
+      : pending.length
+        ? `${pending.length} ${pending.length === 1 ? "prompt" : "prompts"} ready${COMMAND_HINT && !t.compact ? ` · ${COMMAND_HINT}` : ""}`
+        : null;
   return (
-    // On iOS the keyboard would cover the pinned bar (the first prompt has the cursor on open).
+    // On iOS the keyboard would cover the card's toolbar (the first prompt has the cursor on open).
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: t.compact ? 12 : 24, gap: 14, maxWidth: 820, width: "100%", alignSelf: "center" }} keyboardShouldPersistTaps="handled">
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: t.compact ? 12 : 24, paddingTop: t.compact ? 16 : 56, paddingBottom: 32, gap: 16, maxWidth: 760, width: "100%", alignSelf: "center" }} keyboardShouldPersistTaps="handled">
         {header}
-        {/* The prompts come first: what to do, then where and with what. */}
-        <View style={{ gap: 8 }}>
+        {/* One card, like Paseo's own message box: the prompts, then a toolbar with where and with
+            what, and Start. */}
+        <View style={{ borderRadius: 14, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1 }}>
           {rows.map((row, index) => (
             <PromptRow
               key={row.id}
@@ -230,64 +242,42 @@ function Dispatch({ t, deps, openWorkspace, header }: { t: Tokens; deps: Dispatc
               onCommand={() => void start()}
             />
           ))}
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingBottom: 6 }}>
             <Button t={t} variant="ghost" icon="Plus" label="Add prompt" disabled={running} onPress={() => setRows((current) => [...current, newRow()])} />
             {started.length ? <Button t={t} variant="ghost" icon="ListX" label="Clear started" disabled={running} onPress={() => setRows((current) => (current.every((row) => row.status === "started") ? [newRow()] : current.filter((row) => row.status !== "started")))} /> : null}
           </View>
-        </View>
-
-        {/* Where and with what, as one row of choices, like the options under Paseo's own composer. */}
-        <View style={{ gap: 8 }}>
-          <Text style={t.text.label}>Each prompt starts a new workspace with</Text>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
-            <View style={{ minWidth: 180, flexGrow: 1, flexBasis: 180 }}>
-              <Select t={t} label="Project" placeholder="No project yet" value={project?.id ?? null} onChange={(id) => remember({ project: id })} options={projects.map((item) => ({ value: item.id, label: item.name, icon: "Folder" }))} />
+          <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6, paddingHorizontal: 8, paddingVertical: 8, borderTopWidth: 1, borderTopColor: t.c.border }}>
+            <View style={{ maxWidth: 200 }}>
+              <Select t={t} label="Project" placeholder="No project" value={project?.id ?? null} onChange={(id) => remember({ project: id })} options={projects.map((item) => ({ value: item.id, label: item.name, icon: "Folder" }))} />
             </View>
-            <View style={{ minWidth: 200, flexGrow: 2, flexBasis: 220 }}>
-              <Select t={t} label="Model" placeholder={entries === null || holding ? "Loading models..." : "No model available"} value={model?.value ?? null} onChange={(value) => remember({ model: value, mode: undefined })} options={models.map((item) => ({ value: item.value, label: item.label, icon: "Bot" }))} />
+            <View style={{ maxWidth: 240 }}>
+              <Select t={t} label="Model" placeholder={entries === null || holding ? "Loading models..." : "No model"} value={model?.value ?? null} onChange={(value) => remember({ model: value, mode: undefined })} options={models.map((item) => ({ value: item.value, label: item.label, icon: "Bot" }))} />
             </View>
             {modes.length ? (
-              <View style={{ minWidth: 140, flexGrow: 1, flexBasis: 140 }}>
+              <View style={{ maxWidth: 180 }}>
                 <Select t={t} label="Mode" value={mode} onChange={(id) => remember({ mode: id })} options={modes.map((item) => ({ value: item.id, label: item.label, icon: "Shield" }))} />
               </View>
             ) : null}
+            {canWorktree ? (
+              <Segmented<Where>
+                t={t}
+                label="Where each agent works"
+                value={where}
+                onChange={(value) => remember({ where: value })}
+                options={[
+                  { value: "worktree", label: "Worktree", icon: "GitBranch" },
+                  { value: "local", label: "Folder", icon: "Folder" },
+                ]}
+              />
+            ) : null}
+            <View style={{ flex: 1, minWidth: 8 }} />
+            {retryable.length && !running ? <Button t={t} icon="RotateCcw" label={`Retry ${retryable.length}`} accessibilityLabel={`Retry ${retryable.length} failed`} disabled={!project || !model} onPress={() => void start("failed")} /> : null}
+            <Button t={t} variant="primary" icon="Send" label={label} accessibilityLabel={pending.length > 1 ? `Start ${pending.length} agents` : "Start the agent"} disabled={!ready} onPress={() => void start()} />
           </View>
-          {canWorktree ? (
-            <Segmented<Where>
-              t={t}
-              label="Where each agent works"
-              value={where}
-              onChange={(value) => remember({ where: value })}
-              options={[
-                { value: "worktree", label: "Its own worktree", icon: "GitBranch" },
-                { value: "local", label: "The project folder", icon: "Folder" },
-              ]}
-            />
-          ) : project ? (
-            <Text style={t.text.small}>Not a git project, so agents work in the project folder.</Text>
-          ) : null}
         </View>
+        {problem ? <Text style={[t.text.danger, { paddingHorizontal: 4 }]}>{problem}</Text> : status ? <Text style={[t.text.small, { paddingHorizontal: 4 }]}>{status}</Text> : null}
+        {!canWorktree && project ? <Text style={[t.text.small, { paddingHorizontal: 4 }]}>{project.name} is not a git project, so agents work in its folder.</Text> : null}
       </ScrollView>
-
-      {/* Always in view: what will start, and the button that starts it. */}
-      <View style={{ borderTopWidth: 1, borderTopColor: t.c.border, backgroundColor: t.c.surface0 }}>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 10, paddingHorizontal: t.compact ? 12 : 24, paddingVertical: 10, maxWidth: 820, width: "100%", alignSelf: "center" }}>
-          <View style={{ flex: 1, minWidth: 160, gap: 2 }}>
-            <Text style={{ fontSize: 13, color: t.c.foreground }} numberOfLines={1}>
-              {running
-                ? `Starting ${Math.min(run.done + 1, run.total)} of ${run.total}...`
-                : started.length || failed.length
-                  ? [started.length ? `${started.length} started` : null, failed.length ? `${failed.length} failed` : null].filter(Boolean).join(" · ")
-                  : pending.length
-                    ? `${pending.length} ${pending.length === 1 ? "prompt" : "prompts"} ready`
-                    : "Write a prompt to start"}
-            </Text>
-            {problem ? <Text style={t.text.danger} numberOfLines={2}>{problem}</Text> : COMMAND_HINT && !t.compact && pending.length ? <Text style={t.text.small}>{COMMAND_HINT}</Text> : null}
-          </View>
-          {retryable.length && !running ? <Button t={t} icon="RotateCcw" label={`Retry ${retryable.length} failed`} disabled={!project || !model} onPress={() => void start("failed")} /> : null}
-          <Button t={t} variant="primary" icon="Send" label={label} disabled={!ready} onPress={() => void start()} />
-        </View>
-      </View>
     </KeyboardAvoidingView>
   );
 }

@@ -262,9 +262,16 @@ export const profileSchema = z.strictObject({
   // nobody changed here stays readable by 0.12, which rejects keys it does not know.
   chat: z
     .strictObject({
-      toolCalls: z.enum(["paseo", "compact"]).optional(),
+      toolCalls: z.enum(["paseo", "cards", "compact"]).optional(),
       hideFinished: z.array(z.enum(TOOL_KINDS)).max(TOOL_KINDS.length).optional(),
       reasoning: z.enum(["show", "fold", "hide"]).optional(),
+      fold: z.enum(["finished", "always", "never"]).optional(),
+      // Lines of tool output shown before "Show all"; 0 shows everything.
+      outputLines: z.int().min(0).max(200).optional(),
+      textSize: z.enum(["small", "medium", "large"]).optional(),
+      density: z.enum(["compact", "normal", "spacious"]).optional(),
+      timestamps: z.boolean().optional(),
+      phones: z.enum(["same", "paseo"]).optional(),
     })
     .optional(),
   style: z
