@@ -19,8 +19,9 @@ export function stylePluginViews() {
 /* The same for Morphise's own screens (data-mx-focus-scope, client/web.ts): a button there shows a quiet inset line for the
    keyboard instead of Paseo's ring after a click. Text fields keep Paseo's ring. */
 [data-mx-focus-scope] :focus-visible:not(input, textarea, [contenteditable="true"]) { outline: none !important; box-shadow: inset 0 0 0 2px rgb(127 127 127 / 0.75); }
-/* An agent card's buttons stay laid out but transparent until hovered; keyboard focus inside the card shows them too. */
-[data-mx-card]:focus-within [data-mx-card-actions] { opacity: 1 !important; }
+/* A card's or list row's buttons stay laid out but transparent until hovered; keyboard focus on or inside it shows them too.
+   Only keyboard focus (:focus-visible): the desktop app keeps focus on a row after a click, which must not pin them open. */
+[data-mx-card]:focus-visible [data-mx-card-actions], [data-mx-card]:has(:focus-visible) [data-mx-card-actions] { opacity: 1 !important; }
 /* One scroller for both axes keeps the horizontal bar visible with tall diffs. */
 [data-cp-nowrap] { overflow: auto !important; }
 [data-cp-nowrap] > div { width: max-content; min-width: 100%; }

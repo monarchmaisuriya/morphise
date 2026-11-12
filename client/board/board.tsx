@@ -17,6 +17,7 @@ import { useTooltip } from "../web";
 import { useReminderClock } from "../reminder-clock";
 import { tasksOf } from "../task-store";
 import { Button, Field, Icon, IconButton, MenuItem, Segmented, Tag, type Tokens, useTokens } from "../ui/kit";
+import { GroupBox, GroupFooter, GroupList, GroupRow } from "../ui/grouped-list";
 import { CardEditor, type EditorTarget, newTaskId } from "./card-editor";
 import { CustomiseBoard } from "./customise";
 import { CARD_GAP, DragGhost, DragProvider, useBoardDrag, useCardDragHandlers, useDrag } from "./drag";
@@ -553,8 +554,9 @@ function ColumnView({ t, entry, document, now, layout, open, run, workspaceId, w
 
 // ---------- Tasks as a list ----------
 
-// One card as a list row: priority, title, labels, and its facts on one line; a press opens the editor, the check
-// moves it to the done column. Dragging stays on the board.
+// One card as a list row (the grouped list the Agents tab uses too): priority, title, and its facts on the same
+// line, labels at the right. A press opens the editor; the check (on hover, or always on touch) moves it to the
+// done column. Dragging stays on the board.
 function TaskRow({ t, task, document, now, workspaces, onOpen, run }: { t: Tokens; task: Task; document: TaskDocument; now: Date; workspaces: BoardDeps["workspaces"] | null; onOpen(): void; run: Run }) {
   const column = document.columns.find((item) => item.id === task.column);
   const done = document.columns.find((item) => item.done);
@@ -565,80 +567,72 @@ function TaskRow({ t, task, document, now, workspaces, onOpen, run }: { t: Token
   const dueTone = task.due && !inDone ? (task.due < today ? t.c.statusDanger : task.due === today ? t.c.statusWarning : undefined) : undefined;
   const reminderTone = task.reminder && !inDone && isDue(task.reminder, now) ? t.c.statusDanger : undefined;
   const labels = task.labels.flatMap((id) => document.labels.filter((label) => label.id === id));
+  const facts = [
+    workspaces && task.links.workspaceId ? <WorkspaceMeta key="workspace" t={t} workspaces={workspaces} workspaceId={task.links.workspaceId} /> : null,
+    task.due ? <MetaItem key="due" t={t} icon="Calendar" text={dueText(task.due, today)} tone={dueTone} /> : null,
+    task.reminder ? <MetaItem key="reminder" t={t} icon="AlarmClock" text={inDone ? "Paused" : formatDue(task.reminder, now)} tone={reminderTone} /> : null,
+    task.checklist.length ? <MetaItem key="checklist" t={t} icon="SquareCheck" text={`${checked}/${task.checklist.length}`} tone={checked === task.checklist.length ? t.c.statusSuccess : undefined} /> : null,
+    task.links.agentId ? <MetaItem key="chat" t={t} icon="MessageSquare" /> : null,
+    task.description ? <MetaItem key="notes" t={t} icon="AlignLeft" /> : null,
+  ].filter(Boolean);
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`Open ${task.title}`}
+    <GroupRow
+      t={t}
+      leading={priority ? <View accessibilityLabel={`Priority ${priority.name}`}><Icon name={priority.icon} size={14} color={priorityColor(t.c, task.priority)} /></View> : null}
+      title={task.title}
+      struck={inDone}
+      dim={inDone}
+      detail={facts.length ? <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 12, overflow: "hidden" }}>{facts}</View> : undefined}
+      facts={labels.length ? <View style={{ flexDirection: "row", gap: 4 }}>{labels.slice(0, 3).map((label) => <Tag key={label.id} t={t} label={label.name} color={label.color} />)}</View> : undefined}
+      actions={done && !inDone ? <IconButton t={t} size="sm" icon="Check" label={`Move ${task.title} to ${done.name}`} onPress={() => void run({ kind: "moveTask", id: task.id, column: done.id })} /> : undefined}
+      label={`Open ${task.title}`}
       onPress={onOpen}
-      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => ({ flexDirection: "row", alignItems: "center", gap: 10, minHeight: t.compact ? 52 : 44, paddingVertical: 6, paddingHorizontal: 10, borderRadius: t.radius.row, backgroundColor: pressed || hovered ? t.c.surface1 : "transparent", opacity: inDone ? 0.75 : 1 })}
-    >
-      <View style={{ width: 14, alignItems: "center" }} accessibilityLabel={priority ? `Priority ${priority.name}` : undefined}>
-        {priority ? <Icon name={priority.icon} size={13} color={priorityColor(t.c, task.priority)} /> : null}
-      </View>
-      <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-        <Text style={[t.text.body, { fontWeight: "500", textDecorationLine: inDone ? "line-through" : "none" }]} numberOfLines={1}>
-          {task.title}
-        </Text>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10, minWidth: 0, overflow: "hidden" }}>
-          {workspaces && task.links.workspaceId ? <WorkspaceMeta t={t} workspaces={workspaces} workspaceId={task.links.workspaceId} /> : null}
-          {task.due ? <MetaItem t={t} icon="Calendar" text={dueText(task.due, today)} tone={dueTone} /> : null}
-          {task.reminder ? <MetaItem t={t} icon="AlarmClock" text={inDone ? "Paused" : formatDue(task.reminder, now)} tone={reminderTone} /> : null}
-          {task.checklist.length ? <MetaItem t={t} icon="SquareCheck" text={`${checked}/${task.checklist.length}`} tone={checked === task.checklist.length ? t.c.statusSuccess : undefined} /> : null}
-          {task.links.agentId ? <MetaItem t={t} icon="MessageSquare" /> : null}
-          {task.description ? <MetaItem t={t} icon="AlignLeft" /> : null}
-        </View>
-      </View>
-      {t.compact ? null : labels.slice(0, 3).map((label) => <Tag key={label.id} t={t} label={label.name} color={label.color} />)}
-      {done && !inDone ? <IconButton t={t} size="sm" icon="Check" label={`Move ${task.title} to ${done.name}`} onPress={() => void run({ kind: "moveTask", id: task.id, column: done.id })} /> : null}
-    </Pressable>
+    />
   );
 }
 
-// The board's columns as sections of rows: the same filters, order, rows (swimlanes) and saved views. An empty
+// The board's columns as boxes of rows: the same filters, order, rows (swimlanes) and saved views. An empty
 // column starts folded.
 function TaskList({ t, columns, document, now, open, run, workspaceId, workspaceStore, swimlanes }: { t: Tokens; columns: BoardColumn[]; document: TaskDocument; now: Date; open(target: EditorTarget): void; run: Run; workspaceId: string | null; workspaceStore: BoardDeps["workspaces"]; swimlanes: Layout["swimlanes"] }) {
   const [folds, setFolds] = useState<Record<string, boolean>>({});
   return (
-    <ScrollView contentContainerStyle={{ paddingHorizontal: t.compact ? 12 : 16, paddingBottom: 16, gap: 10 }}>
+    <GroupList t={t}>
       {columns.map((entry) => {
         const { column } = entry;
         const empty = entry.lanes.every((lane) => lane.tasks.length === 0);
         const folded = folds[column.id] ?? empty;
+        const count = column.wipLimit ? `${entry.count} / ${column.wipLimit}` : entry.inScope;
         return (
-          <View key={column.id} style={{ gap: 2 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ expanded: !folded }}
-                accessibilityLabel={`${column.name}, ${entry.inScope}. ${folded ? "Open" : "Fold"} the section`}
-                onPress={() => setFolds({ ...folds, [column.id]: !folded })}
-                style={({ hovered }: { pressed: boolean; hovered?: boolean }) => ({ flex: 1, flexDirection: "row", alignItems: "center", gap: 6, height: 30, paddingHorizontal: 6, borderRadius: t.radius.control, backgroundColor: hovered ? t.c.surface1 : "transparent" })}
-              >
-                <Icon name={folded ? "ChevronRight" : "ChevronDown"} size={13} color={t.c.foregroundMuted} />
-                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: column.color ?? (column.done ? t.c.statusSuccess : t.c.foregroundMuted) }} />
-                <Text style={folded ? [t.text.heading, { fontSize: 13, flexShrink: 1, color: t.c.foregroundMuted, fontWeight: "500" }] : [t.text.heading, { fontSize: 13, flexShrink: 1 }]} numberOfLines={1}>
-                  {column.name}
-                </Text>
-                <Text style={{ color: entry.overLimit ? t.c.statusDanger : t.c.foregroundMuted, fontSize: 12, fontWeight: entry.overLimit ? "600" : "400" }}>{column.wipLimit ? `${entry.count} / ${column.wipLimit}` : entry.inScope}</Text>
-                {entry.shown < entry.inScope ? <Text style={t.text.small}>· {entry.inScope - entry.shown} hidden by filters</Text> : null}
-              </Pressable>
-              <IconButton t={t} size="sm" icon="Plus" label={`Add a task to ${column.name}`} onPress={() => open({ kind: "new", column: column.id, workspaceId })} />
-            </View>
-            {folded
-              ? null
-              : entry.lanes.map((lane) => (
-                  <View key={lane.key} style={{ gap: 2 }}>
-                    {lane.title ? <View style={{ paddingLeft: 18 }}><LaneTitle t={t} laneKey={lane.key} title={lane.title} workspaces={workspaceStore} /></View> : null}
-                    {lane.tasks.map((task) => (
-                      <TaskRow key={`${lane.key}:${task.id}`} t={t} task={task} document={document} now={now} workspaces={workspaceId === null && swimlanes !== "workspace" ? workspaceStore : null} onOpen={() => open({ kind: "existing", taskId: task.id })} run={run} />
-                    ))}
+          <GroupBox
+            key={column.id}
+            t={t}
+            title={entry.shown < entry.inScope ? `${column.name} · ${entry.inScope - entry.shown} hidden by filters` : column.name}
+            count={count}
+            empty={empty}
+            countTone={entry.overLimit ? t.c.statusDanger : undefined}
+            dot={column.color ?? (column.done ? t.c.statusSuccess : t.c.foregroundMuted)}
+            open={!folded}
+            onToggle={() => setFolds({ ...folds, [column.id]: !folded })}
+            label={`${column.name}, ${entry.inScope}${entry.overLimit ? ", over its limit" : ""}. ${folded ? "Open" : "Fold"} the column`}
+            trailing={<IconButton t={t} size="sm" icon="Plus" label={`Add a task to ${column.name}`} onPress={() => open({ kind: "new", column: column.id, workspaceId })} />}
+          >
+            {entry.lanes.map((lane) => (
+              <View key={lane.key}>
+                {lane.title ? (
+                  <View style={{ paddingLeft: 32, paddingVertical: 4, borderTopWidth: 1, borderTopColor: t.c.border }}>
+                    <LaneTitle t={t} laneKey={lane.key} title={lane.title} workspaces={workspaceStore} />
                   </View>
+                ) : null}
+                {lane.tasks.map((task) => (
+                  <TaskRow key={`${lane.key}:${task.id}`} t={t} task={task} document={document} now={now} workspaces={workspaceId === null && swimlanes !== "workspace" ? workspaceStore : null} onOpen={() => open({ kind: "existing", taskId: task.id })} run={run} />
                 ))}
-            {!folded && empty ? <Text style={[t.text.meta, { paddingHorizontal: 34, paddingVertical: 6 }]}>{column.done ? "Finished cards land here" : "No cards"}</Text> : null}
-          </View>
+              </View>
+            ))}
+            {empty ? <GroupFooter t={t} text={column.done ? "Finished cards land here" : "No cards"} /> : null}
+          </GroupBox>
         );
       })}
-    </ScrollView>
+    </GroupList>
   );
 }
 

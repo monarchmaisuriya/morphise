@@ -123,8 +123,11 @@ function AgentsBoardSettingsForm({ form }: { form: Form }) {
         <>
           <SettingsSection title="Preview" info="A sample agent, drawn as the list and the board draw it on desktop and web.">
             <View style={{ gap: 12 }}>
-              <View style={{ width: 640, maxWidth: "100%", padding: 8, borderRadius: t.radius.panel, backgroundColor: t.c.surface0, borderWidth: 1, borderColor: t.c.border }}>
+              <View style={{ width: 640, maxWidth: "100%", borderRadius: t.radius.card, overflow: "hidden", backgroundColor: t.c.surface0, borderWidth: 1, borderColor: t.c.border }}>
+                {/* The row draws its own top divider; the frame's border stands in for it. */}
+                <View style={{ marginTop: -1 }}>
                 <AgentRow t={t} facts={sampleFacts()} card={card} now={new Date()} live={SAMPLE_LIVE} selected={false} focused={false} buttons={{ open: () => {}, stop: () => {} }} onPress={() => {}} onMenu={() => {}} />
+                </View>
               </View>
               <View style={{ width: 320, maxWidth: "100%", padding: 12, borderRadius: t.radius.panel, backgroundColor: t.c.surface0, borderWidth: 1, borderColor: t.c.border }}>
                 <AgentCard t={t} facts={sampleFacts()} card={card} now={new Date()} live={SAMPLE_LIVE} selected={false} focused={false} buttons={{ open: () => {}, stop: () => {} }} onPress={() => {}} onMenu={null} />

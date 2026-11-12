@@ -2,6 +2,14 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.19.9 - 2026-11-12
+
+- **Lists that read at a glance:** the Agents and Tasks lists share one design. Each status or column is a box with a tinted header (its icon or colour dot, name and a count chip, and + for task columns), rows have hairline dividers, and the list stops at 1180 pt wide and centres, so a row's facts stay near its title on wide windows.
+- **One line per row:** the title and its detail sit on one line: what the agent asks, works on or failed on, or a card's workspace, due date, reminder and checklist. The facts at the right are quiet text: plan, context, PR, model and time for agents, labels for cards. Phones keep two lines.
+- **Status icons:** waiting on you is a hand (amber), to review a dot in a circle (green), running a spinner circle (Paseo's blue), failed a crossed circle (red), done a check circle (grey); section headers use the same icons.
+- **Actions on hover:** Stop, Archive, Open and More float over a row's facts while you hover or move to it with the keyboard, instead of repeating on every row; Allow and Deny always show beside them, and phones show the actions in the row. Right-click and long press still open the menu. A clicked card or row no longer keeps its buttons showing after the pointer leaves.
+- **Overview icon:** binoculars.
+
 ## 0.19.8 - 2026-11-12
 
 - **Overview, not Board:** the Workbench view that holds Tasks and Agents is now called Overview, with its own icon, since each of its tabs has a List / Board switch of its own. Links that opened Board still open it.

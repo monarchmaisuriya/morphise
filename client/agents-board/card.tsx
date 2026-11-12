@@ -48,7 +48,7 @@ export function agentAgo(updatedAt: string, now: Date): string | null {
 
 export const STATUS_WORDS: Record<Indicator, string> = { needs_input: "Waiting", running: "Running", attention: "To review", failed: "Failed", done: "Done" };
 
-export function Pill({ t, icon, label, tone }: { t: Tokens; icon?: string; label: string; tone?: string }) {
+function Pill({ t, icon, label, tone }: { t: Tokens; icon?: string; label: string; tone?: string }) {
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 4, height: 20, paddingHorizontal: 6, borderRadius: 10, backgroundColor: t.c.surface2, maxWidth: "100%" }}>
       {icon ? <Icon name={icon} size={11} color={tone ?? t.c.foregroundMuted} /> : null}
@@ -60,7 +60,7 @@ export function Pill({ t, icon, label, tone }: { t: Tokens; icon?: string; label
 }
 
 // The share of the context window in use, as words: amber from 80%, red from 95%.
-export function ContextPill({ t, share }: { t: Tokens; share: number }) {
+function ContextPill({ t, share }: { t: Tokens; share: number }) {
   const percent = Math.round(share * 100);
   const tone = share >= 0.95 ? t.c.statusDanger : share >= 0.8 ? t.c.statusWarning : undefined;
   return <Pill t={t} icon="Gauge" label={`${percent}% context`} tone={tone} />;

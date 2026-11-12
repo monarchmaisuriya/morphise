@@ -39,7 +39,10 @@ import type { WorkspaceList } from "../workspaces";
 import { AgentCard, type CardButtons, type CardFacts } from "./card";
 import { type CliActions, useAgentEntries, useCardLive, useCliActions } from "./data";
 import { AgentDetails } from "./details";
-import { AgentRow } from "./list";
+import { AgentRow, STATUS_ICONS } from "./list";
+import type { Indicator } from "../../shared/profile";
+import { GroupBox, GroupFooter, GroupList } from "../ui/grouped-list";
+import { statusColor } from "../ui/hues";
 import { observeOnScreen, onBoardKeys } from "./web";
 
 // The Workbench's Agents view: every agent on the host by status (Waiting, To review, Running, Done,
@@ -49,6 +52,9 @@ import { observeOnScreen, onBoardKeys } from "./web";
 export const AGENTS_SETTINGS_TAB = "agents";
 
 const LANE_TITLES: Record<Lane, string> = { waiting: "Waiting", running: "Running", review: "To review", done: "Done", archived: "Archived" };
+// Each list section's icon and the status whose colour it takes (the rows' own icons, see STATUS_ICONS).
+const LANE_STATUS: Record<Lane, Indicator> = { waiting: "needs_input", running: "running", review: "attention", done: "done", archived: "done" };
+const LANE_ICONS: Record<Lane, string> = { ...Object.fromEntries(LANES.map((lane) => [lane, STATUS_ICONS[LANE_STATUS[lane]]])), archived: "Archive" } as Record<Lane, string>;
 const LANE_GAP = 12;
 const BOARD_PADDING = 12;
 const SORT_TITLES: Record<SortKey, string> = { updated: "Updated", created: "Created", title: "Title", workspace: "Workspace", project: "Project", branch: "Branch", folder: "Folder", context: "Context", duration: "Duration" };
@@ -427,14 +433,14 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
 
   // A lane's header: its name and count, with a chevron; a press folds or opens the lane. Folded, the
   // lane is just this header, muted, so the open lanes keep the width.
-  const laneHeader = (lane: Lane, open: boolean, wide = open) => (
+  const laneHeader = (lane: Lane, open: boolean) => (
     <Pressable
       key={open ? undefined : lane}
       accessibilityRole="button"
       accessibilityState={{ expanded: open }}
       accessibilityLabel={`${LANE_TITLES[lane]}, ${lanes[lane].length}. ${open ? "Fold" : "Open"} the lane`}
       onPress={() => setFolded(lane, open)}
-      style={({ hovered }: { pressed: boolean; hovered?: boolean }) => ({ width: wide ? undefined : LANE_STRIP, alignSelf: wide ? "stretch" : "flex-start", flexDirection: "row", alignItems: "center", gap: 6, height: 28, paddingHorizontal: 6, borderRadius: t.radius.control, backgroundColor: hovered ? t.c.surface1 : "transparent" })}
+      style={({ hovered }: { pressed: boolean; hovered?: boolean }) => ({ width: open ? undefined : LANE_STRIP, alignSelf: open ? "stretch" : "flex-start", flexDirection: "row", alignItems: "center", gap: 6, height: 28, paddingHorizontal: 6, borderRadius: t.radius.control, backgroundColor: hovered ? t.c.surface1 : "transparent" })}
     >
       <Icon name={open ? "ChevronDown" : "ChevronRight"} size={13} color={t.c.foregroundMuted} />
       <Text style={open ? t.text.heading : [t.text.heading, { fontSize: 13, color: t.c.foregroundMuted, fontWeight: "500" }]} numberOfLines={1}>
@@ -460,23 +466,21 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
     );
   };
 
-  // The list: a header per status with agents, what needs the user first; Done and Archived show a few rows, then more.
+  // The list: a box per status, what needs the user first; Done and Archived show a few rows, then more.
   const listView = (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: BOARD_PADDING, paddingBottom: 16, gap: 10 }}>
-      {sections.every((section) => lanes[section.lane].length === 0) ? <Text style={[t.text.meta, { paddingHorizontal: 4 }]}>No agents match the search and filters.</Text> : null}
-      {sections.map(({ lane, folded: isFolded, limit }) => (
-        <View key={lane} style={{ gap: 2 }}>
-          {laneHeader(lane, !isFolded, true)}
-          {isFolded ? null : lanes[lane].slice(0, limit).map((agent) => itemOf(agent, "list"))}
-          {!isFolded && lanes[lane].length === 0 ? <Text style={[t.text.meta, { paddingHorizontal: 28, paddingVertical: 6 }]}>No agents</Text> : null}
-          {!isFolded && lanes[lane].length > limit ? (
-            <Pressable accessibilityRole="button" onPress={() => setListShown({ ...listShown, [lane]: limit + PAGE })} style={({ hovered }: { pressed: boolean; hovered?: boolean }) => ({ height: 32, justifyContent: "center", paddingHorizontal: 28, borderRadius: t.radius.row, backgroundColor: hovered ? t.c.surface1 : "transparent" })}>
-              <Text style={t.text.meta}>{lanes[lane].length - limit > PAGE ? `Show ${PAGE} more of ${lanes[lane].length - limit}` : `Show ${lanes[lane].length - limit} more`}</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ))}
-    </ScrollView>
+    <GroupList t={t}>
+      {sections.every((section) => lanes[section.lane].length === 0) ? <Text style={[t.text.meta, { paddingHorizontal: 4, paddingBottom: 4 }]}>No agents match the search and filters.</Text> : null}
+      {sections.map(({ lane, folded: isFolded, limit }) => {
+        const rows = lanes[lane];
+        return (
+          <GroupBox key={lane} t={t} title={LANE_TITLES[lane]} count={rows.length} empty={rows.length === 0} icon={LANE_ICONS[lane]} tone={statusColor(t.c, LANE_STATUS[lane])} open={!isFolded} onToggle={() => setFolded(lane, !isFolded)}>
+            {rows.slice(0, limit).map((agent) => itemOf(agent, "list"))}
+            {rows.length === 0 ? <GroupFooter t={t} text="No agents" /> : null}
+            {rows.length > limit ? <GroupFooter t={t} text={rows.length - limit > PAGE ? `Show ${PAGE} more of ${rows.length - limit}` : `Show ${rows.length - limit} more`} onPress={() => setListShown({ ...listShown, [lane]: limit + PAGE })} /> : null}
+          </GroupBox>
+        );
+      })}
+    </GroupList>
   );
 
   const board =

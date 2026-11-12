@@ -68,7 +68,7 @@ type Counts = ReturnType<typeof useWorkbenchCounts>;
 
 // One list, without group headings, in this order.
 const ENTRIES: readonly { view: WorkbenchView; label: string; icon: string }[] = [
-  { view: "board", label: "Overview", icon: "Activity" },
+  { view: "board", label: "Overview", icon: "Binoculars" },
   { view: "waiting", label: "Waiting", icon: "Inbox" },
   { view: "today", label: "Today", icon: "CalendarClock" },
   { view: "archived", label: "Archived", icon: "Archive" },
