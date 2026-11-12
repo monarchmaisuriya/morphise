@@ -7,7 +7,7 @@
 import type { PluginTimelineData } from "@getpaseo/plugin";
 import type { PluginClientContext, PluginTimelineTransformerContribution } from "@getpaseo/plugin/client";
 import { Platform } from "react-native";
-import { type ChatSettings, type ChatView, chatLook, chatView, rowFate, skippedStep, transformedTypes } from "../../../shared/chat-view";
+import { breaksSteps, type ChatSettings, type ChatView, chatLook, chatView, rowFate, skippedStep, transformedTypes } from "../../../shared/chat-view";
 import type { StepsOptions } from "../../../shared/steps";
 import type { RowActions } from "../../chat-rows";
 import { CHAT_STEPS_KIND, chatStepsSchema, createChatStepsRow } from "../../steps-card";
@@ -171,7 +171,10 @@ export function registerChatRows(client: PluginClientContext, actions: RowAction
       retransform(true);
     }, 50);
   });
-  setStepSkip((item) => skippedStep(item, view));
+  setStepSkip(
+    (item) => skippedStep(item, view),
+    (item) => breaksSteps(item, view),
+  );
 
   // Follows the timelines of agents with an open tab, plus the last few whose merged rows rendered (native can't read tabs); none when merging is off.
   const follow = () => {

@@ -513,8 +513,13 @@ export function rowFate(itemType: string, item: unknown, view: ChatView): RowFat
 // card instead.
 export function skippedStep(item: unknown, view: ChatView): boolean {
   const type = text(record(item)?.type);
-  if (type === "todo" && view.stepsInChat) return true;
+  if (type === "todo" && view.stepsInChat) return false;
   return rowFate(type, item, view).kind === "hide";
+}
+
+/** Whether an item is drawn as a row of its own between merged steps: a plan update, while the steps card shows in the chat. */
+export function breaksSteps(item: unknown, view: ChatView): boolean {
+  return view.stepsInChat && text(record(item)?.type) === "todo";
 }
 
 // ---------- Copy the last turn ----------

@@ -124,8 +124,10 @@ const continuesTurn = (prev: Entry, next: Entry) =>
 
 /** Runs of consecutive steps; anything else ends a run, and items `skip` names (hidden by prefs) are passed over. Todo updates join a run but
  * never make one: a run of only todo updates isn't a run, so those stand on their own. With `replies` (Paseo's Collapse turns) a reply the
- * agent wrote another after, in the same turn, is a step too, so a turn folds into one row before its last reply, like Paseo's summary. */
-export function stepRuns(list: readonly Entry[], skip: (item: Item) => boolean, replies = foldReplies): Run[] {
+ * agent wrote another after, in the same turn, is a step too, so a turn folds into one row before its last reply, like Paseo's summary.
+ * Items `breaks` names are drawn as rows of their own between steps (plan updates as the steps card), so they end a run like a reply:
+ * passed over, they would gather under the run's merged row, away from the work around them. */
+export function stepRuns(list: readonly Entry[], skip: (item: Item) => boolean, replies = foldReplies, breaks: (item: Item) => boolean = breakRun): Run[] {
   const folded = new Set<number>();
   let later = false;
   for (let i = list.length - 1; replies && i >= 0; i--) {
@@ -151,6 +153,10 @@ export function stepRuns(list: readonly Entry[], skip: (item: Item) => boolean, 
   let lastTodo: string | undefined;
   for (const [i, { item, at }] of list.entries()) {
     if (droppedByApp(item) || skip(item)) continue;
+    if (breaks(item)) {
+      close();
+      continue;
+    }
     // An agent can send the same list again; it changes nothing (Paseo rewrites its row in place), so it isn't a step.
     if (item.type === "todo") {
       const key = stepKey(item);
@@ -244,6 +250,7 @@ let onStale: () => void = () => {};
 let onUnplaced: () => void = () => {};
 let onShown: (agentId: string) => void = () => {};
 let skip: (item: Item) => boolean = () => false;
+let breakRun: (item: Item) => boolean = () => false;
 let foldReplies = false;
 let mergeMin = 2;
 
@@ -265,9 +272,11 @@ export function setReplyFolding(on: boolean) {
   for (const agentId of lists.keys()) rebuild(agentId);
 }
 
-/** Steps the transformer hides (prefs) are left out of runs; re-splits every agent when that changes. */
-export function setStepSkip(fn: (item: Item) => boolean) {
+/** Steps the transformer hides (prefs) are left out of runs, and items drawn as their own rows (`breaks`) end one; re-splits every agent when
+ * that changes. */
+export function setStepSkip(fn: (item: Item) => boolean, breaks: (item: Item) => boolean = () => false) {
   skip = fn;
+  breakRun = breaks;
   for (const agentId of lists.keys()) rebuild(agentId);
 }
 

@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.19.6 - 2026-11-12
+
+- **Plan updates sit where the work happened:** with the steps card in the chat, every plan update gathered in one stack under the turn's merged "Thought 66 times…" row, because the merge passed over them and ran on across the whole turn. Each update now ends the merged run, so the chat reads in order: the work, "Planned · 3 steps", the next work, "Working on · Building alert", and so on, each where it happened. Hidden rows are still passed over as before.
+
 ## 0.19.5 - 2026-11-12
 
 - **Plan updates read as progress:** each time the agent updates its plan, the chat shows one row saying what that update did, instead of another identical "Plan 0/4": "Planned · 4 steps", "Working on · Diagnosing the missed store", "Finished · Writing the plan", then "Plan done", each with its count. Every row opens to the plan as it stood then; the newest follows "Start folded".

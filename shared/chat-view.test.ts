@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { polishPrefs } from "./polish/prefs";
-import { accentColor, turnRecap, chatLook, chatView, diffCounts, diffLines, foldLines, isTurnTrigger, lastTurnMarkdown, mcpName, relativePath, rowFate, rowStartsOpen, shellProgram, skippedStep, startsOpen, summarizeToolCall, thinkingStartsOpen, thoughtFirstLine, transformedTypes, wordDiff } from "./chat-view";
+import { accentColor, breaksSteps, turnRecap, chatLook, chatView, diffCounts, diffLines, foldLines, isTurnTrigger, lastTurnMarkdown, mcpName, relativePath, rowFate, rowStartsOpen, shellProgram, skippedStep, startsOpen, summarizeToolCall, thinkingStartsOpen, thoughtFirstLine, transformedTypes, wordDiff } from "./chat-view";
 
 // Shaped like Paseo's timeline items (protocol AgentTimelineItem, ToolCallTimelineItem).
 const call = (detail: Record<string, unknown>, status = "completed", extra: Record<string, unknown> = {}) => ({ type: "tool_call", callId: "c1", name: "Bash", detail, status, error: null, ...extra });
@@ -92,12 +92,15 @@ describe("chat view rules", () => {
     expect(transformedTypes(chatView({ polish: { images: "small" } }, [], false))).toEqual(["assistant_message"]);
   });
 
-  it("draws plans as the card in the chat, keeping an emptied plan as Paseo draws it, and leaves todo updates out of runs then", () => {
+  it("draws plans as the card in the chat, keeping an emptied plan as Paseo draws it, and lets each update end a run then", () => {
     const view = chatView({ toolCalls: "cards" }, [], true);
     const todo = { type: "todo", items: [{ text: "a", completed: false }] };
     expect(rowFate("todo", todo, view)).toEqual({ kind: "steps", data: { steps: [{ text: "a", status: "pending" }] } });
     expect(rowFate("todo", { type: "todo", items: [] }, view)).toEqual({ kind: "keep" });
-    expect(skippedStep(todo, view)).toBe(true);
+    // Drawn as its own row where it happened, between the steps before and after it; not passed over.
+    expect(skippedStep(todo, view)).toBe(false);
+    expect(breaksSteps(todo, view)).toBe(true);
+    expect(breaksSteps(todo, chatView({ toolCalls: "cards" }, [], false))).toBe(false);
     expect(rowFate("todo", todo, chatView({ toolCalls: "cards" }, [], false))).toEqual({ kind: "todo" });
     expect(rowFate("todo", todo, chatView(undefined, [], false))).toEqual({ kind: "keep" });
   });

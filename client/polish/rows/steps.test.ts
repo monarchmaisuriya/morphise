@@ -52,6 +52,15 @@ async function follow(items: AgentTimelineItem[], id: string, ready: Promise<voi
 }
 
 describe("merged steps", () => {
+  it("ends a run at a plan update drawn as its own row, so each update sits by the work around it", () => {
+    const plan = (text: string, completed = false) => ({ type: "todo", items: [{ text, completed }] }) as unknown as AgentTimelineItem;
+    const list = at([shell("a"), shell("b"), plan("Plan"), shell("c"), shell("d"), plan("Plan", true), shell("e")]);
+    const isPlan = (item: AgentTimelineItem) => item.type === "todo";
+    expect(stepRuns(list, () => false, false, isPlan).map((r) => r.steps.map(stepKey))).toEqual([["t:a", "t:b"], ["t:c", "t:d"], ["t:e"]]);
+    // Without that, the updates fold into one run across the whole turn.
+    expect(stepRuns(list, () => false, false).length).toBe(1);
+  });
+
   it("runs split on replies, fold tool updates and thought chunks, skip hidden steps, time the run", () => {
     const list: Entry[] = [{ item: prompt("go"), at: 1000 }];
     let time = 1000;
