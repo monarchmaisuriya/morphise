@@ -23,7 +23,7 @@ import { createChecksPanel } from "./checks-panel";
 import { createDispatchScreen, DISPATCH_ICON, DISPATCH_SCREEN_ID } from "./dispatch";
 import { createWorkbenchScreen, createWorkbenchSidebarItem, WORKBENCH_SCREEN_ID, LEGACY_SCREENS } from "./workbench";
 import { createSidebarView } from "./sidebar-view";
-import { createRecapRow, recapRowSchema, type RowActions } from "./chat-rows";
+import { createRecapRow, recapLook, recapRowSchema, type RowActions } from "./chat-rows";
 import { registerChatRows } from "./polish/rows/register";
 import { createDetailsPanel, DETAILS_PANEL_ID, detailsStore } from "./details-panel";
 import { readImage, revealFile } from "../shared/files";
@@ -210,9 +210,9 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
       register({ profile }, track) {
         const steps = stepsOptions(profile.sidebar.view.steps);
         const stepsInChat = profile.sidebar.view.stepsCard !== false && steps.position === "chat";
+        // First, so a failure below never leaves recaps drawn with an old look.
+        recapLook.set(chatLook(profile.chat));
         track(registerChatRows(client, rowActions, { chat: profile.chat, hidden: profile.timeline.hide, stepsInChat, steps: () => steps }));
-        // Always: recaps already in a chat keep drawing after the setting is turned off.
-        track(client.addTimelineRenderer({ kind: TURN_RECAP_KIND, version: 1, schema: recapRowSchema, Component: createRecapRow(chatLook(profile.chat), rowActions) }));
       },
     },
     {
@@ -256,6 +256,15 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
             );
           }
         }
+      },
+    },
+    {
+      // Registered once and never again: recaps already in a chat keep drawing whatever the Chat
+      // settings do (turned off, changed, or a section above failing). Their look is recapLook.
+      name: "chat.recap",
+      key: () => "always",
+      register(_input, track) {
+        track(client.addTimelineRenderer({ kind: TURN_RECAP_KIND, version: 1, schema: recapRowSchema, Component: createRecapRow(rowActions) }));
       },
     },
     {

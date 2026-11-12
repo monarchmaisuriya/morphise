@@ -57,14 +57,34 @@ interface TipTarget {
   addEventListener(type: string, listener: () => void): void;
   removeEventListener?(type: string, listener: () => void): void;
   getBoundingClientRect(): { top: number; bottom: number; left: number; width: number };
+  contains?(node: unknown): boolean;
+  isConnected?: boolean;
 }
 declare const window: { innerWidth: number; innerHeight: number };
 const TIP_GAP = 6;
 let tip: TipElement | null = null;
 let tipOwner: TipTarget | null = null;
 
+// While a tooltip shows, the pointer is watched: it closes as soon as the pointer is off its button
+// or the button is gone (a button that disappears under the pointer, such as a card's hover-only
+// Move, sends no mouseleave), and on scroll.
+// Read only when a tooltip shows (web): phones have no document.
+const page = () =>
+  document as unknown as {
+    addEventListener(type: string, listener: (event: { target: unknown }) => void, capture: boolean): void;
+    removeEventListener(type: string, listener: (event: { target: unknown }) => void, capture: boolean): void;
+  };
+function pointerMoved(event: { target: unknown }) {
+  const owner = tipOwner;
+  if (!owner || owner.isConnected === false || !owner.contains?.(event.target)) hideTooltip();
+}
+
 function hideTooltip() {
   tip?.remove();
+  if (tip) {
+    page().removeEventListener("pointermove", pointerMoved, true);
+    page().removeEventListener("scroll", hideTooltip, true);
+  }
   tip = null;
   tipOwner = null;
 }
@@ -100,6 +120,8 @@ function showTooltip(target: TipTarget, label: string, colors: TooltipColors) {
   element.style.left = `${Math.round(left)}px`;
   tip = element;
   tipOwner = target;
+  page().addEventListener("pointermove", pointerMoved, true);
+  page().addEventListener("scroll", hideTooltip, true);
 }
 
 // The ref to pass to a button: stable across renders, so hovering (which re-renders the button)
@@ -118,7 +140,13 @@ export function useTooltip(label: string | undefined, colors: TooltipColors) {
     else target.removeAttribute?.("data-tooltip");
   }, [label]);
   return useCallback((element: unknown) => {
-    if (Platform.OS !== "web" || !element || cannotHover()) return;
+    if (Platform.OS !== "web" || cannotHover()) return;
+    // A host React older than 19 calls the ref with null instead of the cleanup below.
+    if (!element) {
+      if (node.current && tipOwner === node.current) hideTooltip();
+      node.current = null;
+      return;
+    }
     const target = element as TipTarget;
     node.current = target;
     if (latest.current.label) target.setAttribute("data-tooltip", latest.current.label);

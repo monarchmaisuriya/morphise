@@ -2,6 +2,12 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.17.2 - 2026-11-12
+
+- **Turn recap in the new style:** one quiet line like the rows around it ("Worked 38m 34s · 1 file +40 · 25 calls"), without a filled bar, that opens to the files changed and any failed commands. The Chat tab's preview shows it when the recap is on.
+- **"Plugin timeline item unavailable" after a turn:** the recap's renderer was registered with the chat rows, which re-register whenever the Chat settings change, so for a moment (or after a failure there) a recap had nothing to draw it. It is now registered once and follows the settings by itself.
+- **Tooltips no longer stay on screen:** a tooltip closes as soon as the pointer is off its button or the button is gone (a card's hover-only Move button left its tooltip behind), and on scroll.
+
 ## 0.17.1 - 2026-11-12
 
 - **Settings previews look right:** every preview sits inside its card with the same padding as the Chat tab's, so no note or sample touches the card's edge. The steps card preview has its own Preview section on the General tab and is drawn on a sample chat line, not as a card inside the settings card.

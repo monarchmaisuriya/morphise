@@ -20,7 +20,7 @@ import { DEFAULT_CHAT_ROWS, rowShows } from "../../shared/row-meta";
 import { VIEW_SECTIONS } from "./view-sections";
 import { DEFAULT_DONE_SECONDS, type StepsSettings, stepsOptions } from "../../shared/steps";
 import type { Layout, Prompt } from "../../shared/document";
-import { type ChatSettings, type ChatWebSettings, chatLook, chatView, FOLD_KINDS, type FoldKind, TOOL_KIND_TITLES, TOOL_KINDS, type ToolKind } from "../../shared/chat-view";
+import { type ChatSettings, type ChatWebSettings, chatLook, TURN_RECAP_KIND, chatView, FOLD_KINDS, type FoldKind, TOOL_KIND_TITLES, TOOL_KINDS, type ToolKind } from "../../shared/chat-view";
 import { EMPTY_PROFILE, type Profile, TIMELINE_ITEM_TYPES } from "../../shared/profile";
 import { presetTitle } from "../../shared/reminders";
 import { useValue } from "../profile-store";
@@ -31,6 +31,7 @@ import { contrast, PRESETS as POLISH_PRESETS } from "../../shared/polish/theme";
 import { PolishLookSettings, PolishRowSettings, UpdateSection } from "./polish-tabs";
 import { StepsCardPreview } from "./previews";
 import { runSplits } from "../polish/rows/steps";
+import { createRecapRow } from "../chat-rows";
 
 type ViewConfig = Profile["sidebar"]["view"];
 type Row = Profile["sidebar"]["headerRows"][number];
@@ -538,6 +539,9 @@ const PREVIEW_TIME = new Date("2026-11-12T10:42:00");
 const PREVIEW_DIFF = "@@ -12,4 +12,5 @@\n export function total(items) {\n-  return items.reduce((sum, item) => sum + item.price, 0);\n+  const prices = items.map((item) => item.price ?? 0);\n+  return prices.reduce((sum, price) => sum + price, 0);\n }";
 const previewCall = (callId: string, name: string, detail: ToolCallItem["detail"], status: "running" | "completed" | "failed" = "completed", error: unknown = null) => ({ type: "tool_call", callId, name, detail, status, error }) as ToolCallItem;
 const PREVIEW_THOUGHT: AgentTimelineItem = { type: "reasoning", text: "The total breaks when an item has no price.\n\nDefault the price to zero before summing." };
+// A sample turn recap: 38 minutes, one file changed, 25 calls.
+const PREVIEW_RECAP = { seconds: 2314, files: [{ path: "src/middleware/requireAuth.ts", added: 40, removed: 0 }], failed: [], calls: 25, outcome: "completed" as const, error: "" };
+
 const PREVIEW_CALLS = [
   previewCall("search", "Grep", { type: "search", query: "item.price", numMatches: 4, numFiles: 2, filePaths: ["src/cart/total.ts", "src/cart/total.test.ts"] }),
   previewCall("edit", "Edit", { type: "edit", filePath: "src/cart/total.ts", unifiedDiff: PREVIEW_DIFF }),
@@ -561,6 +565,8 @@ function ChatPreview({ form, look, chat }: { form: Form; look: ReturnType<typeof
   // Paseo's 16pt gap under each plugin row, which the rows take back, is added here so the
   // preview spaces rows as the chat does.
   const gap = { paddingBottom: 16 };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const RecapRow = useMemo(() => createRecapRow(null, look), [lookKey]);
   // Four steps: merged with "at least 2 or 3 steps", separate rows with "at least 5".
   const runSteps = [PREVIEW_THOUGHT, ...PREVIEW_CALLS.slice(0, 3)];
   const merged = tools && view.merge && !runSplits(runSteps.length, prefs.mergeMin);
@@ -600,6 +606,11 @@ function ChatPreview({ form, look, chat }: { form: Form; look: ReturnType<typeof
           {view.notices ? (
             <View style={gap}>
               <NoticeItem {...props} item={plugin(NOTICE_ROW_KIND, noticeData({ type: "compaction", status: "completed", trigger: "auto", preTokens: 152000 }))} />
+            </View>
+          ) : null}
+          {chat.recap === true ? (
+            <View style={gap}>
+              <RecapRow {...props} item={plugin(TURN_RECAP_KIND, PREVIEW_RECAP)} />
             </View>
           ) : null}
         </View>
