@@ -4,18 +4,21 @@ import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { VIEW_LAYOUTS } from "../shared/agents-board";
 
-// On this device: the Workbench rail folded to icons, which of Agents and Tasks was opened last (boardTab, named for the tabs
-// they once were), and the Agents and Tasks views as a list or
+// On this device: the Workbench rail folded to icons, which view was open last (boardTab, named for the tabs
+// they once were; older versions read "bookmarks" as Agents), and the Agents and Tasks views as a list or
 // lanes. Kept under the Workbench's settings id, so earlier choices carry over.
 const workbenchSchema = z.object({
   railFolded: z.boolean().default(false),
-  boardTab: z.enum(["tasks", "agents"]).catch("agents").default("agents"),
+  boardTab: z.enum(["tasks", "agents", "bookmarks"]).catch("agents").default("agents"),
   agentsLayout: z.enum(VIEW_LAYOUTS).catch("list").default("list"),
   // Tasks keep the board until the user picks the list.
   tasksLayout: z.enum(VIEW_LAYOUTS).catch("board").default("board"),
   // How the Workbench lists its views: tabs along the top (as Paseo's chat tabs) or a list at the side. Phones and
   // narrow windows always use tabs.
   workbenchNav: z.enum(["tabs", "rail"]).catch("tabs").default("tabs"),
+  // What the Workbench opens on: the view open last, or what needs the user (Agents while an agent waits, Tasks when
+  // something is due, else the view open last).
+  openOn: z.enum(["last", "needs"]).catch("last").default("last"),
   // When the Workbench opens on Tasks because something is due: its open cards (no filter on), or Today's list.
   dueOpensOn: z.enum(["board", "today"]).catch("board").default("board"),
 });

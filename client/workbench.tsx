@@ -8,7 +8,6 @@ import { agentsBoardSettings } from "../shared/agents-board";
 import { inboxSettings } from "../shared/inbox";
 import { AgentsBoardView } from "./agents-board/board";
 import { TasksBoard } from "./board/board";
-import { bookmarksOf } from "./bookmark-store";
 import { useDeviceChoice, workbenchSettings } from "./device-choices";
 import { Bookmarks, waitingItems } from "./inbox";
 import { useValue } from "./profile-store";
@@ -51,7 +50,7 @@ function viewParam(params: PluginScreenProps["params"]): WorkbenchView | null {
   return VIEWS.find((item) => item === asked) ?? null;
 }
 
-// The counts each view shows, kept current.
+// What waits on the user and what is due, kept current: they decide the opening view and the sidebar item's label.
 function useWorkbenchCounts(deps: SurfaceDeps) {
   const taskState = useValue(deps.tasks);
   const document = tasksOf(taskState);
@@ -73,11 +72,8 @@ function useWorkbenchCounts(deps: SurfaceDeps) {
     permission: waiting.some((item) => item.reason === "permission"),
     today: todayGroups(document, now).reduce((sum, group) => sum + group.tasks.length, 0),
     due: dueCount(document, now),
-    bookmarks: bookmarksOf(useValue(deps.bookmarks)).bookmarks.length,
   };
 }
-
-type Counts = ReturnType<typeof useWorkbenchCounts>;
 
 // One list, without group headings, in this order.
 const ENTRIES: readonly { view: WorkbenchView; label: string; icon: string }[] = [
@@ -86,29 +82,16 @@ const ENTRIES: readonly { view: WorkbenchView; label: string; icon: string }[] =
   { view: "bookmarks", label: "Bookmarks", icon: "Bookmark" },
 ];
 
-// Agents counts the agents waiting on the user (it lists them first).
-function countOf(view: WorkbenchView, counts: Counts): number {
-  // Tasks counts what is due today (its Filter, Show, Today lists it).
-  return view === "agents" ? counts.waiting ?? 0 : view === "board" ? counts.today : view === "bookmarks" ? counts.bookmarks : 0;
-}
-
-// The count's colour: amber while something needs permission or a reminder is due.
-function countTone(view: WorkbenchView, counts: Counts, t: Tokens): string {
-  if (view === "agents" && counts.permission) return t.c.statusWarning;
-  if (view === "board" && counts.due) return t.c.statusWarning;
-  return t.c.foregroundMuted;
-}
-
 // One view as a tab along the top, drawn as Paseo draws its chat tabs: a 28 pt chip with a 14 pt icon and a muted
 // label; the chosen one filled and in the text colour, a hovered one lightly filled.
-function WorkbenchTab({ t, label, icon, count, countTone, selected, onPress }: { t: Tokens; label: string; icon: string; count: number; countTone: string; selected: boolean; onPress(): void }) {
+function WorkbenchTab({ t, label, icon, selected, onPress }: { t: Tokens; label: string; icon: string; selected: boolean; onPress(): void }) {
   const [hovered, setHovered] = useState(false);
   const lit = selected || hovered;
   return (
     <Pressable
       accessibilityRole="tab"
       accessibilityState={{ selected }}
-      accessibilityLabel={count ? `${label}, ${count}` : label}
+      accessibilityLabel={label}
       onPress={onPress}
       onHoverIn={() => setHovered(true)}
       onHoverOut={() => setHovered(false)}
@@ -118,20 +101,19 @@ function WorkbenchTab({ t, label, icon, count, countTone, selected, onPress }: {
       <Text style={{ fontSize: 14, color: lit ? t.c.foreground : t.c.foregroundMuted }} numberOfLines={1}>
         {label}
       </Text>
-      {count ? <Text style={{ fontSize: 12, color: countTone, fontVariant: ["tabular-nums"] }}>{count}</Text> : null}
     </Pressable>
   );
 }
 
-function RailRow({ t, view, label, icon, count, tone, selected, folded, onPress }: { t: Tokens; view: WorkbenchView; label: string; icon: string; count: number; tone: string; selected: boolean; folded: boolean; onPress(): void }) {
+function RailRow({ t, view, label, icon, selected, folded, onPress }: { t: Tokens; view: WorkbenchView; label: string; icon: string; selected: boolean; folded: boolean; onPress(): void }) {
   // Folded to an icon, the view's name shows on hover.
-  const tooltip = useTooltip(folded ? (count ? `${label}, ${count}` : label) : undefined, t.c);
+  const tooltip = useTooltip(folded ? label : undefined, t.c);
   return (
     <Pressable
       ref={tooltip}
       accessibilityRole="tab"
       accessibilityState={{ selected }}
-      accessibilityLabel={count ? `${label}, ${count}` : label}
+      accessibilityLabel={label}
       onPress={onPress}
       style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => ({
         flexDirection: "row",
@@ -145,17 +127,12 @@ function RailRow({ t, view, label, icon, count, tone, selected, folded, onPress 
       })}
       testID={`workbench-view-${view}`}
     >
-      <View>
-        <Icon name={icon} size={15} color={selected ? t.c.foreground : t.c.foregroundMuted} />
-        {/* Folded, a count becomes a dot on the icon, in the count's colour. */}
-        {folded && count ? <View style={{ position: "absolute", top: -2, right: -3, width: 6, height: 6, borderRadius: 3, backgroundColor: tone === t.c.foregroundMuted ? t.c.foreground : tone }} /> : null}
-      </View>
+      <Icon name={icon} size={15} color={selected ? t.c.foreground : t.c.foregroundMuted} />
       {folded ? null : (
         <>
           <Text style={{ flex: 1, fontSize: 14, color: t.c.foreground, fontWeight: selected ? "600" : "400" }} numberOfLines={1}>
             {label}
           </Text>
-          {count ? <Text style={{ fontSize: 12, color: tone }}>{count}</Text> : null}
         </>
       )}
     </Pressable>
@@ -167,10 +144,10 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
   return function WorkbenchScreen({ theme, layout, params, navigation }: PluginScreenProps) {
     const t = useTokens(theme, layout.compact);
     const counts = useWorkbenchCounts(deps);
-    // The view picked here or asked for when opened. Until then, decided once when the counts load: Agents while
-    // something waits on the user, else Tasks when something is due (on its open cards, or Today if this device chose so in
-    // Settings, General), else whichever of Agents and Tasks was last
-    // opened on this device. It holds for this opening, even as the user clears what waited.
+    // The view picked here or asked for when opened. Until then, decided once when the counts load: the view open last on
+    // this device, or, if this device chose to open on what needs the user (Settings, General), Agents while something
+    // waits on the user, else Tasks when something is due (on its open cards, or Today if chosen so), else the view open
+    // last. It holds for this opening, even as the user clears what waited.
     const [picked, setView] = useState<WorkbenchView | null>(null);
     // The Agents view is listed unless its setting turns it off; it still opens when something waits on the user or
     // a link asks for it, since it is the only place to answer those agents.
@@ -200,14 +177,16 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
     const [lastBoard, saveLastBoard] = useDeviceChoice(railSettings, "boardTab");
     // Picked in Settings, General.
     const [agentsLayout] = useDeviceChoice(railSettings, "agentsLayout");
-    const lastOpened: WorkbenchView = lastBoard === "agents" && agentsShown ? "agents" : "board";
+    const lastOpened: WorkbenchView = lastBoard === "bookmarks" ? "bookmarks" : lastBoard === "agents" && agentsShown ? "agents" : "board";
     const countsReady = counts.waiting !== null && counts.tasksLoaded && railSettings.status !== "loading" && boardSettings.status !== "loading";
     const opening = useRef<WorkbenchView | null>(null);
+    const [openOn] = useDeviceChoice(railSettings, "openOn");
     const [dueOpensOn] = useDeviceChoice(railSettings, "dueOpensOn");
     const openedForDue = useRef(false);
     if (opening.current === null && countsReady) {
-      openedForDue.current = (counts.waiting ?? 0) === 0 && counts.today > 0;
-      opening.current = (counts.waiting ?? 0) > 0 ? "agents" : openedForDue.current ? "board" : lastOpened;
+      const waits = openOn === "needs" && (counts.waiting ?? 0) > 0;
+      openedForDue.current = openOn === "needs" && !waits && counts.today > 0;
+      opening.current = waits ? "agents" : openedForDue.current ? "board" : lastOpened;
     }
     const view: WorkbenchView = picked ?? asked ?? fallbackView ?? opening.current ?? lastOpened;
     // No entry looks chosen until the view is known, so the selection does not jump once the counts load.
@@ -216,8 +195,15 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
     const pick = (next: WorkbenchView) => {
       setView(next);
       if (next === "board") setTasksStart("board");
-      if (next === "agents" || next === "board") saveLastBoard(next === "agents" ? "agents" : "tasks");
     };
+    // A view the user reached (a press, a link, an old screen's address) is the one the next opening returns to. One the
+    // opening chose for what needs the user is not, so it does not replace the view used last.
+    const chosen = picked ?? asked ?? fallbackView;
+    const shown = chosen === "board" ? "tasks" : chosen;
+    useEffect(() => {
+      if (shown) saveLastBoard(shown);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [shown]);
     const openChat = navigation ? (agentId: string) => navigation.openAgent({ agentId }) : null;
     const workspaces = useValue(deps.workspaces);
     // Agents and Tasks wait for the settings and counts, so neither shows for a moment before the opening view is known.
@@ -242,7 +228,7 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
         {rail ? (
           <View accessibilityRole="tablist" style={{ width: folded ? RAIL_FOLDED : RAIL_WIDTH, padding: folded ? 6 : 8, gap: 2, borderRightWidth: 1, borderRightColor: t.c.border }}>
             {entries.map((entry) => (
-              <RailRow key={entry.view} t={t} view={entry.view} label={entry.label} icon={entry.icon} count={countOf(entry.view, counts)} tone={countTone(entry.view, counts, t)} selected={decided && view === entry.view} folded={folded} onPress={() => pick(entry.view)} />
+              <RailRow key={entry.view} t={t} view={entry.view} label={entry.label} icon={entry.icon} selected={decided && view === entry.view} folded={folded} onPress={() => pick(entry.view)} />
             ))}
             <View style={{ flex: 1 }} />
             <Pressable
@@ -258,7 +244,7 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
         ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, borderBottomWidth: 1, borderBottomColor: t.c.border, backgroundColor: t.c.surface0 }} contentContainerStyle={{ height: t.compact ? 44 : 36, alignItems: "center", paddingHorizontal: 4 }} accessibilityRole="tablist">
             {entries.map((entry) => (
-              <WorkbenchTab key={entry.view} t={t} label={entry.label} icon={entry.icon} count={countOf(entry.view, counts)} countTone={countTone(entry.view, counts, t)} selected={decided && view === entry.view} onPress={() => pick(entry.view)} />
+              <WorkbenchTab key={entry.view} t={t} label={entry.label} icon={entry.icon} selected={decided && view === entry.view} onPress={() => pick(entry.view)} />
             ))}
           </ScrollView>
         )}

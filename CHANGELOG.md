@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.21.3 - 2026-11-13
+
+- **The Workbench reopens on the view you used last:** Agents, Tasks or Bookmarks, per device, whether you picked it or a link opened it. Jumping to what needs you (Agents while an agent waits, Tasks when something is due) is now a choice, off by default: Settings, General, Workbench, "Open the Workbench on" (The view used last, or What needs you). "When something is due, open Tasks on" shows with What needs you. Links that ask for a view still open it.
+- **No counts on the Workbench's tabs:** Agents, Tasks and Bookmarks show their names only, in tabs and in the side list (folded icons lose their dot too). The sidebar's Workbench item still says what is due and how many agents wait.
+
 ## 0.21.2 - 2026-11-13
 
 - **No filter on by default:** Tasks opens on its open cards. When something is due, the Workbench still opens on Tasks, and no longer switches Filter to Today unless you choose so: Settings, General, Workbench, "When something is due, open Tasks on" (Open cards by default, or Today), per device. Links that ask for Today or Archived still show them.

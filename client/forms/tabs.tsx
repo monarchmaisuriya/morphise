@@ -873,6 +873,7 @@ function WorkbenchLayouts() {
   const [agents, setAgents] = useDeviceChoice(stored, "agentsLayout");
   const [tasks, setTasks] = useDeviceChoice(stored, "tasksLayout");
   const [nav, setNav] = useDeviceChoice(stored, "workbenchNav");
+  const [openOn, setOpenOn] = useDeviceChoice(stored, "openOn");
   const [dueOpensOn, setDueOpensOn] = useDeviceChoice(stored, "dueOpensOn");
   const options: { value: ViewLayout; label: string }[] = [
     { value: "list", label: "List, grouped by status" },
@@ -891,16 +892,28 @@ function WorkbenchLayouts() {
           ]}
           onChange={setNav}
         />
-        <SelectField<"board" | "today">
-          label="When something is due, open Tasks on"
-          hint="The Workbench opens on Tasks when a card or reminder is due and no agent waits on you."
-          value={dueOpensOn}
+        <SelectField<"last" | "needs">
+          label="Open the Workbench on"
+          hint="Links to a view still open that view."
+          value={openOn}
           options={[
-            { value: "board", label: "Open cards, no filter" },
-            { value: "today", label: "Today" },
+            { value: "last", label: "The view used last" },
+            { value: "needs", label: "What needs you: Agents while one waits, Tasks when something is due" },
           ]}
-          onChange={setDueOpensOn}
+          onChange={setOpenOn}
         />
+        {openOn === "needs" ? (
+          <SelectField<"board" | "today">
+            label="When something is due, open Tasks on"
+            hint="The Workbench opens on Tasks when a card or reminder is due and no agent waits on you."
+            value={dueOpensOn}
+            options={[
+              { value: "board", label: "Open cards, no filter" },
+              { value: "today", label: "Today" },
+            ]}
+            onChange={setDueOpensOn}
+          />
+        ) : null}
         <SelectField<ViewLayout> label="Agents" value={agents} options={options} onChange={setAgents} />
         <SelectField<ViewLayout> label="Tasks" value={tasks} options={options} onChange={setTasks} />
       </SettingsCard>
