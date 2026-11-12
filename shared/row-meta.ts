@@ -80,6 +80,9 @@ export interface ChatListing {
   subLimit: number;
   // Every sub-agent (up to subLimit), only the open one, or none.
   subAgents: boolean | "open";
+  // "hide": a chat with only one sub-agent lists none, even while it is open (its chat row then
+  // holds the highlight, see owningRowKey).
+  singleSubAgent?: "show" | "hide";
   isExpanded(key: string): boolean;
   // The open chat or sub-agent.
   openKey: string | null;
@@ -91,7 +94,7 @@ export function listedTopChats<Ref extends { key: string }>(workspaceKey: string
 }
 
 export function listedSubAgents<Ref extends { key: string }>(parentKey: string, subs: readonly Ref[], listing: ChatListing): { rows: Ref[]; hidden: number } {
-  if (listing.subAgents === false) return { rows: [], hidden: 0 };
+  if (listing.subAgents === false || (listing.singleSubAgent === "hide" && subs.length === 1)) return { rows: [], hidden: 0 };
   if (listing.subAgents === "open") return { rows: subs.filter((agent) => agent.key === listing.openKey), hidden: 0 };
   return visibleChats(subs, listing.subLimit, listing.isExpanded(`subs:${parentKey}`), listing.openKey);
 }

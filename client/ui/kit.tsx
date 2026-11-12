@@ -505,17 +505,18 @@ export function Select<Value extends string>({ t, value, options, onChange, labe
 
 // A row in a menu or option list: icon or dot, label, an optional right-aligned hint, a check.
 // `role` tells screen readers whether the item is an action, an on/off choice or one of a set.
-export function MenuItem({ t, label, hint, icon, dot, checked, onPress, tone, role = "menuitem" }: { t: Tokens; label: string; hint?: string; icon?: string; dot?: string; checked?: boolean; onPress(): void; tone?: string; role?: "menuitem" | "checkbox" | "radio" }) {
+export function MenuItem({ t, label, hint, icon, dot, checked, onPress, tone, disabled, role = "menuitem" }: { t: Tokens; label: string; hint?: string; icon?: string; dot?: string; checked?: boolean; onPress(): void; tone?: string; disabled?: boolean; role?: "menuitem" | "checkbox" | "radio" }) {
   const hover = useHover();
   return (
     <Pressable
       accessibilityRole={role}
       accessibilityLabel={hint ? `${label}, ${hint}` : label}
-      accessibilityState={role === "menuitem" ? undefined : { checked: checked === true }}
+      accessibilityState={role === "menuitem" ? (disabled ? { disabled } : undefined) : { checked: checked === true, disabled }}
+      disabled={disabled}
       onPress={onPress}
       onHoverIn={hover.onHoverIn}
       onHoverOut={hover.onHoverOut}
-      style={({ pressed }) => ({ minHeight: t.compact ? 44 : 32, paddingHorizontal: 8, flexDirection: "row", alignItems: "center", gap: 8, borderRadius: t.radius.control, backgroundColor: hover.hovered || pressed ? t.c.surface2 : "transparent" })}
+      style={({ pressed }) => ({ minHeight: t.compact ? 44 : 32, paddingHorizontal: 8, flexDirection: "row", alignItems: "center", gap: 8, borderRadius: t.radius.control, opacity: disabled ? 0.5 : 1, backgroundColor: !disabled && (hover.hovered || pressed) ? t.c.surface2 : "transparent" })}
     >
       {dot ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: dot }} /> : null}
       {icon ? <Icon name={icon} size={14} color={tone ?? t.c.foregroundMuted} /> : null}

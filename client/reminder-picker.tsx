@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Text, View } from "react-native";
 import type { Profile } from "../shared/profile";
 import { MAX_NOTE_LENGTH, presetTitle, type Reminder, reminderAt } from "../shared/reminders";
-import { followUpTask, followUpWorkspaceTask, type TaskOperation } from "../shared/task-ops";
+import { followUpTask, workspaceTask, type TaskOperation } from "../shared/task-ops";
 import type { TaskDocument } from "../shared/tasks";
 import { formatDue } from "../shared/time-text";
 import { parseWhen } from "../shared/when";
@@ -21,7 +21,7 @@ export type ReminderTarget =
 // The task a chat or workspace reminder lives on, when it has one yet.
 function followUpOf(document: TaskDocument, target: ReminderTarget) {
   if (target.kind === "chat") return followUpTask(document, target.agentId);
-  if (target.kind === "workspace") return followUpWorkspaceTask(document, target.workspaceId);
+  if (target.kind === "workspace") return workspaceTask(document, target.workspaceId);
   return document.tasks.find((task) => task.id === target.taskId) ?? null;
 }
 

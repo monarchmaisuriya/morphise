@@ -18,7 +18,8 @@ export interface NewTask {
   links?: Task["links"];
 }
 
-type TaskPatch = Partial<Pick<Task, "title" | "description" | "priority" | "labels" | "due" | "links">>;
+// Links change only through setLink, which keeps a workspace to one task.
+type TaskPatch = Partial<Pick<Task, "title" | "description" | "priority" | "labels" | "due">>;
 
 export type TaskOperation =
   | { kind: "addTask"; task: NewTask; labelNames?: string[] }
@@ -99,15 +100,6 @@ export function followUpTask(document: TaskDocument, agentId: string): Task | nu
   return reminded[0] ?? open[0] ?? null;
 }
 
-// A workspace's own follow-up task: an open task linked to the workspace and to no chat, the one
-// with the soonest reminder first.
-export function followUpWorkspaceTask(document: TaskDocument, workspaceId: string): Task | null {
-  const done = document.columns.find((column) => column.done)?.id;
-  const open = document.tasks.filter((task) => task.links.workspaceId === workspaceId && !task.links.agentId && task.archivedAt === null && task.column !== done);
-  const reminded = open.filter((task) => task.reminder !== null).sort((left, right) => left.reminder!.at.localeCompare(right.reminder!.at));
-  return reminded[0] ?? open[0] ?? null;
-}
-
 // Open Done cards completed before the cutoff.
 export function doneBefore(document: TaskDocument, cutoff: string): Task[] {
   const done = document.columns.find((column) => column.done)?.id;
@@ -140,7 +132,29 @@ function labelIdsFor(document: TaskDocument, names: readonly string[]): string[]
   });
 }
 
+// The task that holds a workspace: each workspace belongs to at most one task (M, 2026-11-12).
+// Archived tasks let go of it, so the workspace can be linked again.
+// Profiles saved before this rule can have several; then the one with the soonest reminder wins.
+export function workspaceTask(document: TaskDocument, workspaceId: string, except?: string): Task | null {
+  const holders = document.tasks.filter((task) => task.id !== except && task.archivedAt === null && task.links.workspaceId === workspaceId);
+  const reminded = holders.filter((task) => task.reminder !== null).sort((left, right) => left.reminder!.at.localeCompare(right.reminder!.at));
+  return reminded[0] ?? holders[0] ?? null;
+}
+
+function claimWorkspace(document: TaskDocument, workspaceId: string, taskId?: string) {
+  const holder = workspaceTask(document, workspaceId, taskId);
+  if (holder) throw new Error(`This workspace already has a task: "${holder.title}". A workspace can belong to one task.`);
+}
+
 function insertTask(document: TaskDocument, input: NewTask, now: Date) {
+  let links = input.links ?? {};
+  if (links.workspaceId && workspaceTask(document, links.workspaceId)) {
+    // A chat's own task keeps its chat; the workspace stays with the task that has it.
+    if (links.agentId) {
+      const { workspaceId: _taken, ...rest } = links;
+      links = rest;
+    } else claimWorkspace(document, links.workspaceId);
+  }
   const column = input.column ?? firstOpenColumn(document).id;
   const time = now.toISOString();
   document.tasks.push({
@@ -154,7 +168,7 @@ function insertTask(document: TaskDocument, input: NewTask, now: Date) {
     due: input.due ?? null,
     reminder: input.reminder ?? null,
     checklist: input.checklist ?? [],
-    links: input.links ?? {},
+    links,
     createdAt: time,
     updatedAt: time,
     completedAt: document.columns.find((item) => item.id === column)?.done ? time : null,
@@ -216,6 +230,7 @@ function mutate(document: TaskDocument, operation: TaskOperation, now: Date): vo
     case "setLink": {
       const task = findTask(document, operation.id);
       if ((task.links[operation.link] ?? null) === operation.value) return;
+      if (operation.link === "workspaceId" && operation.value !== null) claimWorkspace(document, operation.value, task.id);
       if (operation.value === null) delete task.links[operation.link];
       else task.links[operation.link] = operation.value;
       touch(task, now);
@@ -272,6 +287,12 @@ function mutate(document: TaskDocument, operation: TaskOperation, now: Date): vo
     }
     case "restoreTask": {
       const task = findTask(document, operation.id);
+      if (task.links.workspaceId && workspaceTask(document, task.links.workspaceId, task.id)) {
+        // As when it was made: a chat's own task keeps its chat and leaves the workspace to the
+        // task that has it now; any other task cannot come back while the workspace is taken.
+        if (task.links.agentId) delete task.links.workspaceId;
+        else claimWorkspace(document, task.links.workspaceId, task.id);
+      }
       task.archivedAt = null;
       // A restored Done card counts as finished now, so auto-archive does not take it straight back.
       if (task.completedAt !== null) task.completedAt = now.toISOString();
@@ -368,8 +389,11 @@ function mutate(document: TaskDocument, operation: TaskOperation, now: Date): vo
       return;
     }
     case "remindWorkspace": {
-      const task = followUpWorkspaceTask(document, operation.workspaceId);
+      // The reminder goes on the workspace's task, whichever it is. A Done task never alerts, so a
+      // new reminder reopens it (into the first open column).
+      const task = workspaceTask(document, operation.workspaceId);
       if (task) {
+        if (operation.reminder && task.column === doneColumn(document).id) move(document, task, firstOpenColumn(document).id, undefined, now);
         task.reminder = operation.reminder;
         touch(task, now);
         return;

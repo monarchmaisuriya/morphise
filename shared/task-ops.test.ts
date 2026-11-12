@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyTaskOperation, followUpTask, followUpWorkspaceTask, type TaskOperation } from "./task-ops";
+import { applyTaskOperation, firstOpenColumn, followUpTask, type TaskOperation, workspaceTask } from "./task-ops";
 import { EMPTY_TASKS, type TaskDocument } from "./tasks";
 
 const now = new Date("2026-11-11T14:30:00.000Z");
@@ -159,17 +159,36 @@ describe("chat follow-ups", () => {
     expect(followUpTask(apply(document, { kind: "moveTask", id: document.tasks[0].id, column: "done" }), "chat-1")).toBeNull();
   });
 
-  it("creates a workspace's own follow-up task, then updates the same task, apart from its chats' tasks", () => {
-    const chat = apply(EMPTY_TASKS, { kind: "remindChat", agentId: "chat-1", workspaceId: "w1", title: "Chat", reminder });
-    let document = apply(chat, { kind: "remindWorkspace", workspaceId: "w1", title: "Fix login", reminder });
-    expect(document.tasks).toHaveLength(2);
-    const own = followUpWorkspaceTask(document, "w1");
-    expect(own).toMatchObject({ title: "Follow up: Fix login", reminder, links: { workspaceId: "w1" } });
-    expect(own?.links.agentId).toBeUndefined();
+  it("puts a workspace reminder on the workspace's one task, creating it only when there is none", () => {
+    let document = apply(EMPTY_TASKS, { kind: "remindWorkspace", workspaceId: "w1", title: "Fix login", reminder });
+    expect(document.tasks).toHaveLength(1);
+    expect(workspaceTask(document, "w1")).toMatchObject({ title: "Follow up: Fix login", reminder, links: { workspaceId: "w1" } });
     document = apply(document, { kind: "remindWorkspace", workspaceId: "w1", title: "Fix login", reminder: null });
-    expect(document.tasks).toHaveLength(2);
-    expect(followUpWorkspaceTask(document, "w1")?.reminder).toBeNull();
-    expect(followUpTask(document, "chat-1")?.reminder).toEqual(reminder);
+    expect(document.tasks).toHaveLength(1);
+    expect(workspaceTask(document, "w1")?.reminder).toBeNull();
+  });
+
+  it("reopens the workspace's Done task when a reminder is set on the workspace, so the reminder can fire", () => {
+    let document = apply(EMPTY_TASKS, { kind: "addTask", task: { id: "t", title: "t", links: { workspaceId: "w1" } } }, { kind: "moveTask", id: "t", column: "done" });
+    document = apply(document, { kind: "remindWorkspace", workspaceId: "w1", title: "t", reminder });
+    expect(document.tasks[0]).toMatchObject({ column: firstOpenColumn(document).id, reminder });
+  });
+
+  it("links a workspace to one task only", () => {
+    const add = (id: string, links: Record<string, string>): TaskOperation => ({ kind: "addTask", task: { id, title: id, links } });
+    const document = apply(EMPTY_TASKS, add("a", { workspaceId: "w1" }), add("b", {}));
+    expect(() => apply(document, add("c", { workspaceId: "w1" }))).toThrow('This workspace already has a task: "a"');
+    expect(() => apply(document, { kind: "setLink", id: "b", link: "workspaceId", value: "w1" })).toThrow('already has a task: "a"');
+    // A chat's own task keeps its chat and leaves the workspace to the task that has it.
+    const chat = apply(document, { kind: "remindChat", agentId: "chat-1", workspaceId: "w1", title: "Chat", reminder });
+    expect(followUpTask(chat, "chat-1")?.links).toEqual({ agentId: "chat-1" });
+    // Archiving lets go of the workspace; restoring the old task while another holds it is refused.
+    const moved = apply(document, { kind: "archiveTask", id: "a" }, { kind: "setLink", id: "b", link: "workspaceId", value: "w1" });
+    expect(workspaceTask(moved, "w1")?.id).toBe("b");
+    expect(() => apply(moved, { kind: "restoreTask", id: "a" })).toThrow('already has a task: "b"');
+    // A chat's own task comes back without the workspace another task now has.
+    const chatTask = apply(EMPTY_TASKS, { kind: "addTask", task: { id: "c", title: "c", links: { agentId: "chat-1", workspaceId: "w2" } } }, { kind: "archiveTask", id: "c" }, add("d", { workspaceId: "w2" }), { kind: "restoreTask", id: "c" });
+    expect(chatTask.tasks.find((task) => task.id === "c")?.links).toEqual({ agentId: "chat-1" });
   });
 
   it("moves a 0.2 chat reminder into a task once, however many apps run the migration", () => {

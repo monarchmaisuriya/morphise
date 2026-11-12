@@ -1,6 +1,6 @@
 import { type PluginSurfaceProps, useSettings } from "@getpaseo/plugin/client";
 import { Loading, SettingsAction, SettingsCard, SettingsInput, SettingsSection, SettingsSelect, SettingsSwitch } from "@getpaseo/plugin/client/ui";
-import { Icon } from "../ui/kit";
+import { Icon, tokens } from "../ui/kit";
 import { type ReactNode, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { Action } from "../../shared/actions";
@@ -341,4 +341,32 @@ export function createFormScreen(
       </View>
     );
   };
+}
+
+// A settings row holding a set of on/off chips: one line instead of a switch per choice.
+export function ChipRow({ form, label, hint, chips }: { form: Form; label: string; hint?: string; chips: { key: string; label: string; on: boolean; toggle(): void }[] }) {
+  const t = tokens(form.theme, false);
+  return (
+    <View style={{ paddingVertical: 14, paddingHorizontal: 16, gap: 10 }}>
+      <View style={{ gap: 2 }}>
+        <Text style={{ color: t.c.foreground, fontSize: 14 }}>{label}</Text>
+        {hint ? <Text style={t.text.small}>{hint}</Text> : null}
+      </View>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+        {chips.map((chip) => (
+          <Pressable
+            key={chip.key}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: chip.on }}
+            accessibilityLabel={chip.label}
+            onPress={chip.toggle}
+            style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => ({ flexDirection: "row", alignItems: "center", gap: 6, height: 28, paddingHorizontal: 10, borderRadius: 14, borderWidth: 1, borderColor: chip.on ? t.c.accent : t.c.border, backgroundColor: chip.on ? t.c.surface2 : pressed || hovered ? t.c.surface1 : "transparent" })}
+          >
+            {chip.on ? <Icon name="Check" size={12} color={t.c.accent} /> : null}
+            <Text style={{ fontSize: 12, color: chip.on ? t.c.foreground : t.c.foregroundMuted }}>{chip.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
 }

@@ -8,11 +8,18 @@ import { type Problem, createReconciler } from "./client/reconciler";
 import { createDraftStore } from "./client/draft";
 import { createFormScreen } from "./client/forms/fields";
 import { ButtonsTab, ChatTab, CommandsTab, GeneralTab, LayoutsTab, LookTab, PromptsTab, SidebarTab } from "./client/forms/tabs";
+import { MessagesTab, PagesTab } from "./client/forms/polish-tabs";
 import { type ActionDeps, EDITOR_SCREEN_ID, JSON_SCREEN_ID } from "./client/run-action";
-import { createSections } from "./client/sections";
+import { createRowActions, createSections } from "./client/sections";
+import type { PolishContext } from "./client/polish/context";
+import { followLocale } from "./client/polish/i18n";
+import { registerMedia } from "./client/polish/media.register";
+import { registerPages } from "./client/polish/pages.register";
+import { registerSelection } from "./client/polish/selection.register";
+import { registerWeb } from "./client/polish/web.register";
 import { chimeWav } from "./client/chime";
 import { type AttentionList, reduceAttention } from "./client/attention";
-import { ANSWER_TAIL, bookmarkLastAnswer, createBookmarkStore, createBookmarkWriter } from "./client/bookmark-store";
+import { ANSWER_TAIL, bookmarkLastAnswer, bookmarkPassage, createBookmarkStore, createBookmarkWriter } from "./client/bookmark-store";
 import { type Chats, reduceChats } from "./client/chats";
 import { reduceWorkspaceInfo, type WorkspaceList } from "./client/workspaces";
 import { type AlertEntry, remindersOf, startReminderAlerts } from "./client/reminder-alerts";
@@ -154,6 +161,17 @@ export default function contribute(client: PluginClientContext) {
     reminderSettings: () => profileOf(store.get()).reminders,
   };
   const reconciler = createReconciler(createSections(client, deps, surfaces, switchLayout), (list) => problems.set(list));
+  // The parts ported from Chat Polish and Quote (see NOTICE.md); each follows the profile's chat
+  // settings through client/polish/prefs.ts, fed by the "chat.polish" section.
+  const polish: PolishContext = {
+    client,
+    updateChat,
+    bookmarkPassage: (input) => bookmarkPassage(bookmarkCapture, input),
+    rowActions: createRowActions(client, surfaces),
+  };
+  // Ported strings (chat rows, page restyle) follow Paseo's language: Chinese for zh-*, else English.
+  const unfollowLocale = followLocale(client.i18n, () => {});
+  const stopPolish = [registerSelection, registerWeb, registerMedia, registerPages].map((register) => register(polish));
   const apply = () =>
     reconciler.apply({
       profile: profileOf(store.get()),
@@ -252,6 +270,8 @@ export default function contribute(client: PluginClientContext) {
     { id: "general", title: "General", icon: "SlidersHorizontal", Component: createFormScreen(drafts, GeneralTab, { editsProfile: true }) },
     { id: EDITOR_SCREEN_ID, title: "Sidebar", icon: "PanelLeft", Component: createFormScreen(drafts, SidebarTab, { editsProfile: true }) },
     { id: "chat", title: "Chat", icon: "MessageSquare", Component: createFormScreen(drafts, ChatTab, { editsProfile: true }) },
+    { id: "messages", title: "Messages", icon: "TextQuote", Component: createFormScreen(drafts, MessagesTab, { editsProfile: true }) },
+    { id: "pages", title: "Pages", icon: "AppWindow", Component: createFormScreen(drafts, PagesTab, { editsProfile: true }) },
     { id: "look", title: "Look", icon: "Palette", Component: createFormScreen(drafts, LookTab, { editsProfile: true }) },
     { id: "buttons", title: "Buttons", icon: "MousePointerClick", Component: createFormScreen(drafts, ButtonsTab, { editsProfile: true }) },
     { id: "commands", title: "Commands", icon: "Command", Component: createFormScreen(drafts, CommandsTab, { editsProfile: true }) },
@@ -380,5 +400,7 @@ export default function contribute(client: PluginClientContext) {
     taskStream.stop();
     bookmarkStream.stop();
     reconciler.dispose();
+    stopPolish.forEach((stop) => stop());
+    unfollowLocale();
   };
 }

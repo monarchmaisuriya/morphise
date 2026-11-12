@@ -13,6 +13,7 @@ import { Button, Field, Icon, IconButton, PopoverHost, PropertyRow, Segmented, S
 import type { BoardDeps } from "./deps";
 import { WorkspacePicker } from "./workspace-picker";
 import { PRIORITY, priorityColor } from "./styles";
+import { workspaceTask } from "../../shared/task-ops";
 
 export type EditorTarget = { kind: "existing"; taskId: string } | { kind: "new"; column: string; workspaceId: string | null };
 
@@ -201,7 +202,7 @@ export function CardEditor({ deps, target, theme, compact, onClose }: { deps: Bo
             </PropertyRow>
           ) : null}
           <PropertyRow t={t} icon="FolderGit2" label="Workspace">
-            <WorkspacePicker t={t} workspaces={deps.workspaces} value={draft.workspaceId} onChange={(workspaceId) => set({ workspaceId })} />
+            <WorkspacePicker t={t} workspaces={deps.workspaces} value={draft.workspaceId} onChange={(workspaceId) => set({ workspaceId })} holder={(workspaceId) => workspaceTask(document, workspaceId, task?.id)?.title ?? null} />
           </PropertyRow>
           <PropertyRow t={t} icon="Link" label="Link">
             <Field t={t} plain value={draft.url} onChangeText={(url) => set({ url })} placeholder="https://…" accessibilityLabel="Web address" />

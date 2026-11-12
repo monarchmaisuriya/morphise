@@ -35,21 +35,6 @@ export function isMac(): boolean {
   return /Mac/i.test(nav?.platform ?? nav?.userAgent ?? "");
 }
 
-// Scrolls the open chat to the prompt above or below the top of the view, using Paseo's test
-// ids for its chat and prompts (web only; checked against Paseo 0.16). False when there is none.
-export function scrollToPrompt(direction: "previous" | "next"): boolean {
-  if (Platform.OS !== "web") return false;
-  const prompts = Array.from(document.querySelectorAll('[data-testid="user-message"]'));
-  if (!prompts.length) return false;
-  const top = document.querySelector('[data-testid="agent-chat-scroll"]')?.getBoundingClientRect().top ?? 0;
-  const offsets = prompts.map((element) => element.getBoundingClientRect().top - top);
-  const index = direction === "previous" ? offsets.map((offset, at) => (offset < -8 ? at : -1)).filter((at) => at >= 0).pop() : offsets.findIndex((offset) => offset > 8);
-  const target = index === undefined || index < 0 ? null : prompts[index];
-  if (!target) return false;
-  target.scrollIntoView({ block: "start", behavior: "smooth" });
-  return true;
-}
-
 // Whether the main pointer cannot hover (a phone or tablet browser), so hover-only controls must
 // always show. Native apps answer from the platform instead.
 export function cannotHover(): boolean {

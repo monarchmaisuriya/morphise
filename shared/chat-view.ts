@@ -1,8 +1,10 @@
 // How Morphise reshapes chat rows: which rows stay as Paseo draws them, which it hides, and which
-// it redraws (tool call cards or lines, thinking cards, the plan card). Pure rules, so both the
-// timeline transformers and tests use them. Paseo's own rows are the default for everything.
+// it redraws in Chat Polish's design (tool calls, thoughts, merged steps, plans, todo updates,
+// notices). Pure rules, so both the timeline transformers and tests use them. Paseo's own rows are
+// the default for everything.
 
 import { readSteps, type Step } from "./steps";
+import type { PolishSettings } from "./polish/prefs";
 
 export const TOOL_KINDS = ["shell", "read", "edit", "search", "fetch", "sub_agent", "other"] as const;
 export type ToolKind = (typeof TOOL_KINDS)[number];
@@ -56,6 +58,7 @@ export interface ChatSettings {
   images?: boolean;
   recap?: boolean;
   phones?: "same" | "paseo";
+  polish?: PolishSettings;
   web?: ChatWebSettings;
 }
 
@@ -129,11 +132,18 @@ export function chatLook(saved: ChatSettings | undefined): ChatLook {
 }
 
 export interface ChatView {
+  // Morphise draws rows here: on, and not a phone set to Paseo's rows. Hiding applies either way.
+  draw: boolean;
   toolCalls: ToolStyle;
+  // Thoughts and tool calls between two replies folded into one row (only with Morphise's tool rows).
+  merge: boolean;
   hideFinished: ReadonlySet<ToolKind>;
   reasoning: Reasoning;
   // Errors, notices and compaction drawn as Morphise rows.
   notices: boolean;
+  // Image-only replies as thumbnails, and pages agents draw (the media and page parts' rows).
+  images: boolean;
+  pages: boolean;
   // Whole row types hidden in every chat.
   hidden: ReadonlySet<string>;
   // The plan card drawn in the chat (the steps card's "In the chat").
@@ -144,13 +154,21 @@ export interface ChatView {
 // (hidden row types and the plan card still apply, as they are not about looks).
 export function chatView(saved: ChatSettings | undefined, hidden: readonly string[], stepsInChat: boolean, onPhone = false): ChatView {
   // Off, or on a phone set to Paseo's rows: Morphise draws nothing, though hiding still applies.
-  const paseoHere = saved?.enabled === false || (onPhone && saved?.phones === "paseo");
+  const draw = !(saved?.enabled === false || (onPhone && saved?.phones === "paseo"));
   const reasoning = saved?.reasoning ?? "show";
+  const toolCalls = draw ? saved?.toolCalls ?? "paseo" : "paseo";
   return {
-    toolCalls: paseoHere ? "paseo" : saved?.toolCalls ?? "paseo",
+    draw,
+    toolCalls,
+    merge: toolCalls !== "paseo" && saved?.polish?.merge !== false,
     hideFinished: new Set(saved?.hideFinished ?? []),
-    reasoning: paseoHere && (reasoning === "fold" || reasoning === "expand") ? "show" : reasoning,
-    notices: !paseoHere && saved?.notices === true,
+    reasoning: !draw && (reasoning === "fold" || reasoning === "expand") ? "show" : reasoning,
+    notices: draw && saved?.notices === true,
+    images: draw && (saved?.polish?.images ?? "native") !== "native",
+    // While Morphise draws tool rows, pages already in a chat keep drawing as pages after the option
+    // (which only gives new agents the tool) is turned off, instead of as a tool row of raw HTML.
+    // With Paseo's own rows and the option off, nothing is transformed.
+    pages: draw && (toolCalls !== "paseo" || saved?.polish?.html === true),
     hidden: new Set(hidden),
     stepsInChat,
   };
@@ -159,10 +177,12 @@ export function chatView(saved: ChatSettings | undefined, hidden: readonly strin
 // The row types that need a transformer for this view; the rest stay untouched by Morphise.
 export function transformedTypes(view: ChatView): string[] {
   const types = new Set(view.hidden);
-  if (view.toolCalls !== "paseo" || view.hideFinished.size) types.add("tool_call");
-  if (view.reasoning !== "show") types.add("reasoning");
+  if (view.toolCalls !== "paseo" || view.hideFinished.size || view.pages) types.add("tool_call");
+  if (view.reasoning !== "show" || view.merge) types.add("reasoning");
+  // Replies fold into merged steps under Paseo's Collapse turns.
+  if (view.images || view.merge) types.add("assistant_message");
   if (view.notices) for (const type of NOTICE_TYPES) types.add(type);
-  if (view.stepsInChat) types.add("todo");
+  if (view.stepsInChat || view.toolCalls !== "paseo") types.add("todo");
   return [...types];
 }
 
@@ -183,11 +203,6 @@ export function toolKind(detailType: string): ToolKind {
   if (detailType === "sub_agent") return "sub_agent";
   return "other";
 }
-
-// Tool calls whose content Morphise's rows show in full (subject, plus output, diff or text when
-// opened). Plans, sub-agent tasks (Paseo links them to their chat), worktree setup and unknown
-// tools keep Paseo's own rows, which show what Morphise's rows would lose.
-const DRAWN_DETAILS = new Set(["shell", "read", "edit", "write", "search", "fetch", "plain_text", "unknown"]);
 
 // An MCP tool's name ("mcp__brevo-codebase__search_code") as its service and a readable action
 // ("brevo-codebase", "Search code"); null for other tool names.
@@ -428,64 +443,72 @@ export function diffLines(diff: string): DiffLine[] {
   return rows;
 }
 
-// What becomes of one row: kept as Paseo draws it, hidden, or redrawn as one of Morphise's rows.
 export const NOTICE_TYPES = ["error", "notification", "compaction"] as const;
-export interface NoticeData {
-  level: "info" | "warning" | "error";
-  title: string;
-  message: string;
+
+const normalName = (name: unknown) => text(name).trim().replace(/[.\s-]+/g, "_").toLowerCase();
+
+// A message from another agent or a scheduled heartbeat, sent as a tool call. Paseo starts a turn
+// at it (from 0.14 it shows an agent's message as a prompt), so it is never a step.
+export function isTurnTrigger(item: unknown): boolean {
+  const call = record(item);
+  return call?.type === "tool_call" && (call.agentMessage !== undefined || normalName(call.name) === "agent_message" || normalName(call.name) === "heartbeat");
 }
 
-// A notice row: an error, one of Paseo's notifications, or a context compaction.
-export function summarizeNotice(itemType: string, item: unknown): NoticeData | null {
-  const notice = record(item);
-  if (!notice) return null;
-  if (itemType === "error") return { level: "error", title: "Error", message: text(notice.message) };
-  if (itemType === "notification") {
-    const level = notice.level === "warning" || notice.level === "error" ? notice.level : "info";
-    return { level, title: level === "error" ? "Error" : level === "warning" ? "Warning" : "Notice", message: text(notice.message) };
-  }
-  if (itemType === "compaction") {
-    const before = num(notice.preTokens);
-    const how = notice.trigger === "manual" ? "Compacted on request" : "Context compacted";
-    return { level: "info", title: notice.status === "loading" ? "Compacting context..." : how, message: before !== null ? `${Math.round(before / 1000)}K tokens before` : "" };
-  }
-  return null;
-}
-
+// What becomes of one row: kept as Paseo draws it, hidden, or redrawn as one of Morphise's rows.
+// A step (thought, tool call, reply) may fold into a merged row; on its own it is drawn as `alone`.
 export type RowFate =
   | { kind: "keep" }
   | { kind: "hide" }
-  | { kind: "tool"; data: ToolSummary & { style: "cards" | "compact" } }
-  | { kind: "thinking"; data: { text: string } }
-  | { kind: "notice"; data: NoticeData }
+  | { kind: "step"; alone: "tool" | "thought" | "keep" }
+  | { kind: "plan" }
+  | { kind: "agent-event" }
+  | { kind: "todo" }
+  | { kind: "notice" }
   | { kind: "steps"; data: { steps: Step[] } };
 
 export function rowFate(itemType: string, item: unknown, view: ChatView): RowFate {
   if (view.hidden.has(itemType)) return { kind: "hide" };
+  const tools = view.toolCalls !== "paseo";
   if (itemType === "tool_call") {
-    const summary = summarizeToolCall(item);
-    // A plan written as a tool call is the agent asking to start on it: always Paseo's own row.
-    if (!summary || summary.detail === "plan") return { kind: "keep" };
+    const call = record(item);
+    const detail = text(record(call?.detail)?.type);
+    // Another agent's notice (finished, errored...) reads as a row; its message stays Paseo's prompt.
+    if (isTurnTrigger(item)) return tools ? { kind: "agent-event" } : { kind: "keep" };
+    // Like Paseo: the approval card shows a pending plan, so the call stays out until it is resolved
+    // (Paseo then renames it plan_approval). A plan is never hidden as a finished call.
+    if (tools && (call?.name === "ExitPlanMode" || (call?.name === "plan_approval" && call.status === "running"))) return { kind: "hide" };
+    if (detail === "plan") return tools ? { kind: "plan" } : { kind: "keep" };
     // Only finished calls hide: running ones show progress, failed ones need the user to see them.
-    if (summary.status === "completed" && view.hideFinished.has(summary.kind)) return { kind: "hide" };
-    return view.toolCalls !== "paseo" && DRAWN_DETAILS.has(summary.detail) ? { kind: "tool", data: { ...summary, style: view.toolCalls } } : { kind: "keep" };
+    if (call?.status === "completed" && view.hideFinished.has(toolKind(detail))) return { kind: "hide" };
+    if (!tools) return { kind: "keep" };
+    // Paseo's sub-agent row links to the sub-agent's chat.
+    if (detail === "sub_agent") return { kind: "keep" };
+    return { kind: "step", alone: "tool" };
   }
   if (itemType === "reasoning") {
     if (view.reasoning === "hide") return { kind: "hide" };
-    if (view.reasoning === "fold" || view.reasoning === "expand") return { kind: "thinking", data: { text: cut(text(record(item)?.text), 40000) } };
-    return { kind: "keep" };
+    const alone = view.reasoning === "fold" || view.reasoning === "expand" ? "thought" : "keep";
+    return view.merge || alone === "thought" ? { kind: "step", alone } : { kind: "keep" };
   }
-  if (view.notices && (NOTICE_TYPES as readonly string[]).includes(itemType)) {
-    const notice = summarizeNotice(itemType, item);
-    return notice ? { kind: "notice", data: notice } : { kind: "keep" };
-  }
-  if (itemType === "todo" && view.stepsInChat) {
-    const steps = readSteps(item);
-    // An empty plan (the agent cleared it) keeps Paseo's own row.
-    return steps && steps.length ? { kind: "steps", data: { steps } } : { kind: "keep" };
+  if (itemType === "assistant_message") return view.draw ? { kind: "step", alone: "keep" } : { kind: "keep" };
+  if (view.notices && (NOTICE_TYPES as readonly string[]).includes(itemType)) return { kind: "notice" };
+  if (itemType === "todo") {
+    if (view.stepsInChat) {
+      const steps = readSteps(item);
+      // An empty plan (the agent cleared it) keeps Paseo's own row.
+      return steps && steps.length ? { kind: "steps", data: { steps } } : { kind: "keep" };
+    }
+    return tools ? { kind: "todo" } : { kind: "keep" };
   }
   return { kind: "keep" };
+}
+
+// Whether a step leaves merged runs: hidden by the settings, or (todo updates) drawn as the steps
+// card instead.
+export function skippedStep(item: unknown, view: ChatView): boolean {
+  const type = text(record(item)?.type);
+  if (type === "todo" && view.stepsInChat) return true;
+  return rowFate(type, item, view).kind === "hide";
 }
 
 // ---------- Copy the last turn ----------
@@ -531,12 +554,23 @@ export function lastTurnMarkdown(entries: readonly unknown[]): string | null {
 
 // ---------- Helpers for drawing rows ----------
 
-// Whether a row starts open: failed calls always do; rows whose details are short (at most
-// `foldMinLines`) too; otherwise the rule for its kind, else the general rule.
-export function rowStartsOpen(look: Pick<ChatLook, "fold" | "foldByKind" | "foldMinLines">, kind: FoldKind, status: ToolStatus, detailLines: number): boolean {
-  if (status === "failed") return true;
+// Whether a row starts open: failed calls do (unless `failedOpen` is off); rows whose details are
+// short (at most `foldMinLines`) too; otherwise the rule for its kind, else the general rule.
+export function rowStartsOpen(look: Pick<ChatLook, "fold" | "foldByKind" | "foldMinLines">, kind: FoldKind, status: ToolStatus, detailLines: number, failedOpen = true): boolean {
+  if (status === "failed") {
+    if (failedOpen) return true;
+    status = "completed";
+  }
   if (look.foldMinLines > 0 && detailLines > 0 && detailLines <= look.foldMinLines) return true;
   return startsOpen(look.foldByKind[kind] ?? look.fold, status);
+}
+
+// Whether a thought starts open: "expand" always, "fold" while it streams (or by the thinking fold
+// rule), and "show" (a thought inside merged steps) as Paseo's Always expand reasoning.
+export function thinkingStartsOpen(look: Pick<ChatLook, "fold" | "foldByKind" | "foldMinLines" | "reasoning">, streaming: boolean, paseoExpands: boolean): boolean {
+  if (look.reasoning === "expand") return true;
+  if (look.reasoning === "fold") return rowStartsOpen(look, "thinking", streaming ? "running" : "completed", 0);
+  return paseoExpands;
 }
 
 // The program a shell command runs: its first word after variable assignments, `sudo`, `env`,
@@ -551,32 +585,6 @@ export function shellProgram(command: string): string {
     else break;
   }
   return (words[index] ?? "").replace(/^.*\//, "");
-}
-
-export type CommandTokenKind = "program" | "flag" | "string" | "operator" | "plain";
-
-// A shell command split for colouring: the program after each operator, flags, quoted strings and
-// operators; everything else plain. Spacing is kept, so the parts join back to the command.
-export function commandTokens(command: string): { text: string; kind: CommandTokenKind }[] {
-  const tokens: { text: string; kind: CommandTokenKind }[] = [];
-  const pattern = /(\s+)|("(?:\\.|[^"\\])*"?|'[^']*'?)|(\|\||&&|[|;&]|>>?|<)|([^\s"'|;&<>]+)/g;
-  let expectProgram = true;
-  for (const match of command.matchAll(pattern)) {
-    const [whole, space, quoted, operator, word] = match;
-    if (space) tokens.push({ text: whole, kind: "plain" });
-    else if (quoted) tokens.push({ text: whole, kind: "string" });
-    else if (operator) {
-      tokens.push({ text: whole, kind: "operator" });
-      expectProgram = operator !== ">" && operator !== ">>" && operator !== "<";
-    } else if (word) {
-      const assignment = /^[A-Za-z_][A-Za-z0-9_]*=/.test(word);
-      if (expectProgram && !assignment && word !== "sudo" && word !== "env") {
-        tokens.push({ text: word, kind: "program" });
-        expectProgram = false;
-      } else tokens.push({ text: word, kind: word.startsWith("-") ? "flag" : "plain" });
-    }
-  }
-  return tokens;
 }
 
 // A path shown relative to the workspace folder when it is inside it.
@@ -613,22 +621,6 @@ export function wordDiff(before: string, after: string): { before: { text: strin
     else push(left, a[i++], true);
   }
   return { before: left, after: right };
-}
-
-// Thinking split into steps at its headings ("# x", "**x**" alone on a line), each with its title;
-// text before the first heading is a step without a title.
-export function thinkingSteps(input: string): { title: string; text: string }[] {
-  const steps: { title: string; text: string }[] = [];
-  let current: { title: string; lines: string[] } = { title: "", lines: [] };
-  for (const line of input.split("\n")) {
-    const heading = /^\s*(?:#{1,6}\s+(.+?)\s*#*\s*|\*\*(.+?)\*\*\s*)$/.exec(line);
-    if (heading) {
-      if (current.title || current.lines.some((item) => item.trim())) steps.push({ title: current.title, text: current.lines.join("\n").trim() });
-      current = { title: (heading[1] ?? heading[2] ?? "").trim(), lines: [] };
-    } else current.lines.push(line);
-  }
-  if (current.title || current.lines.some((item) => item.trim())) steps.push({ title: current.title, text: current.lines.join("\n").trim() });
-  return steps;
 }
 
 // ---------- Turn recap ----------

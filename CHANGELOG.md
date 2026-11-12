@@ -2,6 +2,28 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.16.0 - 2026-11-12
+
+Every feature of Chat Polish (lthieu96/chat-polish) and Quote (keefeere/quote), ported with their MIT notices (NOTICE.md), except Chat Polish's writes to Paseo's own settings (fonts, sizes, theme picker) and its loading of Paseo's internal image viewer. Prompts and replies stay Paseo's own, with Fork and Copy. Restyling Paseo, downloads, thumbnails, diagrams by Pele and HTML pages are off until you turn them on. On by default: the new chat rows' look once you choose Morphise's rows (Chat, Tool calls), the selection bar (turn it off under Messages), and ⌥⌘↑ / ⌥⌘↓ to jump between prompts.
+
+- **Chat rows in Chat Polish's design.** Tool calls, plans, thinking, to-do updates and notices as single rows with a verb (Running, Ran, Edited), the command or file and a short detail; the steps between two replies merged into one row that opens to each step; code colours for commands, diffs and JSON (pick a palette under Look). Every 0.15 chat option still applies (folding, long output, paths, labels, accent, strength, sizes, MCP cards, Details, Show in Finder, pictures). New: merged steps, icons per row type, and whether failed calls start open (Chat, Steps).
+- **Selection bar (Messages tab):** select text in a chat on desktop or web to Quote it into that chat's message box, Reply to it in place (Enter sends, Ctrl or Cmd+Enter adds to the message box, Esc cancels), ask a Side chat (a sub-agent with the same model, in a side panel, that can open as a tab), Copy it as text or Markdown, or Bookmark it to the Workbench.
+- **Pictures and diagrams (Messages tab):** thumbnails for replies that are only images (made on the daemon), image stacks that spread into a row with a viewer, mermaid diagrams by Paseo's mermaid or Pele, and three or four styles each for quotes, tables, code, inline code, headings, lists, callouts and rules.
+- **Restyle Paseo (Look tab, experimental):** Chat Polish's design for Paseo's own items, a flat or floating window, seven working indicators in three sizes, Untitled UI or Hugeicons icons, a provider rail in the model picker, a context card with a Compact button, hover cards that glide, and the theme's sidebar colour.
+- **⌥⌘↑ / ⌥⌘↓** jump to the previous or next prompt in the open chat, also through prompts Paseo has not drawn yet (and the Command Center's prompt items). Not while you type in Paseo's code editor.
+- **HTML pages (Pages tab, experimental):** agents created while it is on can draw interactive pages in the chat; an optional headless browser (Download and Remove there) checks each page's layout.
+- **Themes:** Chat Polish's Mariana, Ivory, Parchment and Dusk as starting points, contrast warnings, and an optional sidebar colour.
+- **Update available:** Settings, General checks for a newer Morphise and installs it.
+- **Workbench cards:** a status icon, a lighter title, the request or error on the second line (not "Finished" again under the "Finished" heading), the workspace with its project colour, and Clear and Open on hover.
+- **Settings save when you leave too:** a change made just before leaving a settings tab is saved instead of lost.
+- **The steps card now shows for Claude chats.** Claude Code gives its task-list tools (the plan the card draws) only to older models, so on Opus 5.5 and Fable agents never made a plan and the card never appeared. While the steps card is on, Morphise launches Claude agents with `CLAUDE_CODE_ENABLE_TODO_TOOLS=1`. It applies to chats opened or resumed after the update; a value you set yourself wins. The tools take some of the agent's context; turn the steps card off to launch agents without them.
+- **A workspace belongs to one task.** Linking a workspace that another task already has (any task not archived, Done ones too) is refused with that task's name; the card editor's workspace list shows which task has each one, the sidebar's "Add task" says "Has a task", and the board's Attach panel names the task. A chat's own task (from `/task` or a chat reminder) keeps its chat and leaves the workspace to the task that has it, and a workspace reminder goes on the workspace's task (reopening it if it was Done, so the reminder can ring). Archiving a task frees its workspace. Tasks that already shared a workspace before this release are left as they are.
+- **Board cards:** a long workspace name (or any other detail under the title) is cut to one line with "…" instead of running past the card.
+- **Workspace rows:** the Pin button comes before Archive, and the ⋮ menu no longer repeats them (Pin stays in the menu when its row button is turned off in Settings, Sidebar).
+- **A chat's only sub-agent** can stay unlisted under its chat (Settings, Sidebar, Chats, or the Display menu); the chat row stands for it, shows its running work, and holds the highlight while it is open. Listed when unset.
+
+Rolling back to 0.15.0: `paseo plugin update morphise --ref v0.15.0`. With any new option set (Chat, Messages, Pages, Look, the sub-agent choice or a theme sidebar colour), 0.15.0 reports the profile as invalid and keeps the data; set them back first. Agents created while HTML pages was on keep its tool in their settings.
+
 ## 0.15.0 - 2026-11-12
 
 Every chat feature from four published chat plugins (Beautiful Chat, Refined Chat, Chat Polish, Better Paseo) that Paseo's plugin API supports, rebuilt for Morphise. Prompts and replies are never redrawn, so Paseo's Fork and Copy always stay. The full list, with what was left out and why, is in `docs/2026-11-12-1100_chat-features-all_plan.md`.

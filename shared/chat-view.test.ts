@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { accentColor, turnRecap, chatLook, chatView, commandTokens, diffCounts, diffLines, foldLines, lastTurnMarkdown, mcpName, relativePath, rowFate, rowStartsOpen, shellProgram, startsOpen, summarizeNotice, summarizeToolCall, thinkingSteps, transformedTypes, wordDiff } from "./chat-view";
+import { polishPrefs } from "./polish/prefs";
+import { accentColor, turnRecap, chatLook, chatView, diffCounts, diffLines, foldLines, isTurnTrigger, lastTurnMarkdown, mcpName, relativePath, rowFate, rowStartsOpen, shellProgram, skippedStep, startsOpen, summarizeToolCall, thinkingStartsOpen, transformedTypes, wordDiff } from "./chat-view";
 
 // Shaped like Paseo's timeline items (protocol AgentTimelineItem, ToolCallTimelineItem).
 const call = (detail: Record<string, unknown>, status = "completed", extra: Record<string, unknown> = {}) => ({ type: "tool_call", callId: "c1", name: "Bash", detail, status, error: null, ...extra });
@@ -15,42 +16,86 @@ describe("chat view rules", () => {
   it("hides whole row types the user hid, before any other rule", () => {
     const view = chatView({ toolCalls: "compact" }, ["tool_call"], true);
     expect(rowFate("tool_call", call({ type: "shell", command: "ls" }), view)).toEqual({ kind: "hide" });
-    expect(transformedTypes(view).sort()).toEqual(["todo", "tool_call"]);
+    expect(transformedTypes(view).sort()).toEqual(["assistant_message", "reasoning", "todo", "tool_call"]);
+    expect(rowFate("user_message", { type: "user_message", text: "hi" }, chatView(undefined, ["user_message"], false))).toEqual({ kind: "hide" });
   });
 
-  it("hides finished calls of chosen kinds, never running or failed ones", () => {
+  it("hides finished calls of chosen kinds, never running or failed ones, and leaves them out of merged runs", () => {
     const view = chatView({ hideFinished: ["read", "edit"] }, [], false);
     expect(rowFate("tool_call", call({ type: "read", filePath: "a.ts" }), view)).toEqual({ kind: "hide" });
     expect(rowFate("tool_call", call({ type: "write", filePath: "b.ts" }), view)).toEqual({ kind: "hide" });
     expect(rowFate("tool_call", call({ type: "read", filePath: "a.ts" }, "running"), view)).toEqual({ kind: "keep" });
     expect(rowFate("tool_call", call({ type: "read", filePath: "a.ts" }, "failed", { error: "no such file" }), view)).toEqual({ kind: "keep" });
     expect(rowFate("tool_call", call({ type: "shell", command: "ls" }), view)).toEqual({ kind: "keep" });
+    const merged = chatView({ toolCalls: "cards", hideFinished: ["read"] }, [], false);
+    expect(skippedStep(call({ type: "read", filePath: "a.ts" }), merged)).toBe(true);
+    expect(skippedStep(call({ type: "read", filePath: "a.ts" }, "running"), merged)).toBe(false);
   });
 
-  it("redraws calls as compact rows with what they acted on", () => {
+  it("draws calls as Chat Polish's rows, merged between replies unless merging is off; compact means tighter rows", () => {
     const view = chatView({ toolCalls: "compact" }, [], false);
-    const fate = rowFate("tool_call", call({ type: "shell", command: "npm test\n--watch", output: "ok" }, "failed", { error: { message: "exit 1" } }), view);
-    expect(fate).toEqual({ kind: "tool", data: { kind: "shell", detail: "shell", name: "Bash", subject: "npm test", status: "failed", error: "exit 1", body: "ok", bodyKind: "output", facts: [], style: "compact" } });
+    expect(view.toolCalls).toBe("compact");
+    expect(view.merge).toBe(true);
+    expect(rowFate("tool_call", call({ type: "shell", command: "npm test" }, "failed", { error: { message: "exit 1" } }), view)).toEqual({ kind: "step", alone: "tool" });
+    expect(chatView({ toolCalls: "cards", polish: { merge: false } }, [], false).merge).toBe(false);
+    // Paseo's own tool rows: nothing to merge either.
+    expect(chatView({ polish: { merge: true } }, [], false).merge).toBe(false);
   });
 
-  it("keeps Paseo's rows for plans and sub-agent tasks; draws unknown tools with their input and result", () => {
+  it("draws plans as a card and keeps the pending approval out; sub-agent calls stay Paseo's (they link to the chat)", () => {
     const view = chatView({ toolCalls: "compact", hideFinished: ["other"] }, [], false);
-    expect(rowFate("tool_call", call({ type: "plan", text: "1. Do it" }), view)).toEqual({ kind: "keep" });
+    expect(rowFate("tool_call", call({ type: "plan", text: "1. Do it" }, "running"), view)).toEqual({ kind: "plan" });
+    expect(rowFate("tool_call", call({ type: "unknown", input: {}, output: {} }, "running", { name: "ExitPlanMode" }), view)).toEqual({ kind: "hide" });
     expect(rowFate("tool_call", call({ type: "sub_agent", description: "Explore" }, "running"), view)).toEqual({ kind: "keep" });
-    expect(rowFate("tool_call", call({ type: "unknown", input: { q: 1 }, output: {} }, "running"), view).kind).toBe("tool");
-    // Hiding finished "other" tools is the user's choice; plans are never hidden by it.
+    expect(rowFate("tool_call", call({ type: "unknown", input: { q: 1 }, output: {} }, "running"), view)).toEqual({ kind: "step", alone: "tool" });
+    // Hiding finished "other" tools is the user's choice.
     expect(rowFate("tool_call", call({ type: "worktree_setup", log: "" }), view)).toEqual({ kind: "hide" });
   });
 
-  it("folds or hides thinking", () => {
-    expect(rowFate("reasoning", { type: "reasoning", text: "because" }, chatView({ reasoning: "fold" }, [], false))).toEqual({ kind: "thinking", data: { text: "because" } });
-    expect(rowFate("reasoning", { type: "reasoning", text: "because" }, chatView({ reasoning: "hide" }, [], false))).toEqual({ kind: "hide" });
+  it("reads another agent's notice as a row only with Morphise's tool rows; it is never a step", () => {
+    const notice = call({ type: "plain_text", text: "Agent a (A) finished." }, "completed", { name: "agent_message" });
+    expect(isTurnTrigger(notice)).toBe(true);
+    expect(isTurnTrigger(call({ type: "plain_text", text: "x" }, "completed", { agentMessage: {} }))).toBe(true);
+    expect(rowFate("tool_call", notice, chatView({ toolCalls: "cards" }, [], false))).toEqual({ kind: "agent-event" });
+    expect(rowFate("tool_call", notice, chatView(undefined, [], false))).toEqual({ kind: "keep" });
   });
 
-  it("draws plans as the card in the chat, keeping an emptied plan as Paseo draws it", () => {
-    const view = chatView(undefined, [], true);
-    expect(rowFate("todo", { type: "todo", items: [{ text: "a", completed: false }] }, view)).toEqual({ kind: "steps", data: { steps: [{ text: "a", status: "pending" }] } });
+  it("shows thinking as Paseo does, as a folded or open row, or hides it; inside merged steps it joins the run", () => {
+    const thought = { type: "reasoning", text: "because" };
+    expect(rowFate("reasoning", thought, chatView({ reasoning: "fold" }, [], false))).toEqual({ kind: "step", alone: "thought" });
+    expect(rowFate("reasoning", thought, chatView({ reasoning: "expand" }, [], false))).toEqual({ kind: "step", alone: "thought" });
+    expect(rowFate("reasoning", thought, chatView({ reasoning: "hide", toolCalls: "cards" }, [], false))).toEqual({ kind: "hide" });
+    expect(rowFate("reasoning", thought, chatView({ toolCalls: "cards" }, [], false))).toEqual({ kind: "step", alone: "keep" });
+    expect(skippedStep(thought, chatView({ reasoning: "hide", toolCalls: "cards" }, [], false))).toBe(true);
+    const look = chatLook({ reasoning: "fold" });
+    expect(thinkingStartsOpen(look, true, false)).toBe(true);
+    expect(thinkingStartsOpen(look, false, true)).toBe(false);
+    expect(thinkingStartsOpen(chatLook({ reasoning: "expand" }), false, false)).toBe(true);
+    expect(thinkingStartsOpen(chatLook({ reasoning: "fold", foldByKind: { thinking: "never" } }), false, false)).toBe(true);
+    expect(thinkingStartsOpen(chatLook(undefined), false, true)).toBe(true);
+  });
+
+  it("never redraws prompts; replies only fold into merged steps or show their images", () => {
+    expect(rowFate("user_message", { type: "user_message", text: "hi" }, chatView({ toolCalls: "cards" }, [], false))).toEqual({ kind: "keep" });
+    expect(rowFate("assistant_message", { type: "assistant_message", text: "ok" }, chatView({ toolCalls: "cards" }, [], false))).toEqual({ kind: "step", alone: "keep" });
+    expect(transformedTypes(chatView(undefined, [], false))).not.toContain("assistant_message");
+    expect(transformedTypes(chatView({ polish: { images: "small" } }, [], false))).toEqual(["assistant_message"]);
+  });
+
+  it("draws plans as the card in the chat, keeping an emptied plan as Paseo draws it, and leaves todo updates out of runs then", () => {
+    const view = chatView({ toolCalls: "cards" }, [], true);
+    const todo = { type: "todo", items: [{ text: "a", completed: false }] };
+    expect(rowFate("todo", todo, view)).toEqual({ kind: "steps", data: { steps: [{ text: "a", status: "pending" }] } });
     expect(rowFate("todo", { type: "todo", items: [] }, view)).toEqual({ kind: "keep" });
+    expect(skippedStep(todo, view)).toBe(true);
+    expect(rowFate("todo", todo, chatView({ toolCalls: "cards" }, [], false))).toEqual({ kind: "todo" });
+    expect(rowFate("todo", todo, chatView(undefined, [], false))).toEqual({ kind: "keep" });
+  });
+
+  it("draws pages agents make only while HTML pages are on", () => {
+    expect(chatView({ polish: { html: true } }, [], false).pages).toBe(true);
+    expect(transformedTypes(chatView({ polish: { html: true } }, [], false))).toEqual(["tool_call"]);
+    expect(chatView({ enabled: false, polish: { html: true } }, [], false).pages).toBe(false);
   });
 
   it("summarises only tool calls", () => {
@@ -98,11 +143,12 @@ describe("tool cards", () => {
   });
 
   it("draws cards or lines as chosen, and leaves the chat to Paseo on phones when asked", () => {
-    expect(rowFate("tool_call", call({ type: "read", filePath: "a" }), chatView({ toolCalls: "cards" }, [], false))).toMatchObject({ kind: "tool", data: { style: "cards" } });
+    expect(rowFate("tool_call", call({ type: "read", filePath: "a" }), chatView({ toolCalls: "cards" }, [], false))).toEqual({ kind: "step", alone: "tool" });
     const phone = chatView({ toolCalls: "cards", reasoning: "fold", phones: "paseo", hideFinished: ["read"] }, [], false, true);
-    expect(phone.toolCalls).toBe("paseo");
-    expect(phone.reasoning).toBe("show");
+    expect([phone.draw, phone.toolCalls, phone.merge, phone.reasoning]).toEqual([false, "paseo", false, "show"]);
     expect(rowFate("tool_call", call({ type: "read", filePath: "a" }), phone)).toEqual({ kind: "hide" });
+    // "The same as here" draws on phones too.
+    expect(chatView({ toolCalls: "cards" }, [], false, true).draw).toBe(true);
   });
 
   it("fills unset look options with defaults; 0 output lines means show all", () => {
@@ -144,7 +190,7 @@ describe("0.15 chat rules", () => {
     expect(mcpName("Bash")).toBeNull();
     const summary = summarizeToolCall({ type: "tool_call", callId: "c", name: "mcp__x__read_file", detail: { type: "unknown", input: { path: "a" }, output: "ok" }, status: "completed", error: null });
     expect(summary).toMatchObject({ detail: "unknown", subject: "x", body: 'Input\n{\n  "path": "a"\n}\n\nResult\nok' });
-    expect(rowFate("tool_call", { type: "tool_call", callId: "c", name: "mcp__x__y", detail: { type: "unknown", input: {}, output: {} }, status: "completed", error: null }, chatView({ toolCalls: "compact" }, [], false)).kind).toBe("tool");
+    expect(rowFate("tool_call", { type: "tool_call", callId: "c", name: "mcp__x__y", detail: { type: "unknown", input: {}, output: {} }, status: "completed", error: null }, chatView({ toolCalls: "compact" }, [], false))).toEqual({ kind: "step", alone: "tool" });
   });
 
   it("summarises shell output and failed edits", () => {
@@ -154,35 +200,36 @@ describe("0.15 chat rules", () => {
   });
 
   it("turns everything off with the master switch, but still hides what was hidden", () => {
-    const view = chatView({ enabled: false, toolCalls: "cards", reasoning: "fold", notices: true, hideFinished: ["read"] }, ["error"], false);
-    expect(view.toolCalls).toBe("paseo");
-    expect(view.reasoning).toBe("show");
-    expect(view.notices).toBe(false);
+    const view = chatView({ enabled: false, toolCalls: "cards", reasoning: "fold", notices: true, hideFinished: ["read"], polish: { images: "large" } }, ["error"], false);
+    expect([view.draw, view.toolCalls, view.merge, view.reasoning, view.notices, view.images]).toEqual([false, "paseo", false, "show", false, false]);
     expect(rowFate("error", { type: "error", message: "x" }, view)).toEqual({ kind: "hide" });
+    expect(rowFate("tool_call", call({ type: "read", filePath: "a" }), view)).toEqual({ kind: "hide" });
+    expect(rowFate("assistant_message", { type: "assistant_message", text: "ok" }, view)).toEqual({ kind: "keep" });
+    expect(transformedTypes(view).sort()).toEqual(["error", "tool_call"]);
   });
 
   it("draws errors, notices and compaction as notice rows when asked", () => {
     const view = chatView({ notices: true }, [], false);
     expect(transformedTypes(view).sort()).toEqual(["compaction", "error", "notification"]);
-    expect(rowFate("notification", { type: "notification", level: "warning", message: "Rate limited" }, view)).toEqual({ kind: "notice", data: { level: "warning", title: "Warning", message: "Rate limited" } });
-    expect(summarizeNotice("compaction", { type: "compaction", status: "completed", trigger: "auto", preTokens: 152000 })).toEqual({ level: "info", title: "Context compacted", message: "152K tokens before" });
+    expect(rowFate("notification", { type: "notification", level: "warning", message: "Rate limited" }, view)).toEqual({ kind: "notice" });
+    expect(rowFate("compaction", { type: "compaction", status: "completed" }, chatView(undefined, [], false))).toEqual({ kind: "keep" });
   });
 
-  it("folds per kind, keeps short details open, and always opens failures", () => {
+  it("folds per kind, keeps short details open, and opens failures unless asked not to", () => {
     const look = { fold: "finished" as const, foldByKind: { read: "always" as const }, foldMinLines: 3 };
     expect(rowStartsOpen(look, "read", "running", 20)).toBe(false);
     expect(rowStartsOpen(look, "shell", "running", 20)).toBe(true);
     expect(rowStartsOpen(look, "shell", "completed", 2)).toBe(true);
     expect(rowStartsOpen(look, "read", "failed", 50)).toBe(true);
+    // Failed calls follow the fold rules like any other when "failed calls start open" is off.
+    expect(rowStartsOpen(look, "read", "failed", 50, false)).toBe(false);
+    expect(rowStartsOpen({ ...look, fold: "never" }, "shell", "failed", 50, false)).toBe(true);
+    expect(polishPrefs({ polish: { failedOpen: false } }).failedOpen).toBe(false);
   });
 
-  it("finds the program and colours a command's parts", () => {
+  it("finds the program a command runs", () => {
     expect(shellProgram("FOO=1 sudo /usr/bin/git status")).toBe("git");
     expect(shellProgram("cd api && npm test")).toBe("npm");
-    const tokens = commandTokens('git grep -n "a b" | head -5');
-    expect(tokens.filter((token) => token.kind === "program").map((token) => token.text)).toEqual(["git", "head"]);
-    expect(tokens.find((token) => token.kind === "string")?.text).toBe('"a b"');
-    expect(tokens.map((token) => token.text).join("")).toBe('git grep -n "a b" | head -5');
   });
 
   it("shows paths relative to the workspace", () => {
@@ -197,19 +244,20 @@ describe("0.15 chat rules", () => {
     expect(diff.after.filter((part) => part.changed).map((part) => part.text)).toEqual(["prices"]);
   });
 
-  it("splits thinking at its headings", () => {
-    expect(thinkingSteps("intro\n**Plan**\ndo a\n## Check\ndo b")).toEqual([
-      { title: "", text: "intro" },
-      { title: "Plan", text: "do a" },
-      { title: "Check", text: "do b" },
-    ]);
-  });
-
   it("reads accent names and colours", () => {
     expect(accentColor("jade")).toBe("#3fb68b");
     expect(accentColor("#123abc")).toBe("#123abc");
     expect(accentColor("theme")).toBeNull();
     expect(accentColor("nope")).toBeNull();
+  });
+
+  it("hands Chat Polish's rows the options they share with Morphise's", () => {
+    const prefs = polishPrefs({ wrap: false, commandColors: false, labels: "label", strength: "dim", density: "compact", phones: "paseo", reasoning: "expand", polish: { rowIcons: { thought: "hide" } } });
+    expect([prefs.diffWrap, prefs.commandColors, prefs.steps, prefs.density, prefs.phoneChat, prefs.reasoning]).toEqual(["off", "expanded", "dim", "compact", "off", "expanded"]);
+    // "A label": no icons on any row.
+    expect(prefs.rowIcons).toEqual({ steps: "hide", tool: "hide", thought: "hide" });
+    expect(polishPrefs({ polish: { rowIcons: { thought: "hide" } } }).rowIcons).toEqual({ steps: "show", tool: "show", thought: "hide" });
+    expect(polishPrefs(undefined).commandColors).toBe("always");
   });
 });
 
@@ -253,5 +301,19 @@ describe("file paths", () => {
     const summary = summarizeToolCall({ type: "tool_call", callId: "c", name: "Read", status: "completed", error: null, detail: { type: "read", filePath: long, content: "x" } });
     expect(summary?.path).toBe(long);
     expect(summary?.subject.length).toBeLessThan(long.length);
+  });
+});
+
+describe("plans and pages", () => {
+  it("keeps a finished plan when finished Other calls are hidden", () => {
+    const view = chatView({ toolCalls: "cards", hideFinished: ["other"] }, [], false);
+    expect(rowFate("tool_call", { type: "tool_call", name: "plan_approval", status: "completed", detail: { type: "plan", text: "1. Do it" } }, view)).toEqual({ kind: "plan" });
+  });
+
+  it("keeps drawing pages after HTML pages is turned off while Morphise draws tool rows", () => {
+    expect(chatView({ toolCalls: "cards" }, [], false).pages).toBe(true);
+    expect(chatView({}, [], false).pages).toBe(false);
+    expect(chatView({ polish: { html: true } }, [], false).pages).toBe(true);
+    expect(chatView({ enabled: false, toolCalls: "cards" }, [], false).pages).toBe(false);
   });
 });

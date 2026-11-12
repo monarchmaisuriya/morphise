@@ -6,7 +6,7 @@ type ViewKey = keyof Profile["sidebar"]["view"];
 export const VIEW_SECTIONS = {
   general: ["enabled", "list", "groupBy", "orderBy", "thenBy", "statusOrder", "pinnedFirst", "counts", "rowLimit", "density", "details", "rowActions", "filterBar"],
   rows: ["rowStyle", "titleSource", "show"],
-  chats: ["showAgents", "agentsFor", "singleChat", "chatRows", "showSubAgents", "subAgentRows"],
+  chats: ["showAgents", "agentsFor", "singleChat", "chatRows", "showSubAgents", "singleSubAgent", "subAgentRows"],
   steps: ["stepsCard", "steps"],
   archive: ["autoArchive"],
 } as const satisfies Record<string, readonly ViewKey[]>;

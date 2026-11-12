@@ -1,0 +1,293 @@
+// Ported from Chat Polish (lthieu96/paseo-chat-polish, MIT, see NOTICE.md): test/web.test.mjs
+// Runs the restyle in headless Chrome against a page shaped like Paseo's markup. Off unless
+// MORPHISE_BROWSER_TESTS=1 (it starts a browser); Chrome is found as Chat Polish found it.
+// Left out from Chat Polish's test: the prompt clamp, image stacks, and reading Paseo's bundle
+// (Morphise doesn't port those, or another part owns them).
+import { execFile } from "node:child_process";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { createServer, type Server } from "node:http";
+import { tmpdir } from "node:os";
+import { delimiter, join } from "node:path";
+import { promisify } from "node:util";
+import { build, type Plugin } from "esbuild";
+import { expect, it } from "vitest";
+
+const chrome = [process.env.CHROME_BIN, "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", ...(process.env.PATH ?? "").split(delimiter).flatMap((dir) => ["google-chrome", "chromium", "chromium-browser"].map((name) => join(dir, name)))].find((file) => file && existsSync(file));
+const enabled = process.env.MORPHISE_BROWSER_TESTS === "1" && !!chrome;
+
+// The page has no React Native or React: the restyle only asks Platform.OS, i18n's hooks never run.
+const stubs: Plugin = {
+  name: "stubs",
+  setup(b) {
+    b.onResolve({ filter: /^(react-native|react)$/ }, (args) => ({ path: args.path, namespace: "stub" }));
+    b.onLoad({ filter: /.*/, namespace: "stub" }, (args) => ({
+      contents: args.path === "react-native" ? 'export const Platform = { OS: "web" };' : "export const useMemo = (f) => f(); export const useSyncExternalStore = () => undefined;",
+      loader: "js",
+    }));
+  },
+};
+
+async function bundleWeb() {
+  const entry = ['export { restyleNative } from "./restyle";', 'export { stylePluginViews } from "./plugin-views";', 'export { followExpansionAtBottom } from "./prompts";', 'export { readHostAppearance } from "./host";'].join("\n");
+  const result = await build({ stdin: { contents: entry, resolveDir: __dirname, loader: "ts" }, bundle: true, format: "iife", globalName: "web", platform: "browser", target: "es2022", write: false, plugins: [stubs], logLevel: "silent" });
+  return result.outputFiles[0]!.text;
+}
+
+const CHECKS = [
+  "appColorsFromTheme",
+  "observerSettles",
+  "previewPromptLeftToPaseo",
+  "previewAttachmentsTagged",
+  "senderPromptBubble",
+  "chatDisplaySetting",
+  "permissionActionVariants",
+  "turnSummaryOpen",
+  "turnRails",
+  "turnEnter",
+  "runningRow",
+  "heightShrinks",
+  "placeholder",
+  "placeholderReleased",
+  "calloutUpdated",
+  "noGlobalScans",
+  "accordionCloses",
+  "accordionReverses",
+  "expansionStaysAtBottom",
+  "userScrollCancelsFollowing",
+  "detachedReadingPreserved",
+  "disabledFollowingPreserved",
+  "diffNoWrapScrollsBothAxes",
+  "diffWrapRestoresWrapping",
+];
+
+// Paseo's theme variables, as Unistyles puts them on :root.
+const THEME_VARS = ":root { --colors-surface0: #23272e; --colors-surface1: #2c313a; --colors-surface2: #323842; --colors-border: #3e4452; --colors-foreground: #abb2bf; --colors-foreground-muted: #959aa1; --colors-accent: #6699cc; --colors-accent-foreground: #23272e; --colors-status-success: #98c379; --colors-status-warning: #e5c07b; --colors-status-danger: #e06c75; }";
+
+const html = `<!doctype html><html><head><title>pending</title><style>${THEME_VARS}</style></head><body><img src="/hold" hidden>
+  <div data-testid="settings-detail-pane"></div>
+  <div data-testid="context-window-details" style="position:absolute;border:1px solid black;border-radius:12px;background:white"><div><span>Context</span><span>35% used</span></div><div data-testid="usage-report-test" style="height:180px">Usage</div></div>
+  <div data-testid="assistant-message"><div data-paseo-markdown-tag="blockquote"><span id="marker">[!NO</span></div></div>
+  <div><div data-testid="permission-request-deny" style="color:#888"><div><span>Deny</span></div></div><div data-testid="permission-request-action-always" style="color:#888"><div><span>Allow always</span></div></div><div data-testid="permission-request-action-once" style="color:#eee"><div><span>Allow once</span></div></div></div>
+  <script>
+    const checks = {}; const errors = [];
+    window.onerror = (message) => errors.push(String(message));
+    const wait = (ms = 50) => new Promise((resolve) => setTimeout(resolve, ms));
+    const NativeObserver = MutationObserver; let batches = 0; let capped = false;
+    window.MutationObserver = class extends NativeObserver {
+      constructor(cb) { super((records) => { if (++batches > 30) { capped = true; this.disconnect(); } else cb(records); }); }
+    };
+  </script>
+  <script src="/web.js"></script>
+  <script>
+    (async () => {
+      localStorage.removeItem('chat-polish:context-card-heights');
+      const restyle = web.restyleNative(() => true);
+      checks.appColorsFromTheme = document.documentElement.style.getPropertyValue('--cp-fg') === '#abb2bf' && document.documentElement.style.getPropertyValue('--cp-ok') === '#98c379';
+      await wait(); checks.observerSettles = !capped;
+      // Paseo 0.14 wraps a prompt's rows and text in a message preview that clamps long prompts itself.
+      const shapes = document.createElement('section');
+      shapes.innerHTML = '<div data-testid="user-message" id="p14"><div><div><div style="max-height:240px;overflow:hidden"><div><div data-message-text="true" style="line-height:20px;font-size:14px;white-space:pre">' + Array(15).fill('long prompt').join('\\n') + '</div></div></div></div></div></div>'
+        + '<div data-testid="user-message" id="a14"><div><div><div style="max-height:240px;overflow:hidden"><div><div id="a14row"><div><div><span>PR #12</span></div></div></div><div data-message-text="true">with a card</div></div></div></div></div></div>';
+      document.body.appendChild(shapes); await wait();
+      const bubbleOf = (id) => document.getElementById(id).firstElementChild.firstElementChild;
+      checks.previewPromptLeftToPaseo = !bubbleOf('p14').hasAttribute('data-cp-attach') && !document.querySelector('#p14 [data-cp-part]');
+      const row14 = document.getElementById('a14row');
+      checks.previewAttachmentsTagged = bubbleOf('a14').hasAttribute('data-cp-attach') && row14.dataset.cpPart === 'att-files' && row14.parentElement.hasAttribute('data-cp-attach-body') && !row14.nextElementSibling.hasAttribute('data-cp-part');
+      shapes.remove(); await wait();
+      // A prompt another agent sent leads with a "Sent by" button; the bubble after it keeps the restyle's shape and attachment layout.
+      const sent = document.createElement('section');
+      sent.innerHTML = '<div data-testid="user-message" id="s14"><div><button><div dir="auto">Sent by planner</div></button><div><div><div><div data-message-text="true">hello</div></div></div></div></div></div>'
+        + '<div data-testid="user-message" id="sa14"><div><button><div dir="auto">Sent by planner</div></button><div><div><div><div id="sa14row"><div><div><span>PR #12</span></div></div></div><div data-message-text="true">with a card</div></div></div></div></div></div>';
+      document.body.appendChild(sent); await wait();
+      const sentBubble = document.querySelector('#s14 > div > div');
+      checks.senderPromptBubble = getComputedStyle(sentBubble).paddingLeft === '14px' && getComputedStyle(document.querySelector('#s14 > div > button')).paddingLeft !== '14px'
+        && document.getElementById('sa14row').dataset.cpPart === 'att-files' && document.querySelector('#sa14 > div > div').hasAttribute('data-cp-attach');
+      sent.remove(); await wait();
+      // Paseo 0.14's chat display setting, with the tool call display it replaced as the fallback.
+      const realNow = Date.now; let clock = 0; Date.now = () => (clock += 5000);
+      const display = (settings) => (localStorage.setItem('@paseo:app-settings', JSON.stringify(settings)), web.readHostAppearance().chatDisplay);
+      checks.chatDisplaySetting = display({ chatDisplay: 'collapseTurns' }) === 'collapseTurns' && display({ chatDisplay: 'full', toolCallDetailLevel: 'overview' }) === 'full'
+        && display({ toolCallDetailLevel: 'overview' }) === 'collapseToolCalls' && display({ compactToolCalls: true }) === 'collapseToolCalls' && display({}) === 'full';
+      Date.now = realNow; localStorage.removeItem('@paseo:app-settings');
+      // Extra permission actions follow Paseo's variant, which it shows only by label color.
+      const action = (id) => document.querySelector('[data-testid="permission-request-action-' + id + '"]').dataset.cpPart;
+      checks.permissionActionVariants = action('always') === 'secondary' && action('once') === 'primary';
+      // Collapse turns (Paseo 0.14+): an open summary turns its chevron 90deg; its rows sit in IndentRails in their own history rows.
+      const turn = document.createElement('section');
+      turn.innerHTML = '<div data-history-row-id="t1"><div><div data-testid="turn-summary" id="ts"><button><div><div><div style="transform: rotate(90deg);"><svg><path d="m9 18 6-6-6-6"></path></svg></div></div><div>Ran 2 commands</div></div></button></div><div id="tail"></div></div></div>'
+        + '<div data-history-row-id="t2"><div><div id="rail"><div data-testid="tool-call-badge"><button></button></div></div></div></div>'
+        + '<div data-history-row-id="t3"><div><div id="railView"><div style="display: contents;"></div></div></div></div>'
+        + '<div data-history-row-id="paseo-chat-polish/x"><div><div style="display: contents;" id="view"><div></div></div></div></div>'
+        + '<div data-history-row-id="t4"><div><div id="wrap"><div data-cp-part="footer"></div></div></div></div>';
+      document.body.appendChild(turn); await wait();
+      const summary = document.getElementById('ts');
+      const openedTagged = summary.hasAttribute('data-cp-open') && getComputedStyle(summary.firstElementChild).opacity === '1';
+      summary.querySelector('[style]').style.transform = 'rotate(0deg)'; await wait();
+      checks.turnSummaryOpen = openedTagged && !summary.hasAttribute('data-cp-open');
+      checks.turnRails = document.getElementById('tail').dataset.cpIndent === 'tail' && ['rail', 'railView'].every((id) => document.getElementById(id).dataset.cpIndent === '')
+        && document.getElementById('railView').hasAttribute('data-cp-indent-end') && !document.getElementById('rail').hasAttribute('data-cp-indent-end') && !turn.querySelector('#view[data-cp-indent], #wrap[data-cp-indent], #ts[data-cp-indent]');
+      // Rows that mounted with the list don't animate; rows of a summary opened in place do, and so does a body opened in a row on screen.
+      const remounted = !turn.querySelector('[data-cp-enter]');
+      summary.querySelector('[style]').style.transform = 'rotate(90deg)'; await wait();
+      const opened = document.createElement('div'); opened.setAttribute('data-history-row-id', 't5');
+      opened.innerHTML = '<div><div id="railNew"><div data-testid="tool-call-badge"><button></button></div></div></div>';
+      turn.insertBefore(opened, turn.children[1]); await wait();
+      const badge = opened.querySelector('[data-testid="tool-call-badge"]');
+      badge.insertAdjacentHTML('beforeend', '<div><div><div id="sec"><div dir="auto">Details</div><div><div><div dir="auto">Limit</div><div dir="auto">3</div></div></div></div></div></div>'); await wait();
+      checks.turnEnter = remounted && document.getElementById('railNew').hasAttribute('data-cp-enter') && badge.lastElementChild.hasAttribute('data-cp-enter') && document.getElementById('sec').dataset.cpPart === 'tool-section';
+      turn.remove(); await wait();
+      // A loading row (Paseo's gradient copy over its label) runs in the restyle's look; its next step's label rises in; done once the copy goes.
+      const loading = document.createElement('div');
+      loading.innerHTML = '<div data-testid="tool-call-group" id="lg"><button><div><div><svg></svg></div><div><div dir="auto" id="lt">Ran 1 command</div><div><div style="background-image: linear-gradient(red, blue)">Ran 1 command</div></div></div></div></button></div>';
+      document.body.appendChild(loading); await wait();
+      const lg = document.getElementById('lg'), label = lg.querySelector('[data-cp-part="row-label"]');
+      const startedRunning = lg.hasAttribute('data-cp-running') && label?.hasAttribute('data-cp-running-label');
+      document.getElementById('lt').textContent = 'Ran 2 commands'; await wait();
+      const swapped = label.getAttribute('data-cp-swap') === 'a';
+      label.lastElementChild.remove(); await wait();
+      checks.runningRow = startedRunning && swapped && !lg.hasAttribute('data-cp-running') && !label.hasAttribute('data-cp-running-label');
+      loading.remove(); await wait();
+      const card = document.querySelector('[data-testid="context-window-details"]');
+      const usage = card.lastElementChild;
+      usage.style.height = '40px'; usage.appendChild(document.createElement('span')); await wait();
+      const heights = JSON.parse(localStorage.getItem('chat-polish:context-card-heights'));
+      checks.heightShrinks = heights[''] < 180 && !card.style.minHeight;
+      usage.remove(); card.appendChild(document.createElement('span')); await wait();
+      checks.placeholder = !!card.style.minHeight;
+      card.appendChild(usage); await wait(); checks.placeholderReleased = !card.style.minHeight;
+      let fullScans = 0; let markdownScans = 0;
+      const queryDocument = Document.prototype.querySelectorAll;
+      Document.prototype.querySelectorAll = function(selector) { if (selector === '*') fullScans++; return queryDocument.call(this, selector); };
+      const queryElement = Element.prototype.querySelectorAll;
+      Element.prototype.querySelectorAll = function(selector) { if (this === document.documentElement && selector.includes('data-paseo-markdown')) markdownScans++; return queryElement.call(this, selector); };
+      document.getElementById('marker').firstChild.nodeValue = '[!NOTE]';
+      document.querySelector('[data-testid="settings-detail-pane"]').appendChild(document.createElement('div'));
+      await wait(300);
+      checks.calloutUpdated = document.getElementById('marker').parentElement.dataset.cpCallout === 'note';
+      checks.noGlobalScans = fullScans === 0 && markdownScans === 0;
+      checks.observerSettles &&= !capped;
+      restyle();
+      const unstyle = web.stylePluginViews();
+      checks.accordionCloses = true; checks.accordionReverses = true;
+      for (const width of [320, 1000]) {
+        const fixture = document.createElement('div'); fixture.style.width = width + 'px';
+        fixture.innerHTML = '<div data-cp-expand="open" style="display:flex;flex-direction:column"><div style="display:flex;flex-direction:column;min-height:0;overflow:hidden"><div style="display:flex;margin-top:6px;margin-bottom:12px;height:100px;flex-shrink:0">Output</div></div></div><div>Next tool</div>';
+        document.body.appendChild(fixture);
+        const box = fixture.firstElementChild, next = fixture.lastElementChild;
+        const height = () => box.getBoundingClientRect().height;
+        height(); box.getAnimations().forEach((animation) => animation.finish());
+        const full = height(); box.dataset.cpExpand = 'closed'; height();
+        const animations = box.getAnimations(); animations.forEach((animation) => animation.pause());
+        animations.forEach((animation) => { animation.currentTime = 50; });
+        const middle = height();
+        checks.accordionCloses &&= full === 118 && middle > 0 && middle < full && Math.abs(next.getBoundingClientRect().top - box.getBoundingClientRect().top - middle) < 1;
+        animations.forEach((animation) => animation.finish());
+        checks.accordionCloses &&= height() === 0;
+        box.dataset.cpExpand = 'open'; height();
+        const opening = box.getAnimations(); opening.forEach((animation) => { animation.pause(); animation.currentTime = 25; });
+        const partial = height(); box.dataset.cpExpand = 'closed';
+        checks.accordionReverses &&= partial > 0 && partial < full && Math.abs(height() - partial) < 1;
+        box.getAnimations().forEach((animation) => animation.finish());
+        checks.accordionReverses &&= height() === 0;
+        fixture.remove();
+      }
+      const chat = document.createElement('div');
+      chat.dataset.testid = 'agent-chat-scroll';
+      chat.style = 'width:600px;height:400px;overflow:auto;overflow-anchor:auto';
+      chat.innerHTML = '<div style="display:flex;flex-direction:column;padding:16px"><div style="height:700px;flex-shrink:0;overflow-anchor:none"></div><div style="flex-shrink:0"><button>Ran command</button><div data-cp-expand="closed"><div style="min-height:0;overflow:hidden"><div style="height:250px;margin:6px 0 12px">Output</div></div></div></div></div>';
+      document.body.appendChild(chat);
+      const content = chat.firstElementChild, expanding = chat.querySelector('[data-cp-expand]');
+      chat.scrollTop = chat.scrollHeight; await wait();
+      // Paseo 0.11.4 follows content resizing in the next animation frame.
+      let hostFollowing = true;
+      const hostFollow = new ResizeObserver(() => requestAnimationFrame(() => {
+        if (hostFollowing) chat.scrollTop = chat.scrollHeight;
+      }));
+      hostFollow.observe(content); await wait();
+      chat.querySelector('button').focus({ preventScroll: true });
+      web.followExpansionAtBottom();
+      const gaps = [];
+      const beforePaint = new ResizeObserver(() => gaps.push(chat.scrollHeight - chat.clientHeight - chat.scrollTop));
+      beforePaint.observe(content);
+      expanding.dataset.cpExpand = 'open'; expanding.getBoundingClientRect();
+      const reveal = expanding.getAnimations(); reveal.forEach((animation) => animation.pause());
+      for (const time of [0, 20, 50, 100]) {
+        reveal.forEach((animation) => { animation.currentTime = time; });
+        expanding.getBoundingClientRect(); await wait(30);
+      }
+      checks.expansionStaysAtBottom = gaps.length > 0 && gaps.every((gap) => Math.abs(gap) <= 1);
+      hostFollowing = false;
+      beforePaint.disconnect(); hostFollow.disconnect();
+      reveal.forEach((animation) => animation.finish());
+      chat.dispatchEvent(new WheelEvent('wheel', { deltaY: -80, bubbles: true }));
+      chat.style.overflowAnchor = 'none'; chat.scrollTop -= 80;
+      const readingTop = chat.scrollTop, output = expanding.firstElementChild.firstElementChild;
+      output.style.height = '300px'; await wait(30);
+      checks.userScrollCancelsFollowing = Math.abs(chat.scrollTop - readingTop) <= 1;
+      web.followExpansionAtBottom(); output.style.height = '350px'; await wait(30);
+      checks.detachedReadingPreserved = Math.abs(chat.scrollTop - readingTop) <= 1;
+      chat.scrollTop = chat.scrollHeight;
+      const detachedBottom = chat.scrollTop;
+      web.followExpansionAtBottom(); output.style.height = '400px'; await wait(30);
+      checks.disabledFollowingPreserved = Math.abs(chat.scrollTop - detachedBottom) <= 1;
+      chat.remove();
+      const diff = document.createElement('div');
+      diff.dataset.cpNowrap = '';
+      diff.style = 'width:300px;max-height:100px;overflow-x:hidden;overflow-y:auto;display:flex;flex-direction:column;font:12px monospace;line-height:18px';
+      const lines = document.createElement('div'); lines.style = 'display:flex;flex-direction:column';
+      for (let i = 0; i < 12; i++) {
+        const row = document.createElement('div'); row.style = 'display:flex;gap:12px;flex-shrink:0';
+        const gutter = document.createElement('span'); gutter.textContent = '+ ' + String(99 + i).padStart(3, '\\u2007'); gutter.style.flexShrink = '0';
+        const code = document.createElement('span'); code.dataset.pmono = ''; code.style = 'flex-grow:1;flex-shrink:0;white-space:pre-wrap;overflow-wrap:break-word'; code.textContent = '  const value = ' + 'longFunctionName(argument); '.repeat(12);
+        row.append(gutter, code); lines.appendChild(row);
+      }
+      diff.appendChild(lines); document.body.appendChild(diff);
+      const firstCode = lines.firstElementChild.lastElementChild;
+      diff.scrollLeft = 80; diff.scrollTop = 36;
+      checks.diffNoWrapScrollsBothAxes = firstCode.getBoundingClientRect().height === 18 && diff.scrollLeft === 80 && diff.scrollTop === 36;
+      diff.removeAttribute('data-cp-nowrap');
+      for (const row of lines.children) row.lastElementChild.style = 'flex:1;min-width:0;white-space:pre-wrap;overflow-wrap:break-word';
+      checks.diffWrapRestoresWrapping = firstCode.getBoundingClientRect().height > 18 && diff.scrollWidth <= diff.clientWidth + 1;
+      diff.remove();
+      unstyle();
+      document.title = JSON.stringify({ checks, errors });
+    })().catch((error) => { document.title = JSON.stringify({ error: error.stack, checks }); }).finally(() => fetch('/done'));
+  </script></body></html>`;
+
+it.skipIf(!enabled)("restyles Paseo's markup, opens and closes rows smoothly, and keeps a pinned chat at the bottom", { timeout: 30000 }, async () => {
+  const temp = mkdtempSync(join(tmpdir(), "morphise-web-test-"));
+  let server: Server | undefined;
+  try {
+    const bundle = await bundleWeb();
+    // Hold page load open while real animation frames and ResizeObserver callbacks run.
+    let held: { end(): void } | undefined;
+    server = createServer((request, response) => {
+      if (request.url === "/hold") return void (held = response);
+      if (request.url === "/done") return void (held?.end(), response.end());
+      if (request.url === "/web.js") return void response.end(bundle);
+      response.setHeader("Content-Type", "text/html");
+      response.end(html);
+    });
+    await new Promise<void>((resolve) => server!.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as { port: number }).port;
+    const result = await promisify(execFile)(chrome!, ["--headless=new", "--no-sandbox", "--disable-gpu", "--no-first-run", "--disable-background-networking", `--user-data-dir=${join(temp, "chrome")}`, "--dump-dom", `http://127.0.0.1:${port}`], { encoding: "utf8", timeout: 20000, maxBuffer: 8 * 1024 * 1024 });
+    const title = /<title>([\s\S]*?)<\/title>/.exec(result.stdout)?.[1];
+    expect(title, "browser test did not finish").not.toBe("pending");
+    const report = JSON.parse(title!.replaceAll("&amp;", "&").replaceAll("&lt;", "<").replaceAll("&gt;", ">")) as { error?: string; errors?: string[]; checks: Record<string, boolean> };
+    expect(report.error).toBeUndefined();
+    expect(report.errors).toEqual([]);
+    expect(Object.keys(report.checks).sort()).toEqual([...CHECKS].sort());
+    for (const [check, passed] of Object.entries(report.checks)) expect(passed, check).toBe(true);
+  } finally {
+    server?.closeAllConnections();
+    server?.close();
+    rmSync(temp, { recursive: true, force: true });
+  }
+});
+
+// The bundle step runs without a browser, so a broken import shows up in every run.
+it("bundles the restyle for the page without React Native", async () => {
+  const bundle = await bundleWeb();
+  expect(bundle).toContain("restyleNative");
+  expect(() => new Function(bundle)).not.toThrow();
+});

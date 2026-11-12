@@ -11,8 +11,9 @@ export function useWorkspaceName(workspaces: ValueStore<WorkspaceList>, workspac
 }
 
 // Picks the workspace a task belongs to, or none: a value button that opens a searchable list of
-// open workspaces, most recently used first.
-export function WorkspacePicker({ t, workspaces, value, onChange }: { t: Tokens; workspaces: ValueStore<WorkspaceList>; value: string | null; onChange(workspaceId: string | null): void }) {
+// open workspaces, most recently used first. A workspace can belong to one task, so one that
+// another task holds (`holder` gives that task's title) shows it and cannot be picked.
+export function WorkspacePicker({ t, workspaces, value, onChange, holder }: { t: Tokens; workspaces: ValueStore<WorkspaceList>; value: string | null; onChange(workspaceId: string | null): void; holder(workspaceId: string): string | null }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const anchor = useRef<View>(null);
@@ -46,7 +47,7 @@ export function WorkspacePicker({ t, workspaces, value, onChange }: { t: Tokens;
       <Dropdown t={t} open={open} onClose={close} anchor={anchor} width={360} header={<Field t={t} plain autoFocus icon="Search" value={search} onChangeText={setSearch} placeholder="Find a workspace" accessibilityLabel="Find a workspace" />}>
         <MenuItem t={t} role="radio" icon="CircleSlash" label="No workspace" checked={value === null} onPress={() => pick(null)} />
         {choices.map((workspace) => (
-          <MenuItem key={workspace.id} t={t} role="radio" icon="FolderGit2" label={workspace.name} hint={workspace.project} checked={workspace.id === value} onPress={() => pick(workspace.id)} />
+          <MenuItem key={workspace.id} t={t} role="radio" icon="FolderGit2" label={workspace.name} hint={holder(workspace.id) ? `On "${holder(workspace.id)}"` : workspace.project} disabled={holder(workspace.id) !== null} checked={workspace.id === value} onPress={() => pick(workspace.id)} />
         ))}
         {choices.length === 0 ? <Text style={[t.text.small, { padding: 8 }]}>No workspace matches</Text> : null}
       </Dropdown>

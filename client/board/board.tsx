@@ -6,7 +6,7 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { type BoardColumn, boardColumns, todayGroups } from "../../shared/board";
 import { parseQuickAdd } from "../../shared/quick-add";
 import { isDue, type Reminder, reminderAt } from "../../shared/reminders";
-import { firstOpenColumn, type TaskOperation } from "../../shared/task-ops";
+import { firstOpenColumn, type TaskOperation, workspaceTask } from "../../shared/task-ops";
 import { DEFAULT_FILTER, type Task, type TaskDocument, type TaskFilter, type TaskView } from "../../shared/tasks";
 import { formatDue } from "../../shared/time-text";
 import { todayDate } from "../../shared/when";
@@ -65,9 +65,14 @@ function dueText(due: string, today: string): string {
 
 function MetaItem({ t, icon, text, tone }: { t: Tokens; icon: string; text?: string; tone?: string }) {
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+    // Never wider than the card: a long name is cut to one line with "…".
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 1, minWidth: 0, maxWidth: "100%" }}>
       <Icon name={icon} size={12} color={tone ?? t.c.foregroundMuted} />
-      {text ? <Text style={{ color: tone ?? t.c.foregroundMuted, fontSize: 11 }}>{text}</Text> : null}
+      {text ? (
+        <Text style={{ flexShrink: 1, color: tone ?? t.c.foregroundMuted, fontSize: 11 }} numberOfLines={1}>
+          {text}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -355,7 +360,9 @@ function AttachPanel({ t, document, workspaceId, workspaces, run }: { t: Tokens;
   const [search, setSearch] = useState("");
   const query = search.trim().toLowerCase();
   const done = document.columns.find((column) => column.done)?.id;
-  const candidates = document.tasks
+  // A workspace belongs to one task: once it has one, the panel says which instead of offering more.
+  const holder = workspaceTask(document, workspaceId);
+  const candidates = holder ? [] : document.tasks
     .filter((task) => task.archivedAt === null && task.column !== done && task.links.workspaceId !== workspaceId)
     .filter((task) => !query || task.title.toLowerCase().includes(query))
     // Unattached tasks first, then the most recently changed.
@@ -367,7 +374,7 @@ function AttachPanel({ t, document, workspaceId, workspaces, run }: { t: Tokens;
         {candidates.slice(0, 40).map((task) => (
           <AttachRow key={task.id} t={t} task={task} workspaces={workspaces} onAttach={() => void run({ kind: "setLink", id: task.id, link: "workspaceId", value: workspaceId })} />
         ))}
-        {candidates.length === 0 ? <Text style={[t.text.small, { padding: 8 }]}>{query ? "No open task matches" : "Every open task already belongs to this workspace"}</Text> : null}
+        {candidates.length === 0 ? <Text style={[t.text.small, { padding: 8 }]}>{holder ? `This workspace already has a task: "${holder.title}". A workspace can belong to one task.` : query ? "No open task matches" : "No open task to attach"}</Text> : null}
         {candidates.length > 40 ? <Text style={[t.text.small, { padding: 8 }]}>Type to find more</Text> : null}
       </View>
     </PanelBox>

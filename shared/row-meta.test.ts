@@ -84,6 +84,19 @@ describe("listedChatKeys and runningShownBelow", () => {
     expect([...listedChatKeys("w", tree, listing({ isExpanded: (key) => key === "chats:w" }))]).toContain("h:c");
   });
 
+  it("hides a chat's only sub-agent when asked, even while it is open, and keeps two or more", () => {
+    const lone = { top: [ref("a"), ref("b")], children: new Map([["a", [ref("s1")]], ["b", [ref("s2"), ref("s3")]]]) };
+    expect([...listedChatKeys("w", lone, listing({ limit: 5, subLimit: 5 }))]).toEqual(["h:a", "h:s1", "h:b", "h:s2", "h:s3"]);
+    expect([...listedChatKeys("w", lone, listing({ limit: 5, subLimit: 5, singleSubAgent: "hide", openKey: "h:s1" }))]).toEqual(["h:a", "h:b", "h:s2", "h:s3"]);
+    expect([...listedChatKeys("w", lone, listing({ limit: 5, singleSubAgent: "hide", subAgents: "open", openKey: "h:s1" }))]).toEqual(["h:a", "h:b"]);
+    // Its running work then shows on the chat row.
+    expect(runningShownBelow([ref("s1")], listedChatKeys("w", lone, listing({ limit: 5, singleSubAgent: "hide" })))).toBe(false);
+    // The open lone sub-agent's chat row holds the highlight.
+    expect(owningRowKey(lone, "h:s1", true)).toBe("h:a");
+    // A workspace's lone chat whose lone sub-agent is hidden lists nothing, under "hide" for both.
+    expect(listsChats("hide", [ref("a")], new Map([["a", [ref("s1")]]]), listing({ singleSubAgent: "hide" }))).toBe(false);
+  });
+
   it("lists a lone chat only when asked, or when its sub-agents would show", () => {
     const one = [ref("a")];
     expect(listsChats(undefined, one, new Map(), listing())).toBe(true);

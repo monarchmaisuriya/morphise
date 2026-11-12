@@ -10,7 +10,7 @@ import { formatElapsed } from "../shared/time-text";
 import { type AttentionItem, type AttentionList, attentionOrder } from "./attention";
 import { ANSWER_TAIL, type ApplyBookmark, type BookmarkStore, bookmarksOf } from "./bookmark-store";
 import { type ValueStore, useValue } from "./profile-store";
-import { statusColor } from "./ui/hues";
+import { statusColor, tileColor } from "./ui/hues";
 import { Button, Field, Icon, IconButton, Segmented, type Tokens, useTokens } from "./ui/kit";
 import { usePulse } from "./ui/pulse";
 import type { WorkspaceList } from "./workspaces";
@@ -29,7 +29,7 @@ export interface InboxDeps {
   bookmarkLastAnswer(agentId: string, workspaceId: string | null, note: string): Promise<void>;
 }
 
-type Entry = AttentionItem & { workspace: string };
+type Entry = AttentionItem & { workspace: string; project: string };
 type Settings = ReturnType<typeof UseSettings<typeof inboxSettings.schema>>;
 
 // Two panes from this width; below it the list, and the detail opens over it.
@@ -51,56 +51,86 @@ function whereOf(entry: Entry, list: AttentionList, withWorkspace: boolean): str
 
 // ---------- List ----------
 
-function InboxRow({ entry, t, list, selected, withWorkspace, onPress }: { entry: Entry; t: Tokens; list: AttentionList; selected: boolean; withWorkspace: boolean; onPress(): void }) {
-  const where = whereOf(entry, list, withWorkspace);
+const REASON_ICONS: Record<InboxReason, string> = { permission: "ShieldQuestion", failed: "CircleAlert", finished: "CircleCheck" };
+
+// One waiting chat: its status icon, title and time on the first line; then what it waits on (the
+// request or the error; for a finished chat its workspace, since the heading already says
+// "Finished"); and, on hover (web) or always (touch), Clear and Open buttons.
+function InboxRow({ entry, t, list, selected, groupedByStatus, onPress, onOpen, onClear }: { entry: Entry; t: Tokens; list: AttentionList; selected: boolean; groupedByStatus: boolean; onPress(): void; onOpen: (() => void) | null; onClear: (() => void) | null }) {
+  const [hovered, setHovered] = useState(false);
   const elapsed = entry.at ? formatElapsed(entry.at, new Date()) : null;
-  const preview = previewLine(entry);
+  const parent = entry.parentAgentId ? list.get(entry.parentAgentId)?.title ?? "a chat" : null;
+  const color = reasonColor(t, entry.reason);
+  // The status word only when no heading above says it.
+  const detail = entry.reason === "finished" ? (groupedByStatus ? null : LABELS.finished) : previewLine(entry);
+  const where = [parent ? `Sub-agent of ${parent}` : null, groupedByStatus ? entry.workspace : null].filter(Boolean).join(" · ");
+  // Hover buttons on desktop and web; on phones a tap opens the item, whose page has the same buttons.
+  const showActions = hovered && Platform.OS === "web";
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ selected }}
-      accessibilityLabel={`${entry.title}, ${LABELS[entry.reason]}, ${preview}${where ? `, ${where}` : ""}`}
+      accessibilityLabel={`${entry.title}, ${LABELS[entry.reason]}${detail && entry.reason !== "finished" ? `, ${detail}` : ""}${where ? `, ${where}` : ""}`}
       onPress={onPress}
-      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => ({
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
+      style={({ pressed }: { pressed: boolean }) => ({
         flexDirection: "row",
         gap: 10,
         paddingVertical: 8,
-        paddingHorizontal: 10,
+        paddingLeft: 12,
+        paddingRight: 8,
         borderRadius: t.radius.row,
-        backgroundColor: selected ? t.c.surface2 : pressed || hovered ? t.c.surface1 : "transparent",
+        overflow: "hidden",
+        backgroundColor: selected ? t.c.surface1 : pressed || hovered ? t.c.surface1 : "transparent",
       })}
     >
-      <View style={{ width: 8, height: 18, justifyContent: "center" }}>
-        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: reasonColor(t, entry.reason) }} />
+      {selected ? <View style={{ position: "absolute", left: 0, top: 8, bottom: 8, width: 3, borderRadius: 2, backgroundColor: t.c.accent }} /> : null}
+      <View style={{ paddingTop: 1 }}>
+        <Icon name={REASON_ICONS[entry.reason]} size={15} color={color} />
       </View>
-      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+      <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <Text style={{ flex: 1, color: t.c.foreground, fontSize: 14, fontWeight: selected ? "600" : "500" }} numberOfLines={1}>
+          <Text style={{ flex: 1, color: t.c.foreground, fontSize: 13, fontWeight: selected ? "600" : "500" }} numberOfLines={1}>
             {entry.title}
           </Text>
-          {entry.permissionCount > 1 ? <Text style={{ fontSize: 11, color: reasonColor(t, entry.reason) }}>{entry.permissionCount}</Text> : null}
-          {elapsed ? <Text style={t.text.meta}>{elapsed}</Text> : null}
+          {entry.permissionCount > 1 ? (
+            <View style={{ paddingHorizontal: 5, borderRadius: 8, backgroundColor: t.c.surface2 }}>
+              <Text style={{ fontSize: 11, color }}>{entry.permissionCount}</Text>
+            </View>
+          ) : null}
+          {showActions && (onClear || onOpen) ? null : elapsed ? <Text style={t.text.meta}>{elapsed}</Text> : null}
+          {showActions && onClear ? <IconButton t={t} size="sm" icon="Check" label={`Clear ${entry.title} from the Inbox`} onPress={onClear} /> : null}
+          {showActions && onOpen ? <IconButton t={t} size="sm" icon="ArrowUpRight" label={`Open ${entry.title}`} onPress={onOpen} /> : null}
         </View>
-        <Text style={{ fontSize: 12, color: entry.reason === "failed" ? t.c.statusDanger : t.c.foregroundMuted, fontFamily: entry.reason === "permission" && entry.permission?.subject ? MONO : undefined }} numberOfLines={1}>
-          {preview}
-        </Text>
-        {where ? (
-          <Text style={t.text.small} numberOfLines={1}>
-            {where}
+        {detail ? (
+          <Text style={{ fontSize: 12, color: entry.reason === "failed" ? t.c.statusDanger : t.c.foregroundMuted, fontFamily: entry.reason === "permission" && entry.permission?.subject ? MONO : undefined }} numberOfLines={1}>
+            {detail}
           </Text>
+        ) : null}
+        {where ? (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, minWidth: 0 }}>
+            {groupedByStatus && entry.workspace ? <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: tileColor(entry.project || entry.workspace) }} /> : null}
+            <Text style={[t.text.small, { flexShrink: 1 }]} numberOfLines={1}>
+              {where}
+            </Text>
+          </View>
         ) : null}
       </View>
     </Pressable>
   );
 }
 
-function GroupHeading({ t, title, count, color }: { t: Tokens; title: string; count: number; color?: string }) {
+function GroupHeading({ t, title, count, color, icon }: { t: Tokens; title: string; count: number; color?: string; icon?: string }) {
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingTop: 10, paddingBottom: 2 }}>
-      {color ? <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }} /> : null}
-      <Text style={t.text.label} numberOfLines={1}>
-        {title} · {count}
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingTop: 14, paddingBottom: 4 }}>
+      {icon ? <Icon name={icon} size={12} color={color ?? t.c.foregroundMuted} /> : null}
+      <Text style={[t.text.label, { flexShrink: 1 }]} numberOfLines={1}>
+        {title}
       </Text>
+      <View style={{ paddingHorizontal: 6, borderRadius: 8, backgroundColor: t.c.surface2 }}>
+        <Text style={{ fontSize: 11, color: t.c.foregroundMuted }}>{count}</Text>
+      </View>
     </View>
   );
 }
@@ -401,7 +431,7 @@ export function WaitingView({ deps, theme, compact, navigation }: { deps: InboxD
     // Chats in archived, internal or background workspaces stay out, as their workspaces do.
     const entries: Entry[] = attentionOrder(list)
       .filter((item) => workspaces.get(item.workspaceId)?.open !== false)
-      .map((item) => ({ ...item, workspace: workspaces.get(item.workspaceId)?.name ?? "" }));
+      .map((item) => ({ ...item, workspace: workspaces.get(item.workspaceId)?.name ?? "", project: workspaces.get(item.workspaceId)?.project ?? "" }));
     const { shown, counts } = inboxView(entries, { filter, search, cleared });
     const wide = !layout.compact && width >= WIDE;
     const open = navigation ? (agentId: string) => navigation.openAgent({ agentId }) : null;
@@ -453,9 +483,9 @@ export function WaitingView({ deps, theme, compact, navigation }: { deps: InboxD
         if (!items.length) continue;
         sections.push(
           <View key={reason}>
-            {filter === "all" ? <GroupHeading t={t} title={HEADINGS[reason]} count={items.length} color={reasonColor(t, reason)} /> : null}
+            {filter === "all" ? <GroupHeading t={t} title={HEADINGS[reason]} count={items.length} color={reasonColor(t, reason)} icon={REASON_ICONS[reason]} /> : null}
             {items.map((entry) => (
-              <InboxRow key={entry.id} entry={entry} t={t} list={list} selected={entry.id === selected} withWorkspace onPress={() => pick(entry.id)} />
+              <InboxRow key={entry.id} entry={entry} t={t} list={list} selected={entry.id === selected} groupedByStatus={filter === "all"} onPress={() => pick(entry.id)} onOpen={open ? () => open(entry.id) : null} onClear={canClear(entry) ? () => clear([entry]) : null} />
             ))}
           </View>,
         );
@@ -466,9 +496,9 @@ export function WaitingView({ deps, theme, compact, navigation }: { deps: InboxD
       for (const [name, items] of byWorkspace) {
         sections.push(
           <View key={name}>
-            <GroupHeading t={t} title={name} count={items.length} />
+            <GroupHeading t={t} title={name} count={items.length} color={tileColor(items[0]?.project || name)} icon="FolderGit2" />
             {items.map((entry) => (
-              <InboxRow key={entry.id} entry={entry} t={t} list={list} selected={entry.id === selected} withWorkspace={false} onPress={() => pick(entry.id)} />
+              <InboxRow key={entry.id} entry={entry} t={t} list={list} selected={entry.id === selected} groupedByStatus={false} onPress={() => pick(entry.id)} onOpen={open ? () => open(entry.id) : null} onClear={canClear(entry) ? () => clear([entry]) : null} />
             ))}
           </View>,
         );

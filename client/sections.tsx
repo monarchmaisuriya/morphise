@@ -1,4 +1,4 @@
-import type { PluginButton, PluginClientContext, PluginTimelineTransformerContribution } from "@getpaseo/plugin/client";
+import type { PluginButton, PluginClientContext } from "@getpaseo/plugin/client";
 import { SidebarRow, useToast } from "@getpaseo/plugin/client/ui";
 import type { Prompt } from "../shared/document";
 import type { Profile } from "../shared/profile";
@@ -23,15 +23,19 @@ import { createChecksPanel } from "./checks-panel";
 import { createDispatchScreen, DISPATCH_ICON, DISPATCH_SCREEN_ID } from "./dispatch";
 import { createWorkbenchScreen, createWorkbenchSidebarItem, WORKBENCH_SCREEN_ID, LEGACY_SCREENS } from "./workbench";
 import { createSidebarView } from "./sidebar-view";
-import { CHAT_STEPS_KIND, chatStepsSchema, createChatStepsRow } from "./steps-card";
-import { createNoticeRow, createRecapRow, createThinkingRow, createToolRow, NOTICE_ROW_KIND, noticeRowSchema, recapRowSchema, type RowActions, THINKING_ROW_KIND, thinkingRowSchema, TOOL_ROW_KIND, toolRowSchema } from "./chat-rows";
+import { createRecapRow, recapRowSchema, type RowActions } from "./chat-rows";
+import { registerChatRows } from "./polish/rows/register";
 import { createDetailsPanel, DETAILS_PANEL_ID, detailsStore } from "./details-panel";
 import { readImage, revealFile } from "../shared/files";
-import { chatLook, chatView, lastTurnMarkdown, rowFate, transformedTypes, TURN_RECAP_KIND } from "../shared/chat-view";
+import { chatLook, lastTurnMarkdown, TURN_RECAP_KIND } from "../shared/chat-view";
 import { stepsOptions } from "../shared/steps";
-import { applyStyleSheet, scrollToPrompt } from "./web";
+import { applyStyleSheet } from "./web";
+import { jumpToPrompt } from "./polish/web/prompts";
 import { copyText } from "@getpaseo/plugin/client/ui";
 import { Platform } from "react-native";
+import { POLISH_DEFAULTS, type PolishSettings, type Prefs, polishPrefs } from "../shared/polish/prefs";
+import { setPrefs } from "./polish/prefs";
+import { setCurrentTheme } from "./polish/theme-registry";
 
 
 export interface Applied {
@@ -90,9 +94,29 @@ function createRows(rows: readonly Row[], deps: ActionDeps) {
 
 const json = (value: unknown) => JSON.stringify(value);
 
-export function createSections(client: PluginClientContext, deps: ActionDeps, tasks: SurfaceDeps, switchLayout: (id: string) => Promise<void>): Section<Applied>[] {
-  // What Morphise's chat rows can do: read pictures and reveal files on the daemon, show details in
-  // the Details tab of the chat's workspace, and shorten paths to that workspace's folder.
+// Chat Polish's Command Center switches: [id, title, icon, chat.polish key, value to set].
+// `rows`: Morphise draws tool calls (merging steps does nothing otherwise).
+function polishToggles(prefs: Prefs, rows: boolean): [string, string, string, keyof PolishSettings, PolishSettings[keyof PolishSettings]][] {
+  return [
+    ...(rows ? [["merge", prefs.merge === "on" ? "Chat: show each step on its own row" : "Chat: merge steps between replies into one row", "Layers", "merge", prefs.merge !== "on"] as [string, string, string, keyof PolishSettings, PolishSettings[keyof PolishSettings]]] : []),
+    ["selection", prefs.selection === "on" ? "Chat: hide the bar over selected text" : "Chat: show the bar over selected text", "TextSelect", "selection", prefs.selection !== "on"],
+    ["restyle", prefs.nativeStyle === "design" ? "Chat: leave Paseo's items as Paseo draws them" : "Chat: restyle Paseo's items", "Paintbrush", "restyle", prefs.nativeStyle !== "design"],
+    ["diagrams", prefs.diagrams === "pele" ? "Chat: draw diagrams with Paseo's mermaid" : "Chat: draw diagrams with Pele", "Workflow", "diagrams", prefs.diagrams === "pele" ? "mermaid" : "pele"],
+    ["html", prefs.html === "on" ? "Chat: stop giving new agents HTML pages" : "Chat: give new agents HTML pages", "AppWindow", "html", prefs.html !== "on"],
+  ];
+}
+
+// Sets one `chat.polish` key on a chat being changed; a value that is the default is removed.
+function setPolish(chat: Record<string, unknown>, key: keyof PolishSettings, value: unknown) {
+  const polish = { ...((chat.polish ?? {}) as Record<string, unknown>) };
+  if (value === POLISH_DEFAULTS[key]) delete polish[key];
+  else polish[key] = value;
+  chat.polish = Object.keys(polish).length ? polish : undefined;
+}
+
+// What Morphise's chat rows can do: read pictures and reveal files on the daemon, show details in
+// the Details tab of the chat's workspace, and shorten paths to that workspace's folder.
+export function createRowActions(client: PluginClientContext, tasks: Pick<SurfaceDeps, "chats" | "workspaces">): RowActions {
   const workspaceOf = async (agentId: string): Promise<string | null> => {
     const known = tasks.chats.get().get(agentId)?.workspaceId;
     if (known) return known;
@@ -101,7 +125,7 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
     await handle.refresh().catch(() => null);
     return handle.workspaceId;
   };
-  const rowActions: RowActions = {
+  return {
     readImage: (path) => client.rpc(readImage, { path }),
     reveal: (path) => client.rpc(revealFile, { path }),
     async openDetails(agentId, details) {
@@ -116,6 +140,10 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
       return workspaceId ? tasks.workspaces.get().get(workspaceId)?.directory ?? null : null;
     },
   };
+}
+
+export function createSections(client: PluginClientContext, deps: ActionDeps, tasks: SurfaceDeps, switchLayout: (id: string) => Promise<void>): Section<Applied>[] {
+  const rowActions = createRowActions(client, tasks);
   // A workspace's header button opens the reminder picker for its open chat.
   const ChatPopover = createChatPopover(tasks);
   const remindButton: PluginButton = { title: "Remind me", icon: "AlarmClock", behavior: { kind: "popover", Content: ChatPopover } };
@@ -124,7 +152,8 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
       name: "theme",
       key: ({ profile }) => json(profile.theme),
       register({ profile: { theme } }, track) {
-        if (theme) track(client.addTheme({ id: "profile-theme", ...theme }));
+        // Paseo takes a theme's name, appearance and colours; the sidebar colour is Morphise's own.
+        if (theme) track(client.addTheme({ id: "profile-theme", name: theme.name, appearance: theme.appearance, colors: theme.colors }));
       },
     },
     {
@@ -160,38 +189,30 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
       },
     },
     {
+      // Chat Polish's ported code reads its preferences and theme from these stores (one owner:
+      // the profile); each part follows them through subscribePrefs / subscribeTheme.
+      name: "chat.polish",
+      key: ({ profile }) => json([profile.chat ?? null, profile.theme]),
+      register({ profile }) {
+        const prefs = polishPrefs(profile.chat);
+        setPrefs(prefs);
+        setCurrentTheme(profile.theme, prefs.syntax);
+      },
+    },
+    {
       // Every chat row Morphise hides or redraws, from one owner: the Chat settings (hidden row
-      // types, tool call cards or lines, thinking cards) and the steps card "In the chat". One
-      // transformer per row type, so two rules never compete for the same row. Prompts and
-      // replies are never redrawn, so Paseo's Fork and Copy on them always stay.
+      // types, Chat Polish's rows for tool calls, thoughts, merged steps, plans, todo updates and
+      // notices) and the steps card "In the chat". One transformer per row type, so two rules
+      // never compete for the same row. Prompts and replies are never redrawn, so Paseo's Fork
+      // and Copy on them always stay.
       name: "chat.timeline",
       key: ({ profile }) => json([profile.chat, profile.timeline.hide, profile.sidebar.view.stepsCard, profile.sidebar.view.steps]),
       register({ profile }, track) {
         const steps = stepsOptions(profile.sidebar.view.steps);
-        const view = chatView(profile.chat, profile.timeline.hide, profile.sidebar.view.stepsCard !== false && steps.position === "chat", Platform.OS === "ios" || Platform.OS === "android");
-        const look = chatLook(profile.chat);
-        for (const itemType of transformedTypes(view)) {
-          const transformer = {
-            id: `chat-${itemType.replaceAll("_", "-")}`,
-            query: { itemType },
-            transform({ item, phase }: { item: unknown; phase: "streaming" | "complete" }) {
-              const fate = rowFate(itemType, item, view);
-              if (fate.kind === "keep") return undefined;
-              if (fate.kind === "hide") return { items: [] };
-              if (fate.kind === "thinking") return { items: [{ type: "plugin", kind: THINKING_ROW_KIND, version: 2, data: { ...fate.data, streaming: phase === "streaming" } }] };
-              if (fate.kind === "notice") return { items: [{ type: "plugin", kind: NOTICE_ROW_KIND, version: 1, data: fate.data }] };
-              return { items: [{ type: "plugin", kind: fate.kind === "tool" ? TOOL_ROW_KIND : CHAT_STEPS_KIND, version: fate.kind === "tool" ? 2 : 1, data: fate.data }] };
-            },
-          } as PluginTimelineTransformerContribution;
-          track(client.addTimelineTransformer(transformer));
-        }
-        // Version 2: the cards' data (0.14) differs from 0.13's one-line rows.
-        if (view.toolCalls !== "paseo") track(client.addTimelineRenderer({ kind: TOOL_ROW_KIND, version: 2, schema: toolRowSchema, Component: createToolRow(look, rowActions) }));
-        if (view.reasoning === "fold" || view.reasoning === "expand") track(client.addTimelineRenderer({ kind: THINKING_ROW_KIND, version: 2, schema: thinkingRowSchema, Component: createThinkingRow(look) }));
-        if (view.notices) track(client.addTimelineRenderer({ kind: NOTICE_ROW_KIND, version: 1, schema: noticeRowSchema, Component: createNoticeRow(look) }));
+        const stepsInChat = profile.sidebar.view.stepsCard !== false && steps.position === "chat";
+        track(registerChatRows(client, rowActions, { chat: profile.chat, hidden: profile.timeline.hide, stepsInChat, steps: () => steps }));
         // Always: recaps already in a chat keep drawing after the setting is turned off.
-        track(client.addTimelineRenderer({ kind: TURN_RECAP_KIND, version: 1, schema: recapRowSchema, Component: createRecapRow(look, rowActions) }));
-        if (view.stepsInChat) track(client.addTimelineRenderer({ kind: CHAT_STEPS_KIND, version: 1, schema: chatStepsSchema, Component: createChatStepsRow(client.paseo, () => steps) }));
+        track(client.addTimelineRenderer({ kind: TURN_RECAP_KIND, version: 1, schema: recapRowSchema, Component: createRecapRow(chatLook(profile.chat), rowActions) }));
       },
     },
     {
@@ -204,7 +225,7 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
     },
     {
       name: "chat.commands",
-      key: ({ profile }) => json([profile.chat?.toolCalls, profile.chat?.reasoning, profile.chat?.enabled]),
+      key: ({ profile }) => json(profile.chat ?? null),
       register({ profile }, track) {
         const chat = profile.chat ?? {};
         const style = chat.toolCalls ?? "paseo";
@@ -215,6 +236,8 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
           { id: "morphise-chat-tools", title: `Chat: show tool calls as ${nextTitle}`, icon: "Rows3", keywords: ["chat", "tool", "calls", "cards", "lines", "compact"], run: () => tasks.updateChat((value) => void (value.toolCalls = next === "paseo" ? undefined : next)) },
           { id: "morphise-chat-thinking", title: folded ? "Chat: show thinking as Paseo does" : "Chat: fold thinking into a row", icon: "Brain", keywords: ["chat", "thinking", "reasoning", "fold"], run: () => tasks.updateChat((value) => void (value.reasoning = folded ? undefined : "fold")) },
           { id: "morphise-chat-switch", title: chat.enabled === false ? "Chat: let Morphise draw chat rows" : "Chat: show every row as Paseo draws it", icon: "MessageSquare", keywords: ["chat", "rows", "off", "on", "paseo"], run: () => tasks.updateChat((value) => void (value.enabled = chat.enabled === false ? undefined : false)) },
+          // Chat Polish's switches (see NOTICE.md), each naming what selecting it does.
+          ...polishToggles(polishPrefs(chat), style !== "paseo").map(([id, title, icon, key, value]) => ({ id: `morphise-polish-${id}`, title, icon, keywords: ["chat", "polish", "toggle"], run: () => tasks.updateChat((next) => setPolish(next, key, value)) })),
         ];
         for (const item of items) track(client.addCommandCenterItem({ id: item.id, title: item.title, icon: item.icon, keywords: item.keywords, context: "global", onSelect: item.run }));
         // Web only: Paseo's page holds the prompts, so these move through it.
@@ -227,9 +250,8 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
                 icon: direction === "previous" ? "ArrowUp" : "ArrowDown",
                 keywords: ["chat", "prompt", "jump", "scroll", direction],
                 context: "agent",
-                onSelect: () => {
-                  if (!scrollToPrompt(direction)) throw new Error(direction === "previous" ? "No prompt above" : "No prompt below");
-                },
+                // Also pages through prompts Paseo's list has not drawn yet (⌥⌘↑ and ⌥⌘↓ do the same).
+                onSelect: () => jumpToPrompt(direction === "previous" ? -1 : 1),
               }),
             );
           }

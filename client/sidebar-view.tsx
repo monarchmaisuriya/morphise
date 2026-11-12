@@ -43,10 +43,10 @@ import { createValueStore, type ValueStore, useValue } from "./profile-store";
 import { useReminderClock } from "./reminder-clock";
 import { type AlertEntry, remindersOf } from "./reminder-alerts";
 import { type PickerDeps, ReminderPicker, type ReminderTarget } from "./reminder-picker";
-import { followUpTask, followUpWorkspaceTask } from "../shared/task-ops";
+import { followUpTask, workspaceTask } from "../shared/task-ops";
 import { type ApplyTaskOperations, type TaskStore, tasksOf } from "./task-store";
 import { Button, Dropdown, Field, Icon, IconButton, MenuItem, PopoverHost, Tag, type Tokens, useTokens } from "./ui/kit";
-import { BLUE, DONE_OPACITY, PURPLE, statusColor } from "./ui/hues";
+import { BLUE, DONE_OPACITY, PURPLE, statusColor, tileColor } from "./ui/hues";
 import { usePulse } from "./ui/pulse";
 import { StepsCards } from "./steps-card";
 import { DISPATCH_ICON, DISPATCH_SCREEN_ID, screenOpener } from "./dispatch";
@@ -63,31 +63,6 @@ const DEFAULT_VIEW_STATE: ViewState = { collapsed: [], statusFilter: [], project
 // Touch screens get finger-sized rows and always-visible row buttons. Paseo reports its sidebar as
 // "compact" on desktop too, so the input decides this (no hover), not the layout.
 const TOUCH = cannotHover();
-// Letter tiles for projects, as Paseo's own sidebar draws them; picked by the project's name.
-// Project tiles take a hue, never gray, white or black, so every project reads as its own.
-const TILE_COLORS = [
-  "#b05c80", // rose
-  "#c08a3e", // amber
-  "#4f9a8f", // teal
-  "#5b7fc7", // blue
-  "#8a6cc7", // violet
-  "#c76b5b", // coral
-  "#6b9a4f", // green
-  "#3a9cc4", // cyan
-  "#6a5fd1", // indigo
-  "#b54fb0", // magenta
-  "#c24d5e", // crimson
-  "#d07a2f", // orange
-  "#2e9a76", // emerald
-  "#8e4f8f", // plum
-  "#a5553a", // brick
-  "#b08d2a", // mustard
-];
-function tileColor(name: string): string {
-  let hash = 0;
-  for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-  return TILE_COLORS[hash % TILE_COLORS.length];
-}
 const REMINDERS_GROUP = "reminders";
 
 // Search text, the open menu and expanded groups live outside the view, so they survive the view
@@ -798,7 +773,8 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   const elapsed = shows.lastActivity ? formatElapsed(config.details.timeInStatus ? workspace.since : workspace.lastPrompt, now) : null;
   const reminder = shared.workspaceReminders.get(reference.id) ?? null;
   // The workspace's own reminder (not one of its chats'), which Remind me edits.
-  const ownReminder = followUpWorkspaceTask(tasksOf(shared.picker.tasks.get()), reference.id)?.reminder ?? null;
+  const ownTask = workspaceTask(tasksOf(shared.picker.tasks.get()), reference.id);
+  const ownReminder = ownTask?.reminder ?? null;
   const host = shared.hosts.find((item) => item.serverId === reference.hostId)?.label ?? null;
   const pr = shows.pullRequest ? info?.pullRequest ?? null : null;
   const changes = workspace.diff && workspace.diff.additions + workspace.diff.deletions > 0 ? workspace.diff : null;
@@ -890,12 +866,12 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
           trailing={time}
           actions={selecting ? undefined : (
             <>
+              {config.rowActions.includes("pin") ? <IconButton t={t} size="sm" icon={workspace.pinned ? "PinOff" : "Pin"} tone={workspace.pinned ? c.foreground : undefined} label={workspace.pinned ? `Unpin ${workspace.name}` : `Pin ${workspace.name}`} onPress={togglePin} /> : null}
               {confirmArchive && menu === null ? (
                 <Button t={t} variant="danger" label="Archive?" accessibilityLabel={`Press again to archive ${workspace.name}`} onPress={archive} style={{ height: 24, paddingHorizontal: 6 }} />
               ) : (
                 <IconButton t={t} size="sm" icon="Archive" label={`Archive ${workspace.name}`} onPress={archive} />
               )}
-              {config.rowActions.includes("pin") ? <IconButton t={t} size="sm" icon={workspace.pinned ? "PinOff" : "Pin"} tone={workspace.pinned ? c.foreground : undefined} label={workspace.pinned ? `Unpin ${workspace.name}` : `Pin ${workspace.name}`} onPress={togglePin} /> : null}
               <IconButton t={t} size="sm" icon="EllipsisVertical" label={`Actions for ${workspace.name}`} onPress={() => setMenu(menu ? null : "actions")} />
             </>
           )}
@@ -921,7 +897,8 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
             <MenuItem t={t} icon="Copy" label="Copy path" onPress={() => copy(workspace.directory, "path")} />
             {workspace.branch ? <MenuItem t={t} icon="GitBranch" label="Copy branch name" onPress={() => copy(workspace.branch ?? "", "branch name")} /> : null}
             <MenuItem t={t} icon="Pencil" label="Rename workspace" onPress={startRename} />
-            <MenuItem t={t} icon={workspace.pinned ? "PinOff" : "Pin"} label={workspace.pinned ? "Unpin" : "Pin to top"} onPress={togglePin} />
+            {/* Pin and Archive are buttons on the row; Pin is here only when its row button is turned off. */}
+            {config.rowActions.includes("pin") ? null : <MenuItem t={t} icon={workspace.pinned ? "PinOff" : "Pin"} label={workspace.pinned ? "Unpin" : "Pin to top"} onPress={togglePin} />}
             <MenuItem t={t} icon="Tag" label="Labels" hint={workspace.labels.length ? String(workspace.labels.length) : undefined} onPress={() => setMenu("labels")} />
             <MenuItem
               t={t}
@@ -937,7 +914,8 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
                 unread state cannot be cleared by a plugin, so a natively unread row offers neither. */}
             {markedDone ? <MenuItem t={t} icon="RotateCcw" label="Mark as not done" onPress={() => setMark(null)} /> : markable && indicator !== "done" ? <MenuItem t={t} icon="CircleCheck" label="Mark as done" onPress={() => setMark("done")} /> : null}
             {markedUnread ? <MenuItem t={t} icon="MailOpen" label="Mark as read" onPress={() => setMark(null)} /> : markable && indicator !== "attention" ? <MenuItem t={t} icon="Mail" label="Mark as unread" onPress={() => setMark("unread")} /> : null}
-            <MenuItem t={t} icon="ListPlus" label="Add task" onPress={addTask} />
+            {/* A workspace belongs to one task, so one that has it says so instead. */}
+            <MenuItem t={t} icon="ListPlus" label="Add task" hint={ownTask ? "Has a task" : undefined} disabled={ownTask !== null} onPress={addTask} />
             <MenuItem
               t={t}
               icon="ListChecks"
@@ -975,7 +953,6 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
                   }}
                 />
               ))}
-            <MenuItem t={t} icon="Archive" tone={confirmArchive ? c.statusDanger : undefined} label={confirmArchive ? "Archive? Press again" : "Archive"} onPress={archive} />
           </>
         )}
       </Dropdown>
@@ -1247,6 +1224,7 @@ function ViewMenu({ update, state, saveState, shared }: { update(patch: Partial<
                 (value) => update(value === "hidden" ? { showSubAgents: false } : value === "open" ? { showSubAgents: "open" } : { showSubAgents: true, subAgentRows: Number(value) }),
               )
             : null}
+          {chatsFor !== "off" && config.showSubAgents !== false ? choice("singleSub", "A chat's only sub-agent", config.singleSubAgent ?? "show", [["show", "Listed under it"], ["hide", "Not listed (the chat stands for it)"]] as const, (value) => update({ singleSubAgent: value === "show" ? undefined : value })) : null}
         </>
       ) : null}
       <View>
@@ -1512,6 +1490,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
         limit: config.chatRows ?? DEFAULT_CHAT_ROWS,
         subLimit: config.subAgentRows ?? DEFAULT_CHAT_ROWS,
         subAgents: config.showSubAgents ?? true,
+        singleSubAgent: config.singleSubAgent,
         isExpanded: (key) => expanded.has(key),
         openKey: props.active.agent?.key ?? null,
       },

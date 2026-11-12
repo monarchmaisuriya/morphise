@@ -33,3 +33,29 @@ export function statusColor(colors: StatusColors, status: Status): string {
   if (status === "attention") return colors.statusSuccess;
   return colors.foregroundMuted;
 }
+
+// Letter tiles for projects, as Paseo's own sidebar draws them; picked by the project's name.
+// Project tiles take a hue, never gray, white or black, so every project reads as its own.
+const TILE_COLORS = [
+  "#b05c80", // rose
+  "#c08a3e", // amber
+  "#4f9a8f", // teal
+  "#5b7fc7", // blue
+  "#8a6cc7", // violet
+  "#c76b5b", // coral
+  "#6b9a4f", // green
+  "#3a9cc4", // cyan
+  "#6a5fd1", // indigo
+  "#b54fb0", // magenta
+  "#c24d5e", // crimson
+  "#d07a2f", // orange
+  "#2e9a76", // emerald
+  "#8e4f8f", // plum
+  "#a5553a", // brick
+  "#b08d2a", // mustard
+];
+export function tileColor(name: string): string {
+  let hash = 0;
+  for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return TILE_COLORS[hash % TILE_COLORS.length];
+}

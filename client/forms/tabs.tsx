@@ -1,8 +1,17 @@
 import { SettingsAction, SettingsCard, SettingsSection, TextInput } from "@getpaseo/plugin/client/ui";
 import { type ReactNode, useMemo } from "react";
 import { Pressable, Text, View } from "react-native";
-import type { z } from "zod";
-import { createNoticeRow, createThinkingRow, createToolRow, type toolRowSchema } from "../chat-rows";
+import type { AgentTimelineItem, ToolCallItem } from "../polish/agent-types";
+import { PrefsOverride } from "../polish/prefs";
+import { RowSetupOverride } from "../polish/rows/look";
+import { noticeData, toolData } from "../polish/rows/model";
+import { NoticeItem } from "../polish/rows/notice-row";
+import { NOTICE_ROW_KIND, STEPS_ROW_KIND, THOUGHT_ROW_KIND, TODO_ROW_KIND, TOOL_ROW_KIND } from "../polish/rows/register";
+import { MergedSteps } from "../polish/rows/steps-row";
+import { ThoughtItem } from "../polish/rows/thought-row";
+import { TodoItem } from "../polish/rows/todo-row";
+import { ToolItem } from "../polish/rows/tool-row";
+import { polishPrefs } from "../../shared/polish/prefs";
 import type { Action } from "../../shared/actions";
 import { Icon, IconButton, tokens } from "../ui/kit";
 import { statusColor } from "../ui/hues";
@@ -11,13 +20,15 @@ import { DEFAULT_CHAT_ROWS, rowShows } from "../../shared/row-meta";
 import { VIEW_SECTIONS } from "./view-sections";
 import { DEFAULT_DONE_SECONDS, type StepsSettings, stepsOptions } from "../../shared/steps";
 import type { Layout, Prompt } from "../../shared/document";
-import { type ChatSettings, type ChatWebSettings, chatLook, FOLD_KINDS, type FoldKind, TOOL_KIND_TITLES, TOOL_KINDS, type ToolKind } from "../../shared/chat-view";
+import { type ChatSettings, type ChatWebSettings, chatLook, chatView, FOLD_KINDS, type FoldKind, TOOL_KIND_TITLES, TOOL_KINDS, type ToolKind } from "../../shared/chat-view";
 import { EMPTY_PROFILE, type Profile, TIMELINE_ITEM_TYPES } from "../../shared/profile";
 import { presetTitle } from "../../shared/reminders";
 import { useValue } from "../profile-store";
 import { viewPresence } from "../view-presence";
-import { ActionFields, type Form, ListEditor, NumberField, SelectField, SwitchField, TextField } from "./fields";
+import { ActionFields, ChipRow, type Form, ListEditor, NumberField, SelectField, SwitchField, TextField } from "./fields";
 import { parseMetadataText, uniqueId } from "./form-values";
+import { contrast, PRESETS as POLISH_PRESETS } from "../../shared/polish/theme";
+import { PolishLookSettings, PolishRowSettings, UpdateSection } from "./polish-tabs";
 
 type ViewConfig = Profile["sidebar"]["view"];
 type Row = Profile["sidebar"]["headerRows"][number];
@@ -355,6 +366,17 @@ function viewFields(form: Form): { [Key in keyof ViewConfig]-?: ReactNode } {
         onChange={(value) => setOptional("showSubAgents", value === "hidden" ? false : value === "open" ? "open" : true, true)}
       />
     ) : null,
+    singleSubAgent: view.showAgents && view.showSubAgents !== false ? (
+      <SelectField
+        label="A chat's only sub-agent"
+        value={view.singleSubAgent ?? "show"}
+        options={[
+          { value: "show", label: "Listed under it" },
+          { value: "hide", label: "Not listed: the chat row stands for it" },
+        ]}
+        onChange={(value) => setOptional("singleSubAgent", value, "show")}
+      />
+    ) : null,
     subAgentRows: view.showAgents && view.showSubAgents !== false && view.showSubAgents !== "open" ? (
       <SelectField label="Sub-agents per chat, then Show more" value={String(view.subAgentRows ?? DEFAULT_CHAT_ROWS)} options={counts([3, 5, 10, 20], view.subAgentRows ?? DEFAULT_CHAT_ROWS)} onChange={(value) => setOptional("subAgentRows", Number(value), DEFAULT_CHAT_ROWS)} />
     ) : null,
@@ -508,68 +530,76 @@ const ROW_TYPE_TITLES: Record<(typeof TIMELINE_ITEM_TYPES)[number], string> = {
   compaction: "Compaction",
 };
 
-// A settings row holding a set of on/off chips: one line instead of a switch per choice.
-function ChipRow({ form, label, hint, chips }: { form: Form; label: string; hint?: string; chips: { key: string; label: string; on: boolean; toggle(): void }[] }) {
-  const t = tokens(form.theme, false);
-  return (
-    <View style={{ paddingVertical: 14, paddingHorizontal: 16, gap: 10 }}>
-      <View style={{ gap: 2 }}>
-        <Text style={{ color: t.c.foreground, fontSize: 14 }}>{label}</Text>
-        {hint ? <Text style={t.text.small}>{hint}</Text> : null}
-      </View>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-        {chips.map((chip) => (
-          <Pressable
-            key={chip.key}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: chip.on }}
-            accessibilityLabel={chip.label}
-            onPress={chip.toggle}
-            style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => ({ flexDirection: "row", alignItems: "center", gap: 6, height: 28, paddingHorizontal: 10, borderRadius: 14, borderWidth: 1, borderColor: chip.on ? t.c.accent : t.c.border, backgroundColor: chip.on ? t.c.surface2 : pressed || hovered ? t.c.surface1 : "transparent" })}
-          >
-            {chip.on ? <Icon name="Check" size={12} color={t.c.accent} /> : null}
-            <Text style={{ fontSize: 12, color: chip.on ? t.c.foreground : t.c.foregroundMuted }}>{chip.label}</Text>
-          </Pressable>
-        ))}
-      </View>
-    </View>
-  );
-}
 
 // Sample rows drawn by the real renderers with the current (unsaved) choices.
 const PREVIEW_TIME = new Date("2026-11-12T10:42:00");
 const PREVIEW_DIFF = "@@ -12,4 +12,5 @@\n export function total(items) {\n-  return items.reduce((sum, item) => sum + item.price, 0);\n+  const prices = items.map((item) => item.price ?? 0);\n+  return prices.reduce((sum, price) => sum + price, 0);\n }";
+const previewCall = (callId: string, name: string, detail: ToolCallItem["detail"], status: "running" | "completed" | "failed" = "completed", error: unknown = null) => ({ type: "tool_call", callId, name, detail, status, error }) as ToolCallItem;
+const PREVIEW_THOUGHT: AgentTimelineItem = { type: "reasoning", text: "The total breaks when an item has no price.\n\nDefault the price to zero before summing." };
+const PREVIEW_CALLS = [
+  previewCall("search", "Grep", { type: "search", query: "item.price", numMatches: 4, numFiles: 2, filePaths: ["src/cart/total.ts", "src/cart/total.test.ts"] }),
+  previewCall("edit", "Edit", { type: "edit", filePath: "src/cart/total.ts", unifiedDiff: PREVIEW_DIFF }),
+  previewCall("test", "Bash", { type: "shell", command: 'npm test -- --grep "total"', output: "FAIL src/cart/total.test.ts\n  total() > ignores items without a price\n    expected 30, got NaN", exitCode: 1 }, "failed", { message: "Exit code 1" }),
+  previewCall("mcp", "mcp__codebase__search_code", { type: "unknown", input: { query: "price ?? 0" }, output: { matches: 1 } }),
+];
+const PREVIEW_RUNNING = previewCall("status", "Bash", { type: "shell", command: "git status --short" }, "running");
+const PREVIEW_TODO = { items: [{ text: "Find the bug", status: "completed" as const }, { text: "Default missing prices to zero", status: "in_progress" as const }, { text: "Run the tests", status: "pending" as const }], active: "Default missing prices to zero" };
 function ChatPreview({ form, look, chat }: { form: Form; look: ReturnType<typeof chatLook>; chat: ChatSettings }) {
   const t = tokens(form.theme, false);
-  const on = chat.enabled !== false;
-  const style = chat.toolCalls === "compact" ? "compact" : "cards";
+  const view = chatView(chat, form.profile.timeline.hide, false);
+  const prefs = polishPrefs(chat);
   // Made once per look, so a sample row keeps being open or folded while the form re-renders.
-  const lookKey = JSON.stringify(look);
+  const lookKey = JSON.stringify([look, view.toolCalls]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const rows = useMemo(() => ({ Tool: createToolRow(look, null), Thinking: createThinkingRow(look), Notice: createNoticeRow(look) }), [lookKey]);
+  const setup = useMemo(() => ({ look: { ...look, style: view.toolCalls === "compact" ? ("compact" as const) : ("cards" as const) }, actions: null }), [lookKey]);
   const props = { agentId: "preview", timestamp: PREVIEW_TIME, theme: form.theme, host: { id: "preview", label: "Preview" }, layout: { compact: false, platform: "web" as const } };
-  const tool = (data: Omit<z.output<typeof toolRowSchema>, "style">) => <rows.Tool {...props} item={{ type: "plugin", kind: "tool-call", version: 2, data: { ...data, style } }} />;
-  const tools = on && (chat.toolCalls ?? "paseo") !== "paseo";
-  const thinking = on && (chat.reasoning === "fold" || chat.reasoning === "expand");
-  const notices = on && chat.notices === true;
+  const plugin = <Data,>(kind: string, data: Data) => ({ type: "plugin" as const, kind, version: 1, data });
+  const tools = view.toolCalls !== "paseo";
+  const thinking = view.reasoning === "fold" || view.reasoning === "expand";
+  // Paseo's 16pt gap under each plugin row, which the rows take back, is added here so the
+  // preview spaces rows as the chat does.
+  const gap = { paddingBottom: 16 };
   return (
-    // Paseo's 16pt gap under each plugin row, which the rows take back, is added here so the
-    // preview spaces rows as the chat does.
-    <View style={{ padding: 16 }}>
-      {!on ? <Text style={t.text.small}>Morphise draws no chat rows; every row stays as Paseo draws it.</Text> : null}
-      {on && !tools && !thinking && !notices ? <Text style={t.text.small}>Every row shows as Paseo draws it. Choose lines or cards for tool calls, a thinking row, or notice rows below.</Text> : null}
-      {thinking ? <View style={{ paddingBottom: 16 }}><rows.Thinking {...props} item={{ type: "plugin", kind: "thinking", version: 2, data: { text: "**Find the bug**\nThe total breaks when an item has no price.\n**Fix**\nDefault the price to zero before summing.", streaming: false } }} /></View> : null}
-      {tools ? (
-        <>
-          <View style={{ paddingBottom: 16 }}>{tool({ kind: "search", detail: "search", name: "Grep", subject: "item.price", status: "completed", error: "", body: "src/cart/total.ts\nsrc/cart/total.test.ts", bodyKind: "output", facts: ["4 matches", "2 files"] })}</View>
-          <View style={{ paddingBottom: 16 }}>{tool({ kind: "edit", detail: "edit", name: "Edit", subject: "src/cart/total.ts", status: "completed", error: "", body: PREVIEW_DIFF, bodyKind: "diff", facts: ["+2 −1"] })}</View>
-          <View style={{ paddingBottom: 16 }}>{tool({ kind: "shell", detail: "shell", name: "Bash", subject: 'npm test -- --grep "total"', status: "failed", error: "1 test failed", body: "FAIL src/cart/total.test.ts\n  total() > ignores items without a price\n    expected 30, got NaN", bodyKind: "output", facts: ["exit 1"] })}</View>
-          <View style={{ paddingBottom: 16 }}>{tool({ kind: "other", detail: "unknown", name: "mcp__codebase__search_code", subject: "codebase", status: "completed", error: "", body: 'Input\n{\n  "query": "price ?? 0"\n}', bodyKind: "output", facts: [] })}</View>
-          <View style={{ paddingBottom: 16 }}>{tool({ kind: "shell", detail: "shell", name: "Bash", subject: "git status --short", status: "running", error: "", body: "", bodyKind: "output", facts: [] })}</View>
-        </>
-      ) : null}
-      {notices ? <View style={{ paddingBottom: 16 }}><rows.Notice {...props} item={{ type: "plugin", kind: "notice", version: 1, data: { level: "info", title: "Context compacted", message: "152K tokens before" } }} /></View> : null}
-    </View>
+    <PrefsOverride.Provider value={prefs}>
+      <RowSetupOverride.Provider value={setup}>
+        <View style={{ padding: 16 }}>
+          {!view.draw ? <Text style={t.text.small}>Morphise draws no chat rows; every row stays as Paseo draws it.</Text> : null}
+          {view.draw && !tools && !thinking && !view.notices ? <Text style={t.text.small}>Every row shows as Paseo draws it. Choose lines or cards for tool calls, a thinking row, or notice rows below.</Text> : null}
+          {tools && view.merge ? (
+            <View style={gap}>
+              <MergedSteps {...props} item={plugin(STEPS_ROW_KIND, {})} steps={[PREVIEW_THOUGHT, ...PREVIEW_CALLS].map((item) => ({ item, phase: "complete" as const }))} ms={41000} growing={false} defaultOpen />
+            </View>
+          ) : null}
+          {thinking && !(tools && view.merge) ? (
+            <View style={gap}>
+              <ThoughtItem {...props} item={plugin(THOUGHT_ROW_KIND, { text: PREVIEW_THOUGHT.type === "reasoning" ? PREVIEW_THOUGHT.text : "", phase: "complete" as const })} />
+            </View>
+          ) : null}
+          {tools && !view.merge
+            ? PREVIEW_CALLS.map((call) => (
+                <View key={call.callId} style={gap}>
+                  <ToolItem {...props} item={plugin(TOOL_ROW_KIND, toolData(call))} />
+                </View>
+              ))
+            : null}
+          {tools ? (
+            <>
+              <View style={gap}>
+                <TodoItem {...props} item={plugin(TODO_ROW_KIND, PREVIEW_TODO)} />
+              </View>
+              <View style={gap}>
+                <ToolItem {...props} item={plugin(TOOL_ROW_KIND, toolData(PREVIEW_RUNNING))} />
+              </View>
+            </>
+          ) : null}
+          {view.notices ? (
+            <View style={gap}>
+              <NoticeItem {...props} item={plugin(NOTICE_ROW_KIND, noticeData({ type: "compaction", status: "completed", trigger: "auto", preTokens: 152000 }))} />
+            </View>
+          ) : null}
+        </View>
+      </RowSetupOverride.Provider>
+    </PrefsOverride.Provider>
   );
 }
 
@@ -638,15 +668,15 @@ export function ChatTab(form: Form): ReactNode {
       </SettingsSection>
       {on ? (
         <>
-          <SettingsSection title="Tool calls" info="Commands, file reads and edits, searches, web fetches and MCP tools. Plans and sub-agent tasks keep Paseo's rows.">
+          <SettingsSection title="Tool calls" info="Commands, file reads and edits, searches, web fetches, plans and MCP tools. Sub-agent tasks keep Paseo's rows, which open the sub-agent's chat.">
             <SettingsCard>
               <SelectField
                 label="Show them as"
                 value={chat.toolCalls ?? "paseo"}
                 options={[
                   { value: "paseo", label: "Paseo's own rows" },
-                  { value: "compact", label: "Lines: one quiet line each" },
-                  { value: "cards", label: "Cards: one soft card each" },
+                  { value: "compact", label: "Morphise's rows, compact" },
+                  { value: "cards", label: "Morphise's rows, roomy" },
                 ]}
                 onChange={(value) => setChat("toolCalls", value === "paseo" ? undefined : value)}
               />
@@ -680,6 +710,7 @@ export function ChatTab(form: Form): ReactNode {
               </SettingsCard>
             </SettingsSection>
           ) : null}
+          {tools ? <PolishRowSettings form={form} /> : null}
           {tools ? (
             <SettingsSection title="Long output" info="Long text shows its first and last lines, with Show all for the rest.">
               <SettingsCard>
@@ -697,7 +728,7 @@ export function ChatTab(form: Form): ReactNode {
                 options={[
                   { value: "show", label: "As Paseo shows it" },
                   { value: "fold", label: "As a row: open while thinking, folded when done" },
-                  { value: "expand", label: "As a row, always open, split into its steps" },
+                  { value: "expand", label: "As a row, always open" },
                   { value: "hide", label: "Hidden" },
                 ]}
                 onChange={(value) => setChat("reasoning", value === "show" ? undefined : value)}
@@ -786,9 +817,12 @@ export function ChatTab(form: Form): ReactNode {
 export function GeneralTab(form: Form): ReactNode {
   const view = viewFields(form);
   return (
-    <SettingsSection title="Steps card" info="A chat's plan as a card, in the chat or the sidebar, that shows while it works and settles when it is done.">
-      <SettingsCard>{VIEW_SECTIONS.steps.map((key) => view[key])}</SettingsCard>
-    </SettingsSection>
+    <>
+      <SettingsSection title="Steps card" info="A chat's plan as a card, in the chat or the sidebar, that shows while it works and settles when it is done. While it is on, Claude agents start with Claude Code's task-list tools, so they publish a plan.">
+        <SettingsCard>{VIEW_SECTIONS.steps.map((key) => view[key])}</SettingsCard>
+      </SettingsSection>
+      <UpdateSection form={form} />
+    </>
   );
 }
 
@@ -844,7 +878,24 @@ const THEME_PRESETS: Record<string, Theme> = {
   forest: { name: "Forest", appearance: "dark", colors: { background: "#121814", foreground: "#d6e2d6", raised: "#18211b", control: "#212c24", border: "#2c3a30", accent: "#5fbf8a", mutedForeground: "#8ea493", ring: "#3f6b50" } },
   dusk: { name: "Dusk", appearance: "dark", colors: { background: "#17141f", foreground: "#e2dcef", raised: "#1f1b2a", control: "#2a2438", border: "#362f48", accent: "#b48cf2", mutedForeground: "#978fab", ring: "#5a4a82" } },
   paper: { name: "Paper", appearance: "light", colors: { background: "#faf8f3", foreground: "#2b2a27", raised: "#ffffff", control: "#efece4", border: "#e0dbcf", accent: "#c0622f", mutedForeground: "#7a766c", ring: "#d9a07f" } },
+  // Chat Polish's four (see NOTICE.md), with their sidebar colours.
+  ...Object.fromEntries(POLISH_PRESETS.map((preset) => [`polish-${preset.id}`, { name: preset.id === "dusk" ? "Dusk (Chat Polish)" : preset.name === "One Dark Darker Mariana" ? "Mariana" : preset.name, appearance: preset.appearance, colors: { ...preset.colors }, ...(preset.sidebar ? { sidebar: preset.sidebar } : {}) }])),
 };
+
+// Contrast warnings for a theme's text, by WCAG's ratios: 4.5:1 for text, 3:1 for muted text.
+function contrastWarnings(colors: Theme["colors"]): string[] {
+  const hex = /^#[0-9a-fA-F]{6}$/;
+  const checks: [string, string | undefined, string | undefined, number][] = [
+    ["Text on the background", colors.foreground, colors.background, 4.5],
+    ["Text on raised surfaces", colors.foreground, colors.raised, 4.5],
+    ["Muted text on the background", colors.mutedForeground, colors.background, 3],
+  ];
+  return checks.flatMap(([what, text, back, needed]) => {
+    if (!text || !back || !hex.test(text) || !hex.test(back)) return [];
+    const ratio = contrast(text, back);
+    return ratio < needed ? [`${what}: ${ratio.toFixed(1)}:1, below ${needed}:1`] : [];
+  });
+}
 
 function colorFields(form: Form, theme: Theme): ReactNode {
   type Colors = Theme["colors"];
@@ -906,10 +957,17 @@ export function LookTab(form: Form): ReactNode {
                 onChange={(value) => form.updateProfile((profile) => void (profile.theme && (profile.theme.appearance = value)))}
               />
               {colorFields(form, theme)}
+              <TextField form={form} label="Sidebar (optional)" hint="Painted while Paseo's items are restyled and this theme is Paseo's theme" placeholder="#1e2227" value={theme.sidebar ?? ""} onChange={(text) => form.updateProfile((profile) => void (profile.theme && (text.trim() ? (profile.theme.sidebar = text.trim()) : delete profile.theme.sidebar)))} error={form.profileError("theme.sidebar")} />
+              {contrastWarnings(theme.colors).map((warning) => (
+                <Text key={warning} style={{ paddingHorizontal: 16, paddingBottom: 8, fontSize: 12, color: form.theme.colors.statusWarning }}>
+                  {warning}
+                </Text>
+              ))}
             </>
           ) : null}
         </SettingsCard>
       </SettingsSection>
+      <PolishLookSettings form={form} />
       <SettingsSection title="Style layer" info="Unsupported: desktop and browser only, and a Paseo update can rename what it hides.">
         <SettingsCard>
           <SwitchField label="Use the style layer" value={style.enabled} onChange={(value) => form.updateProfile((profile) => void (profile.style.enabled = value))} />

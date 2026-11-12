@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { actionSchema } from "./actions";
 import { TOOL_KINDS } from "./chat-view";
+import { polishSchema } from "./polish/prefs";
 
 const MAX_ITEMS = 50;
 
@@ -93,6 +94,8 @@ const themeSchema = z.strictObject({
     mutedForeground: hexColour,
     ring: hexColour,
   }),
+  // The sidebars' colour on web and desktop (painted by the Paseo restyle); Paseo's own when unset.
+  sidebar: hexColour.optional(),
 });
 
 const slashCommandSchema = z.strictObject({
@@ -221,6 +224,9 @@ const viewSchema = z
     // A workspace with a single chat (and none of its sub-agents shown) lists no chat under it:
     // the workspace row already stands for it. Shown when unset.
     singleChat: z.enum(["show", "hide"]).optional(),
+    // A chat with a single sub-agent lists none under it: the chat row stands for it (and shows
+    // its running work). Shown when unset.
+    singleSubAgent: z.enum(["show", "hide"]).optional(),
   })
   .prefault({});
 
@@ -290,6 +296,8 @@ export const profileSchema = z.strictObject({
       images: z.boolean().optional(),
       recap: z.boolean().optional(),
       phones: z.enum(["same", "paseo"]).optional(),
+      // Chat Polish's options that Morphise had no key for (see shared/polish/prefs.ts).
+      polish: polishSchema.optional(),
       // Web and desktop only, through Paseo's page structure; may break when Paseo changes.
       web: z
         .strictObject({

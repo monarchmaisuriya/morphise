@@ -16,6 +16,7 @@ import type { SurfaceDeps } from "./task-surfaces";
 import { tasksOf } from "./task-store";
 import { lendScreenOpener } from "./dispatch";
 import { Icon, type Tokens, useTokens } from "./ui/kit";
+import { StackViewerHost } from "./polish/media/views";
 
 // Workbench: everything that needs the user, in one place. Chats waiting on them (raised by agents) and
 // their own tasks (Today, Board, Archived), plus bookmarked answers. A list of views on the left on
@@ -224,13 +225,17 @@ export function createWorkbenchSidebarItem(deps: SurfaceDeps) {
     useEffect(() => lendScreenOpener(openScreen), [openScreen]);
     const active = currentScreen !== null && (currentScreen.screenId === WORKBENCH_SCREEN_ID || currentScreen.screenId in LEGACY_SCREENS);
     return (
-      <SidebarRow
-        icon="LayoutDashboard"
-        label={counts.due ? `Workbench · ${counts.due} due` : "Workbench"}
-        active={active}
-        onPress={() => openScreen({ screenId: WORKBENCH_SCREEN_ID })}
-        trailing={counts.waiting ? <Text style={{ fontSize: 12, color: counts.permission ? theme.colors.statusWarning : theme.colors.foregroundMuted, paddingRight: 8 }}>{counts.waiting}</Text> : null}
-      />
+      <>
+        <SidebarRow
+          icon="LayoutDashboard"
+          label={counts.due ? `Workbench · ${counts.due} due` : "Workbench"}
+          active={active}
+          onPress={() => openScreen({ screenId: WORKBENCH_SCREEN_ID })}
+          trailing={counts.waiting ? <Text style={{ fontSize: 12, color: counts.permission ? theme.colors.statusWarning : theme.colors.foregroundMuted, paddingRight: 8 }}>{counts.waiting}</Text> : null}
+        />
+        {/* Always mounted with this row, so it shows the viewer for image stacks in Paseo's own replies. */}
+        <StackViewerHost />
+      </>
     );
   };
 }

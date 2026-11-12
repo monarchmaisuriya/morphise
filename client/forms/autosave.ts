@@ -5,6 +5,8 @@ import { useValue } from "../profile-store";
 
 // How long after the last edit the settings save; long enough that typing a word saves once.
 export const AUTOSAVE_DELAY_MS = 600;
+// How soon a save that found another one running tries again.
+const AUTOSAVE_RETRY_MS = 300;
 
 interface Saver {
   status: string;
@@ -12,22 +14,45 @@ interface Saver {
   save(values: ProfileDocument, revision: string): Promise<boolean>;
 }
 
-// Saves the shared settings draft shortly after each edit, once it has no problems. A failed
-// save is not retried: the draft stays, the screen shows the error, and the next edit tries again.
+// Saves the shared settings draft shortly after each edit, once it has no problems. Leaving the
+// screen saves a waiting edit at once instead of dropping it. A failed save is not retried: the
+// draft stays, the screen shows the error, and the next edit tries again.
 export function useAutoSave(drafts: DraftStore, settings: Saver, valid: boolean) {
   const { draft } = useValue(drafts);
   const latest = useRef(settings);
   latest.current = settings;
+  // The save waiting for its delay, if any.
+  const pending = useRef<{ timer: ReturnType<typeof setTimeout>; run(): void } | null>(null);
+  // On leaving, a waiting save runs at once. Declared first: React runs a component's cleanups in
+  // order, so this reads the waiting save before the effect below cancels it.
+  const flushOnLeave = useRef<() => void>(() => {});
+  flushOnLeave.current = () => {
+    const waiting = pending.current;
+    if (!waiting) return;
+    clearTimeout(waiting.timer);
+    waiting.run();
+  };
+  useEffect(() => () => flushOnLeave.current(), []);
   useEffect(() => {
     if (!draft || !valid || settings.status !== "ready") return;
-    const timer = setTimeout(() => {
+    const run = () => {
+      pending.current = null;
       const current = latest.current;
       if (current.status !== "ready" || !current.revision) return;
       const sending = drafts.take();
-      if (!sending) return;
+      if (!sending) {
+        // Another save is running: send this draft right after it, also once the screen has closed,
+        // so an edit never waits for the next visit (and then overwrites newer changes).
+        if (drafts.get().draft) pending.current = { timer: setTimeout(run, AUTOSAVE_RETRY_MS), run };
+        return;
+      }
       const revision = sending.revision ?? current.revision;
       void current.save(sending.document, revision).then((ok) => drafts.finish(ok));
-    }, AUTOSAVE_DELAY_MS);
-    return () => clearTimeout(timer);
+    };
+    pending.current = { timer: setTimeout(run, AUTOSAVE_DELAY_MS), run };
+    return () => {
+      if (pending.current) clearTimeout(pending.current.timer);
+      pending.current = null;
+    };
   }, [drafts, draft, valid, settings.status]);
 }

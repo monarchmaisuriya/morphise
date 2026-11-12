@@ -65,7 +65,7 @@ describe("boardColumns", () => {
   });
 
   it("does not count other workspaces' cards as hidden by a filter in a workspace's board", () => {
-    const scoped = applyTaskOperation(document, { kind: "updateTask", id: "a", patch: { links: { workspaceId: "w1" } } }, now);
+    const scoped = applyTaskOperation(document, { kind: "setLink", id: "a", link: "workspaceId", value: "w1" }, now);
     const columns = boardColumns(scoped, { sort: "manual", swimlanes: "none", filter: { ...DEFAULT_FILTER, workspaceId: "w1" } }, now);
     expect([columns[1].count, columns[1].inScope, columns[1].shown]).toEqual([2, 1, 1]);
   });
