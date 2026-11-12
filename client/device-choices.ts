@@ -16,6 +16,8 @@ const workbenchSchema = z.object({
   // How the Workbench lists its views: tabs along the top (as Paseo's chat tabs) or a list at the side. Phones and
   // narrow windows always use tabs.
   workbenchNav: z.enum(["tabs", "rail"]).catch("tabs").default("tabs"),
+  // When the Workbench opens on Tasks because something is due: its open cards (no filter on), or Today's list.
+  dueOpensOn: z.enum(["board", "today"]).catch("board").default("board"),
 });
 type WorkbenchValues = z.output<typeof workbenchSchema>;
 const WORKBENCH_DEFAULTS: WorkbenchValues = workbenchSchema.parse({});

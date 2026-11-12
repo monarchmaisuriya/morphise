@@ -168,7 +168,8 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
     const t = useTokens(theme, layout.compact);
     const counts = useWorkbenchCounts(deps);
     // The view picked here or asked for when opened. Until then, decided once when the counts load: Agents while
-    // something waits on the user, else Tasks with Today on when something is due, else whichever of Agents and Tasks was last
+    // something waits on the user, else Tasks when something is due (on its open cards, or Today if this device chose so in
+    // Settings, General), else whichever of Agents and Tasks was last
     // opened on this device. It holds for this opening, even as the user clears what waited.
     const [picked, setView] = useState<WorkbenchView | null>(null);
     // The Agents view is listed unless its setting turns it off; it still opens when something waits on the user or
@@ -202,10 +203,11 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
     const lastOpened: WorkbenchView = lastBoard === "agents" && agentsShown ? "agents" : "board";
     const countsReady = counts.waiting !== null && counts.tasksLoaded && railSettings.status !== "loading" && boardSettings.status !== "loading";
     const opening = useRef<WorkbenchView | null>(null);
-    const openedForToday = useRef(false);
+    const [dueOpensOn] = useDeviceChoice(railSettings, "dueOpensOn");
+    const openedForDue = useRef(false);
     if (opening.current === null && countsReady) {
-      openedForToday.current = (counts.waiting ?? 0) === 0 && counts.today > 0;
-      opening.current = (counts.waiting ?? 0) > 0 ? "agents" : openedForToday.current ? "board" : lastOpened;
+      openedForDue.current = (counts.waiting ?? 0) === 0 && counts.today > 0;
+      opening.current = (counts.waiting ?? 0) > 0 ? "agents" : openedForDue.current ? "board" : lastOpened;
     }
     const view: WorkbenchView = picked ?? asked ?? fallbackView ?? opening.current ?? lastOpened;
     // No entry looks chosen until the view is known, so the selection does not jump once the counts load.
@@ -220,7 +222,9 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
     const workspaces = useValue(deps.workspaces);
     // Agents and Tasks wait for the settings and counts, so neither shows for a moment before the opening view is known.
     const ready = countsReady;
-    const tasksStart: TasksStart = tasksStartChosen ?? (asked ? startOf(askedName(params)) : openedForToday.current ? "today" : "board");
+    // Tasks starts with no filter (its open cards) unless a link asked for Today or Archived, or it opened for what is due
+    // and this device chose Today for that.
+    const tasksStart: TasksStart = tasksStartChosen ?? (asked ? startOf(askedName(params)) : openedForDue.current && dueOpensOn === "today" ? "today" : "board");
 
     const content =
       view === "bookmarks" ? (

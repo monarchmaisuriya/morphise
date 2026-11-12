@@ -873,6 +873,7 @@ function WorkbenchLayouts() {
   const [agents, setAgents] = useDeviceChoice(stored, "agentsLayout");
   const [tasks, setTasks] = useDeviceChoice(stored, "tasksLayout");
   const [nav, setNav] = useDeviceChoice(stored, "workbenchNav");
+  const [dueOpensOn, setDueOpensOn] = useDeviceChoice(stored, "dueOpensOn");
   const options: { value: ViewLayout; label: string }[] = [
     { value: "list", label: "List, grouped by status" },
     { value: "board", label: "Board, in columns" },
@@ -889,6 +890,16 @@ function WorkbenchLayouts() {
             { value: "rail", label: "A list at the side" },
           ]}
           onChange={setNav}
+        />
+        <SelectField<"board" | "today">
+          label="When something is due, open Tasks on"
+          hint="The Workbench opens on Tasks when a card or reminder is due and no agent waits on you."
+          value={dueOpensOn}
+          options={[
+            { value: "board", label: "Open cards, no filter" },
+            { value: "today", label: "Today" },
+          ]}
+          onChange={setDueOpensOn}
         />
         <SelectField<ViewLayout> label="Agents" value={agents} options={options} onChange={setAgents} />
         <SelectField<ViewLayout> label="Tasks" value={tasks} options={options} onChange={setTasks} />

@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.21.2 - 2026-11-13
+
+- **No filter on by default:** Tasks opens on its open cards. When something is due, the Workbench still opens on Tasks, and no longer switches Filter to Today unless you choose so: Settings, General, Workbench, "When something is due, open Tasks on" (Open cards by default, or Today), per device. Links that ask for Today or Archived still show them.
+
 ## 0.21.1 - 2026-11-13
 
 - **Full width:** the Workbench's lists use the whole width of the window: Agents and Tasks in list layout, Tasks' Today and Archived, and Bookmarks (they stopped at 820 to 1180 pt before).
