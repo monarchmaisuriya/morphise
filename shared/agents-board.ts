@@ -2,6 +2,7 @@
 import { defineSettings } from "@getpaseo/plugin";
 import { z } from "zod";
 import { chatIndicator, type ChatStatusFields, parentFromLabels } from "./chat-status";
+import { type PermissionSummary, previewLine } from "./inbox";
 import type { Indicator } from "./profile";
 
 // The Workbench's Agents view: its settings, and the rules that place, filter and sort agents.
@@ -416,25 +417,22 @@ export const dueForRefresh = (lastAt: number | undefined, now: number) => lastAt
 
 // ---------- Lane layout ----------
 
-// An empty lane, and Done and Archived until opened, fold to a strip with the lane's name and count.
-export const LANE_STRIP = 44;
+// An empty lane, and Archived until opened, fold to a short header with the lane's name and count.
+export const LANE_STRIP = 132;
 export const LANE_MIN = 240;
 // The Lane width setting is the widest an open lane grows to.
 export const LANE_MAX: Record<LaneWidth, number> = { narrow: 300, default: 420, wide: 520 };
-const FOLDED_AT_START: ReadonlySet<Lane> = new Set(["done", "archived"]);
+const FOLDED_AT_START: ReadonlySet<Lane> = new Set(["archived"]);
 
-/** Whether a lane shows as a strip: the user's own choice for it, else folded when empty, and Done and Archived folded at first. */
+/** Whether a lane shows folded: the user's own choice for it, else folded when empty, and Archived folded at first. */
 export function laneFolded(lane: Lane, count: number, choice: boolean | undefined): boolean {
   if (choice !== undefined) return choice;
   return count === 0 || FOLDED_AT_START.has(lane);
 }
 
-/** Which lanes show as strips. When none would be open but Done has agents, Done opens, so the board never shows only strips with work in them. */
+/** Which lanes show folded. */
 export function foldedLanes(lanes: readonly { lane: Lane; count: number; choice: boolean | undefined }[]): Set<Lane> {
-  const folded = new Set(lanes.filter((item) => laneFolded(item.lane, item.count, item.choice)).map((item) => item.lane));
-  const done = lanes.find((item) => item.lane === "done");
-  if (folded.size === lanes.length && done && done.count > 0 && done.choice === undefined) folded.delete("done");
-  return folded;
+  return new Set(lanes.filter((item) => laneFolded(item.lane, item.count, item.choice)).map((item) => item.lane));
 }
 
 /**
@@ -470,4 +468,65 @@ export function modelLabel(provider: string | null, model: string | null): strin
 export function folderAddsSomething(folder: string, project: string | null, workspace: string | null): boolean {
   const same = (other: string | null) => !!other && other.toLowerCase() === folder.toLowerCase();
   return !same(project) && !same(workspace);
+}
+
+// ---------- List view ----------
+
+// How the Agents view lays agents out: a list grouped by status (the default, as agent overviews do) or lanes.
+export const AGENTS_LAYOUTS = ["list", "board"] as const;
+export type AgentsLayout = (typeof AGENTS_LAYOUTS)[number];
+
+// The list puts what needs the user first (as Claude Code's agent view does), then what runs, then what is finished.
+export const LIST_ORDER: readonly Lane[] = ["waiting", "review", "running", "done", "archived"];
+// Done and Archived show this many rows, then a button for more.
+export const LIST_PREVIEW = 8;
+
+export interface ListSection {
+  lane: Lane;
+  folded: boolean;
+  limit: number;
+}
+
+/** The list's sections: those with agents, in LIST_ORDER, folded as laneFolded says, with how many rows each shows. */
+export function listSections(counts: Readonly<Record<Lane, number>>, choices: Partial<Record<Lane, boolean>>, shown: Partial<Record<Lane, number>> = {}): ListSection[] {
+  return LIST_ORDER.filter((lane) => counts[lane] > 0).map((lane) => ({
+    lane,
+    folded: laneFolded(lane, counts[lane], choices[lane]),
+    limit: shown[lane] ?? (lane === "done" || lane === "archived" ? LIST_PREVIEW : Number.POSITIVE_INFINITY),
+  }));
+}
+
+/** The second line of a row: what the agent asks, why it failed, the step it works on, else its first prompt (or nothing). */
+export function rowLine(input: { indicator: Indicator; permission: PermissionSummary | null; error: string | null; step: string | null; subtitle: string | null }): string | null {
+  if (input.indicator === "needs_input") return previewLine({ reason: "permission", permission: input.permission, error: "" });
+  if (input.indicator === "failed") return previewLine({ reason: "failed", permission: null, error: input.error ?? "" });
+  if (input.indicator === "running" && input.step) return `Working on: ${input.step}`;
+  return input.subtitle;
+}
+
+// ---------- Titles ----------
+
+/** Every http(s) link in the text shortened to its host (without "www." or a login) and the last part of its path: "acme.slack.com/…/p1794". */
+export function shortLinks(value: string): string {
+  return value.replace(/https?:\/\/[^\s<>()"']+/gi, (link) => {
+    const trail = /[.,;:!?]+$/.exec(link)?.[0] ?? "";
+    const parsed = /^https?:\/\/([^/?#]+)([^?#]*)/i.exec(link.slice(0, link.length - trail.length));
+    if (!parsed) return link;
+    const parts = parsed[2]!.split("/").filter(Boolean);
+    const host = parsed[1]!.replace(/^.*@/, "").replace(/^www\./i, "");
+    const path = parts.length === 0 ? "" : parts.length === 1 ? `/${parts[0]}` : `/…/${parts[parts.length - 1]}`;
+    return host + path + trail;
+  });
+}
+
+/**
+ * The bold line of a card or row and the muted line under it. Paseo's agent title is usually the first prompt; a
+ * workspace title that reads as a phrase (it has a space) says the task better, so it leads, with the prompt under it.
+ * It leads only for the one agent of its workspace, and never for a sub-agent, so no two rows share a bold line.
+ * A workspace named like a slug, the same as the project, or the start of the agent's title adds nothing.
+ */
+export function agentHeadline(agent: Pick<BoardAgent, "title" | "workspace" | "project" | "parentId">, workspaceShared: boolean): { title: string; subtitle: string | null } {
+  const workspace = agent.workspace?.trim() ?? "";
+  const leads = !workspaceShared && !agent.parentId && workspace.includes(" ") && workspace !== agent.project && !agent.title.startsWith(workspace);
+  return leads ? { title: shortLinks(workspace), subtitle: shortLinks(agent.title) } : { title: shortLinks(agent.title), subtitle: null };
 }

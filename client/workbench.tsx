@@ -1,4 +1,4 @@
-import type { PluginScreenProps, PluginSidebarItemProps } from "@getpaseo/plugin/client";
+import type { PluginScreenProps, PluginSidebarItemProps, SettingsState } from "@getpaseo/plugin/client";
 import { useSettings } from "@getpaseo/plugin/client";
 import { SidebarRow, useToast } from "@getpaseo/plugin/client/ui";
 import { useEffect, useRef, useState } from "react";
@@ -6,7 +6,7 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { defineSettings } from "@getpaseo/plugin";
 import { z } from "zod";
 import { dueCount, todayGroups } from "../shared/board";
-import { agentsBoardSettings } from "../shared/agents-board";
+import { AGENTS_LAYOUTS, agentsBoardSettings } from "../shared/agents-board";
 import { inboxSettings } from "../shared/inbox";
 import { AgentsBoardView } from "./agents-board/board";
 import { TasksBoard } from "./board/board";
@@ -38,9 +38,33 @@ const RAIL_FROM = 720;
 const RAIL_WIDTH = 176;
 const RAIL_FOLDED = 52;
 
-// The rail folded to icons, on this device.
-// The rail folded to icons, and the Board's last tab, on this device.
-const workbenchSettings = defineSettings({ id: "workbench", scope: "device", version: 1, schema: z.object({ railFolded: z.boolean().default(false), boardTab: z.enum(["tasks", "agents"]).catch("agents").default("agents") }) });
+// On this device: the rail folded to icons, the Board's last tab, and the Agents tab as a list or lanes.
+const workbenchSchema = z.object({
+  railFolded: z.boolean().default(false),
+  boardTab: z.enum(["tasks", "agents"]).catch("agents").default("agents"),
+  agentsLayout: z.enum(AGENTS_LAYOUTS).catch("list").default("list"),
+});
+type WorkbenchValues = z.output<typeof workbenchSchema>;
+const WORKBENCH_DEFAULTS: WorkbenchValues = workbenchSchema.parse({});
+const workbenchSettings = defineSettings({ id: "workbench", scope: "device", version: 1, schema: workbenchSchema });
+
+// One of those choices: what the user picked here applies at once and waits to be saved, so a press before
+// the settings load is not lost. A save is tried once per stored revision: one refused for an old revision is
+// tried again on the new one, one refused otherwise is not retried in a loop. Once stored, the pick is released,
+// so a later change from another screen shows here instead of being overwritten.
+function useDeviceChoice<Key extends keyof WorkbenchValues>(stored: SettingsState<typeof workbenchSchema>, key: Key): [WorkbenchValues[Key], (value: WorkbenchValues[Key]) => void] {
+  const [chosen, choose] = useState<WorkbenchValues[Key] | null>(null);
+  const tried = useRef<unknown>(undefined);
+  useEffect(() => {
+    if (chosen === null || stored.status !== "ready" || stored.saving) return;
+    if (stored.values[key] === chosen) return choose(null);
+    if (tried.current === stored.revision) return;
+    tried.current = stored.revision;
+    void stored.save({ ...stored.values, [key]: chosen }, stored.revision);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chosen, stored.status, stored.saving, stored.status === "ready" ? stored.revision : null]);
+  return [chosen ?? (stored.status === "ready" ? stored.values[key] : WORKBENCH_DEFAULTS[key]), choose];
+}
 
 // "agents" was a view of its own before 0.19.2; it now opens Board on its Agents tab.
 function viewParam(params: PluginScreenProps["params"]): { view: WorkbenchView; tab?: BoardTab } | null {
@@ -164,7 +188,6 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: WorkbenchView
     const entries = ENTRIES;
     const asked = viewParam(params);
     // A tab the user pressed is remembered on the device; one a link asked for applies to that opening only.
-    const [pickedTab, setPickedTab] = useState<BoardTab | null>(null);
     const [linkedTab, setLinkedTab] = useState<BoardTab | null>(null);
     // Each opening asks again, even for the view it asked for last time.
     useEffect(() => {
@@ -176,33 +199,20 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: WorkbenchView
     const [width, setWidth] = useState(0);
     const rail = !layout.compact && width >= RAIL_FROM;
     const railSettings = useSettings(workbenchSettings);
-    const savedFolded = railSettings.status === "ready" ? railSettings.values.railFolded : false;
-    // The fold the user chose here applies at once and is saved until the stored value matches,
-    // so a press before the settings load, or a save refused for an old revision, is not lost.
-    const [chosenFolded, setChosenFolded] = useState<boolean | null>(null);
-    const folded = chosenFolded ?? savedFolded;
-    const toggleFolded = () => setChosenFolded(!folded);
-    useEffect(() => {
-      if (chosenFolded === null || railSettings.status !== "ready" || railSettings.saving || railSettings.values.railFolded === chosenFolded) return;
-      void railSettings.save({ ...railSettings.values, railFolded: chosenFolded }, railSettings.revision);
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [chosenFolded, railSettings.status, railSettings.saving, railSettings.status === "ready" ? railSettings.revision : null]);
+    const [folded, setFolded] = useDeviceChoice(railSettings, "railFolded");
+    const toggleFolded = () => setFolded(!folded);
+    const [savedTab, saveTab] = useDeviceChoice(railSettings, "boardTab");
+    const [agentsLayout, setAgentsLayout] = useDeviceChoice(railSettings, "agentsLayout");
     const openChat = navigation ? (agentId: string) => navigation.openAgent({ agentId }) : null;
     const workspaces = useValue(deps.workspaces);
-    // The Board's tab: the one picked here, else the one last used on this device; saved like the fold.
-    const savedTab: BoardTab = railSettings.status === "ready" ? railSettings.values.boardTab : "agents";
-    const boardTab: BoardTab = agentsShown ? linkedTab ?? pickedTab ?? savedTab : "tasks";
+    // The Board's tab: one a link asked for, else the one picked here or last used on this device.
+    const boardTab: BoardTab = agentsShown ? linkedTab ?? savedTab : "tasks";
     // Board waits for both settings, so it never shows the Agents tab for a moment when it is off or not the saved tab.
     const boardReady = boardSettings.status !== "loading" && railSettings.status !== "loading";
     const pickTab = (tab: BoardTab) => {
       setLinkedTab(null);
-      setPickedTab(tab);
+      saveTab(tab);
     };
-    useEffect(() => {
-      if (pickedTab === null || railSettings.status !== "ready" || railSettings.saving || railSettings.values.boardTab === pickedTab) return;
-      void railSettings.save({ ...railSettings.values, boardTab: pickedTab }, railSettings.revision);
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [pickedTab, railSettings.status, railSettings.saving, railSettings.status === "ready" ? railSettings.revision : null]);
 
     const content =
       view === "waiting" ? (
@@ -213,7 +223,7 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: WorkbenchView
         !boardReady ? null : <View style={{ flex: 1 }}>
           {agentsShown ? <BoardTabs t={t} tab={boardTab} onChange={pickTab} /> : null}
           {boardTab === "agents" ? (
-            <AgentsBoardView client={deps.client} workspaces={deps.workspaces} theme={theme} compact={layout.compact} navigation={navigation} />
+            <AgentsBoardView client={deps.client} workspaces={deps.workspaces} theme={theme} compact={layout.compact} navigation={navigation} layout={agentsLayout} onLayout={setAgentsLayout} />
           ) : (
             <TasksBoard key="board" deps={deps} theme={theme} compact={layout.compact} workspaceId={null} initialTab="board" openChat={openChat} embedded />
           )}

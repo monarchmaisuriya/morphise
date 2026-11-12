@@ -18,6 +18,7 @@ interface BoardNode {
   getClientRects?(): ArrayLike<unknown>;
   addEventListener?(type: "contextmenu", listener: (event: { preventDefault(): void }) => void): void;
   removeEventListener?(type: "contextmenu", listener: (event: { preventDefault(): void }) => void): void;
+  scrollIntoView?(options: { block: "nearest"; inline: "nearest" }): void;
 }
 interface Editable {
   tagName?: string;
@@ -92,4 +93,9 @@ export function onRightClick(node: unknown, open: () => void): () => void {
   };
   target.addEventListener("contextmenu", listener);
   return () => target.removeEventListener?.("contextmenu", listener);
+}
+
+// Scrolls the card or row the keys moved to into view, as little as needed (web only).
+export function reveal(node: unknown): void {
+  if (WEB) (node as BoardNode | null)?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
 }

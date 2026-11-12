@@ -112,7 +112,7 @@ export function previewLine(item: { reason: InboxReason; permission: PermissionS
     const what = request.subject || request.title || request.description;
     return what ? `${request.tool || "Tool"}: ${what}` : `Wants to use ${request.tool || "a tool"}`;
   }
-  if (item.reason === "failed") return item.error ? item.error.split("\n")[0] : "Stopped with an error";
+  if (item.reason === "failed") return item.error.split("\n").map((line) => line.trim()).find(Boolean) ?? "Stopped with an error";
   return "Finished";
 }
 

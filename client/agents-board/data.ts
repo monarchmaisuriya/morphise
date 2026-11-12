@@ -72,7 +72,8 @@ export function useAgentEntries(client: PluginClientContext): ListState {
 
 export interface CardLive {
   usage: UsageFacts | null;
-  plan: { done: number; total: number } | null;
+  // With the step the agent is on, for the list's row line.
+  plan: { done: number; total: number; step: string | null } | null;
 }
 
 // Read at most once a minute per agent, and kept across re-sorts and lane changes. A finished
@@ -87,7 +88,9 @@ async function readLive(client: PluginClientContext, agentId: string, withPlan: 
   if (!withPlan) return { usage, plan: null };
   const page = await handle.timeline.refetch({ direction: "tail", limit: PLAN_TAIL });
   const plan = latestPlan(page.entries);
-  return { usage, plan: plan ? { done: plan.steps.filter((step) => step.status === "completed").length, total: plan.steps.length } : null };
+  if (!plan) return { usage, plan: null };
+  const step = plan.steps.find((item) => item.status === "in_progress")?.text ?? null;
+  return { usage, plan: { done: plan.steps.filter((item) => item.status === "completed").length, total: plan.steps.length, step } };
 }
 
 export function useCardLive(client: PluginClientContext | null, agent: { id: string; updatedAt: string; running: boolean; archived: boolean }, options: { onScreen: boolean; usage: boolean; plan: boolean }): CardLive | null {

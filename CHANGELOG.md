@@ -2,6 +2,16 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.19.7 - 2026-11-12
+
+- **Agents as a list, grouped by status:** the Agents tab now opens as a list, the way agent overviews such as Claude Code's and GitHub's show many agents. Sections run Waiting, To review, Running, Done and Archived, so what needs you is on top; sections with no agents are left out, Archived starts folded, and Done and Archived show 8 rows with "Show more". Each row has a status dot, the title, one line saying what the agent asks, why it failed or the step it is on, then its context, plan, PR, model and time, and its buttons (Allow, Deny, Stop, Archive, Open, More) always visible; on phones the row keeps Allow, Deny and More, so the title has room. J and K scroll the row they move to into view. A List / Board switch at the top keeps the lanes one press away; each device remembers its pick.
+- **Readable titles:** when a workspace's title reads as a phrase and the workspace holds only that agent (not a sub-agent), it leads, with the agent's first prompt as a muted line under it; agents that share a workspace keep their own titles, so no two rows read the same. Links in titles show short, as their host and last path part: `acme.slack.com/…/p1794`, with any login in the link left out.
+- **Lanes:** Done no longer starts folded, so finished agents show beside Running. A folded lane is a short header with its name and count, not a tall strip; press any lane's header to fold or open it.
+- **Cards:** the context share is a "30% context" pill instead of a small ring that could be cut off. Buttons float at the card's top-right corner on hover or keyboard focus (not while its details are open, so they do not cover the title), so cards have no empty band at the bottom; Allow and Deny always show, and phones keep the buttons in a row.
+- **Running is blue:** a running agent's dot is Paseo's own running blue (lighter on dark themes, deeper on light ones) everywhere Morphise draws a status, instead of white or grey. Light themes given as `rgb()` get the deeper blue too.
+- **A failed agent's reason** skips blank lines at the start of its error, in the list and in Waiting.
+- **Workbench choices on this device** (the list of views folded to icons, the Board tab, List or Board) are saved once per change and then follow the stored value, so two open Workbench screens no longer save over each other, and a save that fails is not retried in a loop.
+
 ## 0.19.6 - 2026-11-12
 
 - **Plan updates sit where the work happened:** with the steps card in the chat, every plan update gathered in one stack under the turn's merged "Thought 66 times…" row, because the merge passed over them and ran on across the whole turn. Each update now ends the merged run, so the chat reads in order: the work, "Planned · 3 steps", the next work, "Working on · Building alert", and so on, each where it happened. Hidden rows are still passed over as before.
@@ -115,7 +125,7 @@ Every chat feature from four published chat plugins (Beautiful Chat, Refined Cha
 
 - **A new look for chat rows:** one design for every row Morphise draws (an icon, a label, what it acted on, quiet facts on the right), close together instead of boxed and spaced. "Lines" are quiet; "Cards" sit on a soft fill.
 - **Tool calls:**
-  - MCP and other tools are drawn too ("Search code · brevo-codebase"), with their input and result.
+  - MCP and other tools are drawn too ("Search code · acme-codebase"), with their input and result.
   - An icon per program (git, npm, docker, curl, rg and more) and coloured commands.
   - File paths from the workspace folder, or in full. Icon and label, icon only, or label only.
   - Commands say how many lines they printed, or "no output"; a failed edit says "Not applied".

@@ -28,6 +28,11 @@ import {
   modelLabel,
   laneFolded,
   openLaneWidth,
+  agentHeadline,
+  shortLinks,
+  listSections,
+  rowLine,
+  LIST_PREVIEW,
 } from "./agents-board";
 
 const NOW = Date.parse("2026-11-12T12:00:00Z");
@@ -355,20 +360,21 @@ describe("agent list updates", () => {
 });
 
 describe("lane layout", () => {
-  it("folds an empty lane, and Done and Archived at first, unless the user chose otherwise", () => {
+  it("folds an empty lane, and Archived at first, unless the user chose otherwise", () => {
     expect(laneFolded("running", 0, undefined)).toBe(true);
     expect(laneFolded("running", 3, undefined)).toBe(false);
-    expect(laneFolded("done", 49, undefined)).toBe(true);
+    // Finished work stays in view (M's board: Running 1 and Done 50 side by side).
+    expect(laneFolded("done", 50, undefined)).toBe(false);
     expect(laneFolded("archived", 6, undefined)).toBe(true);
-    expect(laneFolded("done", 49, false)).toBe(false);
+    expect(laneFolded("done", 49, true)).toBe(true);
     expect(laneFolded("waiting", 2, true)).toBe(true);
   });
 
   it("shares the width between open lanes, within the minimum and the setting's maximum", () => {
     // M's case: 1,500 pt, everything folded but one open lane.
     expect(openLaneWidth({ width: 1500, open: 1, folded: 4, gap: 12, padding: 12, max: LANE_MAX.default })).toEqual({ width: 420, scrolls: false });
-    // Three open lanes on 1,100 pt: (1100 − 24 − 4×12 − 2×44) / 3 = 313.
-    expect(openLaneWidth({ width: 1100, open: 3, folded: 2, gap: 12, padding: 12, max: LANE_MAX.default })).toEqual({ width: 313, scrolls: false });
+    // Three open lanes on 1,100 pt: (1100 − 24 − 4×12 − 2×132) / 3 = 254.
+    expect(openLaneWidth({ width: 1100, open: 3, folded: 2, gap: 12, padding: 12, max: LANE_MAX.default })).toEqual({ width: 254, scrolls: false });
     // Too narrow even at the minimum: the board scrolls.
     expect(openLaneWidth({ width: 700, open: 5, folded: 0, gap: 12, padding: 12, max: LANE_MAX.wide })).toEqual({ width: LANE_MIN, scrolls: true });
     expect(openLaneWidth({ width: 900, open: 0, folded: 5, gap: 12, padding: 12, max: 420 })).toEqual({ width: 0, scrolls: false });
@@ -388,7 +394,7 @@ describe("card text", () => {
 
   it("shows the folder only when it is not the project's or workspace's name", () => {
     expect(folderAddsSomething("Develop", "Develop", "Add super user tool")).toBe(false);
-    expect(folderAddsSomething("lucky-catfish", "pushowl-backend", "Scan Slack thread")).toBe(true);
+    expect(folderAddsSomething("lucky-catfish", "web-backend", "Scan Slack thread")).toBe(true);
     expect(folderAddsSomething("develop", null, "Develop")).toBe(false);
   });
 });
@@ -397,12 +403,72 @@ describe("folded lanes", () => {
   const lanes = (counts: Partial<Record<"waiting" | "running" | "review" | "done" | "archived", number>>, choices: Partial<Record<string, boolean>> = {}) =>
     (["waiting", "running", "review", "done", "archived"] as const).map((lane) => ({ lane, count: counts[lane] ?? 0, choice: choices[lane] }));
 
-  it("opens Done when nothing else would be open, as on M's quiet board", () => {
-    expect([...foldedLanes(lanes({ done: 49, archived: 6 }))].sort()).toEqual(["archived", "review", "running", "waiting"]);
+  it("keeps Running and Done open side by side, as on M's board, and folds what is empty and Archived", () => {
+    expect([...foldedLanes(lanes({ running: 1, done: 50, archived: 6 }))].sort()).toEqual(["archived", "review", "waiting"]);
+    expect(foldedLanes(lanes({ done: 49 }, { done: true })).has("done")).toBe(true);
+  });
+});
+
+describe("list sections", () => {
+  const counts = { waiting: 0, running: 1, review: 0, done: 50, archived: 6 };
+
+  it("puts what needs you first, leaves empty sections out, and folds Archived at first, as on M's host", () => {
+    expect(listSections(counts, {})).toEqual([
+      { lane: "running", folded: false, limit: Number.POSITIVE_INFINITY },
+      { lane: "done", folded: false, limit: LIST_PREVIEW },
+      { lane: "archived", folded: true, limit: LIST_PREVIEW },
+    ]);
+    expect(listSections({ ...counts, waiting: 2, review: 1 }, {}).map((section) => section.lane)).toEqual(["waiting", "review", "running", "done", "archived"]);
   });
 
-  it("keeps Done folded while another lane is open, or when the user folded it", () => {
-    expect(foldedLanes(lanes({ running: 2, done: 49 })).has("done")).toBe(true);
-    expect(foldedLanes(lanes({ done: 49 }, { done: true })).has("done")).toBe(true);
+  it("follows the user's fold and the rows they asked to see", () => {
+    expect(listSections(counts, { done: true, archived: false }, { done: 16 })).toEqual([
+      { lane: "running", folded: false, limit: Number.POSITIVE_INFINITY },
+      { lane: "done", folded: true, limit: 16 },
+      { lane: "archived", folded: false, limit: LIST_PREVIEW },
+    ]);
+  });
+});
+
+describe("titles", () => {
+  const prompt = "scan https://acme.slack.com/archives/C0123/p1794 and fix what it finds";
+
+  it("leads with a workspace title that reads as a phrase, with the prompt under it, links short", () => {
+    expect(agentHeadline(agent("a", { title: prompt, project: "morphise", workspace: "Plan security scan improvement" }), false)).toEqual({ title: "Plan security scan improvement", subtitle: "scan acme.slack.com/…/p1794 and fix what it finds" });
+  });
+
+  it("keeps each agent's own title when the workspace holds other agents, or for a sub-agent, so rows stay apart", () => {
+    const shared = agent("a", { title: "Write the tests", workspace: "Plan security scan improvement" });
+    expect(agentHeadline(shared, true)).toEqual({ title: "Write the tests", subtitle: null });
+    expect(agentHeadline({ ...shared, parentId: "p" }, false)).toEqual({ title: "Write the tests", subtitle: null });
+  });
+
+  it("keeps the agent's title when the workspace is a slug, the project, or the title's start", () => {
+    expect(agentHeadline(agent("a", { title: prompt, project: "morphise", workspace: "fix-scan" }), false)).toEqual({ title: "scan acme.slack.com/…/p1794 and fix what it finds", subtitle: null });
+    expect(agentHeadline(agent("a", { title: "Add tests", project: "my app", workspace: "my app" }), false).title).toBe("Add tests");
+    expect(agentHeadline(agent("a", { title: "Fix login flow now", workspace: "Fix login flow" }), false).title).toBe("Fix login flow now");
+  });
+
+  it("shortens links to the host and the last part of the path, keeping the whole host and dropping a login", () => {
+    expect(shortLinks("https://monarch.github.io/repo/docs/page")).toBe("monarch.github.io/…/page");
+    expect(shortLinks("https://user:secret@example.com/a/b")).toBe("example.com/…/b");
+    expect(shortLinks("see https://www.github.com/getpaseo/plugins/pull/2378.")).toBe("see github.com/…/2378.");
+    expect(shortLinks("http://localhost:6878/settings")).toBe("localhost:6878/settings");
+    expect(shortLinks("https://example.com/")).toBe("example.com");
+    expect(shortLinks("no links here")).toBe("no links here");
+  });
+});
+
+describe("row line", () => {
+  it("says what the agent asks, what failed, or what it works on, else the prompt", () => {
+    const permission = { id: "p", kind: "tool", tool: "Bash", title: "", description: "", subject: "npm test", body: "", choices: [], answerInChat: false };
+    expect(rowLine({ indicator: "needs_input", permission, error: null, step: "Write tests", subtitle: "the prompt" })).toBe("Bash: npm test");
+    expect(rowLine({ indicator: "needs_input", permission: null, error: null, step: null, subtitle: null })).toBe("Waiting for your permission");
+    expect(rowLine({ indicator: "failed", permission: null, error: "Timed out\nstack", step: null, subtitle: "the prompt" })).toBe("Timed out");
+    expect(rowLine({ indicator: "failed", permission: null, error: "\n  Timed out\nstack", step: null, subtitle: null })).toBe("Timed out");
+    expect(rowLine({ indicator: "failed", permission: null, error: "\n", step: null, subtitle: null })).toBe("Stopped with an error");
+    expect(rowLine({ indicator: "running", permission: null, error: null, step: "Write tests", subtitle: "the prompt" })).toBe("Working on: Write tests");
+    expect(rowLine({ indicator: "running", permission: null, error: null, step: null, subtitle: "the prompt" })).toBe("the prompt");
+    expect(rowLine({ indicator: "done", permission: null, error: null, step: "Write tests", subtitle: null })).toBeNull();
   });
 });

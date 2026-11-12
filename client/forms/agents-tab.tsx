@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import { type AgentsBoardSettings, agentsBoardSettings, applyDensity, type BoardAgent, CARD_FIELDS, type CardField, type Density, DENSITY_PRESETS, type DoneWindow, effectiveCard, type LabelLimit, type LaneWidth, setCardSetting } from "../../shared/agents-board";
 import { AgentCard, type CardFacts } from "../agents-board/card";
+import { AgentRow } from "../agents-board/list";
 import { tokens } from "../ui/kit";
 import { ChipRow, type Form, SelectField, SwitchField, TextField } from "./fields";
 import { DEFAULT_TITLE_PROMPT, type TitleSettings, titleSettings } from "../../shared/agent-titles";
@@ -25,7 +26,7 @@ const FIELD_TITLES: Record<CardField, string> = {
   labels: "Labels",
   pullRequest: "Linked PR",
   timer: "Timer",
-  context: "Context ring",
+  context: "Context used",
   plan: "Plan",
   subtasks: "Sub-agents",
 };
@@ -34,6 +35,8 @@ const DENSITY_TITLES: Record<Density, string> = { minimal: "Minimal", standard: 
 const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
 
 // Sample data for the preview only; every field has a value so each switch shows its effect.
+const SAMPLE_LIVE = { usage: null, plan: { done: 3, total: 5, step: "Write the redirect test" } };
+
 function sampleFacts(): CardFacts {
   const agent: BoardAgent = {
     id: "sample",
@@ -63,7 +66,7 @@ function sampleFacts(): CardFacts {
     lastError: null,
     context: { used: 128_000, max: 200_000 },
   };
-  return { agent, indicator: "running", git: { dirty: true, ahead: 2, behind: 0 }, pullRequest: { number: 128, state: "open" }, subtasks: { total: 2, running: 1, waiting: 0, failed: 0 }, parent: null };
+  return { agent, indicator: "running", git: { dirty: true, ahead: 2, behind: 0 }, pullRequest: { number: 128, state: "open" }, subtasks: { total: 2, running: 1, waiting: 0, failed: 0 }, parent: null, workspaceShared: false };
 }
 
 // Saves the latest choice once the record has loaded and no other save runs, so quick changes are
@@ -111,16 +114,21 @@ function AgentsBoardSettingsForm({ form }: { form: Form }) {
   const densityOptions = [...DENSITY_PRESETS, ...(values.density === "custom" ? (["custom"] as const) : [])].map((density) => ({ value: density, label: DENSITY_TITLES[density] }));
   return (
     <View style={{ gap: 12 }}>
-      <SettingsSection title="Agents tab" info="The Workbench Board's Agents tab: every agent on this host in lanes (Waiting, Running, To review, Done and Archived).">
+      <SettingsSection title="Agents tab" info="The Workbench Board's Agents tab: every agent on this host by status (Waiting, To review, Running, Done and Archived), as a list or as lanes; pick with List or Board at its top.">
         <SettingsCard>
           <SwitchField label="Show the Agents tab" hint="Adds an Agents tab beside Tasks on the Workbench Board. When this is off, Board shows only tasks and no agents are read for it." value={values.enabled} onChange={(enabled) => set({ enabled })} />
         </SettingsCard>
       </SettingsSection>
       {values.enabled ? (
         <>
-          <SettingsSection title="Preview" info="A sample agent, drawn as the board draws it on desktop and web.">
-            <View style={{ width: 320, maxWidth: "100%", padding: 12, borderRadius: t.radius.panel, backgroundColor: t.c.surface0, borderWidth: 1, borderColor: t.c.border }}>
-              <AgentCard t={t} facts={sampleFacts()} card={card} now={new Date()} live={{ usage: null, plan: { done: 3, total: 5 } }} selected={false} focused={false} buttons={{ open: () => {}, stop: () => {} }} onPress={() => {}} onMenu={null} />
+          <SettingsSection title="Preview" info="A sample agent, drawn as the list and the board draw it on desktop and web.">
+            <View style={{ gap: 12 }}>
+              <View style={{ width: 640, maxWidth: "100%", padding: 8, borderRadius: t.radius.panel, backgroundColor: t.c.surface0, borderWidth: 1, borderColor: t.c.border }}>
+                <AgentRow t={t} facts={sampleFacts()} card={card} now={new Date()} live={SAMPLE_LIVE} selected={false} focused={false} buttons={{ open: () => {}, stop: () => {} }} onPress={() => {}} onMenu={() => {}} />
+              </View>
+              <View style={{ width: 320, maxWidth: "100%", padding: 12, borderRadius: t.radius.panel, backgroundColor: t.c.surface0, borderWidth: 1, borderColor: t.c.border }}>
+                <AgentCard t={t} facts={sampleFacts()} card={card} now={new Date()} live={SAMPLE_LIVE} selected={false} focused={false} buttons={{ open: () => {}, stop: () => {} }} onPress={() => {}} onMenu={null} />
+              </View>
             </View>
           </SettingsSection>
           <SettingsSection title="Cards" info="Each part shows only when Paseo gives its value. Plan reads the agent's latest to-do list from its recent history.">

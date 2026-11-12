@@ -1,17 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { type BoardAgent, type CardSettings, contextShare, folderAddsSomething, folderOf, labelLimitCount, modelLabel } from "../../shared/agents-board";
+import { agentHeadline, type BoardAgent, type CardSettings, contextShare, folderAddsSomething, folderOf, labelLimitCount, modelLabel } from "../../shared/agents-board";
 import type { Indicator } from "../../shared/profile";
 import { formatElapsed } from "../../shared/time-text";
 import { statusColor, tileColor } from "../ui/hues";
 import { Icon, IconButton, type Tokens } from "../ui/kit";
 import type { CardLive } from "./data";
-import { cannotHover, useTooltip } from "../web";
-import { onRightClick } from "./web";
+import { cannotHover } from "../web";
+import { onRightClick, reveal } from "./web";
 
-// One agent on the Agents view, read top to bottom: its title (with the context ring while it works),
-// one quiet line of facts (project, workspace, model, time), pills for its checkout and plan, and the
-// card's buttons on hover. Each part shows only when its field is on and Paseo gave its value.
+// One agent on the Agents view's board, read top to bottom: its title (and its first prompt when the
+// workspace's title leads), one quiet line of facts (project, workspace, model, time), pills for its
+// context, checkout and plan, and the card's buttons floating at its corner on hover. Each part shows
+// only when its field is on and Paseo gave its value.
 
 export interface CardFacts {
   agent: BoardAgent;
@@ -22,6 +23,8 @@ export interface CardFacts {
   subtasks: { total: number; running: number; waiting: number; failed: number } | null;
   // The parent's title, for a sub-agent.
   parent: string | null;
+  // Whether other agents on the view share its workspace, so the workspace's title cannot tell them apart.
+  workspaceShared: boolean;
 }
 
 export interface CardButtons {
@@ -38,14 +41,14 @@ const CARD_MARK = { dataSet: { mxCard: "" } } as object;
 const ACTIONS_MARK = { dataSet: { mxCardActions: "" } } as object;
 
 // "3m ago", or "Just now".
-function agentAgo(updatedAt: string, now: Date): string | null {
+export function agentAgo(updatedAt: string, now: Date): string | null {
   const elapsed = formatElapsed(updatedAt || null, now);
   return elapsed ? (elapsed === "now" ? "Just now" : `${elapsed} ago`) : null;
 }
 
-const STATUS_WORDS: Record<Indicator, string> = { needs_input: "Waiting", running: "Running", attention: "To review", failed: "Failed", done: "Done" };
+export const STATUS_WORDS: Record<Indicator, string> = { needs_input: "Waiting", running: "Running", attention: "To review", failed: "Failed", done: "Done" };
 
-function Pill({ t, icon, label, tone }: { t: Tokens; icon?: string; label: string; tone?: string }) {
+export function Pill({ t, icon, label, tone }: { t: Tokens; icon?: string; label: string; tone?: string }) {
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 4, height: 20, paddingHorizontal: 6, borderRadius: 10, backgroundColor: t.c.surface2, maxWidth: "100%" }}>
       {icon ? <Icon name={icon} size={11} color={tone ?? t.c.foregroundMuted} /> : null}
@@ -56,16 +59,11 @@ function Pill({ t, icon, label, tone }: { t: Tokens; icon?: string; label: strin
   );
 }
 
-// The share of the context window in use: a ring that turns amber from 80% and red from 95%.
-export function ContextRing({ t, share }: { t: Tokens; share: number }) {
+// The share of the context window in use, as words: amber from 80%, red from 95%.
+export function ContextPill({ t, share }: { t: Tokens; share: number }) {
   const percent = Math.round(share * 100);
-  const tone = share >= 0.95 ? t.c.statusDanger : share >= 0.8 ? t.c.statusWarning : t.c.foregroundMuted;
-  const tooltip = useTooltip(`Context used: ${percent}%`, t.c);
-  return (
-    <View ref={tooltip} accessibilityLabel={`Context ${percent}% used`} style={{ width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: tone, alignItems: "center", justifyContent: "center" }}>
-      <Text style={{ fontSize: 8, color: tone, fontWeight: "600" }}>{percent}%</Text>
-    </View>
-  );
+  const tone = share >= 0.95 ? t.c.statusDanger : share >= 0.8 ? t.c.statusWarning : undefined;
+  return <Pill t={t} icon="Gauge" label={`${percent}% context`} tone={tone} />;
 }
 
 // Stop asks for a second press within four seconds.
@@ -99,13 +97,15 @@ export function AgentCard({ t, facts, card, now, live, selected, focused, button
   const [hovered, setHovered] = useState(false);
   useEffect(() => (onMenu ? onRightClick(node.current, onMenu) : undefined), [onMenu]);
   useEffect(() => onScreenRef?.(node.current), [onScreenRef]);
+  useEffect(() => (focused ? reveal(node.current) : undefined), [focused]);
   const running = indicator === "running" || !!agent.turnStartedAt;
+  const headline = agentHeadline(agent, facts.workspaceShared);
   // The lane says the status; a dot is kept only for what asks for attention.
   const dot = indicator === "needs_input" || indicator === "failed" ? statusColor(t.c, indicator) : null;
-  // The context ring means something only while the agent works.
+  // The context share means something only while the agent works.
   const share = card.context && running ? contextShare(live?.usage?.context ?? agent.context) : null;
   const project = card.project ? agent.project : null;
-  const workspace = card.workspace && agent.workspace && agent.workspace !== agent.project && !agent.title.startsWith(agent.workspace) ? agent.workspace : null;
+  const workspace = card.workspace && !headline.subtitle && agent.workspace && agent.workspace !== agent.project && !agent.title.startsWith(agent.workspace) ? agent.workspace : null;
   const model = card.model || card.provider ? modelLabel(card.provider ? agent.provider : null, card.model ? agent.model : null) : null;
   const thinking = card.thinking ? agent.thinking : null;
   const timer = card.timer ? (agent.turnStartedAt ? `Running ${formatElapsed(agent.turnStartedAt, now)}` : agentAgo(agent.updatedAt, now)) : null;
@@ -117,18 +117,21 @@ export function AgentCard({ t, facts, card, now, live, selected, focused, button
   const folder = agent.cwd ? (card.path ? agent.cwd : card.folder && folderAddsSomething(folderOf(agent.cwd), agent.project, agent.workspace) ? folderOf(agent.cwd) : null) : null;
   const subtasks = card.subtasks && facts.subtasks ? facts.subtasks : null;
   const plan = card.plan ? live?.plan ?? null : null;
-  const pills = !!(card.branch && agent.branch) || !!git || !!folder || labels.length > 0 || !!(card.pullRequest && facts.pullRequest) || !!plan || !!subtasks;
-  // The button row is always laid out (so cards do not jump) and reachable by Tab; with a pointer it is
-  // transparent until the card is hovered, chosen, or has keyboard focus inside (CSS in plugin-views.ts).
-  const showButtons = cannotHover() || hovered || selected || focused || !!buttons.allow;
-  const hasButtons = !!(buttons.allow || buttons.deny || buttons.stop || buttons.archive || buttons.open);
+  const pills = share !== null || !!(card.branch && agent.branch) || !!git || !!folder || labels.length > 0 || !!(card.pullRequest && facts.pullRequest) || !!plan || !!subtasks;
+  // Allow and Deny always show in a row. With a pointer, the other buttons float over the card's top-right
+  // corner, taking no room, and show while it is hovered or has keyboard focus (J/K, or Tab inside: CSS in
+  // plugin-views.ts), not merely while its details are open, as they cover the title's end. On touch they sit in a row.
+  const touch = cannotHover();
+  const showFloating = hovered || focused;
+  const answer = buttons.allow || buttons.deny;
+  const others = !!(buttons.stop || buttons.archive || buttons.open);
   return (
     <Pressable
       ref={node}
       {...CARD_MARK}
       accessibilityRole="button"
       accessibilityState={{ selected }}
-      accessibilityLabel={`${agent.title}, ${STATUS_WORDS[indicator]}${project ? `, ${project}` : ""}`}
+      accessibilityLabel={`${headline.title}, ${STATUS_WORDS[indicator]}${project ? `, ${project}` : ""}`}
       onPress={onPress}
       onLongPress={onMenu ?? undefined}
       onHoverIn={() => setHovered(true)}
@@ -146,10 +149,14 @@ export function AgentCard({ t, facts, card, now, live, selected, focused, button
       <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
         {dot ? <View style={{ width: 8, height: 8, borderRadius: 4, marginTop: 5, backgroundColor: dot }} /> : null}
         <Text style={{ flex: 1, color: t.c.foreground, fontSize: 13, fontWeight: "500", lineHeight: 18 }} numberOfLines={2}>
-          {agent.title}
+          {headline.title}
         </Text>
-        {share !== null ? <ContextRing t={t} share={share} /> : null}
       </View>
+      {headline.subtitle ? (
+        <Text style={t.text.small} numberOfLines={1}>
+          {headline.subtitle}
+        </Text>
+      ) : null}
       {project || facts1.length ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6, minWidth: 0 }}>
           {project && card.projectIcon ? (
@@ -164,6 +171,7 @@ export function AgentCard({ t, facts, card, now, live, selected, focused, button
       ) : null}
       {pills ? (
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4 }}>
+          {share !== null ? <ContextPill t={t} share={share} /> : null}
           {card.branch && agent.branch ? <Pill t={t} icon="GitBranch" label={git ? `${agent.branch} ${git}` : agent.branch} /> : !card.branch && git ? <Pill t={t} icon="GitBranch" label={git} /> : null}
           {folder ? <Pill t={t} icon="Folder" label={folder} /> : null}
           {labels.map((label) => (
@@ -175,15 +183,34 @@ export function AgentCard({ t, facts, card, now, live, selected, focused, button
           {subtasks ? <Pill t={t} icon="Network" label={[`${subtasks.total} sub-agent${subtasks.total === 1 ? "" : "s"}`, subtasks.running ? `${subtasks.running} running` : null, subtasks.waiting ? `${subtasks.waiting} waiting` : null, subtasks.failed ? `${subtasks.failed} failed` : null].filter(Boolean).join(" · ")} /> : null}
         </View>
       ) : null}
-      {hasButtons ? (
-        <View {...ACTIONS_MARK} style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 2, minHeight: t.compact ? 32 : 24, opacity: showButtons ? 1 : 0 }}>
-          {buttons.allow ? <IconButton t={t} size="sm" icon="Check" tone={t.c.statusSuccess} label={`Allow: ${agent.title}`} disabled={buttons.busy} onPress={buttons.allow} /> : null}
-          {buttons.deny ? <IconButton t={t} size="sm" icon="X" label={`Deny: ${agent.title}`} disabled={buttons.busy} onPress={buttons.deny} /> : null}
-          {buttons.stop ? <StopButton t={t} title={agent.title} disabled={buttons.busy} onStop={buttons.stop} /> : null}
-          {buttons.archive ? <IconButton t={t} size="sm" icon="Archive" label={`Archive ${agent.title}`} disabled={buttons.busy} onPress={buttons.archive} /> : null}
-          {buttons.open ? <IconButton t={t} size="sm" icon="ArrowUpRight" label={`Open ${agent.title}`} onPress={buttons.open} /> : null}
+      {answer ? (
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 2 }}>
+          {buttons.allow ? <IconButton t={t} size="sm" icon="Check" tone={t.c.statusSuccess} label={`Allow: ${headline.title}`} disabled={buttons.busy} onPress={buttons.allow} /> : null}
+          {buttons.deny ? <IconButton t={t} size="sm" icon="X" label={`Deny: ${headline.title}`} disabled={buttons.busy} onPress={buttons.deny} /> : null}
+          {touch ? otherButtons(t, headline.title, buttons) : null}
+        </View>
+      ) : touch && others ? (
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 2 }}>{otherButtons(t, headline.title, buttons)}</View>
+      ) : null}
+      {!touch && others ? (
+        <View
+          {...ACTIONS_MARK}
+          pointerEvents={showFloating ? "auto" : "none"}
+          style={{ position: "absolute", top: 6, right: 6, flexDirection: "row", alignItems: "center", gap: 2, padding: 2, borderRadius: t.radius.control, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface2, opacity: showFloating ? 1 : 0 }}
+        >
+          {otherButtons(t, headline.title, buttons)}
         </View>
       ) : null}
     </Pressable>
+  );
+}
+
+function otherButtons(t: Tokens, title: string, buttons: CardButtons) {
+  return (
+    <>
+      {buttons.stop ? <StopButton t={t} title={title} disabled={buttons.busy} onStop={buttons.stop} /> : null}
+      {buttons.archive ? <IconButton t={t} size="sm" icon="Archive" label={`Archive ${title}`} disabled={buttons.busy} onPress={buttons.archive} /> : null}
+      {buttons.open ? <IconButton t={t} size="sm" icon="ArrowUpRight" label={`Open ${title}`} onPress={buttons.open} /> : null}
+    </>
   );
 }

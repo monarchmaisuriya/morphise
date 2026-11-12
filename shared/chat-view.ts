@@ -210,8 +210,8 @@ export function toolKind(detailType: string): ToolKind {
   return "other";
 }
 
-// An MCP tool's name ("mcp__brevo-codebase__search_code") as its service and a readable action
-// ("brevo-codebase", "Search code"); null for other tool names.
+// An MCP tool's name ("mcp__acme-codebase__search_code") as its service and a readable action
+// ("acme-codebase", "Search code"); null for other tool names.
 export function mcpName(name: string): { service: string; action: string } | null {
   const match = /^mcp__(.+?)__(.+)$/.exec(name);
   if (!match) return null;

@@ -199,7 +199,7 @@ describe("lastTurnMarkdown", () => {
 
 describe("0.15 chat rules", () => {
   it("draws MCP tools with their service and input and result", () => {
-    expect(mcpName("mcp__brevo-codebase__search_code")).toEqual({ service: "brevo-codebase", action: "Search code" });
+    expect(mcpName("mcp__acme-codebase__search_code")).toEqual({ service: "acme-codebase", action: "Search code" });
     expect(mcpName("Bash")).toBeNull();
     const summary = summarizeToolCall({ type: "tool_call", callId: "c", name: "mcp__x__read_file", detail: { type: "unknown", input: { path: "a" }, output: "ok" }, status: "completed", error: null });
     expect(summary).toMatchObject({ detail: "unknown", subject: "x", body: 'Input\n{\n  "path": "a"\n}\n\nResult\nok' });

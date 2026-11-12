@@ -27,19 +27,22 @@ import {
   LANE_STRIP,
   foldedLanes,
   openLaneWidth,
+  type AgentsLayout,
+  listSections,
 } from "../../shared/agents-board";
 import { summarizePermission } from "../../shared/inbox";
 import { type ValueStore, useValue } from "../profile-store";
-import { Dropdown, Icon, IconButton, MenuItem, PopoverHost, type Tokens, useTokens } from "../ui/kit";
+import { Dropdown, Icon, IconButton, MenuItem, PopoverHost, Segmented, type Tokens, useTokens } from "../ui/kit";
 import type { WorkspaceList } from "../workspaces";
 import { AgentCard, type CardButtons, type CardFacts } from "./card";
 import { type CliActions, useAgentEntries, useCardLive, useCliActions } from "./data";
 import { AgentDetails } from "./details";
+import { AgentRow } from "./list";
 import { observeOnScreen, onBoardKeys } from "./web";
 
-// The Workbench's Agents view: every agent on the host in lanes by status (Waiting, Running, To
-// review, Done, Archived), with filters, search, sort, keys on the web, and a details pane. It
-// subscribes to Paseo's agent list only while it is open.
+// The Workbench's Agents view: every agent on the host by status (Waiting, To review, Running, Done,
+// Archived), as a grouped list or as lanes, with filters, search, sort, keys on the web, and a details
+// pane. It subscribes to Paseo's agent list only while it is open.
 
 export const AGENTS_SETTINGS_TAB = "agents";
 
@@ -108,8 +111,8 @@ function SortMenu({ t, sort, onChange }: { t: Tokens; sort: SortKey; onChange(so
   );
 }
 
-// A card on the board: reads its usage and plan while it is on screen, and owns its menu.
-function BoardCard({ t, client, facts, card, now, selected, focused, buttons, onPress, onOpen }: { t: Tokens; client: PluginClientContext; facts: CardFacts; card: ReturnType<typeof effectiveCard>; now: Date; selected: boolean; focused: boolean; buttons: CardButtons; onPress(): void; onOpen: (() => void) | null }) {
+// An agent on the view, as a card or a list row: reads its usage and plan while it is on screen, and owns its menu.
+function BoardCard({ as, t, client, facts, card, now, selected, focused, buttons, onPress, onOpen }: { as: AgentsLayout; t: Tokens; client: PluginClientContext; facts: CardFacts; card: ReturnType<typeof effectiveCard>; now: Date; selected: boolean; focused: boolean; buttons: CardButtons; onPress(): void; onOpen: (() => void) | null }) {
   const toast = useToast();
   const { agent, indicator } = facts;
   const [onScreen, setOnScreen] = useState(false);
@@ -129,9 +132,14 @@ function BoardCard({ t, client, facts, card, now, selected, focused, buttons, on
   const openMenu = useCallback(() => setMenuOpen(true), []);
   return (
     <View ref={anchor}>
-      <AgentCard t={t} facts={facts} card={card} now={now} live={live} selected={selected} focused={focused} buttons={buttons} onPress={onPress} onMenu={openMenu} onScreenRef={onScreenRef} />
+      {as === "list" ? (
+        <AgentRow t={t} facts={facts} card={card} now={now} live={live} selected={selected} focused={focused} buttons={buttons} onPress={onPress} onMenu={openMenu} onScreenRef={onScreenRef} />
+      ) : (
+        <AgentCard t={t} facts={facts} card={card} now={now} live={live} selected={selected} focused={focused} buttons={buttons} onPress={onPress} onMenu={openMenu} onScreenRef={onScreenRef} />
+      )}
       <Dropdown t={t} open={menuOpen} onClose={() => setMenuOpen(false)} anchor={anchor} width={240}>
         {onOpen ? <MenuItem t={t} icon="MessageSquare" label="Open chat" onPress={() => (setMenuOpen(false), onOpen())} /> : null}
+        {buttons.archive ? <MenuItem t={t} icon="Archive" label="Archive" onPress={() => (setMenuOpen(false), buttons.archive?.())} /> : null}
         {agent.sessionId ? <MenuItem t={t} icon="Fingerprint" label="Copy session ID" onPress={() => copy("session ID", agent.sessionId as string)} /> : null}
         <MenuItem t={t} icon="Type" label="Copy title" onPress={() => copy("title", agent.title)} />
         {agent.workspace ? <MenuItem t={t} icon="LayoutGrid" label="Copy workspace" onPress={() => copy("workspace", agent.workspace as string)} /> : null}
@@ -141,7 +149,7 @@ function BoardCard({ t, client, facts, card, now, selected, focused, buttons, on
   );
 }
 
-export function AgentsBoardView({ client, workspaces, theme, compact, navigation }: { client: PluginClientContext; workspaces: ValueStore<WorkspaceList>; theme: PluginTheme; compact: boolean; navigation: PluginScreenProps["navigation"] }) {
+export function AgentsBoardView({ client, workspaces, theme, compact, navigation, layout: shape, onLayout }: { client: PluginClientContext; workspaces: ValueStore<WorkspaceList>; theme: PluginTheme; compact: boolean; navigation: PluginScreenProps["navigation"]; layout: AgentsLayout; onLayout(layout: AgentsLayout): void }) {
   const t = useTokens(theme, compact);
   const toast = useToast();
   const stored = useSettings(agentsBoardSettings);
@@ -157,6 +165,8 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
   const [focused, setFocused] = useState<string | null>(null);
   const [phoneLane, setPhoneLane] = useState<Lane>("waiting");
   const [shown, setShown] = useState<Partial<Record<Lane, number>>>({});
+  // The list's own "Show more" counts, apart from the lanes', as the two start from different row counts.
+  const [listShown, setListShown] = useState<Partial<Record<Lane, number>>>({});
   // Lanes the user opened or folded while the view is open; the rest follow laneFolded's defaults.
   const [foldChoice, setFoldChoice] = useState<Partial<Record<Lane, boolean>>>({});
   const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
@@ -173,6 +183,11 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
     return [...list.entries.values()].flatMap((entry) => readBoardAgent(entry, workspaceOf) ?? []);
   }, [list, workspaceList]);
   const byId = useMemo(() => new Map(agents.map((agent) => [agent.id, agent])), [agents]);
+  const perWorkspace = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const agent of agents) if (agent.workspaceId) counts.set(agent.workspaceId, (counts.get(agent.workspaceId) ?? 0) + 1);
+    return counts;
+  }, [agents]);
   const childrenOf = useMemo(() => {
     const map = new Map<string, BoardAgent[]>();
     for (const agent of agents) if (agent.parentId && !agent.archivedAt) map.set(agent.parentId, [...(map.get(agent.parentId) ?? []), agent]);
@@ -193,9 +208,11 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
   }, [onBoard, workspaceList, settings.board.showEmptyGroups]);
 
   const sideDetails = !compact && width >= SIDE_DETAILS_FROM;
+  const asList = shape === "list";
+  const sections = listSections(Object.fromEntries(laneList.map((lane) => [lane, lanes[lane].length])) as Record<Lane, number>, foldChoice, listShown);
   const visibleLanes = compact ? [phoneLane] : laneList;
   const foldedSet = foldedLanes(laneList.map((lane) => ({ lane, count: lanes[lane].length, choice: foldChoice[lane] })));
-  const folded = (lane: Lane) => !compact && foldedSet.has(lane);
+  const folded = (lane: Lane) => (asList ? sections.some((section) => section.lane === lane && section.folded) : !compact && foldedSet.has(lane));
   const setFolded = (lane: Lane, value: boolean) => setFoldChoice((current) => ({ ...current, [lane]: value }));
 
   const openChat = navigation ? (agentId: string) => navigation.openAgent({ agentId }) : null;
@@ -249,6 +266,7 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
       pullRequest: workspace?.pullRequest ? { number: workspace.pullRequest.number, state: workspace.pullRequest.state } : null,
       subtasks: children.length ? { total: children.length, running: indicators.filter((item) => item === "running").length, waiting: indicators.filter((item) => item === "needs_input").length, failed: indicators.filter((item) => item === "failed").length } : null,
       parent: agent.parentId ? byId.get(agent.parentId)?.title ?? null : null,
+      workspaceShared: !!agent.workspaceId && (perWorkspace.get(agent.workspaceId) ?? 0) > 1,
     };
   };
   const canStop = (agent: BoardAgent) => cli.available && !agent.archivedAt && ["running", "needs_input"].includes(indicatorOf(agent));
@@ -278,7 +296,14 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
   // The keys read the board as last drawn: the cards each shown lane lists, and the focus.
   const keyState = useRef<{ lanes: string[][]; focused: string | null; selected: string | null }>({ lanes: [], focused: null, selected: null });
   // A folded lane's cards are not drawn, so the keys skip them.
-  keyState.current = { lanes: visibleLanes.map((lane) => (folded(lane) ? [] : lanes[lane].slice(0, shown[lane] ?? PAGE).map((agent) => agent.id))), focused, selected };
+  // The list reads as one column, so J and K run through every row shown.
+  keyState.current = {
+    lanes: asList
+      ? [sections.flatMap((section) => (section.folded ? [] : lanes[section.lane].slice(0, section.limit).map((agent) => agent.id)))]
+      : visibleLanes.map((lane) => (folded(lane) ? [] : lanes[lane].slice(0, shown[lane] ?? PAGE).map((agent) => agent.id))),
+    focused,
+    selected,
+  };
   const openRef = useRef(openChat);
   openRef.current = openChat;
   useEffect(
@@ -327,6 +352,7 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
             style={[{ flex: 1, minWidth: 0, color: t.c.foreground, fontSize: t.compact ? 15 : 13, height: t.control - 2 }, Platform.OS === "web" ? (WEB_NO_OUTLINE as TextStyle) : null]}
           />
         </View>
+        <Segmented<AgentsLayout> t={t} label="Show agents as" value={shape} onChange={onLayout} options={[{ value: "list", label: "List", icon: "List" }, { value: "board", label: "Board", icon: "Columns3" }]} />
         <IconButton t={t} icon="Settings2" label="Agents tab settings" onPress={() => client.openSettings(AGENTS_SETTINGS_TAB)} />
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, alignItems: "center" }}>
@@ -337,7 +363,7 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
         <SortMenu t={t} sort={sort} onChange={setSort} />
         {JSON.stringify(filter) !== JSON.stringify(NO_FILTER) ? <IconButton t={t} icon="FilterX" label="Clear the search and filters" onPress={() => setFilter(NO_FILTER)} /> : null}
       </ScrollView>
-      {compact ? (
+      {compact && !asList ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4 }} accessibilityRole="tablist">
           {laneList.map((lane) => (
             <Pressable key={lane} accessibilityRole="tab" accessibilityState={{ selected: lane === phoneLane }} accessibilityLabel={`${LANE_TITLES[lane]}, ${lanes[lane].length}`} onPress={() => setPhoneLane(lane)} style={{ flexDirection: "row", alignItems: "center", gap: 6, height: t.control, paddingHorizontal: 10, borderRadius: t.radius.control, backgroundColor: lane === phoneLane ? t.c.surface2 : "transparent" }}>
@@ -354,63 +380,78 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
   const openLanes = laneList.filter((lane) => !folded(lane));
   const layout = openLaneWidth({ width: boardWidth, open: openLanes.length, folded: laneList.length - openLanes.length, gap: LANE_GAP, padding: BOARD_PADDING, max: LANE_MAX[settings.board.laneWidth] });
 
-  // A folded lane: a narrow strip with its count and its name written downward; a press opens it.
-  const laneStrip = (lane: Lane) => (
+  const itemOf = (agent: BoardAgent, as: AgentsLayout) => (
+    <BoardCard
+      as={as}
+      key={agent.id}
+      t={t}
+      client={client}
+      facts={factsOf(agent)}
+      card={card}
+      now={now}
+      selected={agent.id === selected}
+      focused={agent.id === focused}
+      buttons={buttonsOf(agent)}
+      onPress={() => {
+        setFocused(agent.id);
+        setSelected(agent.id);
+      }}
+      onOpen={openChat ? () => openChat(agent.id) : null}
+    />
+  );
+
+  // A lane's header: its name and count, with a chevron; a press folds or opens the lane. Folded, the
+  // lane is just this header, muted, so the open lanes keep the width.
+  const laneHeader = (lane: Lane, open: boolean, wide = open) => (
     <Pressable
-      key={lane}
+      key={open ? undefined : lane}
       accessibilityRole="button"
-      accessibilityLabel={`${LANE_TITLES[lane]}, ${lanes[lane].length}. Open the lane`}
-      onPress={() => setFolded(lane, false)}
-      style={({ hovered }: { pressed: boolean; hovered?: boolean }) => ({ width: LANE_STRIP, alignItems: "center", paddingTop: 6, borderRadius: t.radius.card, backgroundColor: hovered ? t.c.surface1 : "transparent" })}
+      accessibilityState={{ expanded: open }}
+      accessibilityLabel={`${LANE_TITLES[lane]}, ${lanes[lane].length}. ${open ? "Fold" : "Open"} the lane`}
+      onPress={() => setFolded(lane, open)}
+      style={({ hovered }: { pressed: boolean; hovered?: boolean }) => ({ width: wide ? undefined : LANE_STRIP, alignSelf: wide ? "stretch" : "flex-start", flexDirection: "row", alignItems: "center", gap: 6, height: 28, paddingHorizontal: 6, borderRadius: t.radius.control, backgroundColor: hovered ? t.c.surface1 : "transparent" })}
     >
+      <Icon name={open ? "ChevronDown" : "ChevronRight"} size={13} color={t.c.foregroundMuted} />
+      <Text style={open ? t.text.heading : [t.text.heading, { fontSize: 13, color: t.c.foregroundMuted, fontWeight: "500" }]} numberOfLines={1}>
+        {LANE_TITLES[lane]}
+      </Text>
       <Text style={[t.text.meta, { fontVariant: ["tabular-nums"] }]}>{lanes[lane].length}</Text>
-      <View style={{ width: 160, marginTop: 78, transform: [{ rotate: "90deg" }] }}>
-        <Text style={[t.text.heading, { fontSize: 13 }]} numberOfLines={1}>
-          {LANE_TITLES[lane]}
-        </Text>
-      </View>
     </Pressable>
   );
 
   const laneView = (lane: Lane) => {
     const cards = lanes[lane];
     const limit = shown[lane] ?? PAGE;
-    if (folded(lane)) return laneStrip(lane);
+    if (folded(lane)) return laneHeader(lane, false);
     return (
       <View key={lane} style={{ width: compact ? undefined : layout.width, flex: compact ? 1 : undefined, gap: 8 }}>
-        {compact ? null : (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 4 }}>
-            <Text style={t.text.heading}>{LANE_TITLES[lane]}</Text>
-            <Text style={t.text.meta}>{cards.length}</Text>
-            <View style={{ flex: 1 }} />
-            <IconButton t={t} size="sm" icon="ChevronsLeftRight" label={`Fold ${LANE_TITLES[lane]}`} onPress={() => setFolded(lane, true)} />
-          </View>
-        )}
+        {compact ? null : laneHeader(lane, true)}
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 8, paddingBottom: 16 }}>
           {cards.length ? null : <Text style={[t.text.meta, { paddingHorizontal: 4 }]}>No agents</Text>}
-          {cards.slice(0, limit).map((agent) => (
-            <BoardCard
-              key={agent.id}
-              t={t}
-              client={client}
-              facts={factsOf(agent)}
-              card={card}
-              now={now}
-              selected={agent.id === selected}
-              focused={agent.id === focused}
-              buttons={buttonsOf(agent)}
-              onPress={() => {
-                setFocused(agent.id);
-                setSelected(agent.id);
-              }}
-              onOpen={openChat ? () => openChat(agent.id) : null}
-            />
-          ))}
+          {cards.slice(0, limit).map((agent) => itemOf(agent, "board"))}
           {cards.length > limit ? <Pressable accessibilityRole="button" onPress={() => setShown({ ...shown, [lane]: limit + PAGE })} style={{ padding: 8, alignItems: "center" }}><Text style={t.text.meta}>Show {Math.min(PAGE, cards.length - limit)} more</Text></Pressable> : null}
         </ScrollView>
       </View>
     );
   };
+
+  // The list: a header per status with agents, what needs the user first; Done and Archived show a few rows, then more.
+  const listView = (
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: BOARD_PADDING, paddingBottom: 16, gap: 10 }}>
+      {sections.length === 0 ? <Text style={[t.text.meta, { paddingHorizontal: 4 }]}>No agents match the search and filters.</Text> : null}
+      {sections.map(({ lane, folded: isFolded, limit }) => (
+        <View key={lane} style={{ gap: 2 }}>
+          {laneHeader(lane, !isFolded, true)}
+          {isFolded ? null : lanes[lane].slice(0, limit).map((agent) => itemOf(agent, "list"))}
+          {!isFolded && lanes[lane].length > limit ? (
+            <Pressable accessibilityRole="button" onPress={() => setListShown({ ...listShown, [lane]: limit + PAGE })} style={({ hovered }: { pressed: boolean; hovered?: boolean }) => ({ height: 32, justifyContent: "center", paddingHorizontal: 28, borderRadius: t.radius.row, backgroundColor: hovered ? t.c.surface1 : "transparent" })}>
+              <Text style={t.text.meta}>{lanes[lane].length - limit > PAGE ? `Show ${PAGE} more of ${lanes[lane].length - limit}` : `Show ${lanes[lane].length - limit} more`}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ))}
+    </ScrollView>
+  );
 
   const board =
     list.status === "loading" ? (
@@ -422,6 +463,8 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
       <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 8 }}>
         <Text style={t.text.meta}>{settings.board.doneWindow === "all" ? "No agents on this host yet." : "No agents in this window. Older finished agents show with Done and Archived set to Everything in this tab's settings."}</Text>
       </View>
+    ) : asList ? (
+      listView
     ) : compact ? (
       <View style={{ flex: 1, paddingHorizontal: 12 }}>{laneView(phoneLane)}</View>
     ) : (
