@@ -2,6 +2,12 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.18.0 - 2026-11-12
+
+- **Drag and drop on the board:** drag a card to another column, or to a new place in its own column. A lifted copy follows the pointer, a gap opens where the card will land, and the board (or a long column) scrolls when the card is held near its edge. On a phone, a long press picks the card up. The arrow buttons on cards are gone; screen readers still move a card a column at a time. With an order other than Manual, a drop changes only the card's column.
+- **One toolbar row on the board:** the add field and the All tasks, Filter, Display and Customise buttons share one row in one bordered style. Enter (Return on a phone) adds the card, so there is no greyed-out Add button; the line under the field says what Enter will add. Cards with no details no longer keep an empty line at the bottom.
+- **The turn recap lines up with the rows around it:** it is drawn with the same row as merged steps (icon column, text size, hover, chevron, spacing), so "Worked 38m 34s" sits in line with "Thought 2 times" and Paseo's own rows instead of smaller and offset.
+
 ## 0.17.2 - 2026-11-12
 
 - **Turn recap in the new style:** one quiet line like the rows around it ("Worked 38m 34s · 1 file +40 · 25 calls"), without a filled bar, that opens to the files changed and any failed commands. The Chat tab's preview shows it when the recap is on.

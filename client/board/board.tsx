@@ -1,9 +1,9 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import type { PluginWorkspacePanelProps } from "@getpaseo/plugin/client";
 import { useToast } from "@getpaseo/plugin/client/ui";
-import { type ReactNode, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
-import { type BoardColumn, boardColumns, todayGroups } from "../../shared/board";
+import { Fragment, type ReactNode, useState } from "react";
+import { Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { type BoardColumn, boardColumns, dropMove, todayGroups } from "../../shared/board";
 import { parseQuickAdd } from "../../shared/quick-add";
 import { isDue, type Reminder, reminderAt } from "../../shared/reminders";
 import { firstOpenColumn, type TaskOperation, workspaceTask } from "../../shared/task-ops";
@@ -11,11 +11,13 @@ import { DEFAULT_FILTER, type Task, type TaskDocument, type TaskFilter, type Tas
 import { formatDue } from "../../shared/time-text";
 import { todayDate } from "../../shared/when";
 import { useValue } from "../profile-store";
+import { useTooltip } from "../web";
 import { useReminderClock } from "../reminder-clock";
 import { tasksOf } from "../task-store";
 import { Button, Field, Icon, IconButton, MenuItem, Segmented, Tag, type Tokens, useTokens } from "../ui/kit";
 import { CardEditor, type EditorTarget, newTaskId } from "./card-editor";
 import { CustomiseBoard } from "./customise";
+import { CARD_GAP, DragGhost, DragProvider, useBoardDrag, useCardDragHandlers, useDrag } from "./drag";
 import type { BoardDeps } from "./deps";
 import { useWorkspaceName } from "./workspace-picker";
 import { PRIORITY, priorityColor } from "./styles";
@@ -82,11 +84,13 @@ function WorkspaceMeta({ t, workspaces, workspaceId }: { t: Tokens; workspaces: 
   return <MetaItem t={t} icon="FolderGit2" text={name ?? "Closed workspace"} />;
 }
 
-function CardView({ t, task, document, now, compact, workspaces, onOpen, run }: { t: Tokens; task: Task; document: TaskDocument; now: Date; compact: boolean; workspaces: BoardDeps["workspaces"] | null; onOpen(): void; run: Run }) {
+function CardView({ t, task, document, now, compact, workspaces, onOpen, run, lifted = false, onLongPress }: { t: Tokens; task: Task; document: TaskDocument; now: Date; compact: boolean; workspaces: BoardDeps["workspaces"] | null; onOpen(): void; run: Run; lifted?: boolean; onLongPress?(): void }) {
   const [hovered, setHovered] = useState(false);
   const index = document.columns.findIndex((column) => column.id === task.column);
   const previous = document.columns[index - 1];
   const next = document.columns[index + 1];
+  // Screen readers move a card a column at a time; everyone else drags it.
+  const moves = [previous && { name: "previous", label: `Move to ${previous.name}`, column: previous.id }, next && { name: "next", label: `Move to ${next.name}`, column: next.id }].filter((item) => !!item);
   const today = todayDate(now);
   const checked = task.checklist.filter((item) => item.done).length;
   const inDone = document.columns[index]?.done === true;
@@ -94,16 +98,22 @@ function CardView({ t, task, document, now, compact, workspaces, onOpen, run }: 
   const dueTone = task.due && !inDone ? (task.due < today ? t.c.statusDanger : task.due === today ? t.c.statusWarning : undefined) : undefined;
   const reminderTone = task.reminder && !inDone && isDue(task.reminder, now) ? t.c.statusDanger : undefined;
   const labels = task.labels.flatMap((id) => document.labels.filter((label) => label.id === id));
-  // Move buttons show on hover on desktop and always on touch, where there is no hover.
-  const showMoves = hovered || t.compact;
+  const hasMeta = !!((workspaces && task.links.workspaceId) || task.due || task.reminder || task.checklist.length || task.links.agentId || task.links.url || task.description);
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Open ${task.title}`}
+      accessibilityHint="Drag to move it"
+      accessibilityActions={moves.map(({ name, label }) => ({ name, label }))}
+      onAccessibilityAction={(event) => {
+        const move = moves.find((item) => item.name === event.nativeEvent.actionName);
+        if (move) void run({ kind: "moveTask", id: task.id, column: move.column });
+      }}
       onPress={onOpen}
+      onLongPress={onLongPress}
       onHoverIn={() => setHovered(true)}
       onHoverOut={() => setHovered(false)}
-      style={{ padding: compact ? 10 : 12, gap: 8, borderRadius: t.radius.card, backgroundColor: t.c.surface0, borderWidth: 1, borderColor: hovered ? t.c.foregroundMuted : t.c.border, opacity: inDone ? 0.75 : 1 }}
+      style={{ padding: compact ? 10 : 12, gap: 8, borderRadius: t.radius.card, backgroundColor: t.c.surface0, borderWidth: 1, borderColor: lifted ? t.c.accent : hovered ? t.c.foregroundMuted : t.c.border, opacity: inDone && !lifted ? 0.75 : 1 }}
     >
       <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
         {priority ? (
@@ -122,8 +132,8 @@ function CardView({ t, task, document, now, compact, workspaces, onOpen, run }: 
           ))}
         </View>
       ) : null}
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 10, minHeight: 20 }}>
-        <View style={{ flex: 1, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+      {hasMeta ? (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 10, minHeight: 20 }}>
           {workspaces && task.links.workspaceId ? <WorkspaceMeta t={t} workspaces={workspaces} workspaceId={task.links.workspaceId} /> : null}
           {task.due ? <MetaItem t={t} icon="Calendar" text={dueText(task.due, today)} tone={dueTone} /> : null}
           {task.reminder ? <MetaItem t={t} icon="AlarmClock" text={inDone ? "Paused" : formatDue(task.reminder, now)} tone={reminderTone} /> : null}
@@ -132,13 +142,7 @@ function CardView({ t, task, document, now, compact, workspaces, onOpen, run }: 
           {task.links.url ? <MetaItem t={t} icon="Link" /> : null}
           {task.description ? <MetaItem t={t} icon="AlignLeft" /> : null}
         </View>
-        {showMoves ? (
-          <View style={{ flexDirection: "row" }}>
-            <IconButton t={t} size="sm" icon="ChevronLeft" label={previous ? `Move to ${previous.name}` : "Already in the first column"} disabled={!previous} onPress={() => previous && void run({ kind: "moveTask", id: task.id, column: previous.id })} />
-            <IconButton t={t} size="sm" icon="ChevronRight" label={next ? `Move to ${next.name}` : "Already in the last column"} disabled={!next} onPress={() => next && void run({ kind: "moveTask", id: task.id, column: next.id })} />
-          </View>
-        ) : null}
-      </View>
+      ) : null}
       {task.reminder?.note && !compact ? (
         <Text style={t.text.small} numberOfLines={2}>
           {task.reminder.note}
@@ -148,9 +152,30 @@ function CardView({ t, task, document, now, compact, workspaces, onOpen, run }: 
   );
 }
 
+// A card on the board: it can be dragged (the mouse moves it on the web; a long press picks it up on a phone). While it
+// is, its slot closes in manual order (a gap shows where it lands instead) and dims otherwise. It stays mounted, with no
+// height, because it holds the gesture.
+function BoardCard({ closes, ...props }: Parameters<typeof CardView>[0] & { closes: boolean }) {
+  const drag = useDrag();
+  const handlers = useCardDragHandlers(props.task.id);
+  const lifted = drag.state?.taskId === props.task.id;
+  const closed = lifted && closes && drag.state?.origin != null;
+  return (
+    <View ref={drag.card(props.task.id)} {...handlers} style={closed ? { height: 0, marginTop: -CARD_GAP, overflow: "hidden", opacity: 0 } : { opacity: lifted ? 0.35 : 1 }}>
+      <CardView {...props} onLongPress={Platform.OS === "web" ? undefined : () => drag.arm(props.task.id)} />
+    </View>
+  );
+}
+
+// Where a dragged card will land: a gap the card's size.
+function DropSlot({ t, height }: { t: Tokens; height: number }) {
+  return <View style={{ height, borderRadius: t.radius.card, borderWidth: 1, borderStyle: "dashed", borderColor: t.c.accent, backgroundColor: t.c.surface0 }} />;
+}
+
 // ---------- Toolbar ----------
 
-function QuickAdd({ t, document, run, workspaceId }: { t: Tokens; document: TaskDocument; run: Run; workspaceId: string | null }) {
+// The add field, with the board's buttons (`trailing`) in the same row. Enter (Return on a phone) adds the card.
+function QuickAdd({ t, document, run, workspaceId, trailing }: { t: Tokens; document: TaskDocument; run: Run; workspaceId: string | null; trailing: ReactNode }) {
   const [text, setText] = useState("");
   // Read on every keystroke: relative times ("45m") count from when they were typed, not from the
   // board clock.
@@ -178,16 +203,18 @@ function QuickAdd({ t, document, run, workspaceId }: { t: Tokens; document: Task
   }
   return (
     <View style={{ gap: 6 }}>
-      <View style={{ flexDirection: "row", gap: 8, alignItems: "flex-start" }}>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
         <Field t={t} grow plain icon="Plus" value={text} onChangeText={setText} onSubmit={() => void add()} accessibilityLabel="Quick add a task" placeholder="Add a task… try: Fix login p1 @bug #review due:fri tomorrow 9am" />
-        <Button t={t} variant="primary" label="Add" accessibilityLabel="Add task" disabled={!parsed || problems.length > 0} onPress={() => void add()} />
+        {trailing}
       </View>
       {parsed ? (
         problems.length ? (
           <Text style={t.text.danger}>{problems.join(". ")}</Text>
         ) : (
           <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 4 }}>
-            <Text style={t.text.small}>Adds “{parsed.title}”</Text>
+            <Text style={t.text.small}>
+              {t.compact ? "Return" : "Enter"} adds “{parsed.title}”
+            </Text>
             {parsed.priority ? <Tag t={t} label={PRIORITY[parsed.priority as 1 | 2 | 3 | 4].name} color={priorityColor(t.c, parsed.priority)} /> : null}
             {parsed.labelNames.map((name) => (
               <Tag key={name} t={t} label={name} color={document.labels.find((label) => label.name.toLowerCase() === name.toLowerCase())?.color ?? t.c.foregroundMuted} />
@@ -382,19 +409,27 @@ function AttachPanel({ t, document, workspaceId, workspaces, run }: { t: Tokens;
 }
 
 // A toolbar button that opens a panel, with a count badge for active settings.
-function PanelButton({ t, icon, label, open, count, onPress }: { t: Tokens; icon: string; label: string; open: boolean; count?: number; onPress(): void }) {
+// The board's toolbar buttons, all one look. `iconOnly` shows the label as a tooltip instead.
+function PanelButton({ t, icon, label, open = false, count, iconOnly = false, onPress }: { t: Tokens; icon: string; label: string; open?: boolean; count?: number; iconOnly?: boolean; onPress(): void }) {
+  const [hovered, setHovered] = useState(false);
+  const tooltip = useTooltip(iconOnly ? label : undefined, t.c);
   return (
     <Pressable
+      ref={tooltip}
       accessibilityRole="button"
       accessibilityLabel={count ? `${label}, ${count} active` : label}
       accessibilityState={{ expanded: open }}
       onPress={onPress}
-      style={{ height: t.control, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 6, borderRadius: t.radius.control, borderWidth: 1, borderColor: open ? t.c.accent : t.c.border, backgroundColor: open ? t.c.surface2 : t.c.surface1 }}
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
+      style={{ height: t.control, minWidth: t.control, paddingHorizontal: iconOnly ? 0 : 10, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: t.radius.control, borderWidth: 1, borderColor: open ? t.c.accent : t.c.border, backgroundColor: open || hovered ? t.c.surface2 : t.c.surface1 }}
     >
-      <Icon name={icon} size={14} color={count ? t.c.accent : t.c.foregroundMuted} />
-      <Text style={{ color: t.c.foreground, fontSize: 13, maxWidth: 160 }} numberOfLines={1}>
-        {label}
-      </Text>
+      <Icon name={icon} size={14} color={count ? t.c.accent : hovered || open ? t.c.foreground : t.c.foregroundMuted} />
+      {iconOnly ? null : (
+        <Text style={{ color: t.c.foreground, fontSize: 13, maxWidth: 160 }} numberOfLines={1}>
+          {label}
+        </Text>
+      )}
       {count ? (
         <View style={{ minWidth: 18, height: 18, paddingHorizontal: 5, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: t.c.accent }}>
           <Text style={{ color: t.c.accentForeground, fontSize: 11, fontWeight: "600" }}>{count}</Text>
@@ -439,6 +474,12 @@ function LaneTitle({ t, laneKey, title, workspaces }: { t: Tokens; laneKey: stri
 
 function ColumnView({ t, entry, document, now, layout, open, run, workspaceId, workspaceStore }: { t: Tokens; entry: BoardColumn; document: TaskDocument; now: Date; layout: Layout; open(target: EditorTarget): void; run: Run; workspaceId: string | null; workspaceStore: BoardDeps["workspaces"] }) {
   const { column } = entry;
+  const drag = useDrag();
+  const manual = layout.sort === "manual";
+  // While a card is dragged over this column it lights up; in manual order a gap opens where the card lands.
+  const target = drag.state?.target?.column === column.id ? drag.state.target : null;
+  const slot = target && manual && drag.state?.origin ? drag.state.origin.height : null;
+  const lastId = entry.lanes.at(-1)?.tasks.at(-1)?.id;
   const empty = entry.lanes.every((lane) => lane.tasks.length === 0);
   const [adding, setAdding] = useState(false);
   const [text, setText] = useState("");
@@ -459,7 +500,7 @@ function ColumnView({ t, entry, document, now, layout, open, run, workspaceId, w
     void run({ kind: "addTask", task: { id: newTaskId(), title: parsed.title, column: column.id, priority: parsed.priority, due: parsed.due, reminder, links: workspaceId ? { workspaceId } : {} }, labelNames: parsed.labelNames }).then((ok) => ok && setText(""));
   };
   return (
-    <View style={{ width: t.compact ? 284 : 300, maxHeight: "100%", borderRadius: t.radius.panel, backgroundColor: t.c.surface1, paddingBottom: 8 }}>
+    <View ref={drag.column(column.id)} style={{ width: t.compact ? 284 : 300, maxHeight: "100%", borderRadius: t.radius.panel, backgroundColor: target ? t.c.surface2 : t.c.surface1, paddingBottom: 8 }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8, height: 44, paddingLeft: 14, paddingRight: 6 }}>
         <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: column.color ?? (column.done ? t.c.statusSuccess : t.c.foregroundMuted) }} />
         <Text style={[t.text.heading, { fontSize: 13, flexShrink: 1 }]} numberOfLines={1}>
@@ -473,7 +514,7 @@ function ColumnView({ t, entry, document, now, layout, open, run, workspaceId, w
         <View style={{ flex: 1 }} />
         <IconButton t={t} size="sm" icon="Plus" label={`Add a task to ${column.name}`} onPress={add} />
       </View>
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 8, gap: 8 }}>
+      <ScrollView {...drag.scroller(column.id, false)} contentContainerStyle={{ paddingHorizontal: 8, gap: CARD_GAP }}>
         {adding ? (
           <View style={{ gap: 6 }}>
             <Field t={t} autoFocus value={text} onChangeText={(next) => { setText(next); setProblem(null); }} onSubmit={submit} error={problem} placeholder="Card title, then Enter" accessibilityLabel={`New card in ${column.name}`} />
@@ -486,15 +527,20 @@ function ColumnView({ t, entry, document, now, layout, open, run, workspaceId, w
           </View>
         ) : null}
         {entry.lanes.map((lane) => (
-          <View key={lane.key} style={{ gap: 8 }}>
+          <View key={lane.key} style={{ gap: CARD_GAP }}>
             {lane.title ? <LaneTitle t={t} laneKey={lane.key} title={lane.title} workspaces={workspaceStore} /> : null}
             {lane.tasks.map((task) => (
-              <CardView key={`${lane.key}:${task.id}`} t={t} task={task} document={document} now={now} compact={t.compact || layout.density === "compact"} workspaces={workspaceId === null && layout.swimlanes !== "workspace" ? workspaceStore : null} onOpen={() => open({ kind: "existing", taskId: task.id })} run={run} />
+              <Fragment key={`${lane.key}:${task.id}`}>
+                {slot !== null && target?.before === task.id ? <DropSlot t={t} height={slot} /> : null}
+                <BoardCard t={t} task={task} document={document} now={now} compact={t.compact || layout.density === "compact"} workspaces={workspaceId === null && layout.swimlanes !== "workspace" ? workspaceStore : null} onOpen={() => open({ kind: "existing", taskId: task.id })} run={run} closes={manual} />
+                {slot !== null && target?.before === null && task.id === lastId ? <DropSlot t={t} height={slot} /> : null}
+              </Fragment>
             ))}
           </View>
         ))}
-        {empty && !adding ? (
-          <Pressable accessibilityRole="button" accessibilityLabel={`Add a task to ${column.name}`} onPress={add} style={{ height: 64, alignItems: "center", justifyContent: "center", borderRadius: t.radius.card, borderWidth: 1, borderStyle: "dashed", borderColor: t.c.border }}>
+        {empty && slot !== null ? <DropSlot t={t} height={slot} /> : null}
+        {empty && !adding && slot === null ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={`Add a task to ${column.name}`} onPress={add} style={{ height: 64, alignItems: "center", justifyContent: "center", borderRadius: t.radius.card, borderWidth: 1, borderStyle: "dashed", borderColor: target ? t.c.accent : t.c.border }}>
             <Text style={t.text.small}>{column.done ? "Finished cards land here" : "No cards · Add one"}</Text>
           </Pressable>
         ) : null}
@@ -589,9 +635,20 @@ export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, open
   const activeView = document.views.find((view) => view.id === document.activeView) ?? null;
   const filters = activeFilterCount(layout.filter);
   const pad = compact ? 12 : 16;
+  const shownIn = (column: string) => columns.find((entry) => entry.column.id === column)?.lanes.flatMap((lane) => lane.tasks.map((task) => task.id)) ?? [];
+  const manual = effective.sort === "manual";
+  const drag = useBoardDrag(
+    columns,
+    (taskId, target) => {
+      const operation = dropMove(document, taskId, target, shownIn(target.column), manual);
+      if (operation) void run(operation);
+    },
+    manual,
+  );
 
   return (
-    <View style={{ flex: 1, backgroundColor: t.c.surface0 }}>
+    <DragProvider value={drag.value}>
+    <View ref={drag.root} style={{ flex: 1, backgroundColor: t.c.surface0 }}>
       {problem ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: pad, paddingVertical: 8, backgroundColor: t.c.surface1 }}>
           <Icon name="TriangleAlert" size={14} color={t.c.statusWarning} />
@@ -599,8 +656,8 @@ export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, open
         </View>
       ) : null}
       <View style={{ paddingHorizontal: pad, paddingTop: pad, paddingBottom: 12, gap: 12 }}>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-          {embedded ? <View /> : <Segmented
+        {embedded ? null : (
+          <Segmented
             t={t}
             label="Tasks view"
             value={tab}
@@ -613,8 +670,15 @@ export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, open
               { value: "today", label: todayCount ? `Today · ${todayCount}` : "Today", icon: "CalendarClock", tone: todayCount ? t.c.statusWarning : undefined },
               { value: "archived", label: archived.length ? `Archived · ${archived.length}` : "Archived", icon: "Archive" },
             ]}
-          />}
-          <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+          />
+        )}
+        <QuickAdd
+          t={t}
+          document={document}
+          run={run}
+          workspaceId={workspaceId}
+          trailing={
+            <>
             {tab === "board" ? (
               <>
                 <PanelButton t={t} icon="Layers" label={activeView ? activeView.name : "All tasks"} open={panel === "views"} onPress={() => togglePanel("views")} />
@@ -623,10 +687,10 @@ export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, open
                 {workspaceId ? <PanelButton t={t} icon="FolderInput" label="Attach tasks" open={panel === "attach"} onPress={() => togglePanel("attach")} /> : null}
               </>
             ) : null}
-            <IconButton t={t} icon="Settings2" label="Customise board" onPress={() => setCustomising(true)} />
-          </View>
-        </View>
-        <QuickAdd t={t} document={document} run={run} workspaceId={workspaceId} />
+            <PanelButton t={t} icon="Settings2" label="Customise board" iconOnly onPress={() => setCustomising(true)} />
+            </>
+          }
+        />
         {tab === "board" && panel === "views" ? <ViewsPanel t={t} document={document} layout={layout} changed={changed} clearEdits={clearEdits} run={run} close={() => setPanel(null)} /> : null}
         {tab === "board" && panel === "filter" ? <FilterPanel t={t} layout={layout} setLayout={setLayout} document={document} /> : null}
         {tab === "board" && panel === "display" ? <DisplayPanel t={t} layout={layout} setLayout={setLayout} /> : null}
@@ -634,7 +698,7 @@ export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, open
         {tab === "board" && panel !== "filter" ? <ActiveFilters t={t} layout={layout} setLayout={setLayout} document={document} /> : null}
       </View>
       {tab === "board" ? (
-        <ScrollView horizontal contentContainerStyle={{ paddingHorizontal: pad, paddingBottom: pad, gap: 12, alignItems: "flex-start" }}>
+        <ScrollView horizontal {...drag.value.scroller("board", true)} contentContainerStyle={{ paddingHorizontal: pad, paddingBottom: pad, gap: 12, alignItems: "flex-start" }}>
           {columns.map((entry) => (
             <ColumnView key={entry.column.id} t={t} entry={entry} document={document} now={now} layout={effective} open={setEditing} run={run} workspaceId={workspaceId} workspaceStore={deps.workspaces} />
           ))}
@@ -672,9 +736,16 @@ export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, open
           )}
         </ScrollView>
       )}
+      <DragGhost>
+        {(taskId) => {
+          const task = document.tasks.find((item) => item.id === taskId);
+          return task ? <CardView t={t} task={task} document={document} now={now} compact={t.compact || layout.density === "compact"} workspaces={workspaceId === null && layout.swimlanes !== "workspace" ? deps.workspaces : null} onOpen={() => undefined} run={run} lifted /> : null;
+        }}
+      </DragGhost>
       {editing ? <CardEditor deps={deps} target={editing} theme={theme} compact={compact} onClose={() => setEditing(null)} /> : null}
       {customising ? <CustomiseBoard deps={deps} theme={theme} compact={compact} onClose={() => setCustomising(false)} /> : null}
     </View>
+    </DragProvider>
   );
 }
 

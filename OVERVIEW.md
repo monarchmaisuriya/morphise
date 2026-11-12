@@ -41,7 +41,7 @@ Buttons, rows, commands and controls run one of a small set of actions: open a l
 
 - **Board:** open "Tasks" in the sidebar, the Tasks panel in a workspace (only that workspace's cards), or "Open tasks" in the Command Center.
   - Columns: name, colour, order, a work in progress limit, and which one is Done, under Customise.
-  - Cards: title, description, priority P1 to P4, labels, due date, reminder, checklist, link, workspace, and the chat they belong to ("Insert into chat" puts the card in its message box). The arrows on a card move it one column.
+  - Cards: title, description, priority P1 to P4, labels, due date, reminder, checklist, link, workspace, and the chat they belong to ("Insert into chat" puts the card in its message box). Drag a card to move it, to another column or to a new place in its own (with the mouse on a computer, after a long press on a phone); the board scrolls when a card is held near its edge. Screen readers move a card a column at a time from its actions.
   - Workspaces: pick a card's workspace in its editor, or use "Attach tasks" in a workspace's Tasks panel to bring existing tasks in. The main board shows each card's workspace.
   - Quick add: `Fix login p1 @bug #review due:fri tomorrow 9am`. The preview under the box shows what each part became.
   - Filter, and Display (order, rows by priority, label or workspace, card size), can be saved as views, which also appear in the Command Center. Active filters show as removable tags, and a column says how many cards a filter hides.
@@ -69,7 +69,7 @@ Requires Paseo 0.16.0-beta.1 or later, on both the daemon and the app.
 - Paseo gives plugins no notification or "unread" control, so a reminder cannot make Paseo itself ring; Morphise shows it in its own row, list, view, chime and notification. A reminder row in the chat is written by the daemon; if no app is connected at the time, it is written once one connects.
 - Sorting, filtering and reminders in the list apply to Morphise's own sidebar view; plugins cannot reorder Paseo's built-in list or add items to its right-click menus, so "Remind me" sits in the workspace header, /remind, and Morphise's own rows.
 - Paseo's Mark as unread, Manual (drag) order, Open project settings and Remove project have no plugin API, so Morphise's view cannot offer them. Its hover card opens under the row, because a plugin cannot draw beside the sidebar.
-- Cards move with arrows, not drag and drop.
+- With an order other than Manual (Display), dragging a card changes only its column: its place in the column follows the order.
 - Actions from header buttons, sidebar rows and the Command Center act on the focused chat's message box.
 - If Paseo rejects part of the settings, such as an unknown icon name, that part is skipped, the rest still applies, and the Advanced tab lists what was not applied and why.
 - Ids starting with `morphise-` and the `/remind` and `/task` commands are reserved for Morphise's own items.

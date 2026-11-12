@@ -1,4 +1,5 @@
 import { isDue } from "./reminders";
+import type { TaskOperation } from "./task-ops";
 import type { Column, Task, TaskDocument, TaskFilter, TaskView } from "./tasks";
 import { todayDate } from "./when";
 
@@ -131,3 +132,53 @@ export function dueCount(document: TaskDocument, now: Date): number {
   return openTasks(document).filter((task) => (task.reminder !== null && isDue(task.reminder, now)) || (task.due !== null && task.due < today)).length;
 }
 
+
+// ---------- Drag and drop ----------
+
+export interface Frame {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** A column as the board shows it during a drag: where it is, and its shown cards (without the dragged one) in board order. */
+export interface DropColumn {
+  id: string;
+  frame: Frame;
+  cards: { id: string; frame: Frame }[];
+}
+
+/** Where a dragged card lands: a column, and the shown card it goes before (null: after the column's last shown card). */
+export interface DropTarget {
+  column: string;
+  before: string | null;
+}
+
+/** The drop target under a pointer: the column it is over (or the nearest one, for the gaps), before the first card whose middle is below it. */
+export function dropTarget(columns: DropColumn[], x: number, y: number): DropTarget | null {
+  const distance = (frame: Frame) => (x < frame.x ? frame.x - x : x > frame.x + frame.width ? x - frame.x - frame.width : 0);
+  const column = columns.reduce<DropColumn | null>((best, item) => (best === null || distance(item.frame) < distance(best.frame) ? item : best), null);
+  if (!column) return null;
+  const before = column.cards.find((card) => card.frame.y + card.frame.height / 2 > y);
+  return { column: column.id, before: before?.id ?? null };
+}
+
+/**
+ * The move that puts a dragged card at `target`, or null when it would change nothing. `shown` is the target column's shown
+ * card ids in board order. A move's position counts every card in the column, hidden ones too, so the card lands right before
+ * `before`, or right after the last shown card. With a sort other than manual a card's place in a column is not its own, so
+ * only the column changes.
+ */
+export function dropMove(document: TaskDocument, taskId: string, target: DropTarget, shown: string[], manual: boolean): TaskOperation | null {
+  const task = document.tasks.find((item) => item.id === taskId);
+  if (!task) return null;
+  if (!manual) return task.column === target.column ? null : { kind: "moveTask", id: taskId, column: target.column };
+  const inColumn = document.tasks.filter((item) => item.column === target.column).sort(byOrder);
+  const siblings = inColumn.filter((item) => item.id !== taskId).map((item) => item.id);
+  const last = shown.filter((id) => id !== taskId).at(-1);
+  const position = target.before !== null ? siblings.indexOf(target.before) : last !== undefined ? siblings.indexOf(last) + 1 : siblings.length;
+  if (position < 0) return null;
+  if (task.column === target.column && inColumn.findIndex((item) => item.id === taskId) === position) return null;
+  return { kind: "moveTask", id: taskId, column: target.column, position };
+}

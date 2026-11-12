@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { boardColumns, dueCount, matchesTaskFilter, todayGroups } from "./board";
+import { boardColumns, dropMove, dropTarget, dueCount, matchesTaskFilter, todayGroups } from "./board";
 import { applyTaskOperation, type TaskOperation } from "./task-ops";
 import { DEFAULT_FILTER, EMPTY_TASKS, type TaskDocument } from "./tasks";
 
@@ -97,3 +97,53 @@ describe("todayGroups and dueCount", () => {
   });
 });
 
+
+describe("dropTarget", () => {
+  const frame = (x: number, y: number) => ({ x, y, width: 100, height: 40 });
+  const columns = [
+    { id: "todo", frame: { x: 0, y: 0, width: 100, height: 400 }, cards: [{ id: "a", frame: frame(0, 50) }, { id: "b", frame: frame(0, 100) }] },
+    { id: "doing", frame: { x: 120, y: 0, width: 100, height: 400 }, cards: [] },
+  ];
+
+  it("puts the card before the first card whose middle is below the pointer", () => {
+    expect(dropTarget(columns, 50, 60)).toEqual({ column: "todo", before: "a" });
+    expect(dropTarget(columns, 50, 80)).toEqual({ column: "todo", before: "b" });
+    expect(dropTarget(columns, 50, 300)).toEqual({ column: "todo", before: null });
+  });
+
+  it("takes the nearest column when the pointer is in a gap or past the edge", () => {
+    expect(dropTarget(columns, 115, 10)).toEqual({ column: "doing", before: null });
+    expect(dropTarget(columns, 900, 10)).toEqual({ column: "doing", before: null });
+    expect(dropTarget([], 0, 0)).toBeNull();
+  });
+});
+
+describe("dropMove", () => {
+  // a, b, c in To do; d in To do but archived; e in In progress.
+  const document = build(add("a"), add("b"), add("c"), add("d"), { kind: "archiveTask", id: "d" }, add("e", { column: "doing" }));
+  const order = (doc: TaskDocument, column: string) => doc.tasks.filter((task) => task.column === column).sort((l, r) => l.order - r.order).map((task) => task.id);
+  const drop = (taskId: string, column: string, before: string | null, shown: string[]) => {
+    const operation = dropMove(document, taskId, { column, before }, shown, true);
+    return operation ? order(applyTaskOperation(document, operation, now), column) : null;
+  };
+
+  it("reorders within a column, counting cards the board does not show", () => {
+    expect(drop("c", "todo", "a", ["a", "b", "c"])).toEqual(["c", "a", "b", "d"]);
+    expect(drop("a", "todo", null, ["a", "b", "c"])).toEqual(["b", "c", "a", "d"]);
+  });
+
+  it("moves to another column before a card or after the last shown one", () => {
+    expect(drop("a", "doing", "e", ["e"])).toEqual(["a", "e"]);
+    expect(drop("a", "doing", null, ["e"])).toEqual(["e", "a"]);
+  });
+
+  it("changes nothing when the card is dropped where it is", () => {
+    expect(dropMove(document, "b", { column: "todo", before: "c" }, ["a", "b", "c"], true)).toBeNull();
+    expect(dropMove(document, "c", { column: "todo", before: null }, ["a", "b", "c"], true)).toBeNull();
+  });
+
+  it("only changes the column when the board is not in manual order", () => {
+    expect(dropMove(document, "c", { column: "todo", before: "a" }, ["a", "b", "c"], false)).toBeNull();
+    expect(dropMove(document, "c", { column: "doing", before: "e" }, ["e"], false)).toEqual({ kind: "moveTask", id: "c", column: "doing" });
+  });
+});
