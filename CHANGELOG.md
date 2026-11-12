@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.19.3 - 2026-11-12
+
+- **The steps card in the chat shows the whole plan:** it spans the reply's full width (it stopped at 720 pt), lists every step, finished ones too, without a scroll limit, and keeps its list when all steps are done ("All 4 done" now opens to the four steps). Its header folds and unfolds the list, with a chevron that shows which. The sidebar's card keeps its step limit and "hide finished" choice.
+
 ## 0.19.2 - 2026-11-12
 
 - **Board holds tasks and agents:** the Workbench's Board has two small tabs at its top, Tasks and Agents, in place of a separate Agents view. It remembers the last tab on each device. Board is listed first, and the Workbench list has no group headings: Board, Waiting, Today, Archived, Bookmarks.

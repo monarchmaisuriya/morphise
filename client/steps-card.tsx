@@ -184,16 +184,19 @@ export function StepsCardView({ plan, t, options, title = null, inline = false, 
   const { done, total } = stepCounts(steps);
   if (!shown) return inline ? <PlanLine t={t} icon={done === total ? "CircleCheck" : "ListChecks"} text={done === total ? `Plan · all ${total} done` : `Plan · ${done} of ${total} done`} /> : null;
   const current = steps.find((step) => step.status === "in_progress") ?? steps.find((step) => step.status === "pending") ?? null;
-  const { rows, more } = listedSteps(steps, options);
+  // In the chat the card spans the reply's width and lists every step, finished ones too, while the
+  // sidebar's card keeps its step limit and "hide finished" choice.
+  const { rows, more } = inline ? { rows: steps, more: 0 } : listedSteps(steps, options);
+  const listShown = !folded && (mode === "plan" || inline);
   return (
-    <View accessibilityLabel={`Steps${title ? ` of ${title}` : ""}, ${done} of ${total} done`} style={{ marginHorizontal: inline ? 0 : 8, marginVertical: inline ? 6 : 3, padding: inline ? 12 : 8, gap: 4, borderRadius: inline ? 12 : 10, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1, maxWidth: inline ? 720 : undefined }}>
+    <View accessibilityLabel={`Steps${title ? ` of ${title}` : ""}, ${done} of ${total} done`} style={{ marginHorizontal: inline ? 0 : 8, marginVertical: inline ? 6 : 3, padding: inline ? 12 : 8, gap: 4, borderRadius: inline ? 12 : 10, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1 }}>
       {title ? (
         <Text style={{ fontSize: 11, color: t.c.foregroundMuted }} numberOfLines={1}>
           {title}
         </Text>
       ) : null}
       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-        <Pressable accessibilityRole="button" accessibilityLabel={folded ? "Show the steps" : "Hide the step list"} onPress={() => setFolded(!folded)} style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 6, minHeight: 22 }}>
+        <Pressable accessibilityRole="button" accessibilityState={{ expanded: listShown }} accessibilityLabel={folded ? "Show the steps" : "Hide the step list"} onPress={() => setFolded(!folded)} style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 6, minHeight: 22 }}>
           <Icon name={mode === "done" ? "CircleCheck" : "ListChecks"} size={13} color={mode === "done" ? t.c.statusSuccess : t.c.foregroundMuted} />
           <Text style={{ fontSize: 12, fontWeight: "600", color: t.c.foreground }}>{mode === "done" ? `All ${total} done` : "Steps"}</Text>
           {mode === "plan" ? <Text style={{ fontSize: 12, color: t.c.foregroundMuted }}>{`${done}/${total}`}</Text> : null}
@@ -202,12 +205,14 @@ export function StepsCardView({ plan, t, options, title = null, inline = false, 
               {current.text}
             </Text>
           ) : null}
+          {mode === "done" && !inline ? null : <View style={{ flex: 1 }} />}
+          {mode === "plan" || inline ? <Icon name={listShown ? "ChevronDown" : "ChevronRight"} size={14} color={t.c.foregroundMuted} /> : null}
         </Pressable>
         <IconButton t={t} size="sm" icon="X" label="Hide these steps until they change" onPress={() => setDismissed(planKey)} />
       </View>
       {mode === "plan" && options.progress ? <View style={{ height: 3, borderRadius: 2, backgroundColor: t.c.surface2, overflow: "hidden" }}><View style={{ width: `${Math.round((done / total) * 100)}%`, height: 3, backgroundColor: t.c.statusSuccess }} /></View> : null}
-      {mode === "plan" && !folded ? (
-        <ScrollView nestedScrollEnabled style={{ maxHeight: inline ? 320 : 200 }}>
+      {listShown ? (
+        <ScrollView nestedScrollEnabled style={{ maxHeight: inline ? undefined : 200 }}>
           {rows.map((step, index) => (
             <StepRow key={`${index}:${step.text}`} step={step} t={t} />
           ))}
