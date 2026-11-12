@@ -114,9 +114,9 @@ function AgentsBoardSettingsForm({ form }: { form: Form }) {
   const densityOptions = [...DENSITY_PRESETS, ...(values.density === "custom" ? (["custom"] as const) : [])].map((density) => ({ value: density, label: DENSITY_TITLES[density] }));
   return (
     <View style={{ gap: 12 }}>
-      <SettingsSection title="Agents tab" info="The Workbench Board's Agents tab: every agent on this host by status (Waiting, To review, Running, Done and Archived), as a list or as lanes; pick with List or Board at its top.">
+      <SettingsSection title="Agents tab" info="The Agents tab of the Workbench's Overview: every agent on this host by status (Waiting, To review, Running, Done and Archived), as a list or as lanes; pick with List or Board at its top.">
         <SettingsCard>
-          <SwitchField label="Show the Agents tab" hint="Adds an Agents tab beside Tasks on the Workbench Board. When this is off, Board shows only tasks and no agents are read for it." value={values.enabled} onChange={(enabled) => set({ enabled })} />
+          <SwitchField label="Show the Agents tab" hint="Adds an Agents tab beside Tasks in the Workbench's Overview. When this is off, Overview shows only tasks and no agents are read for it." value={values.enabled} onChange={(enabled) => set({ enabled })} />
         </SettingsCard>
       </SettingsSection>
       {values.enabled ? (
@@ -138,13 +138,13 @@ function AgentsBoardSettingsForm({ form }: { form: Form }) {
               {values.card.labels ? <SelectField<LabelLimit> label="Labels shown" hint="The rest fold into +N." value={values.card.labelLimit} options={[{ value: "1", label: "1" }, { value: "2", label: "2" }, { value: "3", label: "3" }, { value: "all", label: "All" }]} onChange={(limit) => change(setCardSetting(values, "labelLimit", limit))} /> : null}
             </SettingsCard>
           </SettingsSection>
-          <SettingsSection title="Board">
+          <SettingsSection title="List and lanes">
             <SettingsCard>
               <SelectField<DoneWindow> label="Done and Archived show" value={values.board.doneWindow} options={[{ value: "24h", label: "The last 24 hours" }, { value: "7d", label: "The last 7 days" }, { value: "all", label: "Everything" }]} onChange={(doneWindow) => board({ doneWindow })} />
               <SelectField<LaneWidth> label="Lane width" hint="Desktop and web; phones show one lane at a time." value={values.board.laneWidth} options={[{ value: "narrow", label: "Narrow" }, { value: "default", label: "Default" }, { value: "wide", label: "Wide" }]} onChange={(laneWidth) => board({ laneWidth })} />
               <SwitchField label="Show sub-agents" hint="Gives each sub-agent its own card. When this is off, a sub-agent folds into its parent's card unless it runs, waits or failed in another lane." value={values.board.showSubtasks} onChange={(showSubtasks) => board({ showSubtasks })} />
               <SwitchField label="Show the Archived lane" hint="Archived agents within the done window." value={values.board.showArchived} onChange={(showArchived) => board({ showArchived })} />
-              <SwitchField label="List groups with no agents" hint="The filter menus also list Paseo's other labels, projects and workspaces, at 0." value={values.board.showEmptyGroups} onChange={(showEmptyGroups) => board({ showEmptyGroups })} />
+              <SwitchField label="Show groups with no agents" hint="The list shows every status, an empty one as a folded header at 0, and the filter menus list Paseo's other labels, projects and workspaces, at 0." value={values.board.showEmptyGroups} onChange={(showEmptyGroups) => board({ showEmptyGroups })} />
             </SettingsCard>
           </SettingsSection>
           <SettingsSection title="Phone">

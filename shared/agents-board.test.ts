@@ -33,9 +33,11 @@ import {
   listSections,
   rowLine,
   LIST_PREVIEW,
+  updatedWithinMs,
 } from "./agents-board";
 
 const NOW = Date.parse("2026-11-12T12:00:00Z");
+const NOW_FILTER = (part: Partial<typeof NO_FILTER>) => ({ ...NO_FILTER, ...part });
 const hoursAgo = (hours: number) => new Date(NOW - hours * 3_600_000).toISOString();
 
 function agent(id: string, overrides: Partial<BoardAgent> = {}): BoardAgent {
@@ -255,13 +257,13 @@ describe("filters", () => {
   const card = agent("a", { title: "Fix login", provider: "codex", project: "App", workspace: "feature", branch: "fix/login", labels: ["urgent"], workspaceId: "w1" });
 
   it("matches every filter it is given, and searches titles and names", () => {
-    expect(matchesFilter(card, NO_FILTER)).toBe(true);
-    expect(matchesFilter(card, { ...NO_FILTER, providers: ["codex"], labels: ["urgent"], projects: ["App"], workspaces: ["w1"] })).toBe(true);
-    expect(matchesFilter(card, { ...NO_FILTER, providers: ["claude"] })).toBe(false);
-    expect(matchesFilter(card, { ...NO_FILTER, labels: ["later"] })).toBe(false);
-    expect(matchesFilter(card, { ...NO_FILTER, search: "login feature" })).toBe(true);
-    expect(matchesFilter(card, { ...NO_FILTER, search: "fix/login" })).toBe(true);
-    expect(matchesFilter(card, { ...NO_FILTER, search: "billing" })).toBe(false);
+    expect(matchesFilter(card, NO_FILTER, NOW)).toBe(true);
+    expect(matchesFilter(card, NOW_FILTER({ providers: ["codex"], labels: ["urgent"], projects: ["App"], workspaces: ["w1"] }), NOW)).toBe(true);
+    expect(matchesFilter(card, NOW_FILTER({ providers: ["claude"] }), NOW)).toBe(false);
+    expect(matchesFilter(card, NOW_FILTER({ labels: ["later"] }), NOW)).toBe(false);
+    expect(matchesFilter(card, NOW_FILTER({ search: "login feature" }), NOW)).toBe(true);
+    expect(matchesFilter(card, NOW_FILTER({ search: "fix/login" }), NOW)).toBe(true);
+    expect(matchesFilter(card, NOW_FILTER({ search: "billing" }), NOW)).toBe(false);
   });
 
   it("lists groups on the board with counts, and Paseo's other groups at 0 only when empty groups show", () => {
@@ -470,5 +472,43 @@ describe("row line", () => {
     expect(rowLine({ indicator: "running", permission: null, error: null, step: "Write tests", subtitle: "the prompt" })).toBe("Working on: Write tests");
     expect(rowLine({ indicator: "running", permission: null, error: null, step: null, subtitle: "the prompt" })).toBe("the prompt");
     expect(rowLine({ indicator: "done", permission: null, error: null, step: "Write tests", subtitle: null })).toBeNull();
+  });
+});
+
+describe("last updated filter", () => {
+  it("keeps agents updated within the window, and every agent at Any time", () => {
+    const recent = agent("recent", { updatedAt: hoursAgo(0.5) });
+    const older = agent("older", { updatedAt: hoursAgo(7) });
+    const shown = (updatedWithin: typeof NO_FILTER.updatedWithin) => [recent, older].filter((item) => matchesFilter(item, NOW_FILTER({ updatedWithin }), NOW)).map((item) => item.id);
+    expect(shown("any")).toEqual(["recent", "older"]);
+    expect(shown("1h")).toEqual(["recent"]);
+    expect(shown("6h")).toEqual(["recent"]);
+    expect(shown("12h")).toEqual(["recent", "older"]);
+    expect(updatedWithinMs("24h")).toBe(24 * 3_600_000);
+    expect(updatedWithinMs("any")).toBeNull();
+  });
+
+  it("never hides an agent that runs or waits now, such as a parent whose sub-agent runs", () => {
+    const parent = agent("parent", { updatedAt: hoursAgo(3) });
+    expect(matchesFilter(parent, NOW_FILTER({ updatedWithin: "1h" }), NOW, true)).toBe(true);
+    expect(matchesFilter(parent, NOW_FILTER({ updatedWithin: "1h" }), NOW, false)).toBe(false);
+  });
+
+  it("leaves out an agent with no update time when a window is set", () => {
+    expect(matchesFilter(agent("x", { updatedAt: "" }), NOW_FILTER({ updatedWithin: "1h" }), NOW)).toBe(false);
+  });
+});
+
+describe("empty list sections", () => {
+  it("shows every status, empty ones folded, when empty groups show", () => {
+    const counts = { waiting: 0, running: 0, review: 0, done: 51, archived: 6 };
+    expect(listSections(counts, {}, {}, true).map((section) => [section.lane, section.folded])).toEqual([
+      ["waiting", true],
+      ["review", true],
+      ["running", true],
+      ["done", false],
+      ["archived", true],
+    ]);
+    expect(listSections(counts, { waiting: false }, {}, true)[0]).toEqual({ lane: "waiting", folded: false, limit: Number.POSITIVE_INFINITY });
   });
 });

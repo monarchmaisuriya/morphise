@@ -313,11 +313,30 @@ export interface BoardFilter {
   // Workspace ids.
   workspaces: readonly string[];
   search: string;
+  // Only agents Paseo updated within this window.
+  updatedWithin: UpdatedWithin;
 }
 
-export const NO_FILTER: BoardFilter = { providers: [], labels: [], projects: [], workspaces: [], search: "" };
+export const UPDATED_WITHIN = ["any", "1h", "6h", "12h", "24h"] as const;
+export type UpdatedWithin = (typeof UPDATED_WITHIN)[number];
 
-export function matchesFilter(agent: BoardAgent, filter: BoardFilter): boolean {
+/** The Last updated filter's window in milliseconds; null for Any time. */
+export function updatedWithinMs(window: UpdatedWithin): number | null {
+  return window === "any" ? null : Number(window.slice(0, -1)) * 3_600_000;
+}
+
+export const NO_FILTER: BoardFilter = { providers: [], labels: [], projects: [], workspaces: [], search: "", updatedWithin: "any" };
+
+/**
+ * Whether an agent passes the filters. `activeNow` is true for an agent in the Waiting or Running lane (a parent is there
+ * while a sub-agent works): it counts as updated now, as Paseo may not touch its record while a turn runs.
+ */
+export function matchesFilter(agent: BoardAgent, filter: BoardFilter, now: number, activeNow = false): boolean {
+  const windowMs = updatedWithinMs(filter.updatedWithin);
+  if (windowMs !== null && !activeNow) {
+    const at = Date.parse(agent.updatedAt);
+    if (Number.isNaN(at) || at < now - windowMs) return false;
+  }
   if (filter.providers.length && !filter.providers.includes(agent.provider)) return false;
   if (filter.labels.length && !agent.labels.some((label) => filter.labels.includes(label))) return false;
   if (filter.projects.length && !(agent.project && filter.projects.includes(agent.project))) return false;
@@ -472,9 +491,9 @@ export function folderAddsSomething(folder: string, project: string | null, work
 
 // ---------- List view ----------
 
-// How the Agents view lays agents out: a list grouped by status (the default, as agent overviews do) or lanes.
-export const AGENTS_LAYOUTS = ["list", "board"] as const;
-export type AgentsLayout = (typeof AGENTS_LAYOUTS)[number];
+// How the Agents and Tasks views lay items out: a list grouped by status or lanes (columns).
+export const VIEW_LAYOUTS = ["list", "board"] as const;
+export type ViewLayout = (typeof VIEW_LAYOUTS)[number];
 
 // The list puts what needs the user first (as Claude Code's agent view does), then what runs, then what is finished.
 export const LIST_ORDER: readonly Lane[] = ["waiting", "review", "running", "done", "archived"];
@@ -487,11 +506,14 @@ export interface ListSection {
   limit: number;
 }
 
-/** The list's sections: those with agents, in LIST_ORDER, folded as laneFolded says, with how many rows each shows. */
-export function listSections(counts: Readonly<Record<Lane, number>>, choices: Partial<Record<Lane, boolean>>, shown: Partial<Record<Lane, number>> = {}): ListSection[] {
-  return LIST_ORDER.filter((lane) => counts[lane] > 0).map((lane) => ({
+/**
+ * The list's sections in LIST_ORDER, folded as laneFolded says (an empty one folded), with how many rows each shows.
+ * Empty sections show only with `showEmpty` (the "Show groups with no agents" setting).
+ */
+export function listSections(counts: Readonly<Partial<Record<Lane, number>>>, choices: Partial<Record<Lane, boolean>>, shown: Partial<Record<Lane, number>> = {}, showEmpty = false): ListSection[] {
+  return LIST_ORDER.filter((lane) => counts[lane] !== undefined && (showEmpty || counts[lane]! > 0)).map((lane) => ({
     lane,
-    folded: laneFolded(lane, counts[lane], choices[lane]),
+    folded: laneFolded(lane, counts[lane]!, choices[lane]),
     limit: shown[lane] ?? (lane === "done" || lane === "archived" ? LIST_PREVIEW : Number.POSITIVE_INFINITY),
   }));
 }

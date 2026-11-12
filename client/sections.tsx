@@ -309,7 +309,7 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
         );
         track(client.addTimelineRenderer({ kind: "reminder", version: 1, schema: reminderRowSchema, Component: createReminderRow(tasks) }));
         const global = [
-          { id: "morphise-tasks", title: "Open Workbench: task board", tab: "board" },
+          { id: "morphise-tasks", title: "Open Workbench: tasks", tab: "board" },
           { id: "morphise-tasks-today", title: "Open Workbench: today's tasks and reminders", tab: "today" },
         ];
         for (const item of global) {

@@ -2,6 +2,14 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.19.8 - 2026-11-12
+
+- **Overview, not Board:** the Workbench view that holds Tasks and Agents is now called Overview, with its own icon, since each of its tabs has a List / Board switch of its own. Links that opened Board still open it.
+- **Tasks as a list:** the Tasks tab has the same List / Board switch as Agents, remembered on each device (Board until you pick List). The list shows each column as a section with its dot, name, count and an add button, then one row per card: priority, title, labels, workspace, due date, reminder and checklist. A press opens the card; the check moves it to the done column. Filters, order, rows and saved views apply as on the board; empty columns start folded.
+- **Every status in the agents list:** Waiting, To review and Running show even when no agent is in them, as folded headers at 0, so the list always reads the same. The setting is now "Show groups with no agents" (on by default); off, empty sections are left out as before.
+- **Last updated filter:** the Agents tab can show only agents updated in the last hour, 6, 12 or 24 hours, in the list and on the board. Agents that run or wait now always show, including a parent whose sub-agent is working. When nothing matches, the list says so above its empty sections.
+- The Agents settings section for lanes and the list is now called "List and lanes".
+
 ## 0.19.7 - 2026-11-12
 
 - **Agents as a list, grouped by status:** the Agents tab now opens as a list, the way agent overviews such as Claude Code's and GitHub's show many agents. Sections run Waiting, To review, Running, Done and Archived, so what needs you is on top; sections with no agents are left out, Archived starts folded, and Done and Archived show 8 rows with "Show more". Each row has a status dot, the title, one line saying what the agent asks, why it failed or the step it is on, then its context, plan, PR, model and time, and its buttons (Allow, Deny, Stop, Archive, Open, More) always visible; on phones the row keeps Allow, Deny and More, so the title has room. J and K scroll the row they move to into view. A List / Board switch at the top keeps the lanes one press away; each device remembers its pick.

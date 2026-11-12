@@ -1,16 +1,15 @@
-import type { PluginScreenProps, PluginSidebarItemProps, SettingsState } from "@getpaseo/plugin/client";
+import type { PluginScreenProps, PluginSidebarItemProps } from "@getpaseo/plugin/client";
 import { useSettings } from "@getpaseo/plugin/client";
 import { SidebarRow, useToast } from "@getpaseo/plugin/client/ui";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
-import { defineSettings } from "@getpaseo/plugin";
-import { z } from "zod";
 import { dueCount, todayGroups } from "../shared/board";
-import { AGENTS_LAYOUTS, agentsBoardSettings } from "../shared/agents-board";
+import { agentsBoardSettings } from "../shared/agents-board";
 import { inboxSettings } from "../shared/inbox";
 import { AgentsBoardView } from "./agents-board/board";
 import { TasksBoard } from "./board/board";
 import { bookmarksOf } from "./bookmark-store";
+import { useDeviceChoice, workbenchSettings } from "./device-choices";
 import { Bookmarks, waitingItems, WaitingView } from "./inbox";
 import { useValue } from "./profile-store";
 import { useReminderClock } from "./reminder-clock";
@@ -22,7 +21,7 @@ import { StackViewerHost } from "./polish/media/views";
 import { FOCUS_SCOPE, useTooltip } from "./web";
 
 // Workbench: everything that needs the user, in one place. Chats waiting on them (raised by agents) and
-// their own tasks (Today, Board, Archived), plus bookmarked answers. A list of views on the left on
+// their own tasks (Overview, Today, Archived), plus bookmarked answers. A list of views on the left on
 // wide screens, tabs along the top on phones.
 
 export const WORKBENCH_SCREEN_ID = "workbench";
@@ -31,42 +30,15 @@ export const LEGACY_SCREENS = { tasks: "board", inbox: "waiting" } as const;
 
 export type WorkbenchView = "waiting" | "today" | "board" | "bookmarks" | "archived";
 const VIEWS: readonly WorkbenchView[] = ["board", "waiting", "today", "bookmarks", "archived"];
-// Board shows the user's tasks or every agent, by a pair of tabs at its top.
+// Overview (the "board" view) shows the user's tasks or every agent, by a pair of tabs at its top.
 type BoardTab = "tasks" | "agents";
 // Below this width the views sit in a row of tabs instead of a list.
 const RAIL_FROM = 720;
 const RAIL_WIDTH = 176;
 const RAIL_FOLDED = 52;
 
-// On this device: the rail folded to icons, the Board's last tab, and the Agents tab as a list or lanes.
-const workbenchSchema = z.object({
-  railFolded: z.boolean().default(false),
-  boardTab: z.enum(["tasks", "agents"]).catch("agents").default("agents"),
-  agentsLayout: z.enum(AGENTS_LAYOUTS).catch("list").default("list"),
-});
-type WorkbenchValues = z.output<typeof workbenchSchema>;
-const WORKBENCH_DEFAULTS: WorkbenchValues = workbenchSchema.parse({});
-const workbenchSettings = defineSettings({ id: "workbench", scope: "device", version: 1, schema: workbenchSchema });
 
-// One of those choices: what the user picked here applies at once and waits to be saved, so a press before
-// the settings load is not lost. A save is tried once per stored revision: one refused for an old revision is
-// tried again on the new one, one refused otherwise is not retried in a loop. Once stored, the pick is released,
-// so a later change from another screen shows here instead of being overwritten.
-function useDeviceChoice<Key extends keyof WorkbenchValues>(stored: SettingsState<typeof workbenchSchema>, key: Key): [WorkbenchValues[Key], (value: WorkbenchValues[Key]) => void] {
-  const [chosen, choose] = useState<WorkbenchValues[Key] | null>(null);
-  const tried = useRef<unknown>(undefined);
-  useEffect(() => {
-    if (chosen === null || stored.status !== "ready" || stored.saving) return;
-    if (stored.values[key] === chosen) return choose(null);
-    if (tried.current === stored.revision) return;
-    tried.current = stored.revision;
-    void stored.save({ ...stored.values, [key]: chosen }, stored.revision);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chosen, stored.status, stored.saving, stored.status === "ready" ? stored.revision : null]);
-  return [chosen ?? (stored.status === "ready" ? stored.values[key] : WORKBENCH_DEFAULTS[key]), choose];
-}
-
-// "agents" was a view of its own before 0.19.2; it now opens Board on its Agents tab.
+// "agents" was a view of its own before 0.19.2; it now opens Overview on its Agents tab.
 function viewParam(params: PluginScreenProps["params"]): { view: WorkbenchView; tab?: BoardTab } | null {
   const asked = typeof params.view === "string" ? params.view : typeof params.tab === "string" ? params.tab : null;
   if (asked === "agents") return { view: "board", tab: "agents" };
@@ -96,7 +68,7 @@ type Counts = ReturnType<typeof useWorkbenchCounts>;
 
 // One list, without group headings, in this order.
 const ENTRIES: readonly { view: WorkbenchView; label: string; icon: string }[] = [
-  { view: "board", label: "Board", icon: "Columns3" },
+  { view: "board", label: "Overview", icon: "Activity" },
   { view: "waiting", label: "Waiting", icon: "Inbox" },
   { view: "today", label: "Today", icon: "CalendarClock" },
   { view: "archived", label: "Archived", icon: "Archive" },
@@ -114,7 +86,7 @@ function countTone(view: WorkbenchView, counts: Counts, t: Tokens): string {
   return t.c.foregroundMuted;
 }
 
-// Board's two tabs: plain words with a thin line under the chosen one.
+// Overview's two tabs: plain words with a thin line under the chosen one.
 function BoardTabs({ t, tab, onChange }: { t: Tokens; tab: BoardTab; onChange(tab: BoardTab): void }) {
   return (
     <View accessibilityRole="tablist" style={{ flexDirection: "row", gap: 18, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: t.c.border }}>
@@ -182,7 +154,7 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: WorkbenchView
     // The view picked here or asked for when opened; until then, what needs the user first, then
     // what is due, then the board, following the counts as they arrive.
     const [picked, setView] = useState<WorkbenchView | null>(null);
-    // Board's Agents tab shows unless its setting turns it off.
+    // Overview's Agents tab shows unless its setting turns it off.
     const boardSettings = useSettings(agentsBoardSettings);
     const agentsShown = boardSettings.status !== "ready" || boardSettings.values.enabled;
     const entries = ENTRIES;
@@ -202,12 +174,12 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: WorkbenchView
     const [folded, setFolded] = useDeviceChoice(railSettings, "railFolded");
     const toggleFolded = () => setFolded(!folded);
     const [savedTab, saveTab] = useDeviceChoice(railSettings, "boardTab");
-    const [agentsLayout, setAgentsLayout] = useDeviceChoice(railSettings, "agentsLayout");
+    const [agentsLayout, setViewLayout] = useDeviceChoice(railSettings, "agentsLayout");
     const openChat = navigation ? (agentId: string) => navigation.openAgent({ agentId }) : null;
     const workspaces = useValue(deps.workspaces);
-    // The Board's tab: one a link asked for, else the one picked here or last used on this device.
+    // Overview's tab: one a link asked for, else the one picked here or last used on this device.
     const boardTab: BoardTab = agentsShown ? linkedTab ?? savedTab : "tasks";
-    // Board waits for both settings, so it never shows the Agents tab for a moment when it is off or not the saved tab.
+    // Overview waits for both settings, so it never shows the Agents tab for a moment when it is off or not the saved tab.
     const boardReady = boardSettings.status !== "loading" && railSettings.status !== "loading";
     const pickTab = (tab: BoardTab) => {
       setLinkedTab(null);
@@ -223,7 +195,7 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: WorkbenchView
         !boardReady ? null : <View style={{ flex: 1 }}>
           {agentsShown ? <BoardTabs t={t} tab={boardTab} onChange={pickTab} /> : null}
           {boardTab === "agents" ? (
-            <AgentsBoardView client={deps.client} workspaces={deps.workspaces} theme={theme} compact={layout.compact} navigation={navigation} layout={agentsLayout} onLayout={setAgentsLayout} />
+            <AgentsBoardView client={deps.client} workspaces={deps.workspaces} theme={theme} compact={layout.compact} navigation={navigation} layout={agentsLayout} onLayout={setViewLayout} />
           ) : (
             <TasksBoard key="board" deps={deps} theme={theme} compact={layout.compact} workspaceId={null} initialTab="board" openChat={openChat} embedded />
           )}

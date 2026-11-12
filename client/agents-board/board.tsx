@@ -27,8 +27,10 @@ import {
   LANE_STRIP,
   foldedLanes,
   openLaneWidth,
-  type AgentsLayout,
+  type ViewLayout,
   listSections,
+  UPDATED_WITHIN,
+  type UpdatedWithin,
 } from "../../shared/agents-board";
 import { summarizePermission } from "../../shared/inbox";
 import { type ValueStore, useValue } from "../profile-store";
@@ -93,6 +95,28 @@ function FilterMenu({ t, label, icon, groups, picked, onChange }: { t: Tokens; l
   );
 }
 
+const UPDATED_TITLES: Record<UpdatedWithin, string> = { any: "Any time", "1h": "Last hour", "6h": "Last 6 hours", "12h": "Last 12 hours", "24h": "Last 24 hours" };
+
+// The Last updated filter: only agents Paseo updated within the picked window.
+function UpdatedMenu({ t, value, onChange }: { t: Tokens; value: UpdatedWithin; onChange(value: UpdatedWithin): void }) {
+  const [open, setOpen] = useState(false);
+  const anchor = useRef<View>(null);
+  const label = value === "any" ? "Last updated" : `Updated: ${UPDATED_TITLES[value].toLowerCase()}`;
+  return (
+    <View ref={anchor}>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Last updated filter, ${UPDATED_TITLES[value]}. Change`} onPress={() => setOpen(!open)} style={{ flexDirection: "row", alignItems: "center", gap: 6, height: t.control, paddingHorizontal: 10, borderRadius: t.radius.control, borderWidth: 1, borderColor: value === "any" ? t.c.border : t.c.accent, backgroundColor: t.c.surface1 }}>
+        <Icon name="Clock" size={13} color={t.c.foregroundMuted} />
+        <Text style={{ fontSize: 12, color: t.c.foreground }}>{label}</Text>
+      </Pressable>
+      <Dropdown t={t} open={open} onClose={() => setOpen(false)} anchor={anchor} width={200}>
+        {UPDATED_WITHIN.map((key) => (
+          <MenuItem key={key} t={t} role="radio" label={UPDATED_TITLES[key]} checked={key === value} onPress={() => (setOpen(false), onChange(key))} />
+        ))}
+      </Dropdown>
+    </View>
+  );
+}
+
 function SortMenu({ t, sort, onChange }: { t: Tokens; sort: SortKey; onChange(sort: SortKey): void }) {
   const [open, setOpen] = useState(false);
   const anchor = useRef<View>(null);
@@ -112,7 +136,7 @@ function SortMenu({ t, sort, onChange }: { t: Tokens; sort: SortKey; onChange(so
 }
 
 // An agent on the view, as a card or a list row: reads its usage and plan while it is on screen, and owns its menu.
-function BoardCard({ as, t, client, facts, card, now, selected, focused, buttons, onPress, onOpen }: { as: AgentsLayout; t: Tokens; client: PluginClientContext; facts: CardFacts; card: ReturnType<typeof effectiveCard>; now: Date; selected: boolean; focused: boolean; buttons: CardButtons; onPress(): void; onOpen: (() => void) | null }) {
+function BoardCard({ as, t, client, facts, card, now, selected, focused, buttons, onPress, onOpen }: { as: ViewLayout; t: Tokens; client: PluginClientContext; facts: CardFacts; card: ReturnType<typeof effectiveCard>; now: Date; selected: boolean; focused: boolean; buttons: CardButtons; onPress(): void; onOpen: (() => void) | null }) {
   const toast = useToast();
   const { agent, indicator } = facts;
   const [onScreen, setOnScreen] = useState(false);
@@ -149,7 +173,7 @@ function BoardCard({ as, t, client, facts, card, now, selected, focused, buttons
   );
 }
 
-export function AgentsBoardView({ client, workspaces, theme, compact, navigation, layout: shape, onLayout }: { client: PluginClientContext; workspaces: ValueStore<WorkspaceList>; theme: PluginTheme; compact: boolean; navigation: PluginScreenProps["navigation"]; layout: AgentsLayout; onLayout(layout: AgentsLayout): void }) {
+export function AgentsBoardView({ client, workspaces, theme, compact, navigation, layout: shape, onLayout }: { client: PluginClientContext; workspaces: ValueStore<WorkspaceList>; theme: PluginTheme; compact: boolean; navigation: PluginScreenProps["navigation"]; layout: ViewLayout; onLayout(layout: ViewLayout): void }) {
   const t = useTokens(theme, compact);
   const toast = useToast();
   const stored = useSettings(agentsBoardSettings);
@@ -198,7 +222,7 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
   const laneById = useMemo(() => new Map(LANES.flatMap((lane) => allLanes[lane].map((agent) => [agent.id, lane] as const))), [allLanes]);
   const lanes = useMemo(() => {
     const order = compareAgents(sort, now.getTime());
-    return Object.fromEntries(LANES.map((lane) => [lane, allLanes[lane].filter((agent) => matchesFilter(agent, filter)).sort(order)])) as Record<Lane, BoardAgent[]>;
+    return Object.fromEntries(LANES.map((lane) => [lane, allLanes[lane].filter((agent) => matchesFilter(agent, filter, now.getTime(), lane === "waiting" || lane === "running")).sort(order)])) as Record<Lane, BoardAgent[]>;
   }, [allLanes, filter, sort, now]);
   const laneList = LANES.filter((lane) => lane !== "archived" || settings.board.showArchived);
   const groups = useMemo(() => {
@@ -209,7 +233,7 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
 
   const sideDetails = !compact && width >= SIDE_DETAILS_FROM;
   const asList = shape === "list";
-  const sections = listSections(Object.fromEntries(laneList.map((lane) => [lane, lanes[lane].length])) as Record<Lane, number>, foldChoice, listShown);
+  const sections = listSections(Object.fromEntries(laneList.map((lane) => [lane, lanes[lane].length])) as Record<Lane, number>, foldChoice, listShown, settings.board.showEmptyGroups);
   const visibleLanes = compact ? [phoneLane] : laneList;
   const foldedSet = foldedLanes(laneList.map((lane) => ({ lane, count: lanes[lane].length, choice: foldChoice[lane] })));
   const folded = (lane: Lane) => (asList ? sections.some((section) => section.lane === lane && section.folded) : !compact && foldedSet.has(lane));
@@ -352,7 +376,7 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
             style={[{ flex: 1, minWidth: 0, color: t.c.foreground, fontSize: t.compact ? 15 : 13, height: t.control - 2 }, Platform.OS === "web" ? (WEB_NO_OUTLINE as TextStyle) : null]}
           />
         </View>
-        <Segmented<AgentsLayout> t={t} label="Show agents as" value={shape} onChange={onLayout} options={[{ value: "list", label: "List", icon: "List" }, { value: "board", label: "Board", icon: "Columns3" }]} />
+        <Segmented<ViewLayout> t={t} label="Show agents as" value={shape} onChange={onLayout} options={[{ value: "list", label: "List", icon: "List" }, { value: "board", label: "Board", icon: "Columns3" }]} />
         <IconButton t={t} icon="Settings2" label="Agents tab settings" onPress={() => client.openSettings(AGENTS_SETTINGS_TAB)} />
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, alignItems: "center" }}>
@@ -360,6 +384,7 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
         <FilterMenu t={t} label="Label" icon="Tag" groups={groups.labels} picked={filter.labels} onChange={(labels) => setFilter({ ...filter, labels })} />
         <FilterMenu t={t} label="Project" icon="FolderGit2" groups={groups.projects} picked={filter.projects} onChange={(projects) => setFilter({ ...filter, projects })} />
         <FilterMenu t={t} label="Workspace" icon="LayoutGrid" groups={groups.workspaces} picked={filter.workspaces} onChange={(picked) => setFilter({ ...filter, workspaces: picked })} />
+        <UpdatedMenu t={t} value={filter.updatedWithin} onChange={(updatedWithin) => setFilter({ ...filter, updatedWithin })} />
         <SortMenu t={t} sort={sort} onChange={setSort} />
         {JSON.stringify(filter) !== JSON.stringify(NO_FILTER) ? <IconButton t={t} icon="FilterX" label="Clear the search and filters" onPress={() => setFilter(NO_FILTER)} /> : null}
       </ScrollView>
@@ -380,7 +405,7 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
   const openLanes = laneList.filter((lane) => !folded(lane));
   const layout = openLaneWidth({ width: boardWidth, open: openLanes.length, folded: laneList.length - openLanes.length, gap: LANE_GAP, padding: BOARD_PADDING, max: LANE_MAX[settings.board.laneWidth] });
 
-  const itemOf = (agent: BoardAgent, as: AgentsLayout) => (
+  const itemOf = (agent: BoardAgent, as: ViewLayout) => (
     <BoardCard
       as={as}
       key={agent.id}
@@ -438,11 +463,12 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
   // The list: a header per status with agents, what needs the user first; Done and Archived show a few rows, then more.
   const listView = (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: BOARD_PADDING, paddingBottom: 16, gap: 10 }}>
-      {sections.length === 0 ? <Text style={[t.text.meta, { paddingHorizontal: 4 }]}>No agents match the search and filters.</Text> : null}
+      {sections.every((section) => lanes[section.lane].length === 0) ? <Text style={[t.text.meta, { paddingHorizontal: 4 }]}>No agents match the search and filters.</Text> : null}
       {sections.map(({ lane, folded: isFolded, limit }) => (
         <View key={lane} style={{ gap: 2 }}>
           {laneHeader(lane, !isFolded, true)}
           {isFolded ? null : lanes[lane].slice(0, limit).map((agent) => itemOf(agent, "list"))}
+          {!isFolded && lanes[lane].length === 0 ? <Text style={[t.text.meta, { paddingHorizontal: 28, paddingVertical: 6 }]}>No agents</Text> : null}
           {!isFolded && lanes[lane].length > limit ? (
             <Pressable accessibilityRole="button" onPress={() => setListShown({ ...listShown, [lane]: limit + PAGE })} style={({ hovered }: { pressed: boolean; hovered?: boolean }) => ({ height: 32, justifyContent: "center", paddingHorizontal: 28, borderRadius: t.radius.row, backgroundColor: hovered ? t.c.surface1 : "transparent" })}>
               <Text style={t.text.meta}>{lanes[lane].length - limit > PAGE ? `Show ${PAGE} more of ${lanes[lane].length - limit}` : `Show ${lanes[lane].length - limit} more`}</Text>
