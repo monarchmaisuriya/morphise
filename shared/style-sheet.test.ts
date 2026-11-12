@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildStyleSheet } from "./style-sheet";
+import { buildChatWebCss, buildStyleSheet } from "./style-sheet";
 
 describe("buildStyleSheet", () => {
   it("produces nothing while the style layer is off", () => {
@@ -18,5 +18,21 @@ describe("buildStyleSheet", () => {
 
   it("produces nothing when enabled with nothing to apply", () => {
     expect(buildStyleSheet({ enabled: true, hideTestIds: [], css: "  " })).toBe("");
+  });
+});
+
+describe("buildChatWebCss", () => {
+  it("is empty with nothing chosen", () => {
+    expect(buildChatWebCss(undefined)).toBe("");
+    expect(buildChatWebCss({ replySize: 100 })).toBe("");
+  });
+
+  it("styles replies and prompts by Paseo's test ids", () => {
+    const css = buildChatWebCss({ replySize: 120, boldColor: "#e64980", linkStyle: "dashed", clampPrompts: 6, codeFont: "Iosevka" });
+    expect(css).toContain('[data-testid="assistant-message"] { zoom: 1.2; }');
+    expect(css).toContain("color: #e64980 !important");
+    expect(css).toContain("underline dashed");
+    expect(css).toContain("-webkit-line-clamp: 6");
+    expect(css).toContain('font-family: "Iosevka", ui-monospace, monospace');
   });
 });

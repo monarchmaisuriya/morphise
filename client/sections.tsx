@@ -2,7 +2,7 @@ import type { PluginButton, PluginClientContext, PluginTimelineTransformerContri
 import { SidebarRow, useToast } from "@getpaseo/plugin/client/ui";
 import type { Prompt } from "../shared/document";
 import type { Profile } from "../shared/profile";
-import { buildStyleSheet } from "../shared/style-sheet";
+import { buildChatWebCss, buildStyleSheet } from "../shared/style-sheet";
 import { createComposerControl, createPresetField } from "./composer-surfaces";
 import type { Directory } from "./directory";
 import type { Section } from "./reconciler";
@@ -24,10 +24,12 @@ import { createDispatchScreen, DISPATCH_ICON, DISPATCH_SCREEN_ID } from "./dispa
 import { createWorkbenchScreen, createWorkbenchSidebarItem, WORKBENCH_SCREEN_ID, LEGACY_SCREENS } from "./workbench";
 import { createSidebarView } from "./sidebar-view";
 import { CHAT_STEPS_KIND, chatStepsSchema, createChatStepsRow } from "./steps-card";
-import { createThinkingRow, createToolRow, THINKING_ROW_KIND, thinkingRowSchema, TOOL_ROW_KIND, toolRowSchema } from "./chat-rows";
-import { chatLook, chatView, lastTurnMarkdown, rowFate, transformedTypes } from "../shared/chat-view";
+import { createNoticeRow, createRecapRow, createThinkingRow, createToolRow, NOTICE_ROW_KIND, noticeRowSchema, recapRowSchema, type RowActions, THINKING_ROW_KIND, thinkingRowSchema, TOOL_ROW_KIND, toolRowSchema } from "./chat-rows";
+import { createDetailsPanel, DETAILS_PANEL_ID, detailsStore } from "./details-panel";
+import { readImage, revealFile } from "../shared/files";
+import { chatLook, chatView, lastTurnMarkdown, rowFate, transformedTypes, TURN_RECAP_KIND } from "../shared/chat-view";
 import { stepsOptions } from "../shared/steps";
-import { applyStyleSheet } from "./web";
+import { applyStyleSheet, scrollToPrompt } from "./web";
 import { copyText } from "@getpaseo/plugin/client/ui";
 import { Platform } from "react-native";
 
@@ -89,6 +91,31 @@ function createRows(rows: readonly Row[], deps: ActionDeps) {
 const json = (value: unknown) => JSON.stringify(value);
 
 export function createSections(client: PluginClientContext, deps: ActionDeps, tasks: SurfaceDeps, switchLayout: (id: string) => Promise<void>): Section<Applied>[] {
+  // What Morphise's chat rows can do: read pictures and reveal files on the daemon, show details in
+  // the Details tab of the chat's workspace, and shorten paths to that workspace's folder.
+  const workspaceOf = async (agentId: string): Promise<string | null> => {
+    const known = tasks.chats.get().get(agentId)?.workspaceId;
+    if (known) return known;
+    // Sub-agents are not in the chat list; ask Paseo for the agent's workspace.
+    const handle = client.paseo.agents.ref(agentId);
+    await handle.refresh().catch(() => null);
+    return handle.workspaceId;
+  };
+  const rowActions: RowActions = {
+    readImage: (path) => client.rpc(readImage, { path }),
+    reveal: (path) => client.rpc(revealFile, { path }),
+    async openDetails(agentId, details) {
+      const workspaceId = await workspaceOf(agentId);
+      if (!workspaceId) return { ok: false, reason: "this chat's workspace was not found" };
+      detailsStore.set({ workspaceId, ...details });
+      client.openPanel(DETAILS_PANEL_ID, { workspaceId, agentId });
+      return { ok: true };
+    },
+    workspaceFolder(agentId) {
+      const workspaceId = tasks.chats.get().get(agentId)?.workspaceId;
+      return workspaceId ? tasks.workspaces.get().get(workspaceId)?.directory ?? null : null;
+    },
+  };
   // A workspace's header button opens the reminder picker for its open chat.
   const ChatPopover = createChatPopover(tasks);
   const remindButton: PluginButton = { title: "Remind me", icon: "AlarmClock", behavior: { kind: "popover", Content: ChatPopover } };
@@ -152,15 +179,61 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
               if (fate.kind === "keep") return undefined;
               if (fate.kind === "hide") return { items: [] };
               if (fate.kind === "thinking") return { items: [{ type: "plugin", kind: THINKING_ROW_KIND, version: 2, data: { ...fate.data, streaming: phase === "streaming" } }] };
+              if (fate.kind === "notice") return { items: [{ type: "plugin", kind: NOTICE_ROW_KIND, version: 1, data: fate.data }] };
               return { items: [{ type: "plugin", kind: fate.kind === "tool" ? TOOL_ROW_KIND : CHAT_STEPS_KIND, version: fate.kind === "tool" ? 2 : 1, data: fate.data }] };
             },
           } as PluginTimelineTransformerContribution;
           track(client.addTimelineTransformer(transformer));
         }
         // Version 2: the cards' data (0.14) differs from 0.13's one-line rows.
-        if (view.toolCalls !== "paseo") track(client.addTimelineRenderer({ kind: TOOL_ROW_KIND, version: 2, schema: toolRowSchema, Component: createToolRow(look) }));
-        if (view.reasoning === "fold") track(client.addTimelineRenderer({ kind: THINKING_ROW_KIND, version: 2, schema: thinkingRowSchema, Component: createThinkingRow(look) }));
+        if (view.toolCalls !== "paseo") track(client.addTimelineRenderer({ kind: TOOL_ROW_KIND, version: 2, schema: toolRowSchema, Component: createToolRow(look, rowActions) }));
+        if (view.reasoning === "fold" || view.reasoning === "expand") track(client.addTimelineRenderer({ kind: THINKING_ROW_KIND, version: 2, schema: thinkingRowSchema, Component: createThinkingRow(look) }));
+        if (view.notices) track(client.addTimelineRenderer({ kind: NOTICE_ROW_KIND, version: 1, schema: noticeRowSchema, Component: createNoticeRow(look) }));
+        // Always: recaps already in a chat keep drawing after the setting is turned off.
+        track(client.addTimelineRenderer({ kind: TURN_RECAP_KIND, version: 1, schema: recapRowSchema, Component: createRecapRow(look, rowActions) }));
         if (view.stepsInChat) track(client.addTimelineRenderer({ kind: CHAT_STEPS_KIND, version: 1, schema: chatStepsSchema, Component: createChatStepsRow(client.paseo, () => steps) }));
+      },
+    },
+    {
+      // Settings, Chat, "Experimental (web)": Paseo's own prompts and replies styled, not redrawn.
+      name: "chat.web",
+      key: ({ profile }) => json(profile.chat?.enabled === false ? null : profile.chat?.web ?? null),
+      register({ profile }, track) {
+        if (profile.chat?.enabled !== false) track(applyStyleSheet(buildChatWebCss(profile.chat?.web)));
+      },
+    },
+    {
+      name: "chat.commands",
+      key: ({ profile }) => json([profile.chat?.toolCalls, profile.chat?.reasoning, profile.chat?.enabled]),
+      register({ profile }, track) {
+        const chat = profile.chat ?? {};
+        const style = chat.toolCalls ?? "paseo";
+        const next = style === "paseo" ? "compact" : style === "compact" ? "cards" : "paseo";
+        const nextTitle = { paseo: "Paseo's own rows", compact: "lines", cards: "cards" }[next];
+        const folded = chat.reasoning === "fold" || chat.reasoning === "expand";
+        const items = [
+          { id: "morphise-chat-tools", title: `Chat: show tool calls as ${nextTitle}`, icon: "Rows3", keywords: ["chat", "tool", "calls", "cards", "lines", "compact"], run: () => tasks.updateChat((value) => void (value.toolCalls = next === "paseo" ? undefined : next)) },
+          { id: "morphise-chat-thinking", title: folded ? "Chat: show thinking as Paseo does" : "Chat: fold thinking into a row", icon: "Brain", keywords: ["chat", "thinking", "reasoning", "fold"], run: () => tasks.updateChat((value) => void (value.reasoning = folded ? undefined : "fold")) },
+          { id: "morphise-chat-switch", title: chat.enabled === false ? "Chat: let Morphise draw chat rows" : "Chat: show every row as Paseo draws it", icon: "MessageSquare", keywords: ["chat", "rows", "off", "on", "paseo"], run: () => tasks.updateChat((value) => void (value.enabled = chat.enabled === false ? undefined : false)) },
+        ];
+        for (const item of items) track(client.addCommandCenterItem({ id: item.id, title: item.title, icon: item.icon, keywords: item.keywords, context: "global", onSelect: item.run }));
+        // Web only: Paseo's page holds the prompts, so these move through it.
+        if (Platform.OS === "web") {
+          for (const direction of ["previous", "next"] as const) {
+            track(
+              client.addCommandCenterItem({
+                id: `morphise-prompt-${direction}`,
+                title: direction === "previous" ? "Chat: go to the previous prompt" : "Chat: go to the next prompt",
+                icon: direction === "previous" ? "ArrowUp" : "ArrowDown",
+                keywords: ["chat", "prompt", "jump", "scroll", direction],
+                context: "agent",
+                onSelect: () => {
+                  if (!scrollToPrompt(direction)) throw new Error(direction === "previous" ? "No prompt above" : "No prompt below");
+                },
+              }),
+            );
+          }
+        }
       },
     },
     {
@@ -171,6 +244,7 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
         // Earlier versions' Tasks and Inbox screens, so links and open tabs from them still work.
         for (const [id, view] of Object.entries(LEGACY_SCREENS)) track(client.addScreen({ id, title: "Workbench", Component: createWorkbenchScreen(tasks, view) }));
         track(client.addWorkspacePanel({ id: "tasks", title: "Tasks", icon: "ListTodo", context: "workspace", Component: createWorkspaceTasksPanel(tasks) }));
+        track(client.addWorkspacePanel({ id: DETAILS_PANEL_ID, title: "Details", icon: "PanelRight", context: "workspace", Component: createDetailsPanel(client) }));
         track(client.addWorkspacePanel({ id: "checks", title: "Checks", icon: "GitPullRequest", context: "workspace", Component: createChecksPanel(tasks) }));
         track(
           client.addCommandCenterItem({

@@ -1,5 +1,5 @@
 import { type PluginSurfaceProps, useSettings } from "@getpaseo/plugin/client";
-import { Loading, SettingsAction, SettingsCard, SettingsInput, SettingsSection, SettingsSelect, SettingsSwitch, useToast } from "@getpaseo/plugin/client/ui";
+import { Loading, SettingsAction, SettingsCard, SettingsInput, SettingsSection, SettingsSelect, SettingsSwitch } from "@getpaseo/plugin/client/ui";
 import { Icon } from "../ui/kit";
 import { type ReactNode, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -8,6 +8,7 @@ import { type ProfileDocument, profileSettings } from "../../shared/document";
 import type { Profile } from "../../shared/profile";
 import type { DraftStore, Saved } from "../draft";
 import { useValue } from "../profile-store";
+import { useAutoSave } from "./autosave";
 
 type Theme = PluginSurfaceProps["theme"];
 
@@ -244,7 +245,7 @@ export function ActionFields({ form, action, onChange, errorAt }: { form: Form; 
   );
 }
 
-// Every settings tab: loads the document, keeps the shared draft, and shows the save bar.
+// Every settings tab: loads the document, keeps the shared draft, and saves it as it changes.
 export function createFormScreen(
   drafts: DraftStore,
   render: (form: Form) => ReactNode,
@@ -253,7 +254,9 @@ export function createFormScreen(
   return function MorphiseFormScreen({ theme, layout }: PluginSurfaceProps) {
     const settings = useSettings(profileSettings);
     const draftState = useValue(drafts);
-    const toast = useToast();
+    const ready = settings.status === "ready";
+    const issueCount = ready ? drafts.issues({ document: settings.values, revision: settings.revision }).size : 0;
+    useAutoSave(drafts, settings, issueCount === 0);
     const styles = useMemo(
       () => ({
         page: { gap: 12 },
@@ -303,20 +306,19 @@ export function createFormScreen(
         const prefix = inDocument ? path : profilePrefix + path;
         return [...issues.keys()].filter((key) => key === prefix || key.startsWith(`${prefix}.`)).length;
       },
-      // The draft starts at the saved revision, so the first edit keeps every input mounted.
-      inputKey: `${draftState.draft?.revision ?? settings.revision}:${draftState.generation}:${layoutIndex}`,
+      // Changes only when the stored settings change elsewhere, a discard, or another layout,
+      // so this app's own saves keep every input mounted and focused.
+      inputKey: `${drafts.inputVersion(saved)}:${draftState.generation}:${layoutIndex}`,
     };
 
-    async function save() {
-      const draft = drafts.get().draft;
-      if (!draft || issues.size > 0 || settings.status !== "ready") return;
-      if (await settings.save(draft.document, draft.revision)) {
-        drafts.saved();
-        toast.show("Saved and applied on every connected app", { variant: "success" });
-      }
-    }
-
     const dirty = draftState.draft !== null;
+    const status = issues.size
+      ? `${issues.size === 1 ? "1 problem" : `${issues.size} problems`} to fix before this saves; each is shown beside its field.`
+      : settings.saveError
+        ? `Save failed: ${settings.saveError}. Your changes are kept; discard them to load what was saved.`
+        : dirty
+          ? "Saving"
+          : "Changes save on their own and apply on every connected app.";
     return (
       <View style={styles.page}>
         {options.editsProfile && document.layouts.length > 1 ? (
@@ -330,24 +332,12 @@ export function createFormScreen(
           </SettingsCard>
         ) : null}
         {render(form)}
-        <SettingsSection title="Save">
-          {issues.size > 0 ? (
-            <Text style={styles.danger}>
-              {issues.size === 1 ? "1 problem" : `${issues.size} problems`} to fix before saving; each is shown beside its field.
-            </Text>
-          ) : null}
-          {settings.saveError ? <Text style={styles.danger}>Save failed: {settings.saveError}. Your changes are kept; discard them to load what was saved.</Text> : null}
+        <Text style={issues.size || settings.saveError ? styles.danger : styles.muted}>{status}</Text>
+        {dirty && (issues.size > 0 || settings.saveError) ? (
           <SettingsCard>
-            <SettingsAction
-              label="Save changes"
-              hint={dirty ? (issues.size ? "Fix the problems first" : "Applies on every connected app") : "No unsaved changes"}
-              actionLabel={settings.saving ? "Saving" : "Save"}
-              disabled={!dirty || issues.size > 0 || settings.saving}
-              onPress={() => void save()}
-            />
-            <SettingsAction label="Discard unsaved changes" actionLabel="Discard" disabled={!dirty} onPress={() => drafts.discard()} />
+            <SettingsAction label="Discard the changes that did not save" actionLabel="Discard" onPress={() => drafts.discard()} />
           </SettingsCard>
-        </SettingsSection>
+        ) : null}
       </View>
     );
   };

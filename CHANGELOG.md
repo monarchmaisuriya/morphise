@@ -2,6 +2,34 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.15.0 - 2026-11-12
+
+Every chat feature from four published chat plugins (Beautiful Chat, Refined Chat, Chat Polish, Better Paseo) that Paseo's plugin API supports, rebuilt for Morphise. Prompts and replies are never redrawn, so Paseo's Fork and Copy always stay. The full list, with what was left out and why, is in `docs/2026-11-12-1100_chat-features-all_plan.md`.
+
+- **A new look for chat rows:** one design for every row Morphise draws (an icon, a label, what it acted on, quiet facts on the right), close together instead of boxed and spaced. "Lines" are quiet; "Cards" sit on a soft fill.
+- **Tool calls:**
+  - MCP and other tools are drawn too ("Search code · brevo-codebase"), with their input and result.
+  - An icon per program (git, npm, docker, curl, rg and more) and coloured commands.
+  - File paths from the workspace folder, or in full. Icon and label, icon only, or label only.
+  - Commands say how many lines they printed, or "no output"; a failed edit says "Not applied".
+  - Diffs mark the words that changed. Long lines wrap, or scroll sideways.
+  - Separate limits for terminal output and for code and diffs.
+  - Pictures the agent reads are shown (read on the daemon, up to 3 MB).
+  - Details opens the whole output, or the file, in a Details tab; Open file reads it from disk; Show in Finder (or the folder) on desktop.
+- **Folding:** a rule for rows in general, plus kinds that are always folded or always open, and short details kept open.
+- **Thinking:** folded or always open, split into its steps, with its heading while it thinks and how long it took.
+- **Notices:** errors, Paseo's notices and context compaction as rows.
+- **Look:** code size apart from text size, strength until hovered, an accent colour (theme, jade, violet, amber, rose or your own).
+- **Turn recap** (opt-in): after each turn, one row with how long it took, files changed and commands that failed. Added by the daemon, so every app sees it.
+- **Master switch** to leave every row to Paseo; Command Center items to switch tool call style, thinking and the master switch, and (web) to go to the previous or next prompt.
+- **Experimental (web):** reply text size and line spacing, bold colour, dashed links, long prompts cut to a few lines until hovered, chat fonts. These style Paseo's own messages through its page structure and may break with a Paseo update.
+- **Theme presets** in Settings, Look: Midnight, Forest, Dusk, Paper.
+- **Finished, unread** is green instead of blue (sidebar, filters, settings and the Workbench).
+- **Sidebar:** a workspace with a single chat can leave it unlisted (Settings, Sidebar, Chats, or the Display menu); the workspace row stands for it.
+- **Settings save on their own:** there is no Save button. A change saves a moment after you stop, once it has no problems, and applies on every connected app; a field you are typing in keeps its focus. If a save fails, the error shows with a Discard button. On the Advanced tab, valid JSON saves the same way, and "Load the starter profile" and "Clear every customisation" ask for a second press.
+
+Rolling back to 0.14.0: `paseo plugin update morphise --ref v0.14.0`. With any new Chat option, the "always open" thinking choice, or the sidebar's single-chat choice set, 0.14.0 reports the profile as invalid and keeps the data; set them back first.
+
 ## 0.14.0 - 2026-11-12
 
 - **Tool call cards** (Settings, Chat, Tool calls, "Cards"): each tool call as a card that says what it did and on what.

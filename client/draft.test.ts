@@ -53,4 +53,39 @@ describe("draft store", () => {
     store.chooseLayout("gone");
     expect(store.editingIndex(twoLayouts)).toBe(1);
   });
+
+  it("sends one draft at a time, keeps edits made while saving, and builds them on the saved revision", () => {
+    const store = createDraftStore();
+    store.edit(saved, (document) => void (document.prompts = []));
+    const sent = store.take();
+    expect(sent?.revision).toBe("r1");
+    expect(store.take()).toBeNull();
+    store.edit(saved, (document) => void (document.activeLayout = "default"));
+    store.finish(true);
+    expect(store.get().draft?.revision).toBeNull();
+    expect(store.take()?.document.activeLayout).toBe("default");
+    store.finish(true);
+    expect(store.dirty()).toBe(false);
+  });
+
+  it("keeps the draft when a save fails", () => {
+    const store = createDraftStore();
+    store.edit(saved, (document) => void (document.prompts = []));
+    const sent = store.take();
+    store.finish(false);
+    expect(store.get().draft).toBe(sent);
+  });
+
+  it("changes the input version for another app's save, not for its own", () => {
+    const store = createDraftStore();
+    expect(store.inputVersion(saved)).toBe(0);
+    store.edit(saved, (document) => void (document.layouts[0].profile.sidebar.view.counts = false));
+    const sent = store.take();
+    store.finish(true);
+    // The stored copy comes back with its keys in schema order.
+    const reverse = (value: unknown): unknown =>
+      Array.isArray(value) ? value.map(reverse) : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).reverse().map(([key, item]) => [key, reverse(item)])) : value;
+    expect(store.inputVersion({ document: reverse(sent?.document) as typeof saved.document, revision: "r2" })).toBe(0);
+    expect(store.inputVersion({ document: saved.document, revision: "r3" })).toBe(1);
+  });
 });

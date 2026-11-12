@@ -34,7 +34,7 @@ import { chatGroupKey, chatIndicator, chatMatches, chatName, compareChats, isSid
 import { INDICATORS, type Indicator, type Profile } from "../shared/profile";
 import { stepsOptions } from "../shared/steps";
 import { type AttentionList, waitingChildren } from "./attention";
-import { type ChatListing, chatTree, DEFAULT_CHAT_ROWS, effectiveIndicator, listedChatKeys, listedSubAgents, listedTopChats, MARK_KEY, markApplies, owningRowKey, type RowShows, rowShows, rowTitle, runningShownBelow, statusLine } from "../shared/row-meta";
+import { type ChatListing, chatTree, DEFAULT_CHAT_ROWS, effectiveIndicator, listedChatKeys, listedSubAgents, listedTopChats, listsChats, MARK_KEY, markApplies, owningRowKey, type RowShows, rowShows, rowTitle, runningShownBelow, statusLine } from "../shared/row-meta";
 import { newTaskId } from "./board/card-editor";
 import { isDue, type Reminder } from "../shared/reminders";
 import { formatDue, formatElapsed } from "../shared/time-text";
@@ -721,7 +721,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   const markable = workspace.indicator !== "needs_input" && workspace.indicator !== "failed";
   const markedDone = applies && mark.kind === "done" && workspace.indicator !== "done";
   const markedUnread = applies && mark.kind === "unread" && workspace.indicator !== "attention";
-  const chatsShown = config.showAgents && ((config.agentsFor ?? "active") === "all" || isOpen) && chats.length > 0;
+  const chatsShown = config.showAgents && ((config.agentsFor ?? "active") === "all" || isOpen) && listsChats(config.singleChat, chats, config.showSubAgents === false ? new Map() : tree.children, shared.listing);
   // Exactly one row is highlighted: the open chat or sub-agent when it is listed here, else the
   // workspace. `openChat` is the listed chat that holds it, and stays listed past the limit.
   const openChat = chatsShown ? owningRowKey({ top: chats, children: tree.children }, props.active.agent?.key ?? null, config.showSubAgents !== false) : null;
@@ -1236,6 +1236,7 @@ function ViewMenu({ update, state, saveState, shared }: { update(patch: Partial<
       {config.list === "workspaces" ? (
         <>
           {choice("chats", "Chats", chatsFor, [["off", "Hidden"], ["active", "Open workspace only"], ["all", "Every workspace"]] as const, (value) => update(value === "off" ? { showAgents: false } : { showAgents: true, agentsFor: value }))}
+          {chatsFor !== "off" ? choice("single", "A workspace's only chat", config.singleChat ?? "show", [["show", "Listed under it"], ["hide", "Not listed (the workspace stands for it)"]] as const, (value) => update({ singleChat: value === "show" ? undefined : value })) : null}
           {chatsFor !== "off" ? choice("chatRows", "Chats per workspace", String(chatRows), [...new Set(["3", "5", "10", "20", String(chatRows)])].map((rows) => [rows, `${rows}, then Show more`] as const), (rows) => update({ chatRows: Number(rows) })) : null}
           {chatsFor !== "off"
             ? choice(

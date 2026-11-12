@@ -29,6 +29,8 @@ export interface Announcement {
 export interface SurfaceDeps extends BoardDeps {
   announcements: ValueStore<Announcement>;
   updateView(patch: Partial<Profile["sidebar"]["view"]>): Promise<void>;
+  // Changes the active layout's chat settings in place (see index.client.tsx).
+  updateChat(change: (chat: Record<string, unknown>) => void): Promise<void>;
   // False until the first workspace list arrives.
   workspacesReady: ValueStore<boolean>;
   // Chats and sub-agents waiting on the user.

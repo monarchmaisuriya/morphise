@@ -107,6 +107,14 @@ export function listedChatKeys(workspaceKey: string, tree: { top: readonly { key
   return keys;
 }
 
+// Whether a workspace lists its chats under it: not when it has a single chat, none of whose
+// sub-agents would be listed, and the view hides lone chats (the workspace row stands for it).
+export function listsChats(single: "show" | "hide" | undefined, chats: readonly { key: string; id: string }[], children: ReadonlyMap<string, readonly { key: string }[]>, listing: ChatListing): boolean {
+  if (chats.length === 0) return false;
+  if (single !== "hide" || chats.length > 1) return true;
+  return listedSubAgents(chats[0].key, children.get(chats[0].id) ?? [], listing).rows.length > 0;
+}
+
 // A row's running work is shown by the rows under it when every running chat it covers is drawn
 // there: then only those rows pulse, not this one.
 export function runningShownBelow(running: readonly { key: string }[], listed: ReadonlySet<string>): boolean {

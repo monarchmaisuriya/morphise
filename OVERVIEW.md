@@ -1,4 +1,4 @@
-Morphise reshapes Paseo's interface from settings forms, adds a status-aware sidebar, and gives you a kanban task board with reminders that bring you back to the right chat at the right time. Change something under Settings, Plugins, Morphise, save, and every connected Paseo app updates within a moment, without a reload.
+Morphise reshapes Paseo's interface from settings forms, adds a status-aware sidebar, and gives you a kanban task board with reminders that bring you back to the right chat at the right time. Change something under Settings, Plugins, Morphise and it saves on its own; every connected Paseo app updates within a moment, without a reload.
 
 ## What you can change
 
@@ -16,7 +16,7 @@ Settings are split into tabs: Layouts, General, Sidebar, Chat, Look, Buttons, Co
   - The Display menu follows Paseo's: Grouping, Sort, Title (title or branch name), Rows, Per group, Chats, and Show (Branch, Project, Host, Pull request, Checks, Services, Labels, Diff stats, Last activity), plus Show background per device.
   - Chats under a workspace: the latest 5 (changeable), then "Show more"; each chat's sub-agents under it, also the latest 5 (changeable or hidden); only the open chat or sub-agent is highlighted.
   - Shorten long groups with "Show more"; workspaces that need permission or failed always show.
-  - Colours say what each row needs: needs permission amber, failed red, running white (pulsing), finished but unread blue, done gray; uncommitted branches amber, unpushed commits blue, merged pull requests purple.
+  - Colours say what each row needs: needs permission amber, failed red, running white (pulsing), finished but unread green, done gray; uncommitted branches amber, unpushed commits blue, merged pull requests purple.
   - Mark a workspace done or unread yourself, set a reminder on it, add it to tasks, or select several for bulk actions (pin, mark done, label, archive).
   - Auto-archive (off by default) archives workspaces marked done some days ago, never a worktree with uncommitted, unpushed or unknown changes. Merged pull requests use Paseo's own "Archive merged PR workspaces" setting.
 - **Workbench** (one row in Paseo's sidebar header): everything that needs you in one screen, with a list of views on the left that folds to icons.
@@ -26,7 +26,7 @@ Settings are split into tabs: Layouts, General, Sidebar, Chat, Look, Buttons, Co
 - **Steps card:** a chat's plan as a card, in the chat where the agent posts it (or in the sidebar), that shows while it works and settles when it is done. Choose when it shows, how long "All done" stays, top or bottom, the open chat or every chat in the workspace, how many steps, hiding finished steps, starting folded and the progress bar, under Settings, Sidebar, Steps card.
 - **Checks panel:** a workspace tab with the pull request's checks, review and conflicts, and "Ask the agent to fix".
 - **Dispatch** (the two-cards button in the Workspaces bar, or the Command Center): start several agents at once, each in a new workspace. Pick the project, any model your providers offer, the mode, and worktree or project folder (remembered on each device), write or paste the prompts (a pasted list splits into one prompt per item), and start them all with ⌘↵. Each prompt then shows Starting, Started (with Open) or Failed (with Retry).
-- **Chat:** tool calls as cards (facts in the header, coloured diffs, long output folded, Copy) or one line each; hide finished tool calls by kind; thinking as a card; text size, spacing and times; Paseo's rows on phones if you prefer; a live preview. Prompts and replies stay Paseo's own, with Fork and Copy. Plus "Copy this chat's last turn as Markdown".
+- **Chat:** tool calls (MCP tools included) as quiet lines or soft cards: program icons, coloured commands, facts, word-level diffs, folded long output, pictures, Copy, a Details tab, Show in Finder; folding rules by kind; thinking split into steps; errors and notices as rows; text and code size, accent and strength; an opt-in recap after each turn; a master switch and Command Center toggles; experimental web styling of Paseo's own messages. Prompts and replies stay Paseo's own, with Fork and Copy.
 - **Theme:** a light or dark palette from eight colours, listed under Settings, Appearance.
 - **Buttons:** sidebar header and footer rows, workspace header buttons or menus, your own pills above the message box, and message box controls (a button, an on/off switch saved on the chat, or a model, mode or thinking picker).
 - **Commands:** slash commands, Command Center items and New workspace presets.

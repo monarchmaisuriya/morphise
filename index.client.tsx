@@ -80,6 +80,30 @@ export default function contribute(client: PluginClientContext) {
   // document the settings screen edits. It reads the newest saved document and applies the change
   // to it, again when another app saved first, so quick taps and other apps' saves both survive.
   // Only the given keys are written; everything else stays as stored.
+  // The Command Center's chat toggles change the active layout's chat settings the same way:
+  // on the newest saved document, again when another app saved first. A key set to undefined is
+  // removed, so defaults are never written (older versions reject keys they do not know).
+  async function updateChat(change: (chat: Record<string, unknown>) => void) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const state = await client.rpc(profileRpc.read, {});
+      if (state.status !== "ready") throw new Error(`The saved profile is invalid: ${state.error}`);
+      const document = state.values as { activeLayout?: string; layouts?: { id: string; profile?: Record<string, unknown> }[] };
+      const layouts = (document.layouts ?? []).map((layout) => {
+        if (layout.id !== document.activeLayout) return layout;
+        const profile = { ...(layout.profile ?? {}) };
+        const chat = { ...((profile.chat ?? {}) as Record<string, unknown>) };
+        change(chat);
+        for (const key of Object.keys(chat)) if (chat[key] === undefined) delete chat[key];
+        if (Object.keys(chat).length) profile.chat = chat;
+        else delete profile.chat;
+        return { ...layout, profile };
+      });
+      const result = await client.rpc(profileRpc.write, { revision: state.revision, values: { ...document, layouts } as typeof state.values });
+      if (result.status === "saved") return;
+      if (result.status === "invalid") throw new Error(result.error);
+    }
+    throw new Error("Other apps kept saving the profile at the same moment; try again");
+  }
   async function updateView(patch: Partial<Profile["sidebar"]["view"]>) {
     for (let attempt = 0; attempt < 3; attempt++) {
       const state = await client.rpc(profileRpc.read, {});
@@ -126,6 +150,7 @@ export default function contribute(client: PluginClientContext) {
     bookmarkLastAnswer: (agentId, workspaceId, note) => bookmarkLastAnswer(bookmarkCapture, agentId, workspaceId, note),
     announcements,
     updateView,
+    updateChat,
     reminderSettings: () => profileOf(store.get()).reminders,
   };
   const reconciler = createReconciler(createSections(client, deps, surfaces, switchLayout), (list) => problems.set(list));

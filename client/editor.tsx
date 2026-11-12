@@ -14,6 +14,7 @@ import { activeProfile, EMPTY_DOCUMENT, profileSettings } from "../shared/docume
 import { formatDocument, parseDocumentText } from "../shared/document-text";
 import { STARTER_DOCUMENT } from "../shared/starter-profile";
 import type { DraftStore, Saved } from "./draft";
+import { useAutoSave } from "./forms/autosave";
 import type { Problem } from "./reconciler";
 import { type ProfileStore, type ValueStore, useValue } from "./profile-store";
 
@@ -46,6 +47,9 @@ export function createProfileEditor({ store, problems, drafts, reconnect }: Edit
     const saved: Saved | null = settings.status === "ready" ? { document: settings.values, revision: settings.revision } : null;
     const text = typed ?? formatDocument(saved ? drafts.working(saved) : EMPTY_DOCUMENT);
     const parsed = useMemo(() => parseDocumentText(text), [text]);
+    useAutoSave(drafts, settings, parsed.ok);
+    // The action waiting for a second press: loading the starter or clearing replaces everything at once.
+    const [armed, setArmed] = useState<"starter" | "clear" | null>(null);
 
     const styles = useMemo(
       () => ({
@@ -92,17 +96,8 @@ export function createProfileEditor({ store, problems, drafts, reconnect }: Edit
     }
     const load = change;
 
-    async function save() {
-      const draft = drafts.get().draft;
-      if (settings.status === "ready" && draft && parsed.ok) {
-        if (await settings.save(draft.document, draft.revision)) {
-          drafts.saved();
-          setTyped(null);
-          toast.show("Profile saved and applied", { variant: "success" });
-        }
-        return;
-      }
-      // A stored document that no longer validates can only be replaced as a whole.
+    // A stored document that no longer validates can only be replaced as a whole, on request.
+    async function replaceInvalid() {
       if (settings.status === "invalid" && parsed.ok && (await settings.save(parsed.document, settings.revision))) {
         setTyped(null);
         toast.show("Profile saved and applied", { variant: "success" });
@@ -141,7 +136,7 @@ export function createProfileEditor({ store, problems, drafts, reconnect }: Edit
           </SettingsSection>
         ) : null}
 
-        <SettingsSection title="Profile" info="Every layout and prompt as one JSON document; the other tabs edit the same changes.">
+        <SettingsSection title="Profile" info="Every layout and prompt as one JSON document; the other tabs edit the same changes. Valid text saves on its own.">
           <TextInput
             accessibilityLabel="Profile JSON"
             multiline
@@ -166,33 +161,44 @@ export function createProfileEditor({ store, problems, drafts, reconnect }: Edit
 
         <SettingsSection title="Actions">
           <SettingsCard>
+            {settings.status === "invalid" ? (
+              <SettingsAction
+                label="Replace the stored profile with this text"
+                hint={parsed.ok ? "Applies on every connected app" : "Fix the errors above first"}
+                actionLabel={settings.saving ? "Saving" : "Replace"}
+                disabled={!dirty || !parsed.ok || settings.saving}
+                onPress={() => void replaceInvalid()}
+              />
+            ) : null}
+            {dirty && (!parsed.ok || settings.saveError) ? (
+              <SettingsAction
+                label="Discard the changes that did not save"
+                actionLabel="Discard"
+                onPress={() => {
+                  drafts.discard();
+                  setTyped(null);
+                }}
+              />
+            ) : null}
             <SettingsAction
-              label="Save profile"
-              hint={!dirty ? "No unsaved changes" : parsed.ok ? "Applies on every connected app" : "Fix the errors above first"}
-              actionLabel={settings.saving ? "Saving" : "Save"}
-              disabled={!dirty || !parsed.ok || settings.saving}
-              onPress={() => void save()}
-            />
-            <SettingsAction
-              label="Discard unsaved changes"
-              actionLabel="Discard"
-              disabled={!dirty}
+              label="Load the starter profile"
+              hint={armed === "starter" ? "Press again: replaces every setting at once" : "An example of every section, with two prompts"}
+              actionLabel={armed === "starter" ? "Confirm" : "Load"}
               onPress={() => {
-                drafts.discard();
-                setTyped(null);
+                if (armed !== "starter") return setArmed("starter");
+                setArmed(null);
+                load(formatDocument(STARTER_DOCUMENT));
               }}
             />
             <SettingsAction
-              label="Load the starter profile"
-              hint="An example of every section, with two prompts; review it, then save"
-              actionLabel="Load"
-              onPress={() => load(formatDocument(STARTER_DOCUMENT))}
-            />
-            <SettingsAction
               label="Clear every customisation"
-              hint="Loads an empty profile; save to apply"
-              actionLabel="Clear"
-              onPress={() => load(formatDocument(EMPTY_DOCUMENT))}
+              hint={armed === "clear" ? "Press again: clears every setting at once" : "Starts from an empty profile"}
+              actionLabel={armed === "clear" ? "Confirm" : "Clear"}
+              onPress={() => {
+                if (armed !== "clear") return setArmed("clear");
+                setArmed(null);
+                load(formatDocument(EMPTY_DOCUMENT));
+              }}
             />
             <SettingsAction label="Copy the profile" actionLabel="Copy" onPress={() => void copy()} />
           </SettingsCard>

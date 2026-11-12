@@ -22,45 +22,118 @@ export type FoldRule = "finished" | "always" | "never";
 export type TextSize = "small" | "medium" | "large";
 export type Density = "compact" | "normal" | "spacious";
 
+export type Reasoning = "show" | "fold" | "expand" | "hide";
+export type Strength = "full" | "soft" | "faded" | "dim";
+export const ACCENTS = { jade: "#3fb68b", violet: "#8b7cf6", amber: "#d9a23b", rose: "#e0607e" } as const;
+export type FoldKind = ToolKind | "thinking";
+export const FOLD_KINDS: readonly FoldKind[] = [...TOOL_KINDS, "thinking"];
+
 // The chat settings as saved (every key optional, so older versions still read the profile).
 export interface ChatSettings {
+  // Off: Morphise draws no chat rows (hiding rows still applies).
+  enabled?: boolean;
   toolCalls?: ToolStyle;
   hideFinished?: ToolKind[];
-  reasoning?: "show" | "fold" | "hide";
+  reasoning?: Reasoning;
   fold?: FoldRule;
+  // The fold rule for one kind of row, over `fold`.
+  foldByKind?: Partial<Record<FoldKind, FoldRule>>;
+  // Rows whose details are at most this many lines stay open; 0 folds every row by its rule.
+  foldMinLines?: number;
   outputLines?: number;
+  codeLines?: number;
+  wrap?: boolean;
+  labels?: "icon" | "label" | "both";
+  paths?: "relative" | "absolute";
+  commandColors?: boolean;
+  strength?: Strength;
+  accent?: string;
   textSize?: TextSize;
+  codeSize?: TextSize;
   density?: Density;
   timestamps?: boolean;
+  notices?: boolean;
+  images?: boolean;
+  recap?: boolean;
   phones?: "same" | "paseo";
+  web?: ChatWebSettings;
+}
+
+// Web and desktop only: styles Paseo's own prompts and replies through its page structure, without
+// redrawing them (so Fork and Copy stay). May break when Paseo changes its page.
+export interface ChatWebSettings {
+  replySize?: number;
+  replyLineHeight?: number;
+  boldColor?: string;
+  linkStyle?: "paseo" | "dashed";
+  clampPrompts?: number;
+  uiFont?: string;
+  codeFont?: string;
 }
 
 // How Morphise's own chat rows look and behave; read by the renderers.
 export interface ChatLook {
   fold: FoldRule;
-  // Lines of output shown before "Show all"; null shows everything.
+  foldByKind: Partial<Record<FoldKind, FoldRule>>;
+  foldMinLines: number;
+  // Lines of terminal output, and of code and diffs, shown before "Show all"; null shows all.
   outputLines: number | null;
+  codeLines: number | null;
+  wrap: boolean;
+  labels: "icon" | "label" | "both";
+  paths: "relative" | "absolute";
+  commandColors: boolean;
+  strength: Strength;
+  // A colour for icons, the running mark and highlights; null follows the theme.
+  accent: string | null;
   textSize: TextSize;
+  codeSize: TextSize;
   density: Density;
   timestamps: boolean;
+  images: boolean;
+  reasoning: Reasoning;
 }
 
 export const DEFAULT_OUTPUT_LINES = 12;
+export const DEFAULT_CODE_LINES = 30;
+
+const lines = (value: number | undefined, fallback: number) => (value === 0 ? null : value ?? fallback);
+
+export function accentColor(value: string | undefined): string | null {
+  if (!value || value === "theme") return null;
+  if (value in ACCENTS) return ACCENTS[value as keyof typeof ACCENTS];
+  return /^#[0-9a-fA-F]{6}$/.test(value) ? value : null;
+}
 
 export function chatLook(saved: ChatSettings | undefined): ChatLook {
   return {
     fold: saved?.fold ?? "finished",
-    outputLines: saved?.outputLines === 0 ? null : saved?.outputLines ?? DEFAULT_OUTPUT_LINES,
+    foldByKind: saved?.foldByKind ?? {},
+    foldMinLines: saved?.foldMinLines ?? 0,
+    outputLines: lines(saved?.outputLines, DEFAULT_OUTPUT_LINES),
+    // 0.14 had one limit for all output; its "show all" (0) still applies to code until code gets its own.
+    codeLines: lines(saved?.codeLines ?? (saved?.outputLines === 0 ? 0 : undefined), DEFAULT_CODE_LINES),
+    wrap: saved?.wrap ?? true,
+    labels: saved?.labels ?? "both",
+    paths: saved?.paths ?? "relative",
+    commandColors: saved?.commandColors ?? true,
+    strength: saved?.strength ?? "full",
+    accent: accentColor(saved?.accent),
     textSize: saved?.textSize ?? "medium",
+    codeSize: saved?.codeSize ?? saved?.textSize ?? "medium",
     density: saved?.density ?? "normal",
     timestamps: saved?.timestamps ?? false,
+    images: saved?.images ?? true,
+    reasoning: saved?.reasoning ?? "show",
   };
 }
 
 export interface ChatView {
   toolCalls: ToolStyle;
   hideFinished: ReadonlySet<ToolKind>;
-  reasoning: "show" | "fold" | "hide";
+  reasoning: Reasoning;
+  // Errors, notices and compaction drawn as Morphise rows.
+  notices: boolean;
   // Whole row types hidden in every chat.
   hidden: ReadonlySet<string>;
   // The plan card drawn in the chat (the steps card's "In the chat").
@@ -70,11 +143,14 @@ export interface ChatView {
 // `onPhone`: this app runs on iOS or Android, where "phones: paseo" leaves the chat to Paseo
 // (hidden row types and the plan card still apply, as they are not about looks).
 export function chatView(saved: ChatSettings | undefined, hidden: readonly string[], stepsInChat: boolean, onPhone = false): ChatView {
-  const paseoHere = onPhone && saved?.phones === "paseo";
+  // Off, or on a phone set to Paseo's rows: Morphise draws nothing, though hiding still applies.
+  const paseoHere = saved?.enabled === false || (onPhone && saved?.phones === "paseo");
+  const reasoning = saved?.reasoning ?? "show";
   return {
     toolCalls: paseoHere ? "paseo" : saved?.toolCalls ?? "paseo",
     hideFinished: new Set(saved?.hideFinished ?? []),
-    reasoning: paseoHere && saved?.reasoning === "fold" ? "show" : saved?.reasoning ?? "show",
+    reasoning: paseoHere && (reasoning === "fold" || reasoning === "expand") ? "show" : reasoning,
+    notices: !paseoHere && saved?.notices === true,
     hidden: new Set(hidden),
     stepsInChat,
   };
@@ -85,6 +161,7 @@ export function transformedTypes(view: ChatView): string[] {
   const types = new Set(view.hidden);
   if (view.toolCalls !== "paseo" || view.hideFinished.size) types.add("tool_call");
   if (view.reasoning !== "show") types.add("reasoning");
+  if (view.notices) for (const type of NOTICE_TYPES) types.add(type);
   if (view.stepsInChat) types.add("todo");
   return [...types];
 }
@@ -110,7 +187,26 @@ export function toolKind(detailType: string): ToolKind {
 // Tool calls whose content Morphise's rows show in full (subject, plus output, diff or text when
 // opened). Plans, sub-agent tasks (Paseo links them to their chat), worktree setup and unknown
 // tools keep Paseo's own rows, which show what Morphise's rows would lose.
-const DRAWN_DETAILS = new Set(["shell", "read", "edit", "write", "search", "fetch", "plain_text"]);
+const DRAWN_DETAILS = new Set(["shell", "read", "edit", "write", "search", "fetch", "plain_text", "unknown"]);
+
+// An MCP tool's name ("mcp__brevo-codebase__search_code") as its service and a readable action
+// ("brevo-codebase", "Search code"); null for other tool names.
+export function mcpName(name: string): { service: string; action: string } | null {
+  const match = /^mcp__(.+?)__(.+)$/.exec(name);
+  if (!match) return null;
+  const words = match[2].replace(/[_-]+/g, " ").trim();
+  return { service: match[1], action: words.charAt(0).toUpperCase() + words.slice(1) };
+}
+
+function json(value: unknown): string {
+  if (value === undefined || value === null || value === "") return "";
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return "";
+  }
+}
 
 export type ToolStatus = "running" | "completed" | "failed" | "canceled";
 
@@ -122,8 +218,10 @@ export interface ToolSummary {
   kind: ToolKind;
   detail: string;
   name: string;
-  // What it ran or acted on: a command, a path, a query, a URL.
+  // What it ran or acted on: a command, a path, a query, a URL (first line, cut to 300 characters).
   subject: string;
+  // For file tools, the whole path, so file actions never act on a cut one.
+  path?: string;
   status: ToolStatus;
   error: string;
   body: string;
@@ -171,6 +269,7 @@ export function summarizeToolCall(item: unknown): ToolSummary | null {
       body = text(detail?.output);
       const exit = num(detail?.exitCode);
       if (exit !== null && exit !== 0) facts.push(`exit ${exit}`);
+      else if (status === "completed") facts.push(body.trim() ? plural(lineCount(body), "line", "lines") : "no output");
       break;
     }
     case "read": {
@@ -236,11 +335,24 @@ export function summarizeToolCall(item: unknown): ToolSummary | null {
     case "sub_agent":
       subject = text(detail?.description) || text(detail?.subAgentType);
       break;
+    case "unknown": {
+      // MCP and other tools Paseo knows nothing about: the input, then the result, as JSON.
+      const mcp = mcpName(text(call.name));
+      subject = mcp ? mcp.service : "";
+      const input = json(detail?.input);
+      const output = json(detail?.output);
+      body = [input && `Input\n${input}`, output && `Result\n${output}`].filter(Boolean).join("\n\n");
+      break;
+    }
     default:
       break;
   }
   const error = status === "failed" ? (typeof call.error === "string" ? call.error : record(call.error) ? text(record(call.error)?.message) || "Failed" : "Failed") : "";
-  return { kind: toolKind(detailType), detail: detailType, name: text(call.name) || "Tool", subject: cut(subject.split("\n")[0] ?? "", 300), status, error: cut(error, 2000), body: cut(body, BODY_MAX), bodyKind, facts };
+  // An edit that failed changed nothing.
+  if (status === "failed" && (detailType === "edit" || detailType === "write")) facts.unshift("Not applied");
+  const firstLine = subject.split("\n")[0] ?? "";
+  const file = detailType === "read" || detailType === "edit" || detailType === "write";
+  return { kind: toolKind(detailType), detail: detailType, name: text(call.name) || "Tool", subject: cut(firstLine, 300), ...(file ? { path: firstLine } : {}), status, error: cut(error, 2000), body: cut(body, BODY_MAX), bodyKind, facts };
 }
 
 // The verb a card leads with.
@@ -317,7 +429,37 @@ export function diffLines(diff: string): DiffLine[] {
 }
 
 // What becomes of one row: kept as Paseo draws it, hidden, or redrawn as one of Morphise's rows.
-export type RowFate = { kind: "keep" } | { kind: "hide" } | { kind: "tool"; data: ToolSummary & { style: "cards" | "compact" } } | { kind: "thinking"; data: { text: string } } | { kind: "steps"; data: { steps: Step[] } };
+export const NOTICE_TYPES = ["error", "notification", "compaction"] as const;
+export interface NoticeData {
+  level: "info" | "warning" | "error";
+  title: string;
+  message: string;
+}
+
+// A notice row: an error, one of Paseo's notifications, or a context compaction.
+export function summarizeNotice(itemType: string, item: unknown): NoticeData | null {
+  const notice = record(item);
+  if (!notice) return null;
+  if (itemType === "error") return { level: "error", title: "Error", message: text(notice.message) };
+  if (itemType === "notification") {
+    const level = notice.level === "warning" || notice.level === "error" ? notice.level : "info";
+    return { level, title: level === "error" ? "Error" : level === "warning" ? "Warning" : "Notice", message: text(notice.message) };
+  }
+  if (itemType === "compaction") {
+    const before = num(notice.preTokens);
+    const how = notice.trigger === "manual" ? "Compacted on request" : "Context compacted";
+    return { level: "info", title: notice.status === "loading" ? "Compacting context..." : how, message: before !== null ? `${Math.round(before / 1000)}K tokens before` : "" };
+  }
+  return null;
+}
+
+export type RowFate =
+  | { kind: "keep" }
+  | { kind: "hide" }
+  | { kind: "tool"; data: ToolSummary & { style: "cards" | "compact" } }
+  | { kind: "thinking"; data: { text: string } }
+  | { kind: "notice"; data: NoticeData }
+  | { kind: "steps"; data: { steps: Step[] } };
 
 export function rowFate(itemType: string, item: unknown, view: ChatView): RowFate {
   if (view.hidden.has(itemType)) return { kind: "hide" };
@@ -331,8 +473,12 @@ export function rowFate(itemType: string, item: unknown, view: ChatView): RowFat
   }
   if (itemType === "reasoning") {
     if (view.reasoning === "hide") return { kind: "hide" };
-    if (view.reasoning === "fold") return { kind: "thinking", data: { text: cut(text(record(item)?.text), 40000) } };
+    if (view.reasoning === "fold" || view.reasoning === "expand") return { kind: "thinking", data: { text: cut(text(record(item)?.text), 40000) } };
     return { kind: "keep" };
+  }
+  if (view.notices && (NOTICE_TYPES as readonly string[]).includes(itemType)) {
+    const notice = summarizeNotice(itemType, item);
+    return notice ? { kind: "notice", data: notice } : { kind: "keep" };
   }
   if (itemType === "todo" && view.stepsInChat) {
     const steps = readSteps(item);
@@ -381,4 +527,175 @@ export function lastTurnMarkdown(entries: readonly unknown[]): string | null {
     })
     .filter(Boolean)
     .join("\n\n");
+}
+
+// ---------- Helpers for drawing rows ----------
+
+// Whether a row starts open: failed calls always do; rows whose details are short (at most
+// `foldMinLines`) too; otherwise the rule for its kind, else the general rule.
+export function rowStartsOpen(look: Pick<ChatLook, "fold" | "foldByKind" | "foldMinLines">, kind: FoldKind, status: ToolStatus, detailLines: number): boolean {
+  if (status === "failed") return true;
+  if (look.foldMinLines > 0 && detailLines > 0 && detailLines <= look.foldMinLines) return true;
+  return startsOpen(look.foldByKind[kind] ?? look.fold, status);
+}
+
+// The program a shell command runs: its first word after variable assignments, `sudo`, `env`,
+// `time` and `cd x &&`.
+export function shellProgram(command: string): string {
+  const words = command.trim().split(/\s+/);
+  let index = 0;
+  while (index < words.length) {
+    const word = words[index];
+    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(word) || word === "sudo" || word === "env" || word === "time" || word === "command" || word === "exec") index++;
+    else if (word === "cd" && words[index + 2] === "&&") index += 3;
+    else break;
+  }
+  return (words[index] ?? "").replace(/^.*\//, "");
+}
+
+export type CommandTokenKind = "program" | "flag" | "string" | "operator" | "plain";
+
+// A shell command split for colouring: the program after each operator, flags, quoted strings and
+// operators; everything else plain. Spacing is kept, so the parts join back to the command.
+export function commandTokens(command: string): { text: string; kind: CommandTokenKind }[] {
+  const tokens: { text: string; kind: CommandTokenKind }[] = [];
+  const pattern = /(\s+)|("(?:\\.|[^"\\])*"?|'[^']*'?)|(\|\||&&|[|;&]|>>?|<)|([^\s"'|;&<>]+)/g;
+  let expectProgram = true;
+  for (const match of command.matchAll(pattern)) {
+    const [whole, space, quoted, operator, word] = match;
+    if (space) tokens.push({ text: whole, kind: "plain" });
+    else if (quoted) tokens.push({ text: whole, kind: "string" });
+    else if (operator) {
+      tokens.push({ text: whole, kind: "operator" });
+      expectProgram = operator !== ">" && operator !== ">>" && operator !== "<";
+    } else if (word) {
+      const assignment = /^[A-Za-z_][A-Za-z0-9_]*=/.test(word);
+      if (expectProgram && !assignment && word !== "sudo" && word !== "env") {
+        tokens.push({ text: word, kind: "program" });
+        expectProgram = false;
+      } else tokens.push({ text: word, kind: word.startsWith("-") ? "flag" : "plain" });
+    }
+  }
+  return tokens;
+}
+
+// A path shown relative to the workspace folder when it is inside it.
+export function relativePath(path: string, root: string | null): string {
+  if (!root || !path.startsWith("/")) return path;
+  const base = root.endsWith("/") ? root : `${root}/`;
+  return path.startsWith(base) ? path.slice(base.length) || "." : path === root ? "." : path;
+}
+
+// Word-level changes between a removed and an added line: each side split into parts that are
+// the same in both, or changed.
+export function wordDiff(before: string, after: string): { before: { text: string; changed: boolean }[]; after: { text: string; changed: boolean }[] } {
+  const split = (line: string) => line.match(/\s+|[A-Za-z0-9_]+|[^\sA-Za-z0-9_]/g) ?? [];
+  const a = split(before);
+  const b = split(after);
+  // Longest common subsequence of words; lines are short, so the table stays small.
+  if (a.length * b.length > 40000) return { before: [{ text: before, changed: true }], after: [{ text: after, changed: true }] };
+  const table = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0));
+  for (let i = a.length - 1; i >= 0; i--) for (let j = b.length - 1; j >= 0; j--) table[i][j] = a[i] === b[j] ? table[i + 1][j + 1] + 1 : Math.max(table[i + 1][j], table[i][j + 1]);
+  const left: { text: string; changed: boolean }[] = [];
+  const right: { text: string; changed: boolean }[] = [];
+  const push = (side: typeof left, text: string, changed: boolean) => {
+    const last = side[side.length - 1];
+    if (last && last.changed === changed) last.text += text;
+    else side.push({ text, changed });
+  };
+  let i = 0;
+  let j = 0;
+  while (i < a.length || j < b.length) {
+    if (i < a.length && j < b.length && a[i] === b[j]) {
+      push(left, a[i++], false);
+      push(right, b[j++], false);
+    } else if (j < b.length && (i >= a.length || table[i][j + 1] >= table[i + 1][j])) push(right, b[j++], true);
+    else push(left, a[i++], true);
+  }
+  return { before: left, after: right };
+}
+
+// Thinking split into steps at its headings ("# x", "**x**" alone on a line), each with its title;
+// text before the first heading is a step without a title.
+export function thinkingSteps(input: string): { title: string; text: string }[] {
+  const steps: { title: string; text: string }[] = [];
+  let current: { title: string; lines: string[] } = { title: "", lines: [] };
+  for (const line of input.split("\n")) {
+    const heading = /^\s*(?:#{1,6}\s+(.+?)\s*#*\s*|\*\*(.+?)\*\*\s*)$/.exec(line);
+    if (heading) {
+      if (current.title || current.lines.some((item) => item.trim())) steps.push({ title: current.title, text: current.lines.join("\n").trim() });
+      current = { title: (heading[1] ?? heading[2] ?? "").trim(), lines: [] };
+    } else current.lines.push(line);
+  }
+  if (current.title || current.lines.some((item) => item.trim())) steps.push({ title: current.title, text: current.lines.join("\n").trim() });
+  return steps;
+}
+
+// ---------- Turn recap ----------
+
+// The plugin row kind the daemon appends after a turn, and its renderer draws.
+export const TURN_RECAP_KIND = "turn-recap";
+
+export interface TurnRecap {
+  // Names the turn's prompt (its place and time in the chat), so each turn's recap row has its own
+  // id: a row id used again would replace an earlier row and stretch it over later replies.
+  prompt: string;
+  // From the turn's prompt to its end, in seconds; null when the prompt's time is unknown.
+  seconds: number | null;
+  files: { path: string; added: number; removed: number }[];
+  failed: { command: string; exitCode: number | null }[];
+  calls: number;
+  outcome: "completed" | "failed" | "canceled";
+  error: string;
+}
+
+// A turn summed up from its chat's history (its last prompt on): how long, which files changed by
+// how much, which commands failed, and how many tool calls ran. Each call counts once, in its
+// latest state. Null when there is no prompt in the page.
+// Entries after `endedAt` belong to a later turn (a queued prompt can start before the recap is
+// built) and are left out.
+export function turnRecap(allEntries: readonly unknown[], endedAt: number, outcome: TurnRecap["outcome"], error = ""): TurnRecap | null {
+  const entries = allEntries.filter((entry) => {
+    const at = Date.parse(text(record(entry)?.timestamp));
+    return Number.isNaN(at) || at <= endedAt;
+  });
+  let start = -1;
+  for (let index = entries.length - 1; index >= 0; index--) {
+    if (record(record(entries[index])?.item)?.type === "user_message") {
+      start = index;
+      break;
+    }
+  }
+  if (start < 0) return null;
+  const startedAt = Date.parse(text(record(entries[start])?.timestamp));
+  const calls = new Map<string, unknown>();
+  for (const entry of entries.slice(start)) {
+    const item = record(record(entry)?.item);
+    if (item?.type === "tool_call") calls.set(text(item.callId) || `#${calls.size}`, item);
+  }
+  const files = new Map<string, { path: string; added: number; removed: number }>();
+  const failed: TurnRecap["failed"] = [];
+  for (const call of calls.values()) {
+    const summary = summarizeToolCall(call);
+    if (!summary) continue;
+    if ((summary.detail === "edit" || summary.detail === "write") && summary.status === "completed" && summary.subject) {
+      const counts = summary.bodyKind === "diff" ? diffCounts(summary.body) : { added: summary.body ? lineCount(summary.body) : 0, removed: 0 };
+      const file = files.get(summary.subject) ?? { path: summary.subject, added: 0, removed: 0 };
+      files.set(summary.subject, { path: file.path, added: file.added + counts.added, removed: file.removed + counts.removed });
+    }
+    if (summary.detail === "shell" && summary.status === "failed") {
+      const exit = /^exit (\d+)$/.exec(summary.facts.find((fact) => fact.startsWith("exit ")) ?? "");
+      failed.push({ command: summary.subject, exitCode: exit ? Number(exit[1]) : null });
+    }
+  }
+  const promptEntry = record(entries[start]);
+  return {
+    prompt: `${num(promptEntry?.seqStart) ?? ""}@${text(promptEntry?.timestamp)}`,
+    seconds: Number.isNaN(startedAt) ? null : Math.max(0, Math.round((endedAt - startedAt) / 1000)),
+    files: [...files.values()].slice(0, 30),
+    failed: failed.slice(0, 10),
+    calls: calls.size,
+    outcome,
+    error: cut(error, 500),
+  };
 }

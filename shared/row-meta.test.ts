@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { profileSchema } from "./profile";
-import { chatTree, effectiveIndicator, listedChatKeys, owningRowKey, readMark, rowShows, rowTitle, runningShownBelow, statusLine, visibleChats } from "./row-meta";
+import { chatTree, effectiveIndicator, listedChatKeys, listsChats, owningRowKey, readMark, rowShows, rowTitle, runningShownBelow, statusLine, visibleChats } from "./row-meta";
 
 const view = (patch: Record<string, unknown> = {}) => profileSchema.parse({ sidebar: { view: patch } }).sidebar.view;
 
@@ -82,6 +82,16 @@ describe("listedChatKeys and runningShownBelow", () => {
     expect([...listedChatKeys("w", tree, listing({ subAgents: false }))]).toEqual(["h:a", "h:b"]);
     expect([...listedChatKeys("w", tree, listing({ subAgents: "open", openKey: "h:s2" }))]).toEqual(["h:a", "h:s2", "h:b"]);
     expect([...listedChatKeys("w", tree, listing({ isExpanded: (key) => key === "chats:w" }))]).toContain("h:c");
+  });
+
+  it("lists a lone chat only when asked, or when its sub-agents would show", () => {
+    const one = [ref("a")];
+    expect(listsChats(undefined, one, new Map(), listing())).toBe(true);
+    expect(listsChats("hide", one, new Map(), listing())).toBe(false);
+    expect(listsChats("hide", one, new Map([["a", [ref("s1")]]]), listing())).toBe(true);
+    expect(listsChats("hide", one, new Map([["a", [ref("s1")]]]), listing({ subAgents: false }))).toBe(false);
+    expect(listsChats("hide", [ref("a"), ref("b")], new Map(), listing())).toBe(true);
+    expect(listsChats("hide", [], new Map(), listing())).toBe(false);
   });
 
   it("leaves the pulse to the rows below only when every running chat is drawn there", () => {

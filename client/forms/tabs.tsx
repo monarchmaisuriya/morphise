@@ -2,7 +2,7 @@ import { SettingsAction, SettingsCard, SettingsSection, TextInput } from "@getpa
 import { type ReactNode, useMemo } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { z } from "zod";
-import { createThinkingRow, createToolRow, type toolRowSchema } from "../chat-rows";
+import { createNoticeRow, createThinkingRow, createToolRow, type toolRowSchema } from "../chat-rows";
 import type { Action } from "../../shared/actions";
 import { Icon, IconButton, tokens } from "../ui/kit";
 import { statusColor } from "../ui/hues";
@@ -11,7 +11,7 @@ import { DEFAULT_CHAT_ROWS, rowShows } from "../../shared/row-meta";
 import { VIEW_SECTIONS } from "./view-sections";
 import { DEFAULT_DONE_SECONDS, type StepsSettings, stepsOptions } from "../../shared/steps";
 import type { Layout, Prompt } from "../../shared/document";
-import { type ChatSettings, chatLook, TOOL_KIND_TITLES, TOOL_KINDS } from "../../shared/chat-view";
+import { type ChatSettings, type ChatWebSettings, chatLook, FOLD_KINDS, type FoldKind, TOOL_KIND_TITLES, TOOL_KINDS, type ToolKind } from "../../shared/chat-view";
 import { EMPTY_PROFILE, type Profile, TIMELINE_ITEM_TYPES } from "../../shared/profile";
 import { presetTitle } from "../../shared/reminders";
 import { useValue } from "../profile-store";
@@ -329,6 +329,17 @@ function viewFields(form: Form): { [Key in keyof ViewConfig]-?: ReactNode } {
         ))}
       </>
     ),
+    singleChat: view.showAgents ? (
+      <SelectField
+        label="A workspace's only chat"
+        value={view.singleChat ?? "show"}
+        options={[
+          { value: "show", label: "Listed under it" },
+          { value: "hide", label: "Not listed: the workspace row stands for it" },
+        ]}
+        onChange={(value) => setOptional("singleChat", value, "show")}
+      />
+    ) : null,
     chatRows: view.showAgents ? (
       <SelectField label="Chats per workspace, then Show more" value={String(view.chatRows ?? DEFAULT_CHAT_ROWS)} options={counts([3, 5, 10, 20], view.chatRows ?? DEFAULT_CHAT_ROWS)} onChange={(value) => setOptional("chatRows", Number(value), DEFAULT_CHAT_ROWS)} />
     ) : null,
@@ -530,27 +541,34 @@ const PREVIEW_TIME = new Date("2026-11-12T10:42:00");
 const PREVIEW_DIFF = "@@ -12,4 +12,5 @@\n export function total(items) {\n-  return items.reduce((sum, item) => sum + item.price, 0);\n+  const prices = items.map((item) => item.price ?? 0);\n+  return prices.reduce((sum, price) => sum + price, 0);\n }";
 function ChatPreview({ form, look, chat }: { form: Form; look: ReturnType<typeof chatLook>; chat: ChatSettings }) {
   const t = tokens(form.theme, false);
+  const on = chat.enabled !== false;
   const style = chat.toolCalls === "compact" ? "compact" : "cards";
-  // Made once per look, so a sample card keeps being open or folded while the form re-renders.
+  // Made once per look, so a sample row keeps being open or folded while the form re-renders.
   const lookKey = JSON.stringify(look);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const ToolRow = useMemo(() => createToolRow(look), [lookKey]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const ThinkingRow = useMemo(() => createThinkingRow(look), [lookKey]);
+  const rows = useMemo(() => ({ Tool: createToolRow(look, null), Thinking: createThinkingRow(look), Notice: createNoticeRow(look) }), [lookKey]);
   const props = { agentId: "preview", timestamp: PREVIEW_TIME, theme: form.theme, host: { id: "preview", label: "Preview" }, layout: { compact: false, platform: "web" as const } };
-  const tool = (data: Omit<z.output<typeof toolRowSchema>, "style">) => <ToolRow {...props} item={{ type: "plugin", kind: "tool-call", version: 2, data: { ...data, style } }} />;
+  const tool = (data: Omit<z.output<typeof toolRowSchema>, "style">) => <rows.Tool {...props} item={{ type: "plugin", kind: "tool-call", version: 2, data: { ...data, style } }} />;
+  const tools = on && (chat.toolCalls ?? "paseo") !== "paseo";
+  const thinking = on && (chat.reasoning === "fold" || chat.reasoning === "expand");
+  const notices = on && chat.notices === true;
   return (
-    <View style={{ padding: 16, gap: 4 }}>
-      {chat.toolCalls === undefined || chat.toolCalls === "paseo" ? (
-        <Text style={t.text.small}>Tool calls show as Paseo's own rows. Choose cards or one line each below to change them.</Text>
-      ) : (
+    // Paseo's 16pt gap under each plugin row, which the rows take back, is added here so the
+    // preview spaces rows as the chat does.
+    <View style={{ padding: 16 }}>
+      {!on ? <Text style={t.text.small}>Morphise draws no chat rows; every row stays as Paseo draws it.</Text> : null}
+      {on && !tools && !thinking && !notices ? <Text style={t.text.small}>Every row shows as Paseo draws it. Choose lines or cards for tool calls, a thinking row, or notice rows below.</Text> : null}
+      {thinking ? <View style={{ paddingBottom: 16 }}><rows.Thinking {...props} item={{ type: "plugin", kind: "thinking", version: 2, data: { text: "**Find the bug**\nThe total breaks when an item has no price.\n**Fix**\nDefault the price to zero before summing.", streaming: false } }} /></View> : null}
+      {tools ? (
         <>
-          {tool({ kind: "edit", detail: "edit", name: "Edit", subject: "src/cart/total.ts", status: "completed", error: "", body: PREVIEW_DIFF, bodyKind: "diff", facts: ["+2 −1"] })}
-          {tool({ kind: "shell", detail: "shell", name: "Bash", subject: "npm test -- cart", status: "failed", error: "1 test failed", body: "FAIL src/cart/total.test.ts\n  total() > ignores items without a price\n    expected 30, got NaN", bodyKind: "output", facts: ["exit 1"] })}
-          {tool({ kind: "search", detail: "search", name: "Grep", subject: "item.price", status: "running", error: "", body: "", bodyKind: "output", facts: [] })}
+          <View style={{ paddingBottom: 16 }}>{tool({ kind: "search", detail: "search", name: "Grep", subject: "item.price", status: "completed", error: "", body: "src/cart/total.ts\nsrc/cart/total.test.ts", bodyKind: "output", facts: ["4 matches", "2 files"] })}</View>
+          <View style={{ paddingBottom: 16 }}>{tool({ kind: "edit", detail: "edit", name: "Edit", subject: "src/cart/total.ts", status: "completed", error: "", body: PREVIEW_DIFF, bodyKind: "diff", facts: ["+2 −1"] })}</View>
+          <View style={{ paddingBottom: 16 }}>{tool({ kind: "shell", detail: "shell", name: "Bash", subject: 'npm test -- --grep "total"', status: "failed", error: "1 test failed", body: "FAIL src/cart/total.test.ts\n  total() > ignores items without a price\n    expected 30, got NaN", bodyKind: "output", facts: ["exit 1"] })}</View>
+          <View style={{ paddingBottom: 16 }}>{tool({ kind: "other", detail: "unknown", name: "mcp__codebase__search_code", subject: "codebase", status: "completed", error: "", body: 'Input\n{\n  "query": "price ?? 0"\n}', bodyKind: "output", facts: [] })}</View>
+          <View style={{ paddingBottom: 16 }}>{tool({ kind: "shell", detail: "shell", name: "Bash", subject: "git status --short", status: "running", error: "", body: "", bodyKind: "output", facts: [] })}</View>
         </>
-      )}
-      {chat.reasoning === "fold" ? <ThinkingRow {...props} item={{ type: "plugin", kind: "thinking", version: 2, data: { text: "The total breaks when an item has no price, so default it to zero before summing.", streaming: false } }} /> : null}
+      ) : null}
+      {notices ? <View style={{ paddingBottom: 16 }}><rows.Notice {...props} item={{ type: "plugin", kind: "notice", version: 1, data: { level: "info", title: "Context compacted", message: "152K tokens before" } }} /></View> : null}
     </View>
   );
 }
@@ -562,28 +580,50 @@ export function ChatTab(form: Form): ReactNode {
   const chat = form.profile.chat ?? {};
   const look = chatLook(chat);
   const timeline = form.profile.timeline;
-  // Written only when it differs from the default, so 0.13 can still read an unchanged profile.
-  const setChat = <Key extends keyof ChatSettings>(key: Key, value: ChatSettings[Key] | undefined) =>
+  // Written only when it differs from the default, so older versions can still read an unchanged
+  // profile. Every change reads the profile being changed, so quick changes all count.
+  const change = (apply: (next: ChatSettings) => void) =>
     form.updateProfile((profile) => {
       const next: ChatSettings = { ...(profile.chat ?? {}) };
-      if (value === undefined || (Array.isArray(value) && value.length === 0)) delete next[key];
-      else next[key] = value;
+      apply(next);
+      for (const key of Object.keys(next) as (keyof ChatSettings)[]) {
+        const value = next[key];
+        if (value === undefined || (Array.isArray(value) && value.length === 0) || (typeof value === "object" && !Array.isArray(value) && value !== null && Object.keys(value).length === 0)) delete next[key];
+      }
       if (Object.keys(next).length) profile.chat = next;
       else delete profile.chat;
     });
-  const drawn = (chat.toolCalls ?? "paseo") !== "paseo" || chat.reasoning === "fold";
-  const toggleHidden = (kind: (typeof TOOL_KINDS)[number]) =>
-    form.updateProfile((profile) => {
-      // Read from the profile being changed, so two quick toggles both count.
-      const current = new Set(profile.chat?.hideFinished ?? []);
+  const setChat = <Key extends keyof ChatSettings>(key: Key, value: ChatSettings[Key] | undefined) => change((next) => void (next[key] = value));
+  const setWeb = <Key extends keyof ChatWebSettings>(key: Key, value: ChatWebSettings[Key] | undefined) =>
+    change((next) => {
+      const web: ChatWebSettings = { ...(next.web ?? {}) };
+      if (value === undefined) delete web[key];
+      else web[key] = value;
+      next.web = web;
+    });
+  const toggleHidden = (kind: ToolKind) =>
+    change((next) => {
+      const current = new Set(next.hideFinished ?? []);
       if (current.has(kind)) current.delete(kind);
       else current.add(kind);
-      const next: ChatSettings = { ...(profile.chat ?? {}), hideFinished: TOOL_KINDS.filter((item) => current.has(item)) };
-      if (!next.hideFinished?.length) delete next.hideFinished;
-      if (Object.keys(next).length) profile.chat = next;
-      else delete profile.chat;
+      next.hideFinished = TOOL_KINDS.filter((item) => current.has(item));
     });
+  // One kind's fold rule: tapping the chip it has turns it back to the general rule.
+  const toggleFold = (kind: FoldKind, rule: "always" | "never") =>
+    change((next) => {
+      const byKind = { ...(next.foldByKind ?? {}) };
+      if (byKind[kind] === rule) delete byKind[kind];
+      else byKind[kind] = rule;
+      next.foldByKind = byKind;
+    });
+  const on = chat.enabled !== false;
+  const tools = on && (chat.toolCalls ?? "paseo") !== "paseo";
+  const thinking = on && (chat.reasoning === "fold" || chat.reasoning === "expand");
+  const drawn = tools || thinking || (on && chat.notices === true);
   const hiddenKinds = new Set(chat.hideFinished ?? []);
+  const web = chat.web ?? {};
+  const kindTitle = (kind: FoldKind) => (kind === "thinking" ? "Thinking" : TOOL_KIND_TITLES[kind]);
+  const lineChoices = (values: number[]) => [...values.map((lines) => ({ value: String(lines), label: `${lines} lines` })), { value: "0", label: "All of it" }];
   return (
     <>
       <SettingsSection title="Preview" info="Sample rows drawn with the choices below. Prompts and replies always stay Paseo's own, with Fork and Copy.">
@@ -591,78 +631,122 @@ export function ChatTab(form: Form): ReactNode {
           <ChatPreview form={form} look={look} chat={chat} />
         </SettingsCard>
       </SettingsSection>
-      <SettingsSection title="Tool calls" info="Commands, file reads and edits, searches and other tools an agent uses. Plans and sub-agent tasks keep Paseo's rows.">
+      <SettingsSection title="Chat rows" info="Morphise draws tool calls, thinking and notices only where you choose below. Prompts and replies are never redrawn.">
         <SettingsCard>
-          <SelectField
-            label="Show them as"
-            value={chat.toolCalls ?? "paseo"}
-            options={[
-              { value: "paseo", label: "Paseo's own rows" },
-              { value: "cards", label: "Cards with a summary, diff and output" },
-              { value: "compact", label: "One line each, opening to the details" },
-            ]}
-            onChange={(value) => setChat("toolCalls", value === "paseo" ? undefined : value)}
-          />
-          {(chat.toolCalls ?? "paseo") !== "paseo" ? (
-            <>
+          <SwitchField label="Let Morphise draw chat rows" hint="Off: every row stays as Paseo draws it. Hidden rows still apply." value={on} onChange={(value) => setChat("enabled", value ? undefined : false)} />
+        </SettingsCard>
+      </SettingsSection>
+      {on ? (
+        <>
+          <SettingsSection title="Tool calls" info="Commands, file reads and edits, searches, web fetches and MCP tools. Plans and sub-agent tasks keep Paseo's rows.">
+            <SettingsCard>
               <SelectField
-                label="Output before Show all"
-                value={String(look.outputLines ?? 0)}
-                options={[...[6, 12, 20, 40].map((lines) => ({ value: String(lines), label: `${lines} lines, first and last` })), { value: "0", label: "All of it" }]}
-                onChange={(value) => setChat("outputLines", Number(value) === 12 ? undefined : Number(value))}
+                label="Show them as"
+                value={chat.toolCalls ?? "paseo"}
+                options={[
+                  { value: "paseo", label: "Paseo's own rows" },
+                  { value: "compact", label: "Lines: one quiet line each" },
+                  { value: "cards", label: "Cards: one soft card each" },
+                ]}
+                onChange={(value) => setChat("toolCalls", value === "paseo" ? undefined : value)}
               />
-            </>
+              {tools ? (
+                <>
+                  <SelectField label="Each row starts with" value={look.labels} options={[{ value: "both", label: "An icon and a label (Ran, Read, Edited)" }, { value: "icon", label: "An icon" }, { value: "label", label: "A label" }]} onChange={(value) => setChat("labels", value === "both" ? undefined : value)} />
+                  <SelectField label="File paths" value={look.paths} options={[{ value: "relative", label: "From the workspace folder" }, { value: "absolute", label: "In full" }]} onChange={(value) => setChat("paths", value === "relative" ? undefined : value)} />
+                  <SwitchField label="Colour commands" hint="The program, flags and quoted text in different colours." value={look.commandColors} onChange={(value) => setChat("commandColors", value ? undefined : false)} />
+                  <SwitchField label="Show pictures the agent reads" hint="Read on this host's daemon, up to 3 MB." value={look.images} onChange={(value) => setChat("images", value ? undefined : false)} />
+                </>
+              ) : null}
+              <ChipRow form={form} label="Hide when finished" hint="Running and failed calls always show." chips={TOOL_KINDS.map((kind) => ({ key: kind, label: TOOL_KIND_TITLES[kind], on: hiddenKinds.has(kind), toggle: () => toggleHidden(kind) }))} />
+            </SettingsCard>
+          </SettingsSection>
+          {drawn ? (
+            <SettingsSection title="Folding" info="Which rows show their details. A failed call always opens, and your own click on a row wins.">
+              <SettingsCard>
+                <SelectField
+                  label="Rows in general"
+                  value={look.fold}
+                  options={[
+                    { value: "finished", label: "Open while working, folded when done" },
+                    { value: "always", label: "Always folded" },
+                    { value: "never", label: "Always open" },
+                  ]}
+                  onChange={(value) => setChat("fold", value === "finished" ? undefined : value)}
+                />
+                <ChipRow form={form} label="Always folded" chips={FOLD_KINDS.map((kind) => ({ key: kind, label: kindTitle(kind), on: look.foldByKind[kind] === "always", toggle: () => toggleFold(kind, "always") }))} />
+                <ChipRow form={form} label="Always open" chips={FOLD_KINDS.map((kind) => ({ key: kind, label: kindTitle(kind), on: look.foldByKind[kind] === "never", toggle: () => toggleFold(kind, "never") }))} />
+                <SelectField label="Keep short details open" value={String(look.foldMinLines)} options={[{ value: "0", label: "No" }, ...[3, 5, 10].map((lines) => ({ value: String(lines), label: `Up to ${lines} lines` }))]} onChange={(value) => setChat("foldMinLines", value === "0" ? undefined : Number(value))} />
+              </SettingsCard>
+            </SettingsSection>
           ) : null}
-          <ChipRow form={form} label="Hide when finished" hint="Running and failed calls always show." chips={TOOL_KINDS.map((kind) => ({ key: kind, label: TOOL_KIND_TITLES[kind], on: hiddenKinds.has(kind), toggle: () => toggleHidden(kind) }))} />
-        </SettingsCard>
-      </SettingsSection>
-      <SettingsSection title="Thinking" info="The model's reasoning between steps, when it shows it.">
-        <SettingsCard>
-          <SelectField
-            label="Show thinking"
-            value={chat.reasoning ?? "show"}
-            options={[
-              { value: "show", label: "In full, as Paseo shows it" },
-              { value: "fold", label: "As a card, open while thinking" },
-              { value: "hide", label: "Hidden" },
-            ]}
-            onChange={(value) => setChat("reasoning", value === "show" ? undefined : value)}
-          />
-        </SettingsCard>
-      </SettingsSection>
-      {drawn ? (
-        <SettingsSection title="Look" info="For the cards and lines Morphise draws.">
-          <SettingsCard>
-            <SelectField
-              label="Open or folded"
-              hint="For tool cards and thinking. A failed call always opens."
-              value={look.fold}
-              options={[
-                { value: "finished", label: "Open while working, folded when done" },
-                { value: "always", label: "Always folded" },
-                { value: "never", label: "Always open" },
-              ]}
-              onChange={(value) => setChat("fold", value === "finished" ? undefined : value)}
-            />
-            <SelectField label="Text size" value={look.textSize} options={[{ value: "small", label: "Small" }, { value: "medium", label: "Medium" }, { value: "large", label: "Large" }]} onChange={(value) => setChat("textSize", value === "medium" ? undefined : value)} />
-            <SelectField label="Spacing" value={look.density} options={[{ value: "compact", label: "Tight" }, { value: "normal", label: "Normal" }, { value: "spacious", label: "Roomy" }]} onChange={(value) => setChat("density", value === "normal" ? undefined : value)} />
-            <SwitchField label="Show the time" value={look.timestamps} onChange={(value) => setChat("timestamps", value ? true : undefined)} />
-          </SettingsCard>
-        </SettingsSection>
+          {tools ? (
+            <SettingsSection title="Long output" info="Long text shows its first and last lines, with Show all for the rest.">
+              <SettingsCard>
+                <SelectField label="Terminal output" value={String(look.outputLines ?? 0)} options={lineChoices([6, 12, 20, 40])} onChange={(value) => setChat("outputLines", Number(value) === 12 ? undefined : Number(value))} />
+                <SelectField label="Code and diffs" value={String(look.codeLines ?? 0)} options={lineChoices([15, 30, 60, 120])} onChange={(value) => setChat("codeLines", Number(value) === 30 ? undefined : Number(value))} />
+                <SwitchField label="Wrap long lines" hint="Off: long lines scroll sideways." value={look.wrap} onChange={(value) => setChat("wrap", value ? undefined : false)} />
+              </SettingsCard>
+            </SettingsSection>
+          ) : null}
+          <SettingsSection title="Thinking" info="The model's reasoning between steps, when it shows it.">
+            <SettingsCard>
+              <SelectField
+                label="Show thinking"
+                value={chat.reasoning ?? "show"}
+                options={[
+                  { value: "show", label: "As Paseo shows it" },
+                  { value: "fold", label: "As a row: open while thinking, folded when done" },
+                  { value: "expand", label: "As a row, always open, split into its steps" },
+                  { value: "hide", label: "Hidden" },
+                ]}
+                onChange={(value) => setChat("reasoning", value === "show" ? undefined : value)}
+              />
+            </SettingsCard>
+          </SettingsSection>
+          <SettingsSection title="Notices" info="Errors, Paseo's notices and context compaction.">
+            <SettingsCard>
+              <SwitchField label="Draw them as rows" hint="Errors open with Copy; notices and compaction stay one line." value={chat.notices === true} onChange={(value) => setChat("notices", value ? true : undefined)} />
+            </SettingsCard>
+          </SettingsSection>
+          {drawn ? (
+            <SettingsSection title="Look" info="For the rows Morphise draws.">
+              <SettingsCard>
+                <SelectField label="Text size" value={look.textSize} options={[{ value: "small", label: "Small" }, { value: "medium", label: "Medium" }, { value: "large", label: "Large" }]} onChange={(value) => setChat("textSize", value === "medium" ? undefined : value)} />
+                <SelectField label="Code size" value={look.codeSize} options={[{ value: "small", label: "Small" }, { value: "medium", label: "Medium" }, { value: "large", label: "Large" }]} onChange={(value) => setChat("codeSize", value === (chat.textSize ?? "medium") ? undefined : value)} />
+                <SelectField label="Spacing" value={look.density} options={[{ value: "compact", label: "Tight" }, { value: "normal", label: "Normal" }, { value: "spacious", label: "Roomy" }]} onChange={(value) => setChat("density", value === "normal" ? undefined : value)} />
+                <SelectField label="Strength until hovered" value={look.strength} options={[{ value: "full", label: "Full" }, { value: "soft", label: "Soft" }, { value: "faded", label: "Faded" }, { value: "dim", label: "Dim" }]} onChange={(value) => setChat("strength", value === "full" ? undefined : value)} />
+                <SelectField
+                  label="Accent"
+                  value={chat.accent && !chat.accent.startsWith("#") ? chat.accent : chat.accent ? "custom" : "theme"}
+                  options={[{ value: "theme", label: "Theme" }, { value: "jade", label: "Jade" }, { value: "violet", label: "Violet" }, { value: "amber", label: "Amber" }, { value: "rose", label: "Rose" }, { value: "custom", label: "Custom colour" }]}
+                  onChange={(value) => setChat("accent", value === "theme" ? undefined : value === "custom" ? "#6366f1" : value)}
+                />
+                {chat.accent?.startsWith("#") ? <TextField form={form} label="Custom accent (#rrggbb)" value={chat.accent} error={form.profileError("chat.accent")} onChange={(value) => setChat("accent", value.trim() || undefined)} /> : null}
+                <SwitchField label="Show the time" value={look.timestamps} onChange={(value) => setChat("timestamps", value ? true : undefined)} />
+              </SettingsCard>
+            </SettingsSection>
+          ) : null}
+          <SettingsSection title="Turn recap" info="After each turn, one row that sums it up: how long it took, files changed, commands that failed.">
+            <SettingsCard>
+              <SwitchField label="Add a recap after each turn" hint="Written into the chat by this host's daemon, so every app sees it." value={chat.recap === true} onChange={(value) => setChat("recap", value ? true : undefined)} />
+            </SettingsCard>
+          </SettingsSection>
+          <SettingsSection title="Phones" info="On iOS and Android.">
+            <SettingsCard>
+              <SelectField
+                label="Chat rows on phones"
+                value={chat.phones ?? "same"}
+                options={[
+                  { value: "same", label: "The same as here" },
+                  { value: "paseo", label: "Paseo's own rows" },
+                ]}
+                onChange={(value) => setChat("phones", value === "same" ? undefined : value)}
+              />
+            </SettingsCard>
+          </SettingsSection>
+        </>
       ) : null}
-      <SettingsSection title="Phones" info="On iOS and Android.">
-        <SettingsCard>
-          <SelectField
-            label="Chat rows on phones"
-            value={chat.phones ?? "same"}
-            options={[
-              { value: "same", label: "The same as here" },
-              { value: "paseo", label: "Paseo's own rows" },
-            ]}
-            onChange={(value) => setChat("phones", value === "same" ? undefined : value)}
-          />
-        </SettingsCard>
-      </SettingsSection>
       <SettingsSection title="Hidden rows" info="Whole kinds of rows hidden in every chat.">
         <SettingsCard>
           <ChipRow
@@ -679,6 +763,17 @@ export function ChatTab(form: Form): ReactNode {
                 }),
             }))}
           />
+        </SettingsCard>
+      </SettingsSection>
+      <SettingsSection title="Experimental (web)" info="Styles Paseo's own prompts and replies on the web and desktop apps, without redrawing them. They rely on Paseo's page structure and may stop working after a Paseo update.">
+        <SettingsCard>
+          <SelectField label="Reply text size" value={String(web.replySize ?? 100)} options={[90, 100, 110, 120, 135, 150].map((size) => ({ value: String(size), label: size === 100 ? "As Paseo shows it" : `${size}%` }))} onChange={(value) => setWeb("replySize", value === "100" ? undefined : Number(value))} />
+          <SelectField label="Reply line spacing" value={String(web.replyLineHeight ?? 100)} options={[100, 115, 130, 150, 175].map((size) => ({ value: String(size), label: size === 100 ? "As Paseo shows it" : `${size}%` }))} onChange={(value) => setWeb("replyLineHeight", value === "100" ? undefined : Number(value))} />
+          <TextField form={form} label="Bold text colour (#rrggbb)" placeholder="As Paseo shows it" value={web.boldColor ?? ""} error={form.profileError("chat.web.boldColor")} onChange={(value) => setWeb("boldColor", value.trim() || undefined)} />
+          <SelectField label="Links" value={web.linkStyle ?? "paseo"} options={[{ value: "paseo", label: "As Paseo shows them" }, { value: "dashed", label: "Dashed underline" }]} onChange={(value) => setWeb("linkStyle", value === "paseo" ? undefined : value)} />
+          <SelectField label="Long prompts" value={String(web.clampPrompts ?? 0)} options={[{ value: "0", label: "In full" }, ...[4, 6, 10].map((lines) => ({ value: String(lines), label: `First ${lines} lines, the rest on hover` }))]} onChange={(value) => setWeb("clampPrompts", value === "0" ? undefined : Number(value))} />
+          <TextField form={form} label="Chat font" hint="For prompts and replies: any font installed on this computer, by its name." placeholder="As Paseo shows it" value={web.uiFont ?? ""} error={form.profileError("chat.web.uiFont")} onChange={(value) => setWeb("uiFont", value.trim() || undefined)} />
+          <TextField form={form} label="Chat code font" placeholder="As Paseo shows it" value={web.codeFont ?? ""} error={form.profileError("chat.web.codeFont")} onChange={(value) => setWeb("codeFont", value.trim() || undefined)} />
         </SettingsCard>
       </SettingsSection>
     </>
@@ -743,6 +838,14 @@ const DEFAULT_THEME: Theme = {
   },
 };
 
+// Ready-made palettes to start a theme from; every colour can then be changed.
+const THEME_PRESETS: Record<string, Theme> = {
+  midnight: { name: "Midnight", appearance: "dark", colors: { background: "#0f1420", foreground: "#d8dee9", raised: "#161d2c", control: "#1f2838", border: "#2a3447", accent: "#5b9cf5", mutedForeground: "#8a95a8", ring: "#3c5a8a" } },
+  forest: { name: "Forest", appearance: "dark", colors: { background: "#121814", foreground: "#d6e2d6", raised: "#18211b", control: "#212c24", border: "#2c3a30", accent: "#5fbf8a", mutedForeground: "#8ea493", ring: "#3f6b50" } },
+  dusk: { name: "Dusk", appearance: "dark", colors: { background: "#17141f", foreground: "#e2dcef", raised: "#1f1b2a", control: "#2a2438", border: "#362f48", accent: "#b48cf2", mutedForeground: "#978fab", ring: "#5a4a82" } },
+  paper: { name: "Paper", appearance: "light", colors: { background: "#faf8f3", foreground: "#2b2a27", raised: "#ffffff", control: "#efece4", border: "#e0dbcf", accent: "#c0622f", mutedForeground: "#7a766c", ring: "#d9a07f" } },
+};
+
 function colorFields(form: Form, theme: Theme): ReactNode {
   type Colors = Theme["colors"];
   const labels: { [Key in keyof Colors]-?: string } = {
@@ -783,6 +886,15 @@ export function LookTab(form: Form): ReactNode {
           <SwitchField label="Add a custom theme" value={theme !== null} onChange={(value) => form.updateProfile((profile) => void (profile.theme = value ? copy(DEFAULT_THEME) : null))} />
           {theme ? (
             <>
+              <SelectField
+                label="Start from"
+                value={Object.keys(THEME_PRESETS).find((key) => JSON.stringify(THEME_PRESETS[key].colors) === JSON.stringify(theme.colors)) ?? "custom"}
+                options={[{ value: "custom", label: "Your colours" }, ...Object.entries(THEME_PRESETS).map(([value, preset]) => ({ value, label: `${preset.name} (${preset.appearance})` }))]}
+                onChange={(value) => {
+                  const preset = THEME_PRESETS[value];
+                  if (preset) form.updateProfile((profile) => void (profile.theme = { ...copy(preset), name: profile.theme?.name && profile.theme.name !== DEFAULT_THEME.name ? profile.theme.name : preset.name }));
+                }}
+              />
               <TextField form={form} label="Name" value={theme.name} onChange={(name) => form.updateProfile((profile) => void (profile.theme && (profile.theme.name = name)))} error={form.profileError("theme.name")} />
               <SelectField
                 label="Light or dark"

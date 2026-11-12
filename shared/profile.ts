@@ -218,6 +218,9 @@ const viewSchema = z
       })
       .optional(),
     subAgentRows: z.int().min(1).max(50).optional(),
+    // A workspace with a single chat (and none of its sub-agents shown) lists no chat under it:
+    // the workspace row already stands for it. Shown when unset.
+    singleChat: z.enum(["show", "hide"]).optional(),
   })
   .prefault({});
 
@@ -262,16 +265,43 @@ export const profileSchema = z.strictObject({
   // nobody changed here stays readable by 0.12, which rejects keys it does not know.
   chat: z
     .strictObject({
+      enabled: z.boolean().optional(),
       toolCalls: z.enum(["paseo", "cards", "compact"]).optional(),
       hideFinished: z.array(z.enum(TOOL_KINDS)).max(TOOL_KINDS.length).optional(),
-      reasoning: z.enum(["show", "fold", "hide"]).optional(),
+      reasoning: z.enum(["show", "fold", "expand", "hide"]).optional(),
       fold: z.enum(["finished", "always", "never"]).optional(),
-      // Lines of tool output shown before "Show all"; 0 shows everything.
+      foldByKind: z.partialRecord(z.enum([...TOOL_KINDS, "thinking"]), z.enum(["finished", "always", "never"])).optional(),
+      foldMinLines: z.int().min(0).max(200).optional(),
+      // Lines of terminal output, and of code and diffs, shown before "Show all"; 0 shows all.
       outputLines: z.int().min(0).max(200).optional(),
+      codeLines: z.int().min(0).max(400).optional(),
+      wrap: z.boolean().optional(),
+      labels: z.enum(["icon", "label", "both"]).optional(),
+      paths: z.enum(["relative", "absolute"]).optional(),
+      commandColors: z.boolean().optional(),
+      strength: z.enum(["full", "soft", "faded", "dim"]).optional(),
+      // "theme", a named accent (see ACCENTS) or a #rrggbb colour.
+      accent: z.string().regex(/^(theme|jade|violet|amber|rose|#[0-9a-fA-F]{6})$/, "Expected theme, jade, violet, amber, rose or a #rrggbb colour").optional(),
       textSize: z.enum(["small", "medium", "large"]).optional(),
+      codeSize: z.enum(["small", "medium", "large"]).optional(),
       density: z.enum(["compact", "normal", "spacious"]).optional(),
       timestamps: z.boolean().optional(),
+      notices: z.boolean().optional(),
+      images: z.boolean().optional(),
+      recap: z.boolean().optional(),
       phones: z.enum(["same", "paseo"]).optional(),
+      // Web and desktop only, through Paseo's page structure; may break when Paseo changes.
+      web: z
+        .strictObject({
+          replySize: z.int().min(80).max(160).optional(),
+          replyLineHeight: z.int().min(100).max(220).optional(),
+          boldColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+          linkStyle: z.enum(["paseo", "dashed"]).optional(),
+          clampPrompts: z.int().min(0).max(40).optional(),
+          uiFont: z.string().regex(/^[A-Za-z0-9 _-]{1,60}$/, "Expected a font family name").optional(),
+          codeFont: z.string().regex(/^[A-Za-z0-9 _-]{1,60}$/, "Expected a font family name").optional(),
+        })
+        .optional(),
     })
     .optional(),
   style: z
