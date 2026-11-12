@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.19.4 - 2026-11-12
+
+- **The plan in the chat looks like the steps around it:** instead of a bordered card, it is one row like "Thought 11 times": a list icon, "Plan" (or "Plan done" with a green check), its count ("1/4"), and a chevron that folds and opens it. The steps hang under a thin rule. Finished steps are quiet with a small check, not struck through; the step in progress is bold with an accent dot; open steps have a hollow circle. A thin progress line shows while the plan runs, when Progress is on. The plan keeps this shape when it finishes, and earlier plan updates are the same row, folded, opening to the plan as it stood then. The sidebar's card is unchanged.
+
 ## 0.19.3 - 2026-11-12
 
 - **The steps card in the chat shows the whole plan:** it spans the reply's full width (it stopped at 720 pt), lists every step, finished ones too, without a scroll limit, and keeps its list when all steps are done ("All 4 done" now opens to the four steps). Its header folds and unfolds the list, with a chevron that shows which. The sidebar's card keeps its step limit and "hide finished" choice.

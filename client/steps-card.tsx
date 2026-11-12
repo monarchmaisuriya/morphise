@@ -1,3 +1,4 @@
+import type { PluginTheme } from "@getpaseo/plugin";
 import { type AgentRef, getPaseoClient, type PluginTimelineItemProps, useAgent, type usePaseo } from "@getpaseo/plugin/client";
 import { useEffect, useState } from "react";
 import { Animated, Pressable, ScrollView, Text, View } from "react-native";
@@ -7,6 +8,7 @@ import { cardMode, latestPlan, listedSteps, readSteps, type Step, stepCounts, ty
 import { createValueStore, useValue, type ValueStore } from "./profile-store";
 import { Icon, IconButton, type Tokens, useTokens } from "./ui/kit";
 import { usePulse } from "./ui/pulse";
+import { alpha, Expand, Row, useIndent, useSpacing, useStyles } from "./polish/rows/row";
 
 type Paseo = ReturnType<typeof usePaseo>;
 
@@ -154,13 +156,78 @@ function StepRow({ step, t }: { step: Step; t: Tokens }) {
   );
 }
 
+// The plan in the chat, drawn like the merged steps around it: one row ("Plan 2/4", "Plan done 4/4")
+// with a chevron, opening to its steps under a thin rule. Finished steps are quiet, not struck
+// through; the current one stands out. Folding is the user's; it starts as "Start folded" says.
+function InlinePlan({ steps, mode, theme, compact, startFolded, progress }: { steps: readonly Step[]; mode: "plan" | "done"; theme: PluginTheme; compact: boolean; startFolded: boolean; progress: boolean }) {
+  const s = useStyles(theme);
+  const c = theme.colors;
+  const icons = !!useIndent("steps");
+  const [open, setOpen] = useState(!startFolded);
+  const { done, total } = stepCounts(steps);
+  const current = steps.find((step) => step.status === "in_progress") ?? null;
+  const spacing = useSpacing();
+  return (
+    <View style={spacing}>
+      <Row
+        theme={theme}
+        compact={compact}
+        kind="steps"
+        icon={mode === "done" ? "CircleCheck" : "ListChecks"}
+        iconColor={mode === "done" ? c.statusSuccess : undefined}
+        verb={mode === "done" ? "Plan done" : "Plan"}
+        target={!open && current ? current.text : undefined}
+        prose
+        meta={`${done}/${total}`}
+        pulsing={!!current}
+        open={open}
+        onToggle={() => setOpen(!open)}
+      />
+      {mode === "plan" && progress ? (
+        <View style={{ height: 2, marginLeft: icons ? 28 : 0, marginTop: 2, borderRadius: 1, backgroundColor: alpha(c.border, 0.6), overflow: "hidden" }}>
+          <View style={{ width: `${Math.round((done / total) * 100)}%`, height: 2, backgroundColor: c.statusSuccess }} />
+        </View>
+      ) : null}
+      <Expand open={open} style={{ marginLeft: icons ? 9 : 0, paddingLeft: icons ? 15 : 13, paddingTop: 4, paddingBottom: 2, gap: 2, borderLeftWidth: 1, borderLeftColor: alpha(c.border, 0.6) }}>
+        {() =>
+          steps.map((step, index) => (
+            <InlineStep key={`${index}:${step.text}`} step={step} theme={theme} textStyle={s.target} />
+          ))
+        }
+      </Expand>
+    </View>
+  );
+}
+
+function InlineStep({ step, theme, textStyle }: { step: Step; theme: PluginTheme; textStyle: object }) {
+  const c = theme.colors;
+  const pulse = usePulse(step.status === "in_progress");
+  const now = step.status === "in_progress";
+  return (
+    <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 8, paddingVertical: 2 }}>
+      <View style={{ width: 14, height: 18, alignItems: "center", justifyContent: "center" }}>
+        {step.status === "completed" ? (
+          <Icon name="Check" size={12} color={c.statusSuccess} />
+        ) : now ? (
+          <Animated.View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: c.accent, opacity: pulse }} />
+        ) : (
+          <View style={{ width: 7, height: 7, borderRadius: 4, borderWidth: 1, borderColor: c.foregroundMuted }} />
+        )}
+      </View>
+      <Text style={[textStyle, { flex: 1, lineHeight: 18, color: now ? c.foreground : c.foregroundMuted, fontWeight: now ? "500" : "400", opacity: step.status === "completed" ? 0.75 : 1 }]} numberOfLines={2}>
+        {step.text}
+      </Text>
+    </View>
+  );
+}
+
 // A plan's card: shown while it has unfinished steps, "All done" for `doneSeconds` when it
 // finishes (or for as long as the plan stands when shown always). × hides this plan until it
 // changes. `title` names the chat when several cards are shown. In the chat (`inline`), a finished
 // plan whose moment has passed stays as one line instead of disappearing, so the chat does not
 // jump. `hidden` keeps the card from drawing while it still follows its plan; `onShown` reports
 // whether it has something to show.
-export function StepsCardView({ plan, t, options, title = null, inline = false, hidden = false, onShown }: { plan: Plan; t: Tokens; options: StepsOptions; title?: string | null; inline?: boolean; hidden?: boolean; onShown?(shown: boolean): void }) {
+export function StepsCardView({ plan, t, options, title = null, inline = false, hidden = false, onShown, theme }: { plan: Plan; t: Tokens; options: StepsOptions; title?: string | null; inline?: boolean; hidden?: boolean; onShown?(shown: boolean): void; theme?: PluginTheme }) {
   const { steps, finishedAt } = plan;
   const [now, setNow] = useState(Date.now());
   const [dismissed, setDismissed] = useState<string | null>(null);
@@ -182,7 +249,9 @@ export function StepsCardView({ plan, t, options, title = null, inline = false, 
   useEffect(() => () => onShown?.(false), []);
   if (hidden || !steps || steps.length === 0) return null;
   const { done, total } = stepCounts(steps);
-  if (!shown) return inline ? <PlanLine t={t} icon={done === total ? "CircleCheck" : "ListChecks"} text={done === total ? `Plan · all ${total} done` : `Plan · ${done} of ${total} done`} /> : null;
+  // In the chat the plan is always the step row, finished or not, so it never changes shape.
+  if (inline && theme) return <InlinePlan steps={steps} mode={done === total ? "done" : "plan"} theme={theme} compact={t.compact} startFolded={options.startFolded} progress={options.progress} />;
+  if (!shown) return null;
   const current = steps.find((step) => step.status === "in_progress") ?? steps.find((step) => step.status === "pending") ?? null;
   // In the chat the card spans the reply's width and lists every step, finished ones too, while the
   // sidebar's card keeps its step limit and "hide finished" choice.
@@ -219,16 +288,6 @@ export function StepsCardView({ plan, t, options, title = null, inline = false, 
           {more > 0 ? <Text style={{ fontSize: 11, color: t.c.foregroundMuted, paddingLeft: 22, paddingTop: 2 }}>{`${more} more`}</Text> : null}
         </ScrollView>
       ) : null}
-    </View>
-  );
-}
-
-// One muted line in the chat for a plan update that is not the current plan, or a finished one.
-function PlanLine({ t, icon, text }: { t: Tokens; icon: string; text: string }) {
-  return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 4 }}>
-      <Icon name={icon} size={12} color={t.c.foregroundMuted} />
-      <Text style={{ fontSize: 12, color: t.c.foregroundMuted }}>{text}</Text>
     </View>
   );
 }
@@ -292,10 +351,11 @@ export function createChatStepsRow(paseo: Paseo, options: () => StepsOptions) {
     // when Paseo gave no time). Until the chat's plan is read, or when it cannot be, every update
     // is one line, so a chat never shows two live cards.
     const current = plan.status === "ready" && plan.steps !== null && (plan.latestAt !== null ? plan.latestAt === timestamp.getTime() : JSON.stringify(plan.steps) === JSON.stringify(own));
+    // An earlier update is the same row, folded, opening to the plan as it stood then.
     if (!current) {
       const { done, total } = stepCounts(own);
-      return <PlanLine t={t} icon="ListChecks" text={`Plan · ${done} of ${total} done`} />;
+      return <InlinePlan steps={own} mode={done === total ? "done" : "plan"} theme={theme} compact={layout.compact} startFolded progress={false} />;
     }
-    return <StepsCardView plan={plan} t={t} options={options()} inline />;
+    return <StepsCardView plan={plan} t={t} options={options()} theme={theme} inline />;
   };
 }
