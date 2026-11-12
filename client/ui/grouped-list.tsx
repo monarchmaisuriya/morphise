@@ -7,8 +7,6 @@ import { Icon, type Tokens } from "./kit";
 // list): each group a bordered box with a tinted header, rows with hairline dividers, one line per row on
 // desktop, quiet facts at the right, and secondary actions over the row's end on hover or keyboard focus.
 
-// The list stops growing here and centres, so a row's facts stay near its title on wide windows.
-const LIST_MAX_WIDTH = 1180;
 
 // Markers for the stylesheet that shows a row's actions while focus is inside it (web only; see plugin-views.ts).
 const ROW_MARK = { dataSet: { mxCard: "" } } as object;
@@ -18,7 +16,7 @@ const ACTIONS_MARK = { dataSet: { mxCardActions: "" } } as object;
 export function GroupList({ t, children, scroll }: { t: Tokens; children: ReactNode; scroll?: object }) {
   return (
     <ScrollView {...scroll} style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: t.compact ? 12 : 16, paddingTop: 4, paddingBottom: 24 }}>
-      <View style={{ width: "100%", maxWidth: LIST_MAX_WIDTH, alignSelf: "center", gap: 12 }}>{children}</View>
+      <View style={{ width: "100%", gap: 12 }}>{children}</View>
     </ScrollView>
   );
 }

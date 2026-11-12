@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.21.1 - 2026-11-13
+
+- **Full width:** the Workbench's lists use the whole width of the window: Agents and Tasks in list layout, Tasks' Today and Archived, and Bookmarks (they stopped at 820 to 1180 pt before).
+
 ## 0.21.0 - 2026-11-13
 
 - **No saved views in Tasks:** the "All tasks" button (save, pick, update and delete named views) and the Command Center "Tasks view" items are gone. Filter and Display choices apply to the screen you are on. Views saved before stay in the task document, unused here, so older versions on other devices still read them.

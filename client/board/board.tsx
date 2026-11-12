@@ -794,7 +794,7 @@ export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, open
           ))}
         </ScrollView>
       ) : (
-        <ScrollView contentContainerStyle={{ paddingHorizontal: pad, paddingBottom: pad, gap: 6, maxWidth: 900, width: "100%" }}>
+        <ScrollView contentContainerStyle={{ paddingHorizontal: pad, paddingBottom: pad, gap: 6, width: "100%" }}>
           {tab === "today" ? (
             today.length ? (
               today.map((group) => (

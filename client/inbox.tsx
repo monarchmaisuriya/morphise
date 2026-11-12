@@ -74,7 +74,7 @@ export function Bookmarks({ t, deps, workspaces, open }: { t: Tokens; deps: Inbo
     );
   if (!all.length) return <EmptyState t={t} icon="Bookmark" title="No bookmarks yet" hint="Type /bookmark in a chat, or use Bookmark answer here, to keep an answer." />;
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: t.compact ? 12 : 20, gap: 10, maxWidth: 820, width: "100%", alignSelf: "center" }}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: t.compact ? 12 : 20, gap: 10, width: "100%" }}>
       <Field t={t} value={search} onChangeText={setSearch} placeholder="Search bookmarks" icon="Search" plain accessibilityLabel="Search bookmarks" />
       {shown.length ? shown.map((bookmark) => <BookmarkCard key={bookmark.id} bookmark={bookmark} t={t} workspaces={workspaces} open={open} remove={() => remove(bookmark)} />) : <Text style={t.text.meta}>No bookmark matches.</Text>}
     </ScrollView>
