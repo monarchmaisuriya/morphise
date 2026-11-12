@@ -1116,9 +1116,11 @@ function FilterMenu({ state, save, projects, shared }: FilterMenuProps) {
   const { t, props, config } = shared;
   const statuses = state.statusFilter;
   const needsMe = needsMeOn(statuses);
+  // Statuses add up: picking one while "Needs me" (permission and failed) is on keeps those two and
+  // adds it; picking one of those two takes just that one out.
   const toggleStatus = (indicator: Indicator) => {
-    const on = !needsMe && statuses.includes(indicator);
-    save({ statusFilter: on ? statuses.filter((item) => item !== indicator) : [...(needsMe ? [] : statuses), indicator] });
+    const on = statuses.includes(indicator);
+    save({ statusFilter: on ? statuses.filter((item) => item !== indicator) : [...statuses, indicator] });
   };
   const toggleProject = (key: string) => save({ projectFilter: state.projectFilter.includes(key) ? state.projectFilter.filter((item) => item !== key) : [...state.projectFilter, key] });
   return (
@@ -1126,7 +1128,7 @@ function FilterMenu({ state, save, projects, shared }: FilterMenuProps) {
       <MenuSection title="Status" shared={shared}>
         <MenuItem t={t} role="checkbox" icon="Hand" label="Needs me" hint="permission or failed" checked={needsMe} onPress={() => save({ statusFilter: needsMe ? [] : [...NEEDS_ME] })} />
         {INDICATORS.map((indicator) => (
-          <MenuItem key={indicator} t={t} role="checkbox" dot={statusColor(props.theme.colors, indicator)} label={STATUS_TITLES[indicator]} checked={!needsMe && statuses.includes(indicator)} onPress={() => toggleStatus(indicator)} />
+          <MenuItem key={indicator} t={t} role="checkbox" dot={statusColor(props.theme.colors, indicator)} label={STATUS_TITLES[indicator]} checked={statuses.includes(indicator)} onPress={() => toggleStatus(indicator)} />
         ))}
       </MenuSection>
       <MenuSection title="Show only" shared={shared}>

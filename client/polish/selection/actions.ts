@@ -84,11 +84,20 @@ export interface SideChat {
 }
 
 /**
- * Starts a child agent next to `agentId` with the same provider, model, mode, and thinking level.
- * Its first message is the quote and the question; the recent main-chat turns travel as
- * instructions so the question has context.
+ * The side chat's provider and model, as agents.create takes it: the parent's provider with `chosen` (Settings, Side chat model)
+ * when set, else the parent's own model. A model the provider rejects fails the side chat; it never falls back to another.
  */
-export async function startSideChat(paseo: PaseoApi, input: { agentId: string; quote: string; question: string }): Promise<SideChat> {
+export function sideChatModel(provider: string, parentModel: string | null, chosen: string): { provider: string; ownModel: boolean } {
+  const model = chosen || parentModel;
+  return { provider: model ? `${provider}/${model}` : provider, ownModel: !chosen || chosen === parentModel };
+}
+
+/**
+ * Starts a child agent next to `agentId` with the same provider, mode, and thinking level, and the
+ * same model unless `model` names another. Its first message is the quote and the question; the
+ * recent main-chat turns travel as instructions so the question has context.
+ */
+export async function startSideChat(paseo: PaseoApi, input: { agentId: string; quote: string; question: string; model?: string }): Promise<SideChat> {
   const parent = paseo.agents.ref(input.agentId);
   const [refetched, turns] = await Promise.all([parent.refresh(), readTurns(parent, 120)]);
   const snapshot = refetched?.agent ?? parent.current();
@@ -96,12 +105,13 @@ export async function startSideChat(paseo: PaseoApi, input: { agentId: string; q
   const workspaceId = snapshot.workspaceId;
   if (!workspaceId) throw new Error(say("noWorkspace"));
 
-  const model = snapshot.model ?? snapshot.runtimeInfo?.model ?? null;
+  const { provider, ownModel } = sideChatModel(snapshot.provider, snapshot.model ?? snapshot.runtimeInfo?.model ?? null, input.model ?? "");
   const child = await paseo.workspaces.ref(workspaceId).agents.create({
     config: {
-      provider: model ? `${snapshot.provider}/${model}` : snapshot.provider,
+      provider,
       modeId: snapshot.currentModeId ?? undefined,
-      thinkingOptionId: snapshot.thinkingOptionId ?? undefined,
+      // Thinking levels are per model: another model starts at its own default.
+      thinkingOptionId: ownModel ? (snapshot.thinkingOptionId ?? undefined) : undefined,
       systemPrompt: buildSideChatSystemPrompt(turns, input.quote),
     },
     parent: input.agentId,

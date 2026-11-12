@@ -185,14 +185,20 @@ export function withCleared(cleared: readonly string[], add: readonly string[], 
   return [...new Set([...cleared, ...add])].filter((key) => live.has(key)).slice(-MAX_CLEARED);
 }
 
-// How the Inbox looks on this device: grouping, and the finished items cleared from it.
+// How the Inbox looks on this device: grouping, the finished items cleared from it, and which lines a
+// card shows. Keys added since version 1 default when missing, so older saved settings still read.
 export const inboxSettings = defineSettings({
   id: "inbox",
   scope: "device",
   version: 1,
   schema: z.object({
+    // No longer read (the list always groups by status); kept so older versions read the settings.
     group: z.enum(["reason", "workspace"]).default("reason"),
     cleared: z.array(z.string().max(400)).max(MAX_CLEARED).default([]),
+    // The workspace a card's chat is in.
+    cardWorkspace: z.boolean().default(true),
+    // What it waits on: the request or the error.
+    cardPreview: z.boolean().default(true),
   }),
 });
 

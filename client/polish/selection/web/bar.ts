@@ -4,11 +4,11 @@
 import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { copyText } from "@getpaseo/plugin/client/ui";
 import { Platform } from "react-native";
-import type { SelectionAction } from "../../../../shared/polish/prefs";
 import type { PolishContext } from "../../context";
 import { currentPrefs, subscribePrefs } from "../../prefs";
 import { currentTheme } from "../../theme-registry";
-import { SIDE_CHAT_PANEL_ID, appendToComposer, hasComposer, sendReply, shownActions, startSideChat, workspaceOf } from "../actions";
+import { SIDE_CHAT_PANEL_ID, appendToComposer, hasComposer, sendReply, startSideChat, workspaceOf } from "../actions";
+import { BAR_ICONS, barItems, barTop, type BarItem } from "../bar-layout";
 import { formatQuote, formatReply, sendBehaviorOf, type QuoteSource, type SendBehavior } from "../format";
 import { choosePalette, parseColor, type Rgba } from "../palette";
 import { say } from "../strings";
@@ -300,16 +300,6 @@ function applyPalette(host: DomElement, anchor: DomElement): void {
 // ---------------------------------------------------------------------------
 // The bar, the note, and the reply card
 
-const ICON = {
-  quote:
-    '<path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/>',
-  reply: '<polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/>',
-  side: '<path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/>',
-  copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
-  bookmark: '<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>',
-  check: '<path d="M20 6 9 17l-5-5"/>',
-  alert: '<circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>',
-} as const;
 
 function svg(paths: string): string {
   return `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
@@ -383,22 +373,12 @@ button:disabled { opacity: 0.4; cursor: default; }
 .primary:hover:not(:disabled) { background: var(--pq-fg); opacity: 0.88; }
 `;
 
-// Words are filled in on every show (`data-word` is the text, `data-title` the tooltip), so the bar
-// follows Paseo's language without being rebuilt.
+// Words are filled in on every show (`data-word` is the text, `data-title` the tooltip, `data-label` an icon-only button's
+// accessible name), so the bar follows Paseo's language without being rebuilt. The bar's buttons are drawn from barItems.
 const MARKUP = `
 <style>${STYLE}</style>
 <div class="panel" data-mode="bar">
-  <div class="bar" role="toolbar">
-    <button data-action="quote" data-title="quoteTitle">${svg(ICON.quote)}<span data-word="quote"></span></button>
-    <button data-action="reply" data-title="replyTitle">${svg(ICON.reply)}<span data-word="reply"></span></button>
-    <button data-action="side" data-title="sideTitle">${svg(ICON.side)}<span data-word="side"></span></button>
-    <span class="divider" data-divider="copy"></span>
-    <span class="lead" data-group="copy">${svg(ICON.copy)}<span data-word="copy"></span></span>
-    <button data-action="copy-text" data-group="copy" data-title="textTitle"><span data-word="text"></span></button>
-    <button data-action="copy-markdown" data-group="copy" data-title="markdownTitle"><span data-word="markdown"></span></button>
-    <span class="divider" data-divider="bookmark"></span>
-    <button data-action="bookmark" class="icon-only" data-title="bookmarkTitle">${svg(ICON.bookmark)}</button>
-  </div>
+  <div class="bar" role="toolbar"></div>
   <div class="note" role="status"><span class="note-icon"></span><span class="note-text"></span></div>
   <div class="card">
     <div class="quote"></div>
@@ -414,6 +394,15 @@ const MARKUP = `
   </div>
 </div>
 `;
+
+function barMarkup(item: BarItem): string {
+  if (item.kind === "divider") return '<span class="divider"></span>';
+  const icon = item.icon ? svg(BAR_ICONS[item.icon]) : "";
+  const word = item.word ? `<span data-word="${item.word}"></span>` : "";
+  if (item.kind === "lead") return `<span class="lead">${icon}${word}</span>`;
+  const iconOnly = item.word ? "" : ` class="icon-only" data-label="${item.label}"`;
+  return `<button data-action="${item.action}" data-title="${item.title}"${iconOnly}>${icon}${word}</button>`;
+}
 
 type Mode = "hidden" | "bar" | "note" | "reply" | "side";
 
@@ -452,7 +441,8 @@ export function installSelectionBar({ client, bookmarkPassage }: BarDeps): () =>
   const quotePreview = shadow.querySelector(".quote")!;
   const hint = shadow.querySelector(".hint")!;
   const error = shadow.querySelector(".error")!;
-  const button = (action: string) => shadow.querySelector(`[data-action="${action}"]`) as DomButton;
+  const bar = shadow.querySelector(".bar")!;
+  const button = (action: string) => shadow.querySelector(`[data-action="${action}"]`) as DomButton | null;
   const all = (selector: string) => Array.from(shadow.querySelectorAll(selector));
 
   const field = document.createElement("textarea");
@@ -496,16 +486,7 @@ export function installSelectionBar({ client, bookmarkPassage }: BarDeps): () =>
   const relabel = () => {
     for (const element of all("[data-word]")) element.textContent = say(element.getAttribute("data-word") as Parameters<typeof say>[0]);
     for (const element of all("[data-title]")) element.setAttribute("title", say(element.getAttribute("data-title") as Parameters<typeof say>[0]));
-  };
-
-  // Only the actions the profile turns on; a divider only between two groups that both show.
-  const showActions = (shown: SelectionAction[]) => {
-    const on = (action: SelectionAction) => shown.includes(action);
-    for (const action of ["quote", "reply", "side", "bookmark"] as const) button(action).hidden = !on(action);
-    for (const element of all('[data-group="copy"]')) element.hidden = !on("copy");
-    const answers = on("quote") || on("reply") || on("side");
-    shadow.querySelector('[data-divider="copy"]')!.hidden = !(on("copy") && answers);
-    shadow.querySelector('[data-divider="bookmark"]')!.hidden = !(on("bookmark") && (answers || on("copy")));
+    for (const element of all("[data-label]")) element.setAttribute("aria-label", say(element.getAttribute("data-label") as Parameters<typeof say>[0]));
   };
 
   const setError = (text: string) => {
@@ -514,21 +495,23 @@ export function installSelectionBar({ client, bookmarkPassage }: BarDeps): () =>
 
   const place = (anchor: DomRect, prefer: "above" | "below") => {
     const width = panel.offsetWidth;
-    const height = panel.offsetHeight;
     const left = clamp(anchor.left + anchor.width / 2 - width / 2, GAP, window.innerWidth - width - GAP);
-    const above = anchor.top - height - GAP;
-    const below = anchor.bottom + GAP;
-    const fitsAbove = above >= GAP;
-    const fitsBelow = below + height <= window.innerHeight - GAP;
-    const top = prefer === "above" ? (fitsAbove || !fitsBelow ? above : below) : fitsBelow || !fitsAbove ? below : above;
     host.style.setProperty("left", `${Math.round(left)}px`, "important");
-    host.style.setProperty("top", `${Math.round(clamp(top, GAP, window.innerHeight - height - GAP))}px`, "important");
+    host.style.setProperty("top", `${Math.round(barTop(anchor, panel.offsetHeight, window.innerHeight, prefer, GAP))}px`, "important");
+  };
+  // The bar and its notes sit on the side the profile picks: above the selection's first line or below its last.
+  const placeBar = (at: Snapshot) => {
+    const prefer = currentPrefs().barPosition;
+    place(prefer === "below" ? at.last : at.first, prefer);
   };
 
   const setBusy = (value: boolean) => {
     busy = value;
     field.readOnly = value;
-    for (const action of ["add", "send", "ask", "cancel", "bookmark"]) button(action).disabled = value;
+    for (const action of ["add", "send", "ask", "cancel", "bookmark"]) {
+      const target = button(action);
+      if (target) target.disabled = value;
+    }
   };
 
   const hide = () => {
@@ -542,17 +525,28 @@ export function installSelectionBar({ client, bookmarkPassage }: BarDeps): () =>
     host.style.setProperty("display", "none", "important");
   };
 
-  const showBar = (next: Snapshot, shown: SelectionAction[]) => {
+  // The bar's markup as last written (reading innerHTML back gives the browser's own serialisation).
+  let barShown = "";
+  const showBar = (next: Snapshot, items: BarItem[]) => {
     snapshot = next;
     mode = "bar";
     panel.setAttribute("data-mode", "bar");
+    // Rebuilt only when its buttons change: showBar also runs on every scroll and resize, and a
+    // rebuild there would drop a button's focus or a click in progress.
+    const markup = items.map(barMarkup).join("");
+    if (markup !== barShown) {
+      bar.innerHTML = markup;
+      barShown = markup;
+    }
     relabel();
-    showActions(shown);
     // Everything but Copy acts on a chat, named by the active agent tab of the selection's pane.
-    for (const action of ["quote", "reply", "side", "bookmark"]) button(action).disabled = !next.agentId;
+    for (const action of ["quote", "reply", "side", "bookmark"]) {
+      const target = button(action);
+      if (target) target.disabled = !next.agentId;
+    }
     applyPalette(host, next.anchor);
     host.style.setProperty("display", "block", "important");
-    place(next.first, "above");
+    placeBar(next);
   };
 
   /** Shows a short result where the bar was: a success closes by itself, an error stays until dismissed. */
@@ -562,11 +556,11 @@ export function installSelectionBar({ client, bookmarkPassage }: BarDeps): () =>
     mode = "note";
     panel.setAttribute("data-mode", "note");
     note.setAttribute("data-tone", tone);
-    note.querySelector(".note-icon")!.innerHTML = svg(tone === "ok" ? ICON.check : ICON.alert);
+    note.querySelector(".note-icon")!.innerHTML = svg(tone === "ok" ? BAR_ICONS.check : BAR_ICONS.alert);
     note.querySelector(".note-text")!.textContent = text;
     applyPalette(host, at.anchor);
     host.style.setProperty("display", "block", "important");
-    place(at.first, "above");
+    placeBar(at);
     if (tone === "ok") noteTimer = window.setTimeout(hide, NOTE_MS);
   };
 
@@ -578,9 +572,9 @@ export function installSelectionBar({ client, bookmarkPassage }: BarDeps): () =>
     setError("");
     field.value = "";
     const canAdd = hasComposer(composers, snapshot.agentId);
-    button("add").hidden = kind !== "reply" || !canAdd;
-    button("send").hidden = kind !== "reply";
-    button("ask").hidden = kind !== "side";
+    button("add")!.hidden = kind !== "reply" || !canAdd;
+    button("send")!.hidden = kind !== "reply";
+    button("ask")!.hidden = kind !== "side";
     if (kind === "reply") {
       field.placeholder = say("replyPlaceholder");
       hint.textContent = canAdd ? say("hintSendAdd", { mod: modKey() }) : say("hintSend");
@@ -672,7 +666,7 @@ export function installSelectionBar({ client, bookmarkPassage }: BarDeps): () =>
     const agentId = current.agentId;
     const question = field.value;
     void runCard(async () => {
-      const side = await startSideChat(client.paseo, { agentId, quote: formatQuote(current.source), question });
+      const side = await startSideChat(client.paseo, { agentId, quote: formatQuote(current.source), question, model: currentPrefs().sideModel });
       client.openPanel(SIDE_CHAT_PANEL_ID, { workspaceId: side.workspaceId, agentId: side.agentId, location: "explorer" });
     });
   };
@@ -717,7 +711,7 @@ export function installSelectionBar({ client, bookmarkPassage }: BarDeps): () =>
     // Enter is the highlighted action, Send; the modifier defers into the composer.
     const defer = event.ctrlKey || event.metaKey;
     if (mode === "side") askSide();
-    else if (defer && !button("add").hidden) addReply();
+    else if (defer && !button("add")!.hidden) addReply();
     else send();
   };
   field.addEventListener("keydown", onFieldKeyDown);
@@ -725,9 +719,9 @@ export function installSelectionBar({ client, bookmarkPassage }: BarDeps): () =>
   const sync = () => {
     pending = 0;
     if (mode === "reply" || mode === "side" || busy) return;
-    const shown = shownActions(currentPrefs());
-    const next = shown.length > 0 ? readSnapshot(host) : null;
-    if (next) showBar(next, shown);
+    const items = barItems(currentPrefs());
+    const next = items.length > 0 ? readSnapshot(host) : null;
+    if (next) showBar(next, items);
     else if (mode === "bar") hide();
   };
   const schedule = () => {

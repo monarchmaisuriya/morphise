@@ -573,6 +573,23 @@ export function thinkingStartsOpen(look: Pick<ChatLook, "fold" | "foldByKind" | 
   return paseoExpands;
 }
 
+// A thought's first line of words as plain text, for its folded row: code fences and empty lines
+// passed over, Markdown marks (headings, quotes, list bullets, emphasis, code, links) dropped.
+export function thoughtFirstLine(text: string): string {
+  for (const raw of text.split("\n")) {
+    if (/^\s*(```|~~~)/.test(raw)) continue;
+    const line = raw
+      .replace(/^\s*(#{1,6}\s+|>\s*|[-*+]\s+(\[[ xX]\]\s+)?|\d+[.)]\s+)+/, "")
+      .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .replace(/(?<![\w*~`])(\*\*|__|\*|_|~~|`)(?=\S)(.+?)(?<=\S)\1(?![\w*~`])/g, "$2")
+      .replace(/`/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (line) return line;
+  }
+  return "";
+}
+
 // The program a shell command runs: its first word after variable assignments, `sudo`, `env`,
 // `time` and `cd x &&`.
 export function shellProgram(command: string): string {

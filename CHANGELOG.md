@@ -2,6 +2,21 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.17.0 - 2026-11-12
+
+- **Previews on every tab that changes a look:** Messages (a sample chat with a long prompt, a reply using every rich-text element and a diagram, an image-only reply and the selection bar), Look (a sample window in your theme with its window style, reply width, working indicator, icons and code colours), Pages (a sample page at your height limit) and General (the steps card with sample steps). Chat's preview now follows "Merge only runs of at least". Each is drawn by the same parts the real feature uses, and changes as you pick.
+- **More options:**
+  - Chat: merge only runs of at least 2, 3 or 5 steps; line numbers in diffs; a folded thought shows its first line.
+  - Messages: selection bar buttons as icons and labels or icons only; the bar above or below the selection; a side chat model of your own (or the chat's); square or rounded thumbnails.
+  - Look (with Restyle Paseo on): reply width (Paseo's, narrow, wide, full; overrides Paseo's own content width while chosen); the floating window's corner radius and gap; the working indicator's colour.
+  - Pages: a height limit (none by default, 800 or 500 px), past which pages scroll inside their frame.
+  - Workbench: a Display menu in Waiting to show or hide each card's workspace line and request or error line.
+  Every default keeps 0.16 as it was.
+- **Workbench cards keep their size on hover:** Clear and Open sit over the end of the first line instead of replacing the time.
+- **Filters pick several at once, visibly:** checkbox items in Morphise's menus (the sidebar's Filter, Display and label menus) show an empty or ticked box. Statuses add up: picking another status after "Needs me" keeps permission and failed and adds it.
+- **Tooltips:** every icon-only button (the sidebar header, the Workbench, the board, row buttons) and the folded Workbench rail show what they do on hover, drawn like Paseo's own tooltips (above the button, at once), from the same words screen readers read; each also carries a `data-tooltip` attribute. A tooltip leaves with its button, and touch screens show none.
+- **Workbench, Waiting:** no status headings and no grouping button. Cards always group by status, each card's icon says its status, and every card shows its workspace and its request or error the same way in every filter.
+
 ## 0.16.0 - 2026-11-12
 
 Every feature of Chat Polish (lthieu96/chat-polish) and Quote (keefeere/quote), ported with their MIT notices (NOTICE.md), except Chat Polish's writes to Paseo's own settings (fonts, sizes, theme picker) and its loading of Paseo's internal image viewer. Prompts and replies stay Paseo's own, with Fork and Copy. Restyling Paseo, downloads, thumbnails, diagrams by Pele and HTML pages are off until you turn them on. On by default: the new chat rows' look once you choose Morphise's rows (Chat, Tool calls), the selection bar (turn it off under Messages), and ⌥⌘↑ / ⌥⌘↓ to jump between prompts.

@@ -106,6 +106,27 @@ function SideChatBody({ agentId, theme, compact, navigation }: { agentId: string
     };
   }, [t, compact]);
 
+  // A side chat that fails (for one, a model its provider rejects) says why here; Paseo keeps the reason on the agent.
+  const failed = agent?.status === "error";
+  useEffect(() => {
+    if (!failed) return;
+    let alive = true;
+    paseo.agents
+      .ref(agentId)
+      .refresh()
+      .then(
+        (result) => {
+          if (alive) setError(result?.agent.lastError || say("sideFailed"));
+        },
+        (cause: unknown) => {
+          if (alive) setError(message(cause));
+        },
+      );
+    return () => {
+      alive = false;
+    };
+  }, [failed, paseo, agentId]);
+
   const running = agent?.status === "running" || agent?.status === "initializing";
 
   return (

@@ -1,7 +1,7 @@
 import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { describe, expect, it, vi } from "vitest";
 import { polishPrefs } from "../../../shared/polish/prefs";
-import { appendToComposer, cancelQueuedReplies, hasComposer, sendReply, shownActions, startSideChat, workspaceOf } from "./actions";
+import { appendToComposer, cancelQueuedReplies, hasComposer, sendReply, shownActions, sideChatModel, startSideChat, workspaceOf } from "./actions";
 
 type Paseo = PluginClientContext["paseo"];
 type Composers = PluginClientContext["composers"];
@@ -112,6 +112,14 @@ describe("startSideChat", () => {
     expect(input.config.systemPrompt).toContain("<assistant>\na1\n\na2\n</assistant>");
   });
 
+  it("starts on the chosen model with the chat's provider, at that model's own thinking level", async () => {
+    const { paseo, create } = fakePaseo(fakeAgent());
+    await startSideChat(paseo, { agentId: "main", quote: "q", question: "x", model: "sonnet" });
+    const input = create.mock.calls[0]![0] as { config: Record<string, string | undefined> };
+    expect(input.config).toMatchObject({ provider: "claude/sonnet", modeId: "plan" });
+    expect(input.config.thinkingOptionId).toBeUndefined();
+  });
+
   it("refuses a chat with no workspace", async () => {
     await expect(startSideChat(fakePaseo(fakeAgent({ workspaceId: null })).paseo, { agentId: "main", quote: "q", question: "x" })).rejects.toThrow("no workspace");
   });
@@ -121,5 +129,15 @@ describe("workspaceOf", () => {
   it("reads the chat's workspace from Paseo, null when it has none", async () => {
     expect(await workspaceOf(fakePaseo(fakeAgent({ workspaceId: "w9" })).paseo, "a1")).toBe("w9");
     expect(await workspaceOf(fakePaseo(fakeAgent({ workspaceId: null })).paseo, "a1")).toBeNull();
+  });
+});
+
+describe("sideChatModel", () => {
+  it("keeps the chat's model unless another is chosen, and never drops the provider", () => {
+    expect(sideChatModel("claude", "opus", "")).toEqual({ provider: "claude/opus", ownModel: true });
+    expect(sideChatModel("claude", "opus", "sonnet")).toEqual({ provider: "claude/sonnet", ownModel: false });
+    expect(sideChatModel("claude", "opus", "opus")).toEqual({ provider: "claude/opus", ownModel: true });
+    expect(sideChatModel("codex", null, "")).toEqual({ provider: "codex", ownModel: true });
+    expect(sideChatModel("codex", null, "gpt-5")).toEqual({ provider: "codex/gpt-5", ownModel: false });
   });
 });

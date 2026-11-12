@@ -26,3 +26,6 @@ export function diffLines(d: Extract<ToolCallDetail, { type: "edit" }>): DiffLin
   }
   return out;
 }
+
+/** The width of the line number column in digits; 0 draws none (numbers turned off, or an edit without hunk headers). */
+export const gutterDigits = (lines: readonly DiffLine[], numbers: boolean) => (numbers ? lines.reduce((max, l) => Math.max(max, String(l.n ?? "").length), 0) : 0);

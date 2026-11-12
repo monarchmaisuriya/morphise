@@ -13,6 +13,7 @@ import { Icon } from "../../ui/kit";
 import { isMac } from "../../web";
 import { useT } from "../i18n";
 import { usePrefs } from "../prefs";
+import { gutterDigits } from "./diff";
 import { useRowSetup } from "./look";
 import { detailBody, shownTarget, type ToolData, type ToolDetailData } from "./model";
 import { alpha, CodeLine, Expand, PMONO, Prose, Row, Scroll, type Styles, toneColor, useDisclosure, useEnter, useIndent, useSpacing, useStyles } from "./row";
@@ -75,13 +76,12 @@ function changedWords(lines: readonly DiffRow[]) {
   return pairs;
 }
 
-function Diff({ s, lines, theme, keep, wrap }: { s: Styles; lines: DiffRow[]; theme: PluginTheme; keep: number | null; wrap: boolean }) {
+function Diff({ s, lines, theme, keep, wrap, numbers }: { s: Styles; lines: DiffRow[]; theme: PluginTheme; keep: number | null; wrap: boolean; numbers: boolean }) {
   const c = theme.colors;
   const [all, setAll] = useState(false);
   const shown = !all && keep !== null && lines.length > keep + 2 ? lines.slice(0, keep) : lines;
   const pairs = changedWords(lines);
-  // An edit without hunk headers has no line numbers: no empty gutter then.
-  const numberDigits = lines.reduce((max, l) => Math.max(max, String(l.n ?? "").length), 0);
+  const numberDigits = gutterDigits(lines, numbers);
   const lineStyle = wrap ? { flex: 1, minWidth: 0 } : { flexGrow: 1, flexShrink: 0 };
   return (
     <>
@@ -118,7 +118,8 @@ export function ToolDetail({ data, theme }: { data: ToolDetailData; theme: Plugi
   const c = theme.colors;
   const t = useT();
   const { look } = useRowSetup();
-  const wrap = usePrefs().diffWrap === "on";
+  const prefs = usePrefs();
+  const wrap = prefs.diffWrap === "on";
   switch (data.kind) {
     case "output":
       return (
@@ -142,7 +143,7 @@ export function ToolDetail({ data, theme }: { data: ToolDetailData; theme: Plugi
     case "diff":
       return (
         <View style={s.block}>
-          <Diff s={s} lines={data.lines} theme={theme} keep={look.codeLines} wrap={wrap} />
+          <Diff s={s} lines={data.lines} theme={theme} keep={look.codeLines} wrap={wrap} numbers={prefs.diffLineNumbers} />
         </View>
       );
     case "io":

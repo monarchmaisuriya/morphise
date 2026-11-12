@@ -29,6 +29,8 @@ import { ActionFields, ChipRow, type Form, ListEditor, NumberField, SelectField,
 import { parseMetadataText, uniqueId } from "./form-values";
 import { contrast, PRESETS as POLISH_PRESETS } from "../../shared/polish/theme";
 import { PolishLookSettings, PolishRowSettings, UpdateSection } from "./polish-tabs";
+import { StepsCardPreview } from "./previews";
+import { runSplits } from "../polish/rows/steps";
 
 type ViewConfig = Profile["sidebar"]["view"];
 type Row = Profile["sidebar"]["headerRows"][number];
@@ -559,23 +561,26 @@ function ChatPreview({ form, look, chat }: { form: Form; look: ReturnType<typeof
   // Paseo's 16pt gap under each plugin row, which the rows take back, is added here so the
   // preview spaces rows as the chat does.
   const gap = { paddingBottom: 16 };
+  // Four steps: merged with "at least 2 or 3 steps", separate rows with "at least 5".
+  const runSteps = [PREVIEW_THOUGHT, ...PREVIEW_CALLS.slice(0, 3)];
+  const merged = tools && view.merge && !runSplits(runSteps.length, prefs.mergeMin);
   return (
     <PrefsOverride.Provider value={prefs}>
       <RowSetupOverride.Provider value={setup}>
         <View style={{ padding: 16 }}>
           {!view.draw ? <Text style={t.text.small}>Morphise draws no chat rows; every row stays as Paseo draws it.</Text> : null}
           {view.draw && !tools && !thinking && !view.notices ? <Text style={t.text.small}>Every row shows as Paseo draws it. Choose lines or cards for tool calls, a thinking row, or notice rows below.</Text> : null}
-          {tools && view.merge ? (
+          {merged ? (
             <View style={gap}>
-              <MergedSteps {...props} item={plugin(STEPS_ROW_KIND, {})} steps={[PREVIEW_THOUGHT, ...PREVIEW_CALLS].map((item) => ({ item, phase: "complete" as const }))} ms={41000} growing={false} defaultOpen />
+              <MergedSteps {...props} item={plugin(STEPS_ROW_KIND, {})} steps={runSteps.map((item) => ({ item, phase: "complete" as const }))} ms={41000} growing={false} defaultOpen />
             </View>
           ) : null}
-          {thinking && !(tools && view.merge) ? (
+          {thinking && !merged ? (
             <View style={gap}>
               <ThoughtItem {...props} item={plugin(THOUGHT_ROW_KIND, { text: PREVIEW_THOUGHT.type === "reasoning" ? PREVIEW_THOUGHT.text : "", phase: "complete" as const })} />
             </View>
           ) : null}
-          {tools && !view.merge
+          {tools && !merged
             ? PREVIEW_CALLS.map((call) => (
                 <View key={call.callId} style={gap}>
                   <ToolItem {...props} item={plugin(TOOL_ROW_KIND, toolData(call))} />
@@ -819,7 +824,10 @@ export function GeneralTab(form: Form): ReactNode {
   return (
     <>
       <SettingsSection title="Steps card" info="A chat's plan as a card, in the chat or the sidebar, that shows while it works and settles when it is done. While it is on, Claude agents start with Claude Code's task-list tools, so they publish a plan.">
-        <SettingsCard>{VIEW_SECTIONS.steps.map((key) => view[key])}</SettingsCard>
+        <SettingsCard>
+          {form.profile.sidebar.view.stepsCard !== false ? <StepsCardPreview theme={form.theme} steps={form.profile.sidebar.view.steps} compact={form.compact} /> : null}
+          {VIEW_SECTIONS.steps.map((key) => view[key])}
+        </SettingsCard>
       </SettingsSection>
       <UpdateSection form={form} />
     </>

@@ -1,6 +1,7 @@
 // Ported from Chat Polish (lthieu96/paseo-chat-polish, MIT, see NOTICE.md): test/model.test.mjs (the row model and highlighting)
 import { describe, expect, it } from "vitest";
 import type { ToolCallItem } from "../agent-types";
+import { diffLines, gutterDigits } from "./diff";
 import { highlight, highlightShell, highlightShellBlock, SYNTAX_THEMES } from "./highlight";
 import { agentEventData, detailBody, errorText, imageOnly, noticeData, shownTarget, toolData, toolSchema } from "./model";
 
@@ -30,6 +31,13 @@ describe("tool rows", () => {
   it("edit: unified diff headers are dropped, hunk headers give line numbers", () => {
     const d = toolData(tool({ type: "edit", filePath: "a.ts", unifiedDiff: "--- a\n+++ b\n@@ -12,2 +12 @@\n-old\n+new\n same" }));
     expect(d.detail?.kind === "diff" && d.detail.lines).toEqual([{ sign: "-", text: "old", n: 12 }, { sign: "+", text: "new", n: 12 }, { sign: " ", text: "same", n: 13 }]);
+  });
+
+  it("diff line numbers: a column as wide as the longest number, none when turned off or when the edit has no hunk headers", () => {
+    const numbered = diffLines({ type: "edit", filePath: "a.ts", unifiedDiff: "@@ -98,3 +98,3 @@\n a\n b\n-c\n+d" });
+    expect(gutterDigits(numbered, true)).toBe(3);
+    expect(gutterDigits(numbered, false)).toBe(0);
+    expect(gutterDigits(diffLines({ type: "edit", filePath: "a.ts", oldString: "x", newString: "y" }), true)).toBe(0);
   });
 
   it("canceled overrides verb and icon; every output passes the renderer schema", () => {

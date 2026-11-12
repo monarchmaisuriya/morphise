@@ -22,7 +22,7 @@ import { setRowSetup } from "./look";
 import { agentEventData, noticeData, noticeSchema, planSchema, stepsSchema, thoughtSchema, todoData, todoSchema, toolData, toolSchema } from "./model";
 import { NoticeItem } from "./notice-row";
 import { PlanItem } from "./plan-row";
-import { followAgent, onShownAgent, onStaleSteps, onUnplacedStep, placeStep, resetMade, setReplyFolding, setStepSkip, stepKey, type Phase } from "./steps";
+import { followAgent, onShownAgent, onStaleSteps, onUnplacedStep, placeStep, resetMade, setMergeMin, setReplyFolding, setStepSkip, stepKey, type Phase } from "./steps";
 import { StepsItem } from "./steps-row";
 import { ThoughtItem } from "./thought-row";
 import { TodoItem } from "./todo-row";
@@ -72,11 +72,16 @@ export function registerChatRows(client: PluginClientContext, actions: RowAction
   let subagentPane = false;
   const merging = () => view.merge && !subagentPane;
   // With Paseo's Collapse turns the replies before a turn's last join the run too, which leaves Paseo nothing to fold into its summary.
-  const foldReplies = () => setReplyFolding(merging() && readHostAppearance().chatDisplay === "collapseTurns");
+  // Runs shorter than the merge minimum stay as separate rows.
+  const splitRules = () => {
+    setReplyFolding(merging() && readHostAppearance().chatDisplay === "collapseTurns");
+    setMergeMin(currentPrefs().mergeMin);
+  };
   const stepRow = (item: AgentTimelineItem, phase: Phase) => {
     if (!merging()) return undefined;
     const placed = placeStep(item, phase);
-    if (!placed) return undefined;
+    // A step of a run too short to merge falls through to the rules for merging off.
+    if (!placed || placed.as === "alone") return undefined;
     return placed.as === "none" ? NONE : one(STEPS_ROW_KIND, { head: placed.key });
   };
 
@@ -145,15 +150,15 @@ export function registerChatRows(client: PluginClientContext, actions: RowAction
   };
 
   // Transformers read the host's chat display and the language when they run; Paseo transforms again only when they are registered again.
-  foldReplies();
+  splitRules();
   resetMade();
   let removeTransformers = addTransformers();
-  const inputs = () => [merging(), readHostAppearance().chatDisplay, currentLanguage(), currentPrefs().images].join("|");
+  const inputs = () => [merging(), readHostAppearance().chatDisplay, currentLanguage(), currentPrefs().images, currentPrefs().mergeMin].join("|");
   let transformedWith = inputs();
   const retransform = (force = false) => {
     if (!force && inputs() === transformedWith) return;
     transformedWith = inputs();
-    foldReplies();
+    splitRules();
     removeTransformers();
     resetMade();
     removeTransformers = addTransformers();

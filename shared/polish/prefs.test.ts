@@ -28,8 +28,10 @@ describe("Chat Polish preferences from Morphise's profile", () => {
     const onOff = (value: unknown) => (value ? "on" : "off");
     expect({
       merge: prefs.merge, failedOpen: prefs.failedOpen, images: prefs.images, imageStacks: prefs.imageStacks, imageStackOpen: prefs.imageStackOpen, selection: prefs.selection, restyle: prefs.nativeStyle, window: prefs.windowStyle, loader: prefs.loader, loaderSize: prefs.loaderSize, diagrams: prefs.diagrams, iconSet: prefs.iconSet, html: prefs.html, syntax: prefs.syntax,
+      mergeMin: prefs.mergeMin, diffLineNumbers: prefs.diffLineNumbers, thoughtFirstLine: prefs.thoughtFirstLine, barButtons: prefs.barButtons, barPosition: prefs.barPosition, sideModel: prefs.sideModel, thumbCorners: prefs.thumbCorners, replyWidth: prefs.replyWidth, floatingRadius: prefs.floatingRadius, floatingGap: prefs.floatingGap, loaderColor: prefs.loaderColor, pageHeight: prefs.pageHeight,
     }).toEqual({
       merge: onOff(POLISH_DEFAULTS.merge), failedOpen: POLISH_DEFAULTS.failedOpen, images: POLISH_DEFAULTS.images, imageStacks: onOff(POLISH_DEFAULTS.imageStacks), imageStackOpen: POLISH_DEFAULTS.imageStackOpen, selection: onOff(POLISH_DEFAULTS.selection), restyle: POLISH_DEFAULTS.restyle ? "design" : "paseo", window: POLISH_DEFAULTS.window, loader: POLISH_DEFAULTS.loader, loaderSize: POLISH_DEFAULTS.loaderSize, diagrams: POLISH_DEFAULTS.diagrams, iconSet: POLISH_DEFAULTS.iconSet, html: onOff(POLISH_DEFAULTS.html), syntax: POLISH_DEFAULTS.syntax,
+      mergeMin: POLISH_DEFAULTS.mergeMin, diffLineNumbers: POLISH_DEFAULTS.diffLineNumbers, thoughtFirstLine: POLISH_DEFAULTS.thoughtFirstLine, barButtons: POLISH_DEFAULTS.barButtons, barPosition: POLISH_DEFAULTS.barPosition, sideModel: POLISH_DEFAULTS.sideModel, thumbCorners: POLISH_DEFAULTS.thumbCorners, replyWidth: POLISH_DEFAULTS.replyWidth, floatingRadius: POLISH_DEFAULTS.floatingRadius, floatingGap: POLISH_DEFAULTS.floatingGap, loaderColor: POLISH_DEFAULTS.loaderColor, pageHeight: POLISH_DEFAULTS.pageHeight,
     });
   });
 });

@@ -11,7 +11,7 @@ import { type AttentionItem, type AttentionList, attentionOrder } from "./attent
 import { ANSWER_TAIL, type ApplyBookmark, type BookmarkStore, bookmarksOf } from "./bookmark-store";
 import { type ValueStore, useValue } from "./profile-store";
 import { statusColor, tileColor } from "./ui/hues";
-import { Button, Field, Icon, IconButton, Segmented, type Tokens, useTokens } from "./ui/kit";
+import { Button, Dropdown, Field, Icon, IconButton, MenuItem, PopoverHost, Segmented, type Tokens, useTokens } from "./ui/kit";
 import { usePulse } from "./ui/pulse";
 import type { WorkspaceList } from "./workspaces";
 
@@ -35,9 +35,8 @@ type Settings = ReturnType<typeof UseSettings<typeof inboxSettings.schema>>;
 // Two panes from this width; below it the list, and the detail opens over it.
 const WIDE = 760;
 const MONO = Platform.select({ ios: "Menlo", android: "monospace", default: "ui-monospace, SFMono-Regular, Menlo, monospace" });
-const DEFAULT_SETTINGS: InboxSettings = { group: "reason", cleared: [] };
+const DEFAULT_SETTINGS: InboxSettings = { group: "reason", cleared: [], cardWorkspace: true, cardPreview: true };
 
-const HEADINGS: Record<InboxReason, string> = { permission: "Waiting for permission", failed: "Failed", finished: "Finished, not seen yet" };
 const LABELS: Record<InboxReason, string> = { permission: "Needs permission", failed: "Failed", finished: "Finished" };
 const STATUS: Record<InboxReason, "needs_input" | "failed" | "attention"> = { permission: "needs_input", failed: "failed", finished: "attention" };
 
@@ -51,19 +50,23 @@ function whereOf(entry: Entry, list: AttentionList, withWorkspace: boolean): str
 
 // ---------- List ----------
 
+// The card's first line, fixed so the hover buttons (centred over its end) never change its height.
+const TITLE_LINE = 18;
 const REASON_ICONS: Record<InboxReason, string> = { permission: "ShieldQuestion", failed: "CircleAlert", finished: "CircleCheck" };
 
 // One waiting chat: its status icon, title and time on the first line; then what it waits on (the
-// request or the error; for a finished chat its workspace, since the heading already says
-// "Finished"); and, on hover (web) or always (touch), Clear and Open buttons.
-function InboxRow({ entry, t, list, selected, groupedByStatus, onPress, onOpen, onClear }: { entry: Entry; t: Tokens; list: AttentionList; selected: boolean; groupedByStatus: boolean; onPress(): void; onOpen: (() => void) | null; onClear: (() => void) | null }) {
+// request or the error; for a finished chat its workspace, since the icon already says
+// "Finished"); and Clear and Open buttons on hover (web). The Display menu can turn off the
+// workspace and the request or error line.
+function InboxRow({ entry, t, list, selected, show, onPress, onOpen, onClear }: { entry: Entry; t: Tokens; list: AttentionList; selected: boolean; show: CardLines; onPress(): void; onOpen: (() => void) | null; onClear: (() => void) | null }) {
   const [hovered, setHovered] = useState(false);
   const elapsed = entry.at ? formatElapsed(entry.at, new Date()) : null;
   const parent = entry.parentAgentId ? list.get(entry.parentAgentId)?.title ?? "a chat" : null;
   const color = reasonColor(t, entry.reason);
-  // The status word only when no heading above says it.
-  const detail = entry.reason === "finished" ? (groupedByStatus ? null : LABELS.finished) : previewLine(entry);
-  const where = [parent ? `Sub-agent of ${parent}` : null, groupedByStatus ? entry.workspace : null].filter(Boolean).join(" · ");
+  // A finished chat has nothing waiting to show: its icon says "Finished".
+  const detail = entry.reason === "finished" ? null : previewLine(entry);
+  const workspaceShown = show.workspace;
+  const where = [parent ? `Sub-agent of ${parent}` : null, workspaceShown ? entry.workspace : null].filter(Boolean).join(" · ");
   // Hover buttons on desktop and web; on phones a tap opens the item, whose page has the same buttons.
   const showActions = hovered && Platform.OS === "web";
   return (
@@ -90,7 +93,7 @@ function InboxRow({ entry, t, list, selected, groupedByStatus, onPress, onOpen, 
         <Icon name={REASON_ICONS[entry.reason]} size={15} color={color} />
       </View>
       <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, height: TITLE_LINE }}>
           <Text style={{ flex: 1, color: t.c.foreground, fontSize: 13, fontWeight: selected ? "600" : "500" }} numberOfLines={1}>
             {entry.title}
           </Text>
@@ -99,18 +102,23 @@ function InboxRow({ entry, t, list, selected, groupedByStatus, onPress, onOpen, 
               <Text style={{ fontSize: 11, color }}>{entry.permissionCount}</Text>
             </View>
           ) : null}
-          {showActions && (onClear || onOpen) ? null : elapsed ? <Text style={t.text.meta}>{elapsed}</Text> : null}
-          {showActions && onClear ? <IconButton t={t} size="sm" icon="Check" label={`Clear ${entry.title} from the Inbox`} onPress={onClear} /> : null}
-          {showActions && onOpen ? <IconButton t={t} size="sm" icon="ArrowUpRight" label={`Open ${entry.title}`} onPress={onOpen} /> : null}
+          {elapsed ? <Text style={t.text.meta}>{elapsed}</Text> : null}
+          {/* Over the end of the line, not in it, so hovering never changes the card's size. */}
+          {showActions && (onClear || onOpen) ? (
+            <View style={{ position: "absolute", right: 0, top: (TITLE_LINE - (t.compact ? 32 : 24)) / 2, flexDirection: "row", gap: 2, paddingLeft: 8, backgroundColor: t.c.surface1 }}>
+              {onClear ? <IconButton t={t} size="sm" icon="Check" label={`Clear ${entry.title} from the Inbox`} onPress={onClear} /> : null}
+              {onOpen ? <IconButton t={t} size="sm" icon="ArrowUpRight" label={`Open ${entry.title}`} onPress={onOpen} /> : null}
+            </View>
+          ) : null}
         </View>
-        {detail ? (
+        {detail && show.preview ? (
           <Text style={{ fontSize: 12, color: entry.reason === "failed" ? t.c.statusDanger : t.c.foregroundMuted, fontFamily: entry.reason === "permission" && entry.permission?.subject ? MONO : undefined }} numberOfLines={1}>
             {detail}
           </Text>
         ) : null}
         {where ? (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6, minWidth: 0 }}>
-            {groupedByStatus && entry.workspace ? <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: tileColor(entry.project || entry.workspace) }} /> : null}
+            {workspaceShown && entry.workspace ? <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: tileColor(entry.project || entry.workspace) }} /> : null}
             <Text style={[t.text.small, { flexShrink: 1 }]} numberOfLines={1}>
               {where}
             </Text>
@@ -121,19 +129,7 @@ function InboxRow({ entry, t, list, selected, groupedByStatus, onPress, onOpen, 
   );
 }
 
-function GroupHeading({ t, title, count, color, icon }: { t: Tokens; title: string; count: number; color?: string; icon?: string }) {
-  return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingTop: 14, paddingBottom: 4 }}>
-      {icon ? <Icon name={icon} size={12} color={color ?? t.c.foregroundMuted} /> : null}
-      <Text style={[t.text.label, { flexShrink: 1 }]} numberOfLines={1}>
-        {title}
-      </Text>
-      <View style={{ paddingHorizontal: 6, borderRadius: 8, backgroundColor: t.c.surface2 }}>
-        <Text style={{ fontSize: 11, color: t.c.foregroundMuted }}>{count}</Text>
-      </View>
-    </View>
-  );
-}
+type CardLines = { workspace: boolean; preview: boolean };
 
 function EmptyState({ t, icon, title, hint }: { t: Tokens; icon: string; title: string; hint: string }) {
   return (
@@ -413,7 +409,7 @@ export function waitingItems(list: AttentionList, workspaces: WorkspaceList, cle
   return [...list.values()].filter((item) => workspaces.get(item.workspaceId)?.open !== false && !isCleared(item, cleared));
 }
 
-// Chats and sub-agents waiting on the user: filter, search, group, and act on the selected one.
+// Chats and sub-agents waiting on the user: filter, search, and act on the selected one.
 export function WaitingView({ deps, theme, compact, navigation }: { deps: InboxDeps; theme: PluginTheme; compact: boolean; navigation: PluginScreenProps["navigation"] }) {
   {
     const layout = { compact };
@@ -474,35 +470,24 @@ export function WaitingView({ deps, theme, compact, navigation }: { deps: InboxD
       saveSettings(settings, { cleared: withCleared(stored.cleared, targets.map(clearKey), live) }, () => toast.error("Could not remember the cleared items on this device"));
     };
     const finishedShown = shown.filter(canClear);
-    const group = stored.group;
+    const show: CardLines = { workspace: stored.cardWorkspace, preview: stored.cardPreview };
+    const [displayOpen, setDisplayOpen] = useState(false);
+    const displayAnchor = useRef<View>(null);
+    const saveDisplay = (next: Partial<InboxSettings>) => saveSettings(settings, next, () => toast.error("Could not remember the card details on this device"));
 
+    // Grouped by status, without headings: each card's icon says its status, and the filter above
+    // counts each one.
     const sections: ReactNode[] = [];
-    if (group === "reason") {
-      for (const reason of ["permission", "failed", "finished"] as const) {
-        const items = shown.filter((entry) => entry.reason === reason);
-        if (!items.length) continue;
-        sections.push(
-          <View key={reason}>
-            {filter === "all" ? <GroupHeading t={t} title={HEADINGS[reason]} count={items.length} color={reasonColor(t, reason)} icon={REASON_ICONS[reason]} /> : null}
-            {items.map((entry) => (
-              <InboxRow key={entry.id} entry={entry} t={t} list={list} selected={entry.id === selected} groupedByStatus={filter === "all"} onPress={() => pick(entry.id)} onOpen={open ? () => open(entry.id) : null} onClear={canClear(entry) ? () => clear([entry]) : null} />
-            ))}
-          </View>,
-        );
-      }
-    } else {
-      const byWorkspace = new Map<string, Entry[]>();
-      for (const entry of shown) byWorkspace.set(entry.workspace || "Other", [...(byWorkspace.get(entry.workspace || "Other") ?? []), entry]);
-      for (const [name, items] of byWorkspace) {
-        sections.push(
-          <View key={name}>
-            <GroupHeading t={t} title={name} count={items.length} color={tileColor(items[0]?.project || name)} icon="FolderGit2" />
-            {items.map((entry) => (
-              <InboxRow key={entry.id} entry={entry} t={t} list={list} selected={entry.id === selected} groupedByStatus={false} onPress={() => pick(entry.id)} onOpen={open ? () => open(entry.id) : null} onClear={canClear(entry) ? () => clear([entry]) : null} />
-            ))}
-          </View>,
-        );
-      }
+    for (const reason of ["permission", "failed", "finished"] as const) {
+      const items = shown.filter((entry) => entry.reason === reason);
+      if (!items.length) continue;
+      sections.push(
+        <View key={reason} style={sections.length ? { marginTop: 10 } : { marginTop: 4 }}>
+          {items.map((entry) => (
+            <InboxRow key={entry.id} entry={entry} t={t} list={list} selected={entry.id === selected} show={show} onPress={() => pick(entry.id)} onOpen={open ? () => open(entry.id) : null} onClear={canClear(entry) ? () => clear([entry]) : null} />
+          ))}
+        </View>,
+      );
     }
 
     const toolbar = (
@@ -523,7 +508,13 @@ export function WaitingView({ deps, theme, compact, navigation }: { deps: InboxD
           <View style={{ flex: 1 }}>
             <Field t={t} value={search} onChangeText={setSearch} placeholder="Search chats and workspaces" icon="Search" plain accessibilityLabel="Search the Inbox" />
           </View>
-          <IconButton t={t} icon={group === "reason" ? "FolderTree" : "Layers"} label={group === "reason" ? "Group by workspace" : "Group by status"} disabled={settings.saving} onPress={() => saveSettings(settings, { group: group === "reason" ? "workspace" : "reason" }, () => toast.error("Could not remember the grouping on this device"))} />
+          <View ref={displayAnchor}>
+            <IconButton t={t} icon="SlidersHorizontal" label="Display: which lines each card shows" onPress={() => setDisplayOpen(!displayOpen)} />
+          </View>
+          <Dropdown t={t} open={displayOpen} onClose={() => setDisplayOpen(false)} anchor={displayAnchor} width={240}>
+            <MenuItem t={t} role="checkbox" icon="FolderGit2" label="Workspace line" checked={show.workspace} disabled={settings.saving} onPress={() => saveDisplay({ cardWorkspace: !show.workspace })} />
+            <MenuItem t={t} role="checkbox" icon="MessageSquareText" label="Request or error line" checked={show.preview} disabled={settings.saving} onPress={() => saveDisplay({ cardPreview: !show.preview })} />
+          </Dropdown>
           {finishedShown.length ? <IconButton t={t} icon="CheckCheck" label={`Clear ${finishedShown.length} finished from the Inbox`} disabled={settings.saving} onPress={() => clear(finishedShown)} /> : null}
         </View>
       </View>
@@ -555,7 +546,7 @@ export function WaitingView({ deps, theme, compact, navigation }: { deps: InboxD
       />
     ) : null;
 
-    return (
+    const screen = (
       <View style={{ flex: 1, backgroundColor: theme.colors.surface0 }} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
         {!wide && detail ? (
           detail
@@ -579,5 +570,7 @@ export function WaitingView({ deps, theme, compact, navigation }: { deps: InboxD
         )}
       </View>
     );
+    // The Display menu's popover draws in this host, above the list.
+    return <PopoverHost>{screen}</PopoverHost>;
   }
 }

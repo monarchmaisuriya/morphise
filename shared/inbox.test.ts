@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canClear, clearKey, inboxView, nextSelection, previewLine, summarizePermission, withCleared } from "./inbox";
+import { canClear, clearKey, inboxSettings, inboxView, nextSelection, previewLine, summarizePermission, withCleared } from "./inbox";
 
 // Shaped like Paseo's AgentPermissionRequest (protocol agent-types).
 const shell = { id: "p1", provider: "claude", name: "Bash", kind: "tool", title: "Run tests", detail: { type: "shell", command: "npm test -- auth" } };
@@ -106,5 +106,18 @@ describe("nextSelection", () => {
 describe("withCleared", () => {
   it("adds keys and forgets those no longer waiting", () => {
     expect(withCleared(["x@1", "gone@1"], ["y@2"], new Set(["x@1", "y@2"]))).toEqual(["x@1", "y@2"]);
+  });
+});
+
+describe("inboxSettings", () => {
+  it("reads settings saved before the card lines existed with both lines shown, at the same version", () => {
+    expect(inboxSettings.version).toBe(1);
+    expect(inboxSettings.schema.parse({ group: "workspace", cleared: ["a@1"] })).toEqual({ group: "workspace", cleared: ["a@1"], cardWorkspace: true, cardPreview: true });
+    expect(inboxSettings.schema.parse({})).toEqual({ group: "reason", cleared: [], cardWorkspace: true, cardPreview: true });
+  });
+
+  it("keeps the card lines turned off, and refuses a value that is not on or off", () => {
+    expect(inboxSettings.schema.parse({ cardWorkspace: false, cardPreview: false })).toMatchObject({ cardWorkspace: false, cardPreview: false });
+    expect(inboxSettings.schema.safeParse({ cardPreview: "no" }).success).toBe(false);
   });
 });

@@ -70,7 +70,7 @@ ${ON} ${MD} [${OPEN}] > [${ROW}] { bottom: 14px; overflow-x: auto; overflow-y: h
 ${ON} ${MD} [${OPEN}] > [${ROW}] { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--cp-fg) 32%, transparent) transparent; }
 ${ON} ${MD} [${CARD}] {
   position: absolute; left: 0; top: 16px; z-index: calc(100 - var(--i)); width: var(--cp-thumb-w, 200px); height: var(--cp-thumb-h, 128px); box-sizing: border-box;
-  border: 1px solid var(--cp-rule); border-radius: 8px; background: var(--cp-raised) center / cover no-repeat; cursor: zoom-in;
+  border: 1px solid var(--cp-rule); border-radius: var(--cp-thumb-radius, 8px); background: var(--cp-raised) center / cover no-repeat; cursor: zoom-in;
   transform: translate(calc(min(var(--i), 2) * 9px), calc(min(var(--i), 2) * -6.5px)) rotate(calc(min(var(--i), 2) * 2.5deg));
   transition: opacity 160ms ease-out, translate 160ms ${EASE}, border-color 160ms ease-out, box-shadow 160ms ease-out;
 }

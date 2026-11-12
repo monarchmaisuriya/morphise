@@ -276,6 +276,8 @@ interface RowProps {
   iconColor?: string;
   verb: string;
   target?: string;
+  /** The target is a sentence, not a path: it ends in "…" rather than losing its middle. */
+  prose?: boolean;
   mono?: boolean;
   meta?: string;
   metaColor?: string;
@@ -376,7 +378,7 @@ export function Row(p: RowProps) {
         {p.target ? (
           <Text
             numberOfLines={1}
-            ellipsizeMode="middle"
+            ellipsizeMode={p.prose ? "tail" : "middle"}
             {...(p.mono ? PMONO : null)}
             style={[s.target, p.mono && s.mono, hovered && !p.pulsing && { color: c.foreground }, p.struck && { textDecorationLine: "line-through" }]}
           >

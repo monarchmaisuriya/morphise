@@ -37,6 +37,7 @@ const EN = {
   loading: "Loading…",
   followUp: "Ask a follow-up…",
   sendFollowUp: "Send to the side chat",
+  sideFailed: "The side chat stopped with an error.",
 } as const;
 
 type Key = keyof typeof EN;
@@ -76,6 +77,7 @@ const ZH: Record<Key, string> = {
   loading: "加载中…",
   followUp: "继续提问…",
   sendFollowUp: "发送到侧边对话",
+  sideFailed: "侧边对话因错误而停止。",
 };
 
 export const WORDS: Record<Language, Record<Key, string>> = { en: EN, zh: ZH };

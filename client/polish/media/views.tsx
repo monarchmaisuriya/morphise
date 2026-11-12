@@ -9,6 +9,7 @@ import { Image, Modal, Platform, Pressable, StyleSheet, Text, useWindowDimension
 import { readImage } from "../../../shared/polish/image";
 import { Icon } from "../../ui/kit";
 import { useT } from "../i18n";
+import type { Prefs } from "../../../shared/polish/prefs";
 import { usePrefs } from "../prefs";
 import { usePopoverRef } from "../pages/web/html-frame";
 import type { ImagesRow } from "./image-rows";
@@ -39,13 +40,16 @@ const ZOOM_CURSOR = (Platform.OS === "web" ? { cursor: "zoom-in" } : {}) as obje
 const THUMB = { small: { width: 200, height: 128 }, large: { width: 320, height: 200 }, xlarge: { width: 480, height: 300 } };
 /** The thumbnail size for the Images choice (Inline uses Small where the plugin still draws one). */
 const thumbSize = (images: string) => THUMB[images === "large" || images === "xlarge" ? images : "small"];
+/** The corner radius of thumbnails and stack cards for the Thumbnail corners choice. */
+export const thumbRadius = (corners: Prefs["thumbCorners"]) => (corners === "square" ? 0 : 8);
 
 function Thumbnail({ alt, label, url, theme, onOpen, edge, focusable = true }: { alt: string; label?: string; url: string; theme: PluginTheme; onOpen(): void; edge?: string; focusable?: boolean }) {
   const c = theme.colors;
   const t = useT();
   const { uri, failed } = useImage(url, "thumbnail");
-  const size = thumbSize(usePrefs().images);
-  const frame = [size, { borderRadius: 8, borderWidth: edge ? 1 : StyleSheet.hairlineWidth, borderColor: edge ?? c.border, backgroundColor: c.surface1, overflow: "hidden" as const }, ZOOM_CURSOR];
+  const prefs = usePrefs();
+  const size = thumbSize(prefs.images);
+  const frame = [size, { borderRadius: thumbRadius(prefs.thumbCorners), borderWidth: edge ? 1 : StyleSheet.hairlineWidth, borderColor: edge ?? c.border, backgroundColor: c.surface1, overflow: "hidden" as const }, ZOOM_CURSOR];
   if (!uri) {
     return (
       <View style={[frame, { alignItems: "center", justifyContent: "center", gap: 6 }]}>
@@ -342,9 +346,9 @@ function ImageStack({ images, theme, onOpen }: { images: Images; theme: PluginTh
                     setActive(i);
                   }}
                   // One even 2px accent edge: the thumbnail's border turns accent with a 1px ring right outside it, on the same
-                  // 8pt radius. No scale: it blurred the edges unevenly.
+                  // radius. No scale: it blurred the edges unevenly.
                   style={{
-                    borderRadius: 8,
+                    borderRadius: thumbRadius(prefs.thumbCorners),
                     // Folding, the face undims at once: the cards fanning back out behind it would show through.
                     opacity: spread && active !== undefined && !lit && !(phase === "folding" && i === 0) ? 0.62 : 1,
                     transform: [{ translateY: lit ? -4 : 0 }],

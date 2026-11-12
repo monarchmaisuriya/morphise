@@ -29,19 +29,21 @@ const LOADERS = `
 ${WORKING_BOX} { position: relative; }
 :root[data-cp-rt-loader-size="m"] ${WORKING_BOX} { transform: scale(1.15); }
 :root[data-cp-rt-loader-size="l"] ${WORKING_BOX} { transform: scale(1.3); }
-[data-cp-loader] { display: none; position: absolute; inset: 0; pointer-events: none; color: var(--cp-fg); }
+[data-cp-loader] { display: none; position: absolute; inset: 0; pointer-events: none; color: var(--cp-loader-color, var(--cp-fg)); }
+/* Paseo draws its dots in the text colour from JS (inline), so only a chosen colour replaces it. */
+:root[data-cp-rt-loader-color] ${DOT} { background-color: var(--cp-loader-color) !important; }
 :root[data-cp-rt-loader] ${WORKING_BOX} > div:first-child { visibility: hidden; }
 :root[data-cp-rt-loader] [data-cp-loader], [data-cp-loader][data-cp-tile] { display: block; }
 [data-cp-loader] > i { position: absolute; display: none; border-radius: 50%; background: currentColor; }
 ${[...Array(9)].map((_, i) => `[data-cp-loader] > i:nth-child(${i + 1}) { --i: ${i}; --c: ${i % 3}; --r: ${Math.floor(i / 3)}; --m: ${Math.max(Math.abs((i % 3) - 1), Math.abs(Math.floor(i / 3) - 1))}; --s: ${[0, 1, 2, 5, 4, 3, 6, 7, 8].indexOf(i)}; }`).join("\n")}
 @keyframes cp-tail { 0% { opacity: 1; } 100% { opacity: 0.15; } }
 @keyframes cp-spin { to { transform: rotate(360deg); } }
-${L("sparkle")}::before { content: "·"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font: 13px/1 var(--cp-mono); color: var(--cp-accent); animation: cp-sparkle 1.2s steps(1) infinite; }
+${L("sparkle")}::before { content: "·"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font: 13px/1 var(--cp-mono); color: var(--cp-loader-color, var(--cp-accent)); animation: cp-sparkle 1.2s steps(1) infinite; }
 @keyframes cp-sparkle { 0% { content: "·"; } 10% { content: "✢"; } 20% { content: "✳"; } 30% { content: "✶"; } 40% { content: "✻"; } 50% { content: "✽"; } 60% { content: "✻"; } 70% { content: "✶"; } 80% { content: "✳"; } 90% { content: "✢"; } }
 ${L("spokes")} > i:nth-child(-n+8) { display: block; left: 50%; top: 50%; width: 1.4px; height: 3.6px; margin: -1.8px 0 0 -0.7px; border-radius: 1px; transform: rotate(calc(var(--i) * 45deg)) translateY(-4.4px); animation: cp-tail 0.9s linear infinite; animation-delay: calc((var(--i) - 8) * 0.9s / 8); }
 ${L("dotring")} > i:nth-child(-n+8) { display: block; left: 50%; top: 50%; width: 2.4px; height: 2.4px; margin: -1.2px 0 0 -1.2px; transform: rotate(calc(var(--i) * 45deg)) translateY(-5px); animation: cp-tail 1s linear infinite; animation-delay: calc((var(--i) - 8) * 1s / 8); }
-${L("orb")}::before { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff 0, var(--cp-accent) 45%, color-mix(in srgb, var(--cp-accent), #000 40%) 100%); animation: cp-orb 2s ease-in-out infinite; }
-@keyframes cp-orb { 0%, 100% { transform: scale(0.78); box-shadow: 0 0 0 0 transparent; opacity: 0.75; } 50% { transform: scale(1); box-shadow: 0 0 5px 1.5px color-mix(in srgb, var(--cp-accent) 45%, transparent); opacity: 1; } }
+${L("orb")}::before { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff 0, var(--cp-loader-color, var(--cp-accent)) 45%, color-mix(in srgb, var(--cp-loader-color, var(--cp-accent)), #000 40%) 100%); animation: cp-orb 2s ease-in-out infinite; }
+@keyframes cp-orb { 0%, 100% { transform: scale(0.78); box-shadow: 0 0 0 0 transparent; opacity: 0.75; } 50% { transform: scale(1); box-shadow: 0 0 5px 1.5px color-mix(in srgb, var(--cp-loader-color, var(--cp-accent)) 45%, transparent); opacity: 1; } }
 :is(${L("matrix")}, ${L("snake")}) > i { display: block; width: 2.6px; height: 2.6px; left: calc(1.5px + var(--c) * 4.2px); top: calc(1.5px + var(--r) * 4.2px); }
 ${L("matrix")} > i { animation: cp-matrix 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite; animation-delay: calc(var(--m) * 0.14s); }
 @keyframes cp-matrix { 0%, 100% { opacity: 0.2; transform: scale(0.7); } 30% { opacity: 1; transform: scale(1.1); } 60% { opacity: 0.3; transform: scale(0.8); } }
@@ -62,6 +64,37 @@ const REDRAW_MASK = icon("RefreshCw", '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 
 // the open card (FadeIn in its style) rises in.
 // Floating surfaces drawn alike: pickers, Paseo's menus (tagged by tagParts), Command Center.
 const POPOVER = `:is(:is([data-testid="combobox-desktop-container"], [data-testid="chat-outline-preview"]):not([style*="opacity: 0"]), [data-testid="context-window-details"][style*="FadeIn"], :is([data-cp-part="menu"], [role="menu"], [role="listbox"]):not([hidden]):not([aria-hidden="true"]):not([data-state="closed"]):not([style*="opacity: 0"])):not([style*="-9999"], [style*="FadeOut"], [data-cp-glide], [data-cp-swap], [data-cp-ghost])`;
+
+/**
+ * The CSS variables each restyle option's root attribute (data-cp-rt-<key>, written by rootChoices in web.register.ts) sets. A key's
+ * attribute is absent at its default, so the restyle keeps 0.16's look and every var() below falls back to it. Settings previews can
+ * set the same variables on a mock element with optionVariables.
+ */
+export const OPTION_VARIABLES: Record<string, { variable: string; values: Record<string, string> }> = {
+  width: { variable: "--cp-reply-width", values: { narrow: "640px", wide: "960px", full: "none" } },
+  "float-radius": { variable: "--cp-float-radius", values: { 8: "8px", 10: "10px", 16: "16px" } },
+  "float-gap": { variable: "--cp-float-gap", values: { 4: "4px", 8: "8px", 12: "12px" } },
+  "loader-color": { variable: "--cp-loader-color", values: { accent: "var(--cp-accent)", text: "var(--cp-fg)", muted: "var(--cp-muted)" } },
+  thumbs: { variable: "--cp-thumb-radius", values: { square: "0px" } },
+};
+
+/** The CSS variables a set of root choices (rootChoices' output) sets, for a preview to put on its own element. */
+export function optionVariables(choices: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, { variable, values }] of Object.entries(OPTION_VARIABLES)) {
+    const value = values[choices[key] ?? "a"];
+    if (value) out[variable] = value;
+  }
+  return out;
+}
+
+const OPTION_CSS = Object.entries(OPTION_VARIABLES)
+  .flatMap(([key, { variable, values }]) => Object.entries(values).map(([choice, value]) => `:root[data-cp-rt-${key}="${choice}"] { ${variable}: ${value}; }`))
+  .join("\n");
+
+// Paseo caps the chat column (each row's wrapper, the turn footer, the composer) at its own content width setting; a chosen width
+// replaces that cap and keeps the column centred. Paseo's value stays wherever the attribute is absent.
+const REPLY_WIDTH_CSS = `:root[data-cp-rt-width] :is([data-testid="agent-chat-scroll"] [data-history-row-id] > div, [data-testid="turn-footer"], [data-cp-part="composer-column"]) { max-width: var(--cp-reply-width) !important; margin-left: auto !important; margin-right: auto !important; }`;
 
 // The chat's own chrome from the "Chat Surfaces" design: turn footer, composer, prompts, outline rail.
 const CHAT_CHROME_CSS = `
@@ -521,7 +554,7 @@ ${CODE_BLOCK} :is(div, span) { line-height: 1.5 !important; }
 /* Images in a reply that also has text (tool screenshots land at the end of the text before them) get the plugin's thumbnail size; Paseo's own button still opens the full image. */
 ${THUMBS} { width: auto !important; min-height: 0 !important; margin: 6px 8px 2px 0 !important; }
 :root:not([data-cp-rt-images="native"]) ${MSG} [data-cp-part="image-text"] > [dir] { flex-basis: 100% !important; }
-${THUMBS} > button { width: var(--cp-thumb-w) !important; height: var(--cp-thumb-h) !important; aspect-ratio: auto !important; border: 1px solid var(--cp-rule) !important; border-radius: 8px !important; background-color: var(--cp-raised) !important; }
+${THUMBS} > button { width: var(--cp-thumb-w) !important; height: var(--cp-thumb-h) !important; aspect-ratio: auto !important; border: 1px solid var(--cp-rule) !important; border-radius: var(--cp-thumb-radius, 8px) !important; background-color: var(--cp-raised) !important; }
 ${THUMBS} > button div { width: 100% !important; height: 100% !important; background-size: cover !important; }
 :root { --cp-thumb-w: 200px; --cp-thumb-h: 128px; }
 :root[data-cp-rt-images="large"] { --cp-thumb-w: 320px; --cp-thumb-h: 200px; }
@@ -552,5 +585,7 @@ ${DOC_MD} tbody > tr { background: transparent !important; }
 ${DOC_MD} td { font-size: calc(var(--cp-content) - 1px) !important; }
 ${DOC_MD} th { background: var(--cp-raised) !important; font-size: 12px !important; font-weight: 600 !important; color: var(--cp-muted) !important; }
 ${DOC_MD} hr { border-top-color: var(--cp-rule) !important; }
-:root:not([data-cp-rt-images="native"]) ${MD} img { width: var(--cp-thumb-w) !important; height: var(--cp-thumb-h) !important; object-fit: cover !important; border: 1px solid var(--cp-rule) !important; border-radius: 8px !important; background-color: var(--cp-raised) !important; margin: 6px 8px 2px 0 !important; }
-${CHAT_CHROME_CSS}`;
+:root:not([data-cp-rt-images="native"]) ${MD} img { width: var(--cp-thumb-w) !important; height: var(--cp-thumb-h) !important; object-fit: cover !important; border: 1px solid var(--cp-rule) !important; border-radius: var(--cp-thumb-radius, 8px) !important; background-color: var(--cp-raised) !important; margin: 6px 8px 2px 0 !important; }
+${CHAT_CHROME_CSS}
+${REPLY_WIDTH_CSS}
+${OPTION_CSS}`;

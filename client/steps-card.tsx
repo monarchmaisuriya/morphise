@@ -160,7 +160,7 @@ function StepRow({ step, t }: { step: Step; t: Tokens }) {
 // plan whose moment has passed stays as one line instead of disappearing, so the chat does not
 // jump. `hidden` keeps the card from drawing while it still follows its plan; `onShown` reports
 // whether it has something to show.
-function StepsCardView({ plan, t, options, title = null, inline = false, hidden = false, onShown }: { plan: Plan; t: Tokens; options: StepsOptions; title?: string | null; inline?: boolean; hidden?: boolean; onShown?(shown: boolean): void }) {
+export function StepsCardView({ plan, t, options, title = null, inline = false, hidden = false, onShown }: { plan: Plan; t: Tokens; options: StepsOptions; title?: string | null; inline?: boolean; hidden?: boolean; onShown?(shown: boolean): void }) {
   const { steps, finishedAt } = plan;
   const [now, setNow] = useState(Date.now());
   const [dismissed, setDismissed] = useState<string | null>(null);

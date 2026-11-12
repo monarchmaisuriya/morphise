@@ -218,24 +218,25 @@ ${W} [data-cp-fs="D"] { --cp-fs: var(--colors-status-danger); }
 ${W} ${EXPLORER_HANDLE} { background-color: transparent !important; }
 ${FLAT}${LIGHT} ${EXPLORER_HANDLE} { background-color: var(--colors-border) !important; }
 
-/* Floating: the main area (header, tabs, chat) is a panel inset from the window, which takes the sidebar's color. The right inset sits
+/* Floating: the main area (header, tabs, chat) is a panel inset from the window, which takes the sidebar's color. The inset and corner
+   come from --cp-float-gap and --cp-float-radius (set by the floating options; unset, 0.16's 8px gap and 10px corner). The right inset sits
    on the row of panel and Explorer, and the gap to the Explorer inside the Explorer: its resize handle is clipped to the Explorer's
    column, so that is the only place a hit area across the gap can be. */
 /* The insets must paint: the desktop window is transparent wherever Paseo draws nothing. */
 ${FLOAT}, ${FLOAT} body, ${FLOAT} #root, ${FLOAT} [data-testid="wide-shell"], ${FLOAT} [data-cp-win-bg] { background-color: var(--colors-surface-sidebar) !important; }
-${FLOAT} [${WIN}="row"] { padding-right: 8px !important; background-color: var(--colors-surface-sidebar) !important; }
-${FLOAT} [${WIN}="panel"] { margin: 8px 0 8px 8px !important; border: 1px solid var(--cp-w-edge); border-radius: 10px; overflow: hidden; }
+${FLOAT} [${WIN}="row"] { padding-right: var(--cp-float-gap, 8px) !important; background-color: var(--colors-surface-sidebar) !important; }
+${FLOAT} [${WIN}="panel"] { margin: var(--cp-float-gap, 8px) 0 var(--cp-float-gap, 8px) var(--cp-float-gap, 8px) !important; border: 1px solid var(--cp-w-edge); border-radius: var(--cp-float-radius, 10px); overflow: hidden; }
 /* The tab row starts at the panel's top inset plus border, so the rule under it lines up with the one under the header. */
-${FLOAT} [data-testid="workspace-explorer-sidebar"] { padding-left: 8px !important; padding-top: 9px !important; }
+${FLOAT} [data-testid="workspace-explorer-sidebar"] { padding-left: var(--cp-float-gap, 8px) !important; padding-top: calc(var(--cp-float-gap, 8px) + 1px) !important; }
 
 /* Resize handles keep their place and hit area (Paseo's spans the edge, or the gap when floating); a 2px accent line shows only on
    hover or while dragging. The Explorer's is Paseo's own highlight (3px, on hover and drag), thinned and moved into the gap. */
 ${W} ${LEFT_HANDLE}::after { content: ""; position: absolute; top: 0; bottom: 0; left: 4px; width: 2px; background-color: var(--colors-accent); opacity: 0; transition: opacity 150ms ease-out; pointer-events: none; }
 ${W} ${LEFT_HANDLE}:is(:hover, :active)::after { opacity: 1; }
 ${W} [${WIN}="left-wrap"] { z-index: 1 !important; }
-${FLOAT} ${LEFT_HANDLE} { right: -9px !important; width: 10px !important; }
+${FLOAT} ${LEFT_HANDLE} { right: calc(-1px - var(--cp-float-gap, 8px)) !important; width: calc(var(--cp-float-gap, 8px) + 2px) !important; }
 ${W} ${EXPLORER_HIGHLIGHT} { width: 2px !important; left: 0 !important; }
-${FLOAT} ${EXPLORER_HIT} { left: 0 !important; width: 8px !important; }
-${FLOAT} ${EXPLORER_HIGHLIGHT} { left: 3px !important; }
+${FLOAT} ${EXPLORER_HIT} { left: 0 !important; width: var(--cp-float-gap, 8px) !important; }
+${FLOAT} ${EXPLORER_HIGHLIGHT} { left: calc(var(--cp-float-gap, 8px) / 2 - 1px) !important; }
 @media (prefers-reduced-motion: reduce) { ${W} ${LEFT_HANDLE}::after { transition: none; } }
 `;

@@ -9,7 +9,8 @@ import { t, type MessageKey } from "../polish/i18n";
 import { BrowserControl } from "../polish/pages/browser-control";
 import { PLAIN_SYNTAX, SYNTAX_THEMES } from "../polish/rows/highlight";
 import { tokens } from "../ui/kit";
-import { ChipRow, type Form, SelectField, SwitchField } from "./fields";
+import { LookPreview, MessagesPreview, PagesPreview } from "./previews";
+import { ChipRow, type Form, SelectField, SwitchField, TextField } from "./fields";
 
 // Settings for the features ported from Chat Polish and Quote (see NOTICE.md). They live in the
 // profile's `chat.polish`; a value equal to its default is removed, so older Morphise versions
@@ -52,7 +53,10 @@ export function PolishRowSettings({ form }: { form: Form }): ReactNode {
     <SettingsSection title="Steps" info="Thoughts and tool calls between two replies, and how rows open.">
       <SettingsCard>
         <SwitchField label={t("prefs.row.merge")} hint={t("prefs.hint.merge")} value={prefs.merge === "on"} onChange={(value) => set("merge", value)} />
+        {prefs.merge === "on" ? <SelectField label="Merge only runs of at least" hint="Shorter runs stay as separate rows." value={String(prefs.mergeMin)} options={[2, 3, 5].map((count) => ({ value: String(count), label: `${count} steps` }))} onChange={(value) => set("mergeMin", Number(value) as 2 | 3 | 5)} /> : null}
         <SwitchField label="Failed calls start open" hint="Off: they follow the folding rules like any other row." value={prefs.failedOpen} onChange={(value) => set("failedOpen", value)} />
+        <SwitchField label="Line numbers in diffs" value={prefs.diffLineNumbers} onChange={(value) => set("diffLineNumbers", value)} />
+        <SwitchField label="A folded thought shows its first line" value={prefs.thoughtFirstLine} onChange={(value) => set("thoughtFirstLine", value)} />
         {/* "Each row starts with: A label" (Tool calls) hides every icon; the chips apply otherwise. */}
         {form.profile.chat?.labels === "label" ? null : <ChipRow form={form} label={t("prefs.row.rowIcons")} hint={t("prefs.hint.rowIcons")} chips={ICON_KINDS.map((kind) => ({ key: kind, label: iconTitles[kind], on: prefs.rowIcons[kind] === "show", toggle: () => toggleIcon(kind) }))} />}
       </SettingsCard>
@@ -85,10 +89,22 @@ export function MessagesTab(form: Form): ReactNode {
   const restyled = prefs.nativeStyle === "design";
   return (
     <>
+      <SettingsSection title="Preview" info="A sample chat drawn with the choices below, before they save.">
+        <SettingsCard>
+          <MessagesPreview theme={form.theme} prefs={prefs} chat={form.profile.chat} compact={form.compact} />
+        </SettingsCard>
+      </SettingsSection>
       <SettingsSection title="Selection bar" info="Select text in a chat (desktop and web) to quote it into the message box, reply to it, ask a side chat about it, copy it, or bookmark it.">
         <SettingsCard>
           <SwitchField label="Show a bar over selected text" value={prefs.selection === "on"} onChange={(value) => set("selection", value)} />
-          {prefs.selection === "on" ? <ChipRow form={form} label="Buttons" hint="Reply: Enter sends, Ctrl or Cmd+Enter adds to the message box. Side chat: a separate agent beside the chat." chips={SELECTION_ACTIONS.map((action) => ({ key: action, label: ACTION_TITLES[action], on: prefs.selectionActions.includes(action), toggle: () => toggleAction(action) }))} /> : null}
+          {prefs.selection === "on" ? (
+            <>
+              <ChipRow form={form} label="Buttons" hint="Reply: Enter sends, Ctrl or Cmd+Enter adds to the message box. Side chat: a separate agent beside the chat." chips={SELECTION_ACTIONS.map((action) => ({ key: action, label: ACTION_TITLES[action], on: prefs.selectionActions.includes(action), toggle: () => toggleAction(action) }))} />
+              <SelectField label="Buttons show" value={prefs.barButtons} options={[{ value: "both", label: "Icons and labels" }, { value: "icons", label: "Icons only" }]} onChange={(value) => set("barButtons", value)} />
+              <SelectField label="Bar position" hint="It moves to the other side when there is no room." value={prefs.barPosition} options={[{ value: "above", label: "Above the selection" }, { value: "below", label: "Below the selection" }]} onChange={(value) => set("barPosition", value)} />
+              {prefs.selectionActions.includes("side") ? <TextField form={form} label="Side chat model" hint="Empty: the chat's own model. Otherwise a model id on the chat's provider." placeholder="The chat's own" value={prefs.sideModel} onChange={(value) => set("sideModel", value.trim() || undefined)} error={form.profileError("chat.polish.sideModel")} /> : null}
+            </>
+          ) : null}
         </SettingsCard>
       </SettingsSection>
       <SettingsSection title="Pictures" info="Replies that are only images, and images side by side in a reply.">
@@ -106,6 +122,7 @@ export function MessagesTab(form: Form): ReactNode {
             onChange={(value) => set("images", value)}
           />
           <SwitchField label={t("prefs.row.imageStacks")} hint={t("prefs.hint.imageStacks")} value={prefs.imageStacks === "on"} onChange={(value) => set("imageStacks", value)} />
+          {prefs.images !== "native" || prefs.imageStacks === "on" ? <SelectField label="Thumbnail corners" value={prefs.thumbCorners} options={[{ value: "rounded", label: "Rounded" }, { value: "square", label: "Square" }]} onChange={(value) => set("thumbCorners", value)} /> : null}
           {prefs.imageStacks === "on" ? <SelectField label={t("prefs.row.spreadOn")} hint={t("prefs.hint.spreadOn")} value={prefs.imageStackOpen} options={[{ value: "hover", label: t("prefs.option.hover") }, { value: "click", label: t("prefs.option.click") }]} onChange={(value) => set("imageStackOpen", value)} /> : null}
         </SettingsCard>
       </SettingsSection>
@@ -137,13 +154,26 @@ export function PolishLookSettings({ form }: { form: Form }): ReactNode {
   const restyled = prefs.nativeStyle === "design";
   return (
     <>
+      <SettingsSection title="Look preview" info="A sample window in your theme, window style, loader, icons and code colours, before they save.">
+        <SettingsCard>
+          <LookPreview theme={form.theme} prefs={prefs} profileTheme={form.profile.theme} compact={form.compact} />
+        </SettingsCard>
+      </SettingsSection>
       <SettingsSection title="Restyle Paseo (experimental)" info="Chat Polish's design for Paseo's own message box, cards, menus, tool groups and replies, on desktop and web. It works through Paseo's page structure, so a Paseo update can break parts of it.">
         <SettingsCard>
           <SwitchField label="Restyle Paseo's items" value={restyled} onChange={(value) => set("restyle", value)} />
           {restyled ? (
             <>
               <SelectField label="Window" value={prefs.windowStyle} options={[{ value: "paseo", label: "As Paseo draws it" }, { value: "flat", label: t("nav.restyle.window.flat") }, { value: "floating", label: t("nav.restyle.window.floating") }]} onChange={(value) => set("window", value)} />
+              {prefs.windowStyle === "floating" ? (
+                <>
+                  <SelectField label="Corner radius" value={String(prefs.floatingRadius)} options={[8, 10, 16].map((radius) => ({ value: String(radius), label: `${radius} px` }))} onChange={(value) => set("floatingRadius", Number(value) as 8 | 10 | 16)} />
+                  <SelectField label="Gap around the chat" value={String(prefs.floatingGap)} options={[4, 8, 12].map((gap) => ({ value: String(gap), label: `${gap} px` }))} onChange={(value) => set("floatingGap", Number(value) as 4 | 8 | 12)} />
+                </>
+              ) : null}
+              <SelectField label="Reply width" hint="How wide the chat column is. Any choice but Paseo's overrides Paseo's own content width (Settings, Appearance)." value={prefs.replyWidth} options={[{ value: "paseo", label: "As Paseo draws it" }, { value: "narrow", label: "Narrow" }, { value: "wide", label: "Wide" }, { value: "full", label: "Full width" }]} onChange={(value) => set("replyWidth", value)} />
               <SelectField label={t("prefs.row.loader")} hint={t("prefs.hint.loader")} value={prefs.loader} options={LOADERS.map((loader) => ({ value: loader, label: t(`prefs.loader.${loader}` as MessageKey) }))} onChange={(value) => set("loader", value)} />
+              <SelectField label="Loader colour" value={prefs.loaderColor} options={[{ value: "paseo", label: "As Paseo draws it" }, { value: "accent", label: "Accent" }, { value: "text", label: "Text" }, { value: "muted", label: "Muted" }]} onChange={(value) => set("loaderColor", value)} />
               <SelectField label={t("prefs.row.size")} value={prefs.loaderSize} options={[{ value: "s", label: "Small (14)" }, { value: "m", label: "Medium (16)" }, { value: "l", label: "Large (18)" }]} onChange={(value) => set("loaderSize", value)} />
               <SelectField
                 label={t("prefs.row.iconSet")}
@@ -166,12 +196,20 @@ export function PagesTab(form: Form): ReactNode {
   const { prefs, set } = polishEditor(form);
   const kit = tokens(form.theme, form.compact);
   return (
+    <>
+      <SettingsSection title="Preview" info="A sample page as the chat draws it, at the height below.">
+        <SettingsCard>
+          <PagesPreview theme={form.theme} prefs={prefs} compact={form.compact} />
+        </SettingsCard>
+      </SettingsSection>
     <SettingsSection title="HTML pages (experimental)" info="Ask an agent to chart, visualise or mock up something, and it draws an interactive page in the chat. Pages show on desktop and web; phones show the page's name.">
       <SettingsCard>
         <SwitchField label={t("prefs.row.htmlPages")} hint={`${t("prefs.hint.htmlPages")} Morphise runs a local page server on 127.0.0.1 for them.`} value={prefs.html === "on"} onChange={(value) => set("html", value)} />
+        <SelectField label="Page height" hint="Taller pages scroll inside their frame." value={String(prefs.pageHeight)} options={[{ value: "0", label: "No limit" }, { value: "800", label: "Up to 800 px" }, { value: "500", label: "Up to 500 px" }]} onChange={(value) => set("pageHeight", Number(value) as 500 | 800 | 0)} />
         {prefs.html === "on" ? <BrowserControl t={kit} /> : null}
       </SettingsCard>
     </SettingsSection>
+    </>
   );
 }
 

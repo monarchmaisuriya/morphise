@@ -94,6 +94,7 @@ export interface ComputedStyle {
   fontWeight: string;
   fontFamily: string;
   marginLeft: string;
+  maxWidth: string;
   height: string;
   color: string;
   position: string;

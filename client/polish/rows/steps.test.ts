@@ -11,6 +11,8 @@ import {
   onUnplacedStep,
   placeStep,
   runOf,
+  runSplits,
+  setMergeMin,
   stepKey,
   stepRuns,
   stepSummary,
@@ -164,6 +166,33 @@ describe("merged steps", () => {
     expect(runOf("t:a").steps.map((s) => stepKey(s.item))).toEqual([stepKey(t0), "t:a", stepKey(t1), "t:b"]);
     expect(changesOfTodo(stepKey(t1)!)).toEqual([{ type: "completed", text: "t0" }, { type: "started", text: "t1" }]);
     expect(stepSummary(runOf("t:a").steps.map((s) => s.item))).toBe("Ran 2 commands and completed 1 task");
+  });
+
+  it("a run shorter than the merge minimum splits into its own rows; a run of one always heads its own row", async () => {
+    expect([1, 2, 3, 4].map((n) => runSplits(n, 2))).toEqual([false, false, false, false]);
+    expect([1, 2, 3, 4].map((n) => runSplits(n, 3))).toEqual([false, true, false, false]);
+    expect([1, 2, 3, 4, 5].map((n) => runSplits(n, 5))).toEqual([false, true, true, true, false]);
+    let stale = 0;
+    onStaleSteps(() => stale++);
+    onTestFinished(() => (onStaleSteps(() => {}), setMergeMin(2)));
+    const [a, b, c, d, e, lone] = ["min-a", "min-b", "min-c", "min-d", "min-e", "min-lone"].map((id) => shell(id));
+    const live = await follow([prompt("go"), a!, b!, reply("half"), c!, d!, e!, reply("done"), lone!, reply("end")], "merge-min");
+    onTestFinished(live.stop);
+    // The default (2) merges every run of two or more, as before the option existed.
+    expect([a, b, c, d, e, lone].map((s) => placeStep(s!, "complete")?.as)).toEqual(["head", "none", "head", "none", "none", "head"]);
+    setMergeMin(3);
+    expect(stale, "rows made under the old minimum are transformed again").toBeGreaterThan(0);
+    expect([a, b, c, d, e, lone].map((s) => placeStep(s!, "complete")?.as)).toEqual(["alone", "alone", "head", "none", "none", "head"]);
+    expect(runOf(stepKey(c!)!).steps).toHaveLength(3);
+    setMergeMin(5);
+    expect([c, d, e].map((s) => placeStep(s!, "complete")?.as)).toEqual(["alone", "alone", "alone"]);
+    // A run that grows past the minimum merges.
+    live.send(prompt("next"));
+    const grown = ["g1", "g2", "g3", "g4", "g5"].map((id) => shell(id));
+    grown.slice(0, 4).forEach((s) => live.send(s));
+    expect(grown.slice(0, 4).map((s) => placeStep(s, "complete")?.as)).toEqual(["alone", "alone", "alone", "alone"]);
+    live.send(grown[4]!);
+    expect(grown.map((s) => placeStep(s, "complete")?.as)).toEqual(["head", "none", "none", "none", "none"]);
   });
 
   it("a provider subagent's pane id isn't followed (no daemon agent behind it)", () => {

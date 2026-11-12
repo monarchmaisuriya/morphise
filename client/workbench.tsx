@@ -17,6 +17,7 @@ import { tasksOf } from "./task-store";
 import { lendScreenOpener } from "./dispatch";
 import { Icon, type Tokens, useTokens } from "./ui/kit";
 import { StackViewerHost } from "./polish/media/views";
+import { useTooltip } from "./web";
 
 // Workbench: everything that needs the user, in one place. Chats waiting on them (raised by agents) and
 // their own tasks (Today, Board, Archived), plus bookmarked answers. A list of views on the left on
@@ -82,8 +83,11 @@ function countTone(view: WorkbenchView, counts: Counts, t: Tokens): string {
 }
 
 function RailRow({ t, view, label, icon, count, tone, selected, folded, onPress }: { t: Tokens; view: WorkbenchView; label: string; icon: string; count: number; tone: string; selected: boolean; folded: boolean; onPress(): void }) {
+  // Folded to an icon, the view's name shows on hover.
+  const tooltip = useTooltip(folded ? (count ? `${label}, ${count}` : label) : undefined, t.c);
   return (
     <Pressable
+      ref={tooltip}
       accessibilityRole="tab"
       accessibilityState={{ selected }}
       accessibilityLabel={count ? `${label}, ${count}` : label}

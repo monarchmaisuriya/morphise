@@ -13,6 +13,9 @@ export function heightAt(heights: ReadonlyArray<readonly [number, number]>, widt
   return Math.round(h0 + ((h1 - h0) * (width - w0)) / (w1 - w0));
 }
 
+/** The frame's height in the chat for a page `height` tall: at most `limit` (Settings, Page height; 0 is no limit), the rest scrolls inside. */
+export const limitFrameHeight = (height: number, limit: number) => (limit > 0 ? Math.min(height, limit) : height);
+
 /** The chat frame's sandbox. Never allow-same-origin: with it the page's scripts could reach the app's session and storage. */
 export const FRAME_SANDBOX = "allow-scripts allow-popups allow-popups-to-escape-sandbox";
 

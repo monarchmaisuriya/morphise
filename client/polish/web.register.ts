@@ -1,7 +1,7 @@
 import { Platform } from "react-native";
 import { renderDiagram } from "../../shared/polish/diagram";
 import { getIconSet } from "../../shared/polish/icons";
-import type { Prefs } from "../../shared/polish/prefs";
+import { POLISH_DEFAULTS, type Prefs } from "../../shared/polish/prefs";
 import { THEME_CATALOG_ID } from "../../shared/polish/theme";
 import type { PolishPart } from "./context";
 import { languageFor } from "./i18n";
@@ -29,7 +29,14 @@ import { tagWindow } from "./web/window";
 // The image stack attributes are read by the image stacks part (client/polish/media).
 export function rootChoices(p: Prefs): Record<string, string> {
   const design = p.nativeStyle === "design";
+  // Restyle-only options write nothing at their default, so the restyle keeps 0.16's look (OPTION_VARIABLES in web/restyle-css.ts).
+  const restyled = (key: keyof Prefs & keyof typeof POLISH_DEFAULTS) => (design && p[key] !== POLISH_DEFAULTS[key] ? String(p[key]) : "a");
   return {
+    width: restyled("replyWidth"),
+    "float-radius": restyled("floatingRadius"),
+    "float-gap": restyled("floatingGap"),
+    "loader-color": restyled("loaderColor"),
+    thumbs: restyled("thumbCorners"),
     ...p.richText,
     images: p.images,
     stacks: design ? p.imageStacks : "off",

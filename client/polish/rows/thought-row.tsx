@@ -4,8 +4,9 @@ import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { useRevealedText } from "@getpaseo/plugin/client/react-native";
 import { Animated, Text, View } from "react-native";
 import type { z } from "zod";
-import { thinkingStartsOpen } from "../../../shared/chat-view";
+import { thinkingStartsOpen, thoughtFirstLine } from "../../../shared/chat-view";
 import { useT } from "../i18n";
+import { usePrefs } from "../prefs";
 import { readHostAppearance } from "../web/host";
 import { useRowSetup } from "./look";
 import type { thoughtSchema } from "./model";
@@ -22,6 +23,7 @@ export function ThoughtItem({ item, theme, layout, timestamp, nested }: PluginTi
   const spacing = useSpacing(nested);
   const text = useRevealedText(item.data.text, item.data.phase);
   const inset = useIndent("thought") ? 9 : 0;
+  const firstLine = usePrefs().thoughtFirstLine && !open && !streaming ? thoughtFirstLine(text) : "";
   return (
     <Animated.View style={[spacing, enter]}>
       <Row
@@ -30,6 +32,8 @@ export function ThoughtItem({ item, theme, layout, timestamp, nested }: PluginTi
         kind="thought"
         icon="Brain"
         verb={t(streaming ? "chat.thinking" : "chat.thought")}
+        target={firstLine || undefined}
+        prose
         pulsing={streaming}
         open={open}
         onToggle={text.trim() ? toggle : undefined}

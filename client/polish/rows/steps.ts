@@ -223,11 +223,12 @@ export function stepSummary(items: readonly Item[], changesOf: (item: Item) => r
 const lists = new Map<string, Entry[]>();
 const keysByAgent = new Map<string, string[]>();
 const runs = new Map<string, Run>();
-const places = new Map<string, { head: string; index: number }>();
+/** Where each step sits: `alone` when its run is too short to merge (drawn as with merging off). */
+const places = new Map<string, { head: string; index: number; alone?: boolean }>();
 /** The app's own copy of each step (with its phase), newer than the daemon's while it streams. */
 const seen = new Map<string, { item: Item; phase: Phase }>();
 /** What the transformer last made of each step, to tell when Paseo must transform again ("native": a reply left to Paseo). */
-const made = new Map<string, "head" | "none" | "native">();
+const made = new Map<string, "head" | "none" | "alone" | "native">();
 /** What each todo update changed, against the update before it in its agent's timeline. */
 const todoChanges = new Map<string, TaskChange[]>();
 // ponytail: seen keeps the latest few thousand steps across agents; key it per agent if long sessions show stale rows.
@@ -244,6 +245,18 @@ let onUnplaced: () => void = () => {};
 let onShown: (agentId: string) => void = () => {};
 let skip: (item: Item) => boolean = () => false;
 let foldReplies = false;
+let mergeMin = 2;
+
+/** Whether a run of this many steps folds into one row. A run of one always heads its own row (the merged row draws it as itself);
+ * a longer run shorter than the minimum is split, each step drawn as it would be with merging off. */
+export const runSplits = (length: number, min: number) => length > 1 && length < min;
+
+/** The merge minimum (prefs.mergeMin). Re-splits every agent when it changes. */
+export function setMergeMin(min: number) {
+  if (min === mergeMin) return;
+  mergeMin = min;
+  for (const agentId of lists.keys()) rebuild(agentId);
+}
 
 /** Paseo's Collapse turns: replies before a turn's last fold into its run. Re-splits every agent when that changes. */
 export function setReplyFolding(on: boolean) {
@@ -320,6 +333,16 @@ function rebuild(agentId: string) {
     // The merged row stands where the run's first thought or tool call is; todo updates are only ever folded in.
     const head = stepKey(run.steps.find((s) => s.type !== "todo")!)!;
     const before = oldRuns.get(head);
+    if (runSplits(run.steps.length, mergeMin)) {
+      // A merged row that is now split is told, so it does not keep drawing the old run until the re-transform.
+      if (before) touch(head);
+      for (const item of run.steps) {
+        const key = stepKey(item)!;
+        places.set(key, { head: key, index: 0, alone: true });
+        keys.push(key);
+      }
+      continue;
+    }
     runs.set(head, run);
     if (!before || before.ms !== run.ms || before.open !== run.open || before.steps.length !== run.steps.length || before.steps.some((x, i) => x !== run.steps[i])) touch(head);
     run.steps.forEach((item, index) => {
@@ -344,11 +367,14 @@ function rebuild(agentId: string) {
  * lead it: a step not placed yet is made a head of its own, which renders as itself and grows into the merged row in place. */
 function stale(key: string) {
   const was = made.get(key);
-  return !!was && was !== expected(key);
+  const now = expected(key);
+  // A reply left to Paseo is already what a split run draws.
+  return !!was && was !== now && !(was === "native" && now === "alone");
 }
 
 function expected(key: string) {
-  return (places.get(key)?.index ?? 0) > 0 ? "none" : "head";
+  const place = places.get(key);
+  return place?.alone ? "alone" : (place?.index ?? 0) > 0 ? "none" : "head";
 }
 
 // ponytail: any followed agent counts, so a new call of an agent opened next to a busy one waits for its event too (~50ms late, no split).
@@ -371,13 +397,14 @@ function recheckAfterGrowing() {
   }, GROWING_MS);
 }
 
-/** Called by the transformer for every step: "head" (render the merged row) or "none" (leave it out). A step the followed timelines don't
+/** Called by the transformer for every step: "head" (render the merged row), "none" (leave it out) or "alone" (its run is too short to
+ * merge: draw it as with merging off). A step the followed timelines don't
  * have yet (a tab just opened, the subscription a beat behind) leads a run of one until they catch up. Except a tool call while a run is
  * growing: Paseo sometimes transforms it before the plugin's event arrives, and as a run of one it showed as its own row for ~80ms, then
  * merged (the split-then-merge flicker). It almost always joins that run, so it stays out until its event places it; if it turns out to
  * start a run instead, it is stale and the re-transform shows it. A streaming thought waits the same way, but only while it streams: its
  * key is its opening words, which may never match, so once complete an unplaced thought shows rather than staying out. */
-export function placeStep(item: Item, phase: Phase): { key: string; as: "head" | "none" } | undefined {
+export function placeStep(item: Item, phase: Phase): { key: string; as: "head" | "none" | "alone" } | undefined {
   const key = stepKey(item);
   const reply = item.type === "assistant_message";
   if (!key || (reply && !foldReplies)) return undefined;

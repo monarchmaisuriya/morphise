@@ -2,7 +2,7 @@ import type { PluginTheme } from "@getpaseo/plugin";
 import { type IconProps, Icon as PaseoIcon, TextInput } from "@getpaseo/plugin/client/ui";
 import { createContext, Fragment, type ReactNode, type RefObject, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createValueStore, useValue, type ValueStore } from "../profile-store";
-import { onPressOutside } from "../web";
+import { onPressOutside, useTooltip } from "../web";
 import { Modal as Layer, Platform, Pressable, ScrollView, type StyleProp, Text, type TextStyle, useWindowDimensions, View, type ViewStyle } from "react-native";
 
 // Morphise's small UI kit. Sizes follow Paseo's own sidebar and settings (measured on 0.16.0-beta.1:
@@ -81,6 +81,8 @@ export function Button({
   checked?: boolean;
 }) {
   const hover = useHover();
+  // An icon without words gets its name as a hover tooltip.
+  const tooltip = useTooltip(label ? undefined : accessibilityLabel, t.c);
   const { c } = t;
   const look = {
     primary: { bg: c.accent, hoverBg: c.accent, fg: c.accentForeground, border: c.accent },
@@ -90,6 +92,7 @@ export function Button({
   }[variant];
   return (
     <Pressable
+      ref={tooltip}
       accessibilityRole={checked === undefined ? "button" : "radio"}
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={checked === undefined ? { disabled } : { disabled, checked }}
@@ -121,12 +124,14 @@ export function Button({
   );
 }
 
-// An icon-only button; `label` is its accessible name and tooltip-free description.
+// An icon-only button; `label` is its accessible name and its hover tooltip.
 export function IconButton({ t, icon, label, onPress, tone, size = "md", disabled }: { t: Tokens; icon: string; label: string; onPress(): void; tone?: string; size?: "sm" | "md"; disabled?: boolean }) {
   const hover = useHover();
+  const tooltip = useTooltip(label, t.c);
   const box = size === "sm" ? (t.compact ? 32 : 24) : t.control;
   return (
     <Pressable
+      ref={tooltip}
       accessibilityRole="button"
       accessibilityLabel={label}
       disabled={disabled}
@@ -524,7 +529,8 @@ export function MenuItem({ t, label, hint, icon, dot, checked, onPress, tone, di
         {label}
       </Text>
       {hint ? <Text style={t.text.meta}>{hint}</Text> : null}
-      {checked ? <Icon name="Check" size={14} color={t.c.accent} /> : null}
+      {/* A checkbox item shows its box ticked or empty, so a menu of them reads as "pick several". */}
+      {role === "checkbox" ? <Icon name={checked ? "SquareCheck" : "Square"} size={14} color={checked ? t.c.foreground : t.c.foregroundMuted} /> : checked ? <Icon name="Check" size={14} color={t.c.accent} /> : null}
     </Pressable>
   );
 }

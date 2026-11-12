@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { polishPrefs } from "./polish/prefs";
-import { accentColor, turnRecap, chatLook, chatView, diffCounts, diffLines, foldLines, isTurnTrigger, lastTurnMarkdown, mcpName, relativePath, rowFate, rowStartsOpen, shellProgram, skippedStep, startsOpen, summarizeToolCall, thinkingStartsOpen, transformedTypes, wordDiff } from "./chat-view";
+import { accentColor, turnRecap, chatLook, chatView, diffCounts, diffLines, foldLines, isTurnTrigger, lastTurnMarkdown, mcpName, relativePath, rowFate, rowStartsOpen, shellProgram, skippedStep, startsOpen, summarizeToolCall, thinkingStartsOpen, thoughtFirstLine, transformedTypes, wordDiff } from "./chat-view";
 
 // Shaped like Paseo's timeline items (protocol AgentTimelineItem, ToolCallTimelineItem).
 const call = (detail: Record<string, unknown>, status = "completed", extra: Record<string, unknown> = {}) => ({ type: "tool_call", callId: "c1", name: "Bash", detail, status, error: null, ...extra });
@@ -73,6 +73,16 @@ describe("chat view rules", () => {
     expect(thinkingStartsOpen(chatLook({ reasoning: "expand" }), false, false)).toBe(true);
     expect(thinkingStartsOpen(chatLook({ reasoning: "fold", foldByKind: { thinking: "never" } }), false, false)).toBe(true);
     expect(thinkingStartsOpen(chatLook(undefined), false, true)).toBe(true);
+  });
+
+  it("a folded thought's first line is plain words: no Markdown marks, no code fence, one line", () => {
+    expect(thoughtFirstLine("**Checking the config**\n\nThen the tests.")).toBe("Checking the config");
+    expect(thoughtFirstLine("\n\n## Plan\nmore")).toBe("Plan");
+    expect(thoughtFirstLine("- [x] Read `steps.ts` and [the docs](https://x.dev/a_b)")).toBe("Read steps.ts and the docs");
+    expect(thoughtFirstLine("> 1. Look at _this_   and   that")).toBe("Look at this and that");
+    expect(thoughtFirstLine("```ts\nconst a = 1;\n```")).toBe("const a = 1;");
+    expect(thoughtFirstLine("snake_case_name stays and 2 * 3 * 4 too")).toBe("snake_case_name stays and 2 * 3 * 4 too");
+    expect(thoughtFirstLine("  \n ")).toBe("");
   });
 
   it("never redraws prompts; replies only fold into merged steps or show their images", () => {

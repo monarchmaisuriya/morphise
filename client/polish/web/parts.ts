@@ -25,6 +25,21 @@ function actionAs(el: DomElement, part: "primary" | "secondary") {
   return (primary ? "primary" : "secondary") === part ? el : null;
 }
 
+/**
+ * The composer's column: the nearest ancestor of the message box that Paseo caps at its content width (a px max-width). Its depth
+ * differs by version, so it is found by that cap; read once per composer, since a tagged column is found again by closest().
+ */
+function composerColumn(root: DomElement) {
+  const tagged = root.closest('[data-cp-part="composer-column"]');
+  if (tagged) return tagged;
+  let box = root.parentElement;
+  for (let depth = 0; box && depth < 6; depth++, box = box.parentElement) {
+    const cap = getComputedStyle(box).maxWidth;
+    if (cap !== "none") return cap.endsWith("px") ? box : null;
+  }
+  return null;
+}
+
 // [child, parent it marks, part]
 const PARTS: Array<[string, (el: DomElement) => DomElement | null | undefined, string]> = [
   ['[data-testid="assistant-fork-menu-trigger"]', (el) => el.parentElement, "fork"],
@@ -46,6 +61,7 @@ const PARTS: Array<[string, (el: DomElement) => DomElement | null | undefined, s
       if (box.lastElementChild !== child && box.lastElementChild?.querySelector("button")) return box;
     }
   }, "composer"],
+  ['[data-testid="message-input-root"]', composerColumn, "composer-column"],
   // The row holding the textarea and, while it's empty and unfocused, the "⌘L to focus" hint.
   ['[data-testid="message-input-root"] textarea', (el) => el.parentElement?.parentElement, "input-row"],
   [PRIMARY, (el) => el, "primary"],

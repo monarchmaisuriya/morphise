@@ -9,6 +9,8 @@ import { readImage } from "../../../shared/polish/image";
 import { htmlPage } from "../../../shared/polish/page";
 import { Icon } from "../../ui/kit";
 import { useT } from "../i18n";
+import { usePrefs } from "../prefs";
+import { limitFrameHeight } from "./frame";
 import type { HtmlData } from "./html-rows";
 import { HtmlFrame, lastFrameHeight, useEscapeKey, useHovered, useHtmlTheme, usePopoverRef, windowButtonsInset } from "./web/html-frame";
 
@@ -24,6 +26,7 @@ function StoredHtmlPage({ stored, theme, ...data }: HtmlData & { theme: PluginTh
   const t = useT();
   const load = useRpc(storedPage);
   const [html, setHtml] = useState<string | null>();
+  const limit = usePrefs().pageHeight;
   useEffect(() => {
     if (!stored) return void setHtml(null);
     let alive = true;
@@ -35,7 +38,7 @@ function StoredHtmlPage({ stored, theme, ...data }: HtmlData & { theme: PluginTh
       alive = false;
     };
   }, [stored, load]);
-  if (html === undefined) return <View style={{ height: lastFrameHeight(data.html, data.heights) }} />;
+  if (html === undefined) return <View style={{ height: limitFrameHeight(lastFrameHeight(data.html, data.heights), limit) }} />;
   if (html === null) {
     return <Text style={{ color: theme.colors.foregroundMuted, fontSize: 13, paddingVertical: 4 }}>{t("chat.htmlGone", { title: data.title })}</Text>;
   }
@@ -72,6 +75,7 @@ function HtmlPage({ html, title, heights, theme }: HtmlData & { theme: PluginThe
   const box = useRef<View>(null);
   const hovered = useHovered(box);
   const [full, setFull] = useState(false);
+  const limit = usePrefs().pageHeight;
   useEscapeKey(full, () => setFull(false));
   // A native popover, so Escape here only leaves full screen (Paseo would also interrupt the agent).
   const fullScreen = usePopoverRef();
@@ -98,7 +102,7 @@ function HtmlPage({ html, title, heights, theme }: HtmlData & { theme: PluginThe
   return (
     <View ref={box}>
       {/* A stand-in at the frame's last size (or the daemon's measured height) while images load, so the chat doesn't move when the page arrives. */}
-      {page === undefined ? <View style={{ height: lastFrameHeight(html, heights) }} /> : <HtmlFrame html={page} id={html} title={title} colors={c} heights={heights} />}
+      {page === undefined ? <View style={{ height: limitFrameHeight(lastFrameHeight(html, heights), limit) }} /> : <HtmlFrame html={page} id={html} title={title} colors={c} heights={heights} />}
       {/* Hidden, not removed, off hover: the buttons stay where the pointer may land, so showing them never moves what is under it. */}
       <View pointerEvents="box-none" style={{ position: "absolute", top: 6, right: 6, flexDirection: "row", gap: 4, opacity: hovered ? 1 : 0 }}>
         {[button("Maximize2", t("chat.fullScreen"), () => setFull(true)), ...shared]}

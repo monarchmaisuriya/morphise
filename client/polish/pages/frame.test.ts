@@ -1,6 +1,6 @@
 // Ported from Chat Polish (lthieu96/paseo-chat-polish, MIT, see NOTICE.md): test/html.test.mjs
 import { describe, expect, it } from "vitest";
-import { FRAME_SANDBOX, fitFrame, frameKey, frameLink, frameReport, frameShortcut, heightAt } from "./frame";
+import { FRAME_SANDBOX, fitFrame, frameKey, frameLink, frameReport, frameShortcut, heightAt, limitFrameHeight } from "./frame";
 
 describe("the page frame", () => {
   it("never gets the app's origin", () => {
@@ -61,5 +61,12 @@ describe("the page frame", () => {
     expect(fitFrame(at, { height: 229, width: 728 })).toBeUndefined();
     expect(fitFrame(at, { height: 150, width: 1200 })).toEqual({ height: 150, later: true });
     expect(fitFrame(at, { height: 400, width: 360 })).toEqual({ height: 400, later: false });
+  });
+
+  it("stops the frame at the page height limit, and never with no limit", () => {
+    expect(limitFrameHeight(1200, 800)).toBe(800);
+    expect(limitFrameHeight(640, 800)).toBe(640);
+    expect(limitFrameHeight(1200, 500)).toBe(500);
+    expect(limitFrameHeight(5000, 0)).toBe(5000);
   });
 });

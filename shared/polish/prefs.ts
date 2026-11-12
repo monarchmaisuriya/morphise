@@ -48,12 +48,31 @@ export const polishSchema = z.strictObject({
   html: z.boolean().optional(),
   // Code colours for commands, diffs and JSON: a highlight theme id, or "plain".
   syntax: z.string().regex(/^[a-z0-9-]{1,40}$/).optional(),
+  // Merged steps: a run shorter than this stays as separate rows.
+  mergeMin: z.union([z.literal(2), z.literal(3), z.literal(5)]).optional(),
+  diffLineNumbers: z.boolean().optional(),
+  // A folded thought row shows its first line after "Thought".
+  thoughtFirstLine: z.boolean().optional(),
+  // The selection bar: icons with labels or icons only, above or below the selection, and the
+  // side chat's model ("" is the chat's own; otherwise a model id as the provider names it).
+  barButtons: z.enum(["both", "icons"]).optional(),
+  barPosition: z.enum(["above", "below"]).optional(),
+  sideModel: z.string().regex(/^[A-Za-z0-9._:/@-]{1,80}$/, "Expected a model id such as claude-sonnet-4-6").optional(),
+  thumbCorners: z.enum(["rounded", "square"]).optional(),
+  // Restyle only: the chat column's width, the floating window's corner radius and gap, and the
+  // working indicator's colour.
+  replyWidth: z.enum(["paseo", "narrow", "wide", "full"]).optional(),
+  floatingRadius: z.union([z.literal(8), z.literal(10), z.literal(16)]).optional(),
+  floatingGap: z.union([z.literal(4), z.literal(8), z.literal(12)]).optional(),
+  loaderColor: z.enum(["paseo", "accent", "text", "muted"]).optional(),
+  // HTML pages taller than this scroll inside their frame; 0 (the default, as in 0.16) is no limit.
+  pageHeight: z.union([z.literal(500), z.literal(800), z.literal(0)]).optional(),
 });
 export type PolishSettings = z.output<typeof polishSchema>;
 
 // Each option's default; a saved value equal to it is removed (older Morphise versions reject keys
 // they do not know, so an unchanged profile carries none).
-export const POLISH_DEFAULTS: Partial<Record<keyof PolishSettings, unknown>> = { merge: true, failedOpen: true, images: "native", imageStacks: false, imageStackOpen: "hover", selection: true, restyle: false, window: "paseo", loader: "dots", loaderSize: "s", diagrams: "mermaid", iconSet: "lucide", html: false, syntax: "one-dark-darker-mariana" };
+export const POLISH_DEFAULTS: Partial<Record<keyof PolishSettings, unknown>> = { mergeMin: 2, diffLineNumbers: true, thoughtFirstLine: false, barButtons: "both", barPosition: "above", sideModel: "", thumbCorners: "rounded", replyWidth: "paseo", floatingRadius: 10, floatingGap: 8, loaderColor: "paseo", pageHeight: 0, merge: true, failedOpen: true, images: "native", imageStacks: false, imageStackOpen: "hover", selection: true, restyle: false, window: "paseo", loader: "dots", loaderSize: "s", diagrams: "mermaid", iconSet: "lucide", html: false, syntax: "one-dark-darker-mariana" };
 
 // Chat Polish's Prefs, as its ported code reads them.
 export interface Prefs {
@@ -82,6 +101,19 @@ export interface Prefs {
   selectionActions: SelectionAction[];
   failedOpen: boolean;
   syntax: string;
+  mergeMin: 2 | 3 | 5;
+  diffLineNumbers: boolean;
+  thoughtFirstLine: boolean;
+  barButtons: "both" | "icons";
+  barPosition: "above" | "below";
+  // "" is the chat's own model.
+  sideModel: string;
+  thumbCorners: "rounded" | "square";
+  replyWidth: "paseo" | "narrow" | "wide" | "full";
+  floatingRadius: 8 | 10 | 16;
+  floatingGap: 4 | 8 | 12;
+  loaderColor: "paseo" | "accent" | "text" | "muted";
+  pageHeight: 500 | 800 | 0;
 }
 
 const hidden = (kinds: readonly string[] | undefined): Hideable[] => HIDEABLE.filter((kind) => kinds?.includes(kind));
@@ -115,5 +147,17 @@ export function polishPrefs(chat: ChatSettings | undefined): Prefs {
     selectionActions: polish.selectionActions ? [...polish.selectionActions] : [...SELECTION_ACTIONS],
     failedOpen: polish.failedOpen !== false,
     syntax: polish.syntax ?? "one-dark-darker-mariana",
+    mergeMin: polish.mergeMin ?? 2,
+    diffLineNumbers: polish.diffLineNumbers !== false,
+    thoughtFirstLine: polish.thoughtFirstLine === true,
+    barButtons: polish.barButtons ?? "both",
+    barPosition: polish.barPosition ?? "above",
+    sideModel: polish.sideModel ?? "",
+    thumbCorners: polish.thumbCorners ?? "rounded",
+    replyWidth: polish.replyWidth ?? "paseo",
+    floatingRadius: polish.floatingRadius ?? 10,
+    floatingGap: polish.floatingGap ?? 8,
+    loaderColor: polish.loaderColor ?? "paseo",
+    pageHeight: polish.pageHeight ?? 0,
   };
 }

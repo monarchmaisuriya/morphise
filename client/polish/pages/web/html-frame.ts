@@ -4,7 +4,8 @@ import { createElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef
 import { htmlPage, themeCss, type HtmlColors } from "../../../../shared/polish/page";
 import { readHostAppearance } from "../../web/host";
 import { showAsPopover } from "../../web/popover";
-import { FRAME_SANDBOX, fitFrame, frameKey, frameLink, frameReport, frameShortcut, heightAt } from "../frame";
+import { usePrefs } from "../../prefs";
+import { FRAME_SANDBOX, fitFrame, frameKey, frameLink, frameReport, frameShortcut, heightAt, limitFrameHeight } from "../frame";
 
 // Web only (html-item.tsx checks Platform.OS); just the DOM this module touches.
 declare const navigator: { userAgent: string } | undefined;
@@ -114,6 +115,8 @@ export function HtmlFrame({
   // Width -1 until the page reports one, so its first report always sets the frame: up at once, down after SHRINK_AFTER_MS (fitFrame).
   const shown = useRef(lastSizes.get(id) ?? { height: lastFrameHeight(id, heights), width: -1 });
   const [height, setHeight] = useState(shown.current.height);
+  // The page's own height is still tracked (fitFrame, lastSizes); only the frame on screen stops at the limit.
+  const limit = usePrefs().pageHeight;
   const shrink = useRef<ReturnType<typeof setTimeout>>(undefined);
   const resize = (size: { height: number; width: number }) => {
     shown.current = size;
@@ -165,7 +168,7 @@ export function HtmlFrame({
     // No modals, forms or same-origin access; links reach the chat as messages (see BOOT in shared/polish/page.ts).
     sandbox: FRAME_SANDBOX,
     onLoad: postTheme,
-    style: { display: "block", width: "100%", height: fill ? "100%" : height, border: 0, background: "transparent", colorScheme: /color-scheme:light/.test(css) ? "light" : "dark" },
+    style: { display: "block", width: "100%", height: fill ? "100%" : limitFrameHeight(height, limit), border: 0, background: "transparent", colorScheme: /color-scheme:light/.test(css) ? "light" : "dark" },
   });
 }
 
