@@ -849,7 +849,7 @@ export function GeneralTab(form: Form): ReactNode {
           </SettingsCard>
         </SettingsSection>
       ) : null}
-      <SettingsSection title="Steps card" info="A chat's plan as a card, in the chat or the sidebar, that shows while it works and settles when it is done. While it is on, Claude agents start with Claude Code's task-list tools, so they publish a plan.">
+      <SettingsSection title="Steps card" info="A chat's plan as a card, in the chat or the sidebar, that shows while it works and settles when it is done. While it is on, Claude agents start with Claude Code's task-list tools, and each new Claude chat is asked to keep its task list with them, so it publishes a plan.">
         <SettingsCard>{VIEW_SECTIONS.steps.map((key) => view[key])}</SettingsCard>
       </SettingsSection>
       <UpdateSection form={form} />

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { documentSchema } from "../shared/document";
-import { createPlanTools, TODO_TOOLS_ENV } from "./plan-tools";
+import { createPlanInstruction, createPlanTools, TASK_LIST_INSTRUCTION, TODO_TOOLS_ENV } from "./plan-tools";
 
 const ready = (stepsCard?: boolean) => {
   const document = documentSchema.parse({});
@@ -24,5 +24,21 @@ describe("task-list tools for the steps card", () => {
   it("opens the agent as Paseo would when the profile cannot be read", async () => {
     const broken = { read: async () => Promise.reject(new Error("disk")) };
     expect(await createPlanTools(broken)({ request: { provider: "claude" } })).toBeUndefined();
+  });
+});
+
+describe("task-list instruction for the steps card", () => {
+  const config = (provider: string, systemPrompt?: string) => ({ request: { config: { provider, cwd: "/w", ...(systemPrompt === undefined ? {} : { systemPrompt }) } } });
+
+  it("asks new Claude agents to keep a task list while the steps card is on, after any instruction they already have", async () => {
+    expect((await createPlanInstruction(ready())(config("claude/claude-opus-5-5")))?.config.systemPrompt).toBe(TASK_LIST_INSTRUCTION);
+    expect((await createPlanInstruction(ready())(config("claude", "Be brief.")))?.config.systemPrompt).toBe(`Be brief.\n\n${TASK_LIST_INSTRUCTION}`);
+  });
+
+  it("leaves other providers, a turned-off card, an agent that already has it, and an unreadable profile alone", async () => {
+    expect(await createPlanInstruction(ready())(config("codex"))).toBeUndefined();
+    expect(await createPlanInstruction(ready(false))(config("claude"))).toBeUndefined();
+    expect(await createPlanInstruction(ready())(config("claude", `x\n\n${TASK_LIST_INSTRUCTION}`))).toBeUndefined();
+    expect(await createPlanInstruction({ read: async () => Promise.reject(new Error("disk")) })(config("claude"))).toBeUndefined();
   });
 });

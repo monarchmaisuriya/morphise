@@ -1,7 +1,7 @@
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import { readImageFile, readTextFile, revealPath } from "./server/files";
 import { watchSettings } from "./server/settings-watch";
-import { createPlanTools } from "./server/plan-tools";
+import { createPlanInstruction, createPlanTools } from "./server/plan-tools";
 import { createTurnRecap } from "./server/turn-recap";
 import { createTaskKeeper } from "./server/task-keeper";
 import { registerMedia } from "./server/polish/media.register";
@@ -33,6 +33,8 @@ export default function contribute(server: PluginServerContext) {
   // While the steps card is on, Claude agents launch with Claude Code's task-list tools, so they
   // publish the plan the card draws (newer models do not get those tools by default).
   const stopPlanTools = server.addHook("agent.open.before", createPlanTools(profile));
+  // ...and each new one is asked to keep that plan, since Claude Code only lists the tools by name.
+  const stopPlanInstruction = server.addHook("agent.create.before", createPlanInstruction(profile));
   // The daemon side of the parts ported from Chat Polish (see NOTICE.md).
   const stopPolish = [registerMedia, registerPages, registerUpdate].map((register) => register(server, profile));
   const keeper = createTaskKeeper(tasks);
@@ -40,6 +42,7 @@ export default function contribute(server: PluginServerContext) {
   return () => {
     stopRecap();
     stopPlanTools();
+    stopPlanInstruction();
     stopPolish.forEach((stop) => stop());
     keeper.dispose();
   };

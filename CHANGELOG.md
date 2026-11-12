@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.18.2 - 2026-11-12
+
+- **The steps card gets a plan to show:** Claude Code lists its task-list tools only by name (the model has to load them first), and agents never loaded them unasked, so no chat ever had a plan. While the steps card is on, each new Claude chat is now asked to keep a task list with them; Paseo adds this to Claude Code's own instructions, it does not replace them. It applies to chats started after the update; turn the steps card off to start chats without it.
+
 ## 0.18.1 - 2026-11-12
 
 - **The turn recap says what happened:** "Changed 7 files +466 −24 · 1 command failed", opening to an Edited row per file and a Ran row per failed command, drawn like the merged steps above it. It no longer repeats the turn's duration (Paseo's footer shows "Worked for …") or counts calls. A turn that changed no file and had no failed command gets no recap, and recaps like that already in a chat draw nothing, so there is no row left that cannot open.
