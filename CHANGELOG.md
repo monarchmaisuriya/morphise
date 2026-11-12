@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.19.10 - 2026-11-12
+
+- **Launchpad:** the Workbench view holding Tasks and Agents is now called Launchpad, with a rocket icon. Links that opened it before still do.
+- **Column colours in the list:** an empty column or status keeps its own colour dot or icon in the list; only its name is muted. Before, empty ones turned grey, so the colours set under Customise board seemed lost.
+
 ## 0.19.9 - 2026-11-12
 
 - **Lists that read at a glance:** the Agents and Tasks lists share one design. Each status or column is a box with a tinted header (its icon or colour dot, name and a count chip, and + for task columns), rows have hairline dividers, and the list stops at 1180 pt wide and centres, so a row's facts stay near its title on wide windows.

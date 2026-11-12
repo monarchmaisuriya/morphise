@@ -21,7 +21,7 @@ import { StackViewerHost } from "./polish/media/views";
 import { FOCUS_SCOPE, useTooltip } from "./web";
 
 // Workbench: everything that needs the user, in one place. Chats waiting on them (raised by agents) and
-// their own tasks (Overview, Today, Archived), plus bookmarked answers. A list of views on the left on
+// their own tasks (Launchpad, Today, Archived), plus bookmarked answers. A list of views on the left on
 // wide screens, tabs along the top on phones.
 
 export const WORKBENCH_SCREEN_ID = "workbench";
@@ -30,7 +30,7 @@ export const LEGACY_SCREENS = { tasks: "board", inbox: "waiting" } as const;
 
 export type WorkbenchView = "waiting" | "today" | "board" | "bookmarks" | "archived";
 const VIEWS: readonly WorkbenchView[] = ["board", "waiting", "today", "bookmarks", "archived"];
-// Overview (the "board" view) shows the user's tasks or every agent, by a pair of tabs at its top.
+// Launchpad (the "board" view) shows the user's tasks or every agent, by a pair of tabs at its top.
 type BoardTab = "tasks" | "agents";
 // Below this width the views sit in a row of tabs instead of a list.
 const RAIL_FROM = 720;
@@ -38,7 +38,7 @@ const RAIL_WIDTH = 176;
 const RAIL_FOLDED = 52;
 
 
-// "agents" was a view of its own before 0.19.2; it now opens Overview on its Agents tab.
+// "agents" was a view of its own before 0.19.2; it now opens Launchpad on its Agents tab.
 function viewParam(params: PluginScreenProps["params"]): { view: WorkbenchView; tab?: BoardTab } | null {
   const asked = typeof params.view === "string" ? params.view : typeof params.tab === "string" ? params.tab : null;
   if (asked === "agents") return { view: "board", tab: "agents" };
@@ -68,7 +68,7 @@ type Counts = ReturnType<typeof useWorkbenchCounts>;
 
 // One list, without group headings, in this order.
 const ENTRIES: readonly { view: WorkbenchView; label: string; icon: string }[] = [
-  { view: "board", label: "Overview", icon: "Binoculars" },
+  { view: "board", label: "Launchpad", icon: "Rocket" },
   { view: "waiting", label: "Waiting", icon: "Inbox" },
   { view: "today", label: "Today", icon: "CalendarClock" },
   { view: "archived", label: "Archived", icon: "Archive" },
@@ -86,7 +86,7 @@ function countTone(view: WorkbenchView, counts: Counts, t: Tokens): string {
   return t.c.foregroundMuted;
 }
 
-// Overview's two tabs: plain words with a thin line under the chosen one.
+// Launchpad's two tabs: plain words with a thin line under the chosen one.
 function BoardTabs({ t, tab, onChange }: { t: Tokens; tab: BoardTab; onChange(tab: BoardTab): void }) {
   return (
     <View accessibilityRole="tablist" style={{ flexDirection: "row", gap: 18, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: t.c.border }}>
@@ -154,7 +154,7 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: WorkbenchView
     // The view picked here or asked for when opened; until then, what needs the user first, then
     // what is due, then the board, following the counts as they arrive.
     const [picked, setView] = useState<WorkbenchView | null>(null);
-    // Overview's Agents tab shows unless its setting turns it off.
+    // Launchpad's Agents tab shows unless its setting turns it off.
     const boardSettings = useSettings(agentsBoardSettings);
     const agentsShown = boardSettings.status !== "ready" || boardSettings.values.enabled;
     const entries = ENTRIES;
@@ -177,9 +177,9 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: WorkbenchView
     const [agentsLayout, setViewLayout] = useDeviceChoice(railSettings, "agentsLayout");
     const openChat = navigation ? (agentId: string) => navigation.openAgent({ agentId }) : null;
     const workspaces = useValue(deps.workspaces);
-    // Overview's tab: one a link asked for, else the one picked here or last used on this device.
+    // Launchpad's tab: one a link asked for, else the one picked here or last used on this device.
     const boardTab: BoardTab = agentsShown ? linkedTab ?? savedTab : "tasks";
-    // Overview waits for both settings, so it never shows the Agents tab for a moment when it is off or not the saved tab.
+    // Launchpad waits for both settings, so it never shows the Agents tab for a moment when it is off or not the saved tab.
     const boardReady = boardSettings.status !== "loading" && railSettings.status !== "loading";
     const pickTab = (tab: BoardTab) => {
       setLinkedTab(null);

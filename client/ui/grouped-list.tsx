@@ -47,11 +47,10 @@ export function Fact({ t, icon, text, tone }: { t: Tokens; icon?: string; text?:
 
 /**
  * One group: a box whose header (chevron, icon or dot, name, count) folds and opens it. A group with no rows to show
- * (`empty`) is drawn muted, whatever its count says (a column's cards may all be hidden by filters). `trailing` sits
+ * (`empty`) has a muted name but keeps its own colour, whatever its count says (a column's cards may all be hidden by filters). `trailing` sits
  * at the header's right, outside its press area (for example an add button).
  */
 export function GroupBox({ t, title, count, countTone, empty, icon, dot, tone, open, onToggle, trailing, children, label }: { t: Tokens; title: string; count: number | string; countTone?: string; empty: boolean; icon?: string; dot?: string; tone?: string; open: boolean; onToggle(): void; trailing?: ReactNode; children?: ReactNode; label?: string }) {
-  const color = empty ? t.c.foregroundMuted : tone ?? t.c.foregroundMuted;
   return (
     <View style={{ borderWidth: 1, borderColor: t.c.border, borderRadius: t.radius.card, overflow: "hidden", backgroundColor: t.c.surface0 }}>
       <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: t.c.surface1, paddingRight: 6 }}>
@@ -63,7 +62,7 @@ export function GroupBox({ t, title, count, countTone, empty, icon, dot, tone, o
           style={({ hovered }: { pressed: boolean; hovered?: boolean }) => ({ flex: 1, flexDirection: "row", alignItems: "center", gap: 8, height: t.compact ? 44 : 38, paddingHorizontal: 12, opacity: hovered ? 0.85 : 1 })}
         >
           <Icon name={open ? "ChevronDown" : "ChevronRight"} size={14} color={t.c.foregroundMuted} />
-          {icon ? <Icon name={icon} size={14} color={color} /> : dot ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: empty ? t.c.foregroundMuted : dot }} /> : null}
+          {icon ? <Icon name={icon} size={14} color={tone ?? t.c.foregroundMuted} /> : dot ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: dot }} /> : null}
           <Text style={{ fontSize: 13, fontWeight: "600", color: empty ? t.c.foregroundMuted : t.c.foreground, flexShrink: 1 }} numberOfLines={1}>
             {title}
           </Text>

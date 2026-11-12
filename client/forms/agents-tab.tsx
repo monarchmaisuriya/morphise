@@ -114,9 +114,9 @@ function AgentsBoardSettingsForm({ form }: { form: Form }) {
   const densityOptions = [...DENSITY_PRESETS, ...(values.density === "custom" ? (["custom"] as const) : [])].map((density) => ({ value: density, label: DENSITY_TITLES[density] }));
   return (
     <View style={{ gap: 12 }}>
-      <SettingsSection title="Agents tab" info="The Agents tab of the Workbench's Overview: every agent on this host by status (Waiting, To review, Running, Done and Archived), as a list or as lanes; pick with List or Board at its top.">
+      <SettingsSection title="Agents tab" info="The Agents tab of the Workbench's Launchpad: every agent on this host by status (Waiting, To review, Running, Done and Archived), as a list or as lanes; pick with List or Board at its top.">
         <SettingsCard>
-          <SwitchField label="Show the Agents tab" hint="Adds an Agents tab beside Tasks in the Workbench's Overview. When this is off, Overview shows only tasks and no agents are read for it." value={values.enabled} onChange={(enabled) => set({ enabled })} />
+          <SwitchField label="Show the Agents tab" hint="Adds an Agents tab beside Tasks in the Workbench's Launchpad. When this is off, Launchpad shows only tasks and no agents are read for it." value={values.enabled} onChange={(enabled) => set({ enabled })} />
         </SettingsCard>
       </SettingsSection>
       {values.enabled ? (
