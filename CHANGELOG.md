@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.19.5 - 2026-11-12
+
+- **Plan updates read as progress:** each time the agent updates its plan, the chat shows one row saying what that update did, instead of another identical "Plan 0/4": "Planned · 4 steps", "Working on · Diagnosing the missed store", "Finished · Writing the plan", then "Plan done", each with its count. Every row opens to the plan as it stood then; the newest follows "Start folded".
+- **No progress line in the chat:** the long line under the plan row is gone; the count says the same. The sidebar's card keeps its progress bar.
+
 ## 0.19.4 - 2026-11-12
 
 - **The plan in the chat looks like the steps around it:** instead of a bordered card, it is one row like "Thought 11 times": a list icon, "Plan" (or "Plan done" with a green check), its count ("1/4"), and a chevron that folds and opens it. The steps hang under a thin rule. Finished steps are quiet with a small check, not struck through; the step in progress is bold with an accent dot; open steps have a hollow circle. A thin progress line shows while the plan runs, when Progress is on. The plan keeps this shape when it finishes, and earlier plan updates are the same row, folded, opening to the plan as it stood then. The sidebar's card is unchanged.

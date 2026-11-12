@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Animated, Pressable, ScrollView, Text, View } from "react-native";
 import { z } from "zod";
 import { chatName } from "../shared/chat-status";
-import { cardMode, latestPlan, listedSteps, readSteps, type Step, stepCounts, type StepsOptions, timeOf } from "../shared/steps";
+import { cardMode, latestPlan, listedSteps, planHeadline, readSteps, type Step, stepCounts, type StepsOptions, timeOf } from "../shared/steps";
 import { createValueStore, useValue, type ValueStore } from "./profile-store";
 import { Icon, IconButton, type Tokens, useTokens } from "./ui/kit";
 import { usePulse } from "./ui/pulse";
@@ -159,13 +159,14 @@ function StepRow({ step, t }: { step: Step; t: Tokens }) {
 // The plan in the chat, drawn like the merged steps around it: one row ("Plan 2/4", "Plan done 4/4")
 // with a chevron, opening to its steps under a thin rule. Finished steps are quiet, not struck
 // through; the current one stands out. Folding is the user's; it starts as "Start folded" says.
-function InlinePlan({ steps, mode, theme, compact, startFolded, progress }: { steps: readonly Step[]; mode: "plan" | "done"; theme: PluginTheme; compact: boolean; startFolded: boolean; progress: boolean }) {
+function InlinePlan({ steps, mode, theme, compact, startFolded }: { steps: readonly Step[]; mode: "plan" | "done"; theme: PluginTheme; compact: boolean; startFolded: boolean }) {
   const s = useStyles(theme);
   const c = theme.colors;
   const icons = !!useIndent("steps");
   const [open, setOpen] = useState(!startFolded);
   const { done, total } = stepCounts(steps);
   const current = steps.find((step) => step.status === "in_progress") ?? null;
+  const headline = planHeadline(steps);
   const spacing = useSpacing();
   return (
     <View style={spacing}>
@@ -175,19 +176,14 @@ function InlinePlan({ steps, mode, theme, compact, startFolded, progress }: { st
         kind="steps"
         icon={mode === "done" ? "CircleCheck" : "ListChecks"}
         iconColor={mode === "done" ? c.statusSuccess : undefined}
-        verb={mode === "done" ? "Plan done" : "Plan"}
-        target={!open && current ? current.text : undefined}
+        verb={headline.verb}
+        target={headline.target ?? undefined}
         prose
         meta={`${done}/${total}`}
         pulsing={!!current}
         open={open}
         onToggle={() => setOpen(!open)}
       />
-      {mode === "plan" && progress ? (
-        <View style={{ height: 2, marginLeft: icons ? 28 : 0, marginTop: 2, borderRadius: 1, backgroundColor: alpha(c.border, 0.6), overflow: "hidden" }}>
-          <View style={{ width: `${Math.round((done / total) * 100)}%`, height: 2, backgroundColor: c.statusSuccess }} />
-        </View>
-      ) : null}
       <Expand open={open} style={{ marginLeft: icons ? 9 : 0, paddingLeft: icons ? 15 : 13, paddingTop: 4, paddingBottom: 2, gap: 2, borderLeftWidth: 1, borderLeftColor: alpha(c.border, 0.6) }}>
         {() =>
           steps.map((step, index) => (
@@ -250,7 +246,7 @@ export function StepsCardView({ plan, t, options, title = null, inline = false, 
   if (hidden || !steps || steps.length === 0) return null;
   const { done, total } = stepCounts(steps);
   // In the chat the plan is always the step row, finished or not, so it never changes shape.
-  if (inline && theme) return <InlinePlan steps={steps} mode={done === total ? "done" : "plan"} theme={theme} compact={t.compact} startFolded={options.startFolded} progress={options.progress} />;
+  if (inline && theme) return <InlinePlan steps={steps} mode={done === total ? "done" : "plan"} theme={theme} compact={t.compact} startFolded={options.startFolded} />;
   if (!shown) return null;
   const current = steps.find((step) => step.status === "in_progress") ?? steps.find((step) => step.status === "pending") ?? null;
   // In the chat the card spans the reply's width and lists every step, finished ones too, while the
@@ -335,8 +331,9 @@ function NamedStepsCard({ chat, paseo, t, options, allowed, report }: { chat: Ag
 
 // ---------- In the chat ----------
 
-// Each plan update an agent posts (a `todo` timeline item) is drawn by Morphise instead of Paseo:
-// the newest as the live card, older ones as one line each.
+
+// Each plan update an agent posts (a `todo` timeline item) is drawn by Morphise instead of Paseo, as
+// one row saying what that update did; the newest is the live plan.
 export const CHAT_STEPS_KIND = "steps-card";
 export const chatStepsSchema = z.object({ steps: z.array(z.object({ text: z.string(), status: z.enum(["pending", "in_progress", "completed"]) })) });
 type ChatSteps = z.output<typeof chatStepsSchema>;
@@ -351,10 +348,11 @@ export function createChatStepsRow(paseo: Paseo, options: () => StepsOptions) {
     // when Paseo gave no time). Until the chat's plan is read, or when it cannot be, every update
     // is one line, so a chat never shows two live cards.
     const current = plan.status === "ready" && plan.steps !== null && (plan.latestAt !== null ? plan.latestAt === timestamp.getTime() : JSON.stringify(plan.steps) === JSON.stringify(own));
-    // An earlier update is the same row, folded, opening to the plan as it stood then.
+    // Every update stays in the chat as a step of its progress ("Working on …", "Finished …"),
+    // folded, opening to the plan as it stood then; the newest follows "Start folded".
     if (!current) {
       const { done, total } = stepCounts(own);
-      return <InlinePlan steps={own} mode={done === total ? "done" : "plan"} theme={theme} compact={layout.compact} startFolded progress={false} />;
+      return <InlinePlan steps={own} mode={done === total ? "done" : "plan"} theme={theme} compact={layout.compact} startFolded />;
     }
     return <StepsCardView plan={plan} t={t} options={options()} theme={theme} inline />;
   };

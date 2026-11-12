@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cardMode, latestPlan, latestSteps, listedSteps, readSteps, stepCounts, stepsOptions, timeOf } from "./steps";
+import { cardMode, latestPlan, latestSteps, listedSteps, planHeadline, readSteps, stepCounts, stepsOptions, timeOf } from "./steps";
 
 const todo = (items: unknown[]) => ({ type: "todo", items });
 
@@ -84,5 +84,15 @@ describe("latestPlan", () => {
     expect(latestPlan([entry({ type: "assistant_message", text: "hi" }, "2026-11-12T10:00:00.000Z")])).toBeNull();
     expect(latestPlan([{ item: todo("x"), timestamp: "soon" }])?.at).toBeNull();
     expect(timeOf(undefined)).toBeNull();
+  });
+});
+
+describe("plan headline", () => {
+  const step = (text: string, status: "pending" | "in_progress" | "completed") => ({ text, status });
+  it("reads successive updates as progress, as in M's chat", () => {
+    expect(planHeadline([step("Diagnose the missed store", "pending"), step("Write the plan", "pending"), step("Fix", "pending")])).toEqual({ verb: "Planned", target: "3 steps" });
+    expect(planHeadline([step("Diagnosing the missed store", "in_progress"), step("Write the plan", "pending")])).toEqual({ verb: "Working on", target: "Diagnosing the missed store" });
+    expect(planHeadline([step("Diagnose", "completed"), step("Write the plan", "completed"), step("Fix", "pending")])).toEqual({ verb: "Finished", target: "Write the plan" });
+    expect(planHeadline([step("Diagnose", "completed"), step("Fix", "completed")])).toEqual({ verb: "Plan done", target: null });
   });
 });

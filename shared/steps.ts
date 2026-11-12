@@ -123,3 +123,17 @@ export function listedSteps(steps: readonly Step[], options: Pick<StepsOptions, 
   const rows = open.slice(start, start + options.maxSteps);
   return { rows, more: open.length - rows.length };
 }
+
+/**
+ * What one plan update says in the chat, so successive updates read as progress: "Planned · 4 steps" before any
+ * work, "Working on · <step>" while a step runs, "Finished · <last finished step>" between steps, "Plan done" at the end.
+ */
+export function planHeadline(steps: readonly Step[]): { verb: string; target: string | null } {
+  const { done, total } = stepCounts(steps);
+  if (total > 0 && done === total) return { verb: "Plan done", target: null };
+  const running = steps.find((step) => step.status === "in_progress");
+  if (running) return { verb: "Working on", target: running.text };
+  const finished = [...steps].reverse().find((step) => step.status === "completed");
+  if (finished) return { verb: "Finished", target: finished.text };
+  return { verb: "Planned", target: `${total} ${total === 1 ? "step" : "steps"}` };
+}
