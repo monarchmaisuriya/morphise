@@ -65,6 +65,7 @@ function sampleFacts(): CardFacts {
     sessionId: null,
     lastError: null,
     context: { used: 128_000, max: 200_000 },
+    workspaceOpen: true,
   };
   return { agent, indicator: "running", git: { dirty: true, ahead: 2, behind: 0 }, pullRequest: { number: 128, state: "open" }, subtasks: { total: 2, running: 1, waiting: 0, failed: 0 }, parent: null, workspaceShared: false };
 }
@@ -114,9 +115,9 @@ function AgentsBoardSettingsForm({ form }: { form: Form }) {
   const densityOptions = [...DENSITY_PRESETS, ...(values.density === "custom" ? (["custom"] as const) : [])].map((density) => ({ value: density, label: DENSITY_TITLES[density] }));
   return (
     <View style={{ gap: 12 }}>
-      <SettingsSection title="Agents tab" info="The Agents tab of the Workbench's Launchpad: every agent on this host by status (Waiting, To review, Running, Done and Archived), as a list or as lanes; pick with List or Board at its top.">
+      <SettingsSection title="Agents tab" info="The Workbench's Agents view: every agent on this host by status (Waiting, To review, Running, Done and Archived), as a list or as lanes; pick with List or Board at its top.">
         <SettingsCard>
-          <SwitchField label="Show the Agents tab" hint="Adds an Agents tab beside Tasks in the Workbench's Launchpad. When this is off, Launchpad shows only tasks and no agents are read for it." value={values.enabled} onChange={(enabled) => set({ enabled })} />
+          <SwitchField label="Show the Agents view" hint="Lists Agents in the Workbench, beside Tasks. When this is off, Agents is listed only while an agent waits on you (it is where you answer them), and no agents are read for it until you open it." value={values.enabled} onChange={(enabled) => set({ enabled })} />
         </SettingsCard>
       </SettingsSection>
       {values.enabled ? (

@@ -1,13 +1,13 @@
 import { useEffect, useRef } from "react";
 import { Text, View } from "react-native";
-import { agentHeadline, type CardSettings, contextShare, modelLabel, rowLine } from "../../shared/agents-board";
+import { agentHeadline, type CardSettings, contextShare, rowLine } from "../../shared/agents-board";
 import { summarizePermission } from "../../shared/inbox";
 import { formatElapsed } from "../../shared/time-text";
 import type { Indicator } from "../../shared/profile";
 import { Fact, GroupRow } from "../ui/grouped-list";
 import { statusColor } from "../ui/hues";
 import { Icon, IconButton, type Tokens } from "../ui/kit";
-import { agentAgo, type CardButtons, type CardFacts, STATUS_WORDS, StopButton } from "./card";
+import { agentAgo, agentFields, type CardButtons, type CardFacts, ProjectTile, STATUS_WORDS, StopButton, subtasksText } from "./card";
 import type { CardLive } from "./data";
 import { onRightClick, reveal } from "./web";
 
@@ -30,13 +30,18 @@ export function AgentRow({ t, facts, card, now, live, selected, focused, buttons
   const permission = indicator === "needs_input" ? summarizePermission(agent.pendingPermissions[agent.pendingPermissions.length - 1]) : null;
   const line = rowLine({ indicator, permission, error: agent.lastError, step: card.plan ? live?.plan?.step ?? null : null, subtitle: headline.subtitle });
   const share = card.context && running ? contextShare(live?.usage?.context ?? agent.context) : null;
-  const model = card.model || card.provider ? modelLabel(card.provider ? agent.provider : null, card.model ? agent.model : null) : null;
+  // The same fields the board's cards show, by the same card settings.
+  const fields = agentFields(facts, card, headline);
+  const model = [fields.model, fields.thinking].filter(Boolean).join(" ") || null;
+  const branch = fields.branch ? [fields.branch, fields.git].filter(Boolean).join(" ") : fields.git || null;
+  const labels = fields.labels.length ? [fields.labels.join(", "), fields.moreLabels ? `+${fields.moreLabels}` : null].filter(Boolean).join(" ") : null;
+  const hasMeta = !!(fields.project || fields.workspace || branch || fields.folder || labels || fields.subtasks || facts.parent);
   const time = card.timer ? (agent.turnStartedAt ? formatElapsed(agent.turnStartedAt, now) : agentAgo(agent.updatedAt, now)) : null;
   const pullRequest = card.pullRequest && facts.pullRequest ? [facts.pullRequest.number ? `#${facts.pullRequest.number}` : "PR", facts.pullRequest.state].join(" ") : null;
   const plan = card.plan ? live?.plan ?? null : null;
   const tone = statusColor(t.c, indicator);
   const lineTone = indicator === "failed" ? t.c.statusDanger : indicator === "needs_input" ? t.c.statusWarning : t.c.foregroundMuted;
-  // Phones keep two lines: the time joins the muted line, and the facts at the right are left out.
+  // Phones stack the lines: the time joins the muted line, the details line follows, and the facts at the right are left out.
   const detail = t.compact ? [line, time].filter(Boolean).join(" · ") : line;
   const contextTone = share === null ? undefined : share >= 0.95 ? t.c.statusDanger : share >= 0.8 ? t.c.statusWarning : undefined;
   return (
@@ -50,6 +55,24 @@ export function AgentRow({ t, facts, card, now, live, selected, focused, buttons
           <Text style={{ fontSize: 12, color: lineTone, flex: 1, minWidth: 0 }} numberOfLines={1}>
             {detail}
           </Text>
+        ) : undefined
+      }
+      meta={
+        hasMeta ? (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 12, minWidth: 0, overflow: "hidden" }}>
+            {fields.project ? (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 5, flexShrink: 1, minWidth: 0 }}>
+                {card.projectIcon ? <ProjectTile name={fields.project} /> : null}
+                <Fact t={t} text={fields.project} />
+              </View>
+            ) : null}
+            {fields.workspace ? <Fact t={t} icon="LayoutGrid" text={fields.workspace} /> : null}
+            {branch ? <Fact t={t} icon="GitBranch" text={branch} /> : null}
+            {fields.folder ? <Fact t={t} icon="Folder" text={fields.folder} /> : null}
+            {labels ? <Fact t={t} icon="Tag" text={labels} /> : null}
+            {fields.subtasks ? <Fact t={t} icon="Network" text={subtasksText(fields.subtasks)} /> : null}
+            {facts.parent ? <Fact t={t} icon="CornerLeftUp" text={`sub-agent of ${facts.parent}`} /> : null}
+          </View>
         ) : undefined
       }
       facts={
@@ -74,9 +97,10 @@ export function AgentRow({ t, facts, card, now, live, selected, focused, buttons
         ) : undefined
       }
       actions={
-        !onMenu && (t.compact || !(buttons.stop || buttons.archive || buttons.open)) ? undefined : (
+        !onMenu && !buttons.clear && (t.compact || !(buttons.stop || buttons.archive || buttons.open)) ? undefined : (
         <>
           {!t.compact && buttons.stop ? <StopButton t={t} title={headline.title} disabled={buttons.busy} onStop={buttons.stop} /> : null}
+          {buttons.clear ? <IconButton t={t} size="sm" icon="CheckCheck" label={`Clear ${headline.title}, to Done`} disabled={buttons.clearing} onPress={buttons.clear} /> : null}
           {!t.compact && buttons.archive ? <IconButton t={t} size="sm" icon="Archive" label={`Archive ${headline.title}`} disabled={buttons.busy} onPress={buttons.archive} /> : null}
           {!t.compact && buttons.open ? <IconButton t={t} size="sm" icon="ArrowUpRight" label={`Open ${headline.title}`} onPress={buttons.open} /> : null}
           {onMenu ? <IconButton t={t} size="sm" icon="Ellipsis" label={`More for ${headline.title}`} onPress={onMenu} /> : null}

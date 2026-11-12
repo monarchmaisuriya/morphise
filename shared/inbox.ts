@@ -116,18 +116,7 @@ export function previewLine(item: { reason: InboxReason; permission: PermissionS
   return "Finished";
 }
 
-// ---------- Filtering, grouping and clearing ----------
-
-export type InboxFilter = "all" | InboxReason;
-
-export interface InboxEntry {
-  id: string;
-  title: string;
-  reason: InboxReason;
-  at: string;
-  attentionAt: string;
-  workspace: string;
-}
+// ---------- Clearing ----------
 
 type Clearable = { id: string; reason: InboxReason; attentionAt: string };
 
@@ -141,41 +130,13 @@ export function isCleared(entry: Clearable, cleared: ReadonlySet<string>): boole
   return canClear(entry) && cleared.has(clearKey(entry));
 }
 
-const ORDER: Record<InboxReason, number> = { permission: 0, failed: 1, finished: 2 };
-
-// Newest first within a reason; reasons in order of urgency.
-export function compareEntries(left: InboxEntry, right: InboxEntry): number {
-  return ORDER[left.reason] - ORDER[right.reason] || right.at.localeCompare(left.at) || left.title.localeCompare(right.title);
-}
-
-// What a filter and a search leave, and how many of each reason there are before the reason filter.
-export function inboxView<Entry extends InboxEntry>(entries: readonly Entry[], options: { filter: InboxFilter; search: string; cleared: ReadonlySet<string> }) {
-  const words = options.search.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const matching = entries
-    .filter((entry) => !isCleared(entry, options.cleared))
-    .filter((entry) => {
-      const haystack = `${entry.title} ${entry.workspace}`.toLowerCase();
-      return words.every((word) => haystack.includes(word));
-    });
-  const counts: Record<InboxFilter, number> = { all: matching.length, permission: 0, failed: 0, finished: 0 };
-  for (const entry of matching) counts[entry.reason]++;
-  const shown = matching.filter((entry) => options.filter === "all" || entry.reason === options.filter).sort(compareEntries);
-  return { shown, counts };
-}
-
-// After the selected item leaves the list (answered, sent, cleared), the one now in its place.
-export function nextSelection(before: readonly { id: string }[], after: readonly { id: string }[], selected: string | null): string | null {
-  if (selected && after.some((entry) => entry.id === selected)) return selected;
-  if (!after.length) return null;
-  const index = selected ? before.findIndex((entry) => entry.id === selected) : -1;
-  if (index < 0) return after[0].id;
-  for (let at = index + 1; at < before.length; at++) {
-    if (after.some((entry) => entry.id === before[at].id)) return before[at].id;
-  }
-  for (let at = index - 1; at >= 0; at--) {
-    if (after.some((entry) => entry.id === before[at].id)) return before[at].id;
-  }
-  return after[0].id;
+/**
+ * Whether an agent waits on the user: it asks permission, failed, or finished unread and was not cleared on this
+ * device, in a workspace that is listed (not being archived, background or internal). The one rule the Workbench count
+ * and the Agents view both use; `reason` is null for an agent that needs nothing.
+ */
+export function waitsOnUser(entry: { id: string; reason: InboxReason | null; attentionAt: string }, workspaceOpen: boolean, cleared: ReadonlySet<string>): boolean {
+  return entry.reason !== null && workspaceOpen && !isCleared(entry as Clearable, cleared);
 }
 
 const MAX_CLEARED = 300;
@@ -185,8 +146,9 @@ export function withCleared(cleared: readonly string[], add: readonly string[], 
   return [...new Set([...cleared, ...add])].filter((key) => live.has(key)).slice(-MAX_CLEARED);
 }
 
-// How the Inbox looks on this device: grouping, the finished items cleared from it, and which lines a
-// card shows. Keys added since version 1 default when missing, so older saved settings still read.
+// On this device: the finished agents the user cleared (the Agents tab moves them to Done and the Workbench count
+// leaves them out). The other keys belonged to the Waiting view, removed in 0.20; they are kept so versions before
+// it still read the record.
 export const inboxSettings = defineSettings({
   id: "inbox",
   scope: "device",

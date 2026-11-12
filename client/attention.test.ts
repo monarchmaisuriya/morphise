@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { attentionOrder, reduceAttention, waitingChildren } from "./attention";
+import { clearKeyOf, readBoardAgent } from "../shared/agents-board";
+import { clearKey, isCleared } from "../shared/inbox";
+import { readAttention, reduceAttention, waitingChildren } from "./attention";
 
 // Shaped like Paseo's daemon agent records: the parent is a label, permission waits are a list.
 const agent = (id: string, extra: Record<string, unknown> = {}) => ({ id, title: `Chat ${id}`, workspaceId: "w1", status: "idle", labels: {}, pendingPermissions: [], requiresAttention: false, attentionReason: null, attentionTimestamp: "2026-11-12T10:00:00Z", ...extra });
@@ -53,7 +55,19 @@ describe("attention", () => {
         { agent: agent("done", { requiresAttention: true, attentionReason: "finished", ...childOf("boss") }) },
       ],
     });
-    expect(attentionOrder(list).map((item) => item.id)).toEqual(["p", "e2", "e1", "f", "done"]);
     expect(waitingChildren(list, "boss")).toBe(2);
+  });
+});
+
+describe("cleared keys", () => {
+  // The Workbench count (attention items) and the Agents view (board agents) read the same per-device cleared list,
+  // so both must build the same key for one agent record.
+  it("are the same from the attention item and the board agent", () => {
+    const raw = agent("f", { requiresAttention: true, attentionReason: "finished", attentionTimestamp: "2026-11-12T10:00:00Z" });
+    const item = readAttention(raw)?.item;
+    const board = readBoardAgent({ agent: raw }, () => undefined);
+    expect(item && board).toBeTruthy();
+    expect(clearKeyOf(board!)).toBe(clearKey(item!));
+    expect(isCleared(item!, new Set([clearKeyOf(board!)!]))).toBe(true);
   });
 });

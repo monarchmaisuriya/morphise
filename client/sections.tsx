@@ -289,11 +289,11 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
         track(
           client.addCommandCenterItem({
             id: "morphise-inbox",
-            title: "Open Workbench: chats waiting on you",
-            icon: "Inbox",
+            title: "Open Workbench: agents waiting on you",
+            icon: "Hand",
             keywords: ["workbench", "inbox", "waiting", "permission", "failed", "finished", "attention"],
             context: "global",
-            onSelect: ({ openScreen }) => openScreen({ screenId: WORKBENCH_SCREEN_ID, params: { view: "waiting" } }),
+            onSelect: ({ openScreen }) => openScreen({ screenId: WORKBENCH_SCREEN_ID, params: { view: "agents" } }),
           }),
         );
         track(client.addScreen({ id: DISPATCH_SCREEN_ID, title: "Dispatch", Component: createDispatchScreen(tasks) }));

@@ -111,6 +111,17 @@ describe("dropTarget", () => {
     expect(dropTarget(columns, 50, 300)).toEqual({ column: "todo", before: null });
   });
 
+  it("in a list, picks the section the pointer is over or nearest to, by height", () => {
+    const sections = [
+      { id: "todo", frame: { x: 0, y: 0, width: 600, height: 120 }, cards: [{ id: "a", frame: { x: 0, y: 40, width: 600, height: 40 } }, { id: "b", frame: { x: 0, y: 80, width: 600, height: 40 } }] },
+      { id: "doing", frame: { x: 0, y: 132, width: 600, height: 40 }, cards: [] },
+    ];
+    expect(dropTarget(sections, 300, 70, "vertical")).toEqual({ column: "todo", before: "b" });
+    expect(dropTarget(sections, 300, 150, "vertical")).toEqual({ column: "doing", before: null });
+    expect(dropTarget(sections, 300, 128, "vertical")).toEqual({ column: "doing", before: null });
+    expect(dropTarget(sections, 300, 500, "vertical")).toEqual({ column: "doing", before: null });
+  });
+
   it("takes the nearest column when the pointer is in a gap or past the edge", () => {
     expect(dropTarget(columns, 115, 10)).toEqual({ column: "doing", before: null });
     expect(dropTarget(columns, 900, 10)).toEqual({ column: "doing", before: null });

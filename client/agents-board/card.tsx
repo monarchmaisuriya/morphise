@@ -33,12 +33,51 @@ export interface CardButtons {
   archive?(): void;
   allow?(): void;
   deny?(): void;
+  // Marks a finished agent seen on this device: it moves from To review to Done.
+  clear?(): void;
+  // A clear is being saved; Clear waits for it, as a second save at once would be refused.
+  clearing?: boolean;
   busy?: boolean;
 }
 
 // Markers for the stylesheet that shows a card's buttons while focus is inside it (web only; ignored elsewhere).
 const CARD_MARK = { dataSet: { mxCard: "" } } as object;
 const ACTIONS_MARK = { dataSet: { mxCardActions: "" } } as object;
+
+/**
+ * What a card and a list row show of an agent, by the card field settings (Settings, Agents): one rule for both. Null or
+ * empty when the field is off or Paseo gave no value. The workspace is left out when it already leads the title.
+ */
+export function agentFields(facts: CardFacts, card: CardSettings, headline: { subtitle: string | null }) {
+  const { agent } = facts;
+  const labels = card.labels ? agent.labels.slice(0, labelLimitCount(card.labelLimit)) : [];
+  return {
+    project: card.project ? agent.project : null,
+    workspace: card.workspace && !headline.subtitle && agent.workspace && agent.workspace !== agent.project && !agent.title.startsWith(agent.workspace) ? agent.workspace : null,
+    model: card.model || card.provider ? modelLabel(card.provider ? agent.provider : null, card.model ? agent.model : null) : null,
+    thinking: card.thinking ? agent.thinking : null,
+    branch: card.branch ? agent.branch : null,
+    git: card.gitStatus && facts.git ? [facts.git.ahead ? `↑${facts.git.ahead}` : null, facts.git.behind ? `↓${facts.git.behind}` : null, facts.git.dirty ? "•" : null].filter(Boolean).join(" ") : "",
+    labels,
+    moreLabels: card.labels ? Math.max(0, agent.labels.length - labels.length) : 0,
+    folder: agent.cwd ? (card.path ? agent.cwd : card.folder && folderAddsSomething(folderOf(agent.cwd), agent.project, agent.workspace) ? folderOf(agent.cwd) : null) : null,
+    subtasks: card.subtasks && facts.subtasks ? facts.subtasks : null,
+  };
+}
+
+// "3 sub-agents · 1 running".
+export function subtasksText(subtasks: NonNullable<CardFacts["subtasks"]>): string {
+  return [`${subtasks.total} sub-agent${subtasks.total === 1 ? "" : "s"}`, subtasks.running ? `${subtasks.running} running` : null, subtasks.waiting ? `${subtasks.waiting} waiting` : null, subtasks.failed ? `${subtasks.failed} failed` : null].filter(Boolean).join(" · ");
+}
+
+// A project's letter tile, as Paseo's own sidebar draws it.
+export function ProjectTile({ name }: { name: string }) {
+  return (
+    <View style={{ width: 14, height: 14, borderRadius: 3, alignItems: "center", justifyContent: "center", backgroundColor: tileColor(name) }}>
+      <Text style={{ fontSize: 9, color: "#ffffff", fontWeight: "700" }}>{name.slice(0, 1).toUpperCase()}</Text>
+    </View>
+  );
+}
 
 // "3m ago", or "Just now".
 export function agentAgo(updatedAt: string, now: Date): string | null {
@@ -104,18 +143,9 @@ export function AgentCard({ t, facts, card, now, live, selected, focused, button
   const dot = indicator === "needs_input" || indicator === "failed" ? statusColor(t.c, indicator) : null;
   // The context share means something only while the agent works.
   const share = card.context && running ? contextShare(live?.usage?.context ?? agent.context) : null;
-  const project = card.project ? agent.project : null;
-  const workspace = card.workspace && !headline.subtitle && agent.workspace && agent.workspace !== agent.project && !agent.title.startsWith(agent.workspace) ? agent.workspace : null;
-  const model = card.model || card.provider ? modelLabel(card.provider ? agent.provider : null, card.model ? agent.model : null) : null;
-  const thinking = card.thinking ? agent.thinking : null;
+  const { project, workspace, model, thinking, git, labels, moreLabels, folder, subtasks } = agentFields(facts, card, headline);
   const timer = card.timer ? (agent.turnStartedAt ? `Running ${formatElapsed(agent.turnStartedAt, now)}` : agentAgo(agent.updatedAt, now)) : null;
   const facts1 = [workspace, [model, thinking].filter(Boolean).join(" ") || null, facts.parent ? `sub-agent of ${facts.parent}` : null, timer].filter(Boolean) as string[];
-  const git = card.gitStatus && facts.git ? [facts.git.ahead ? `↑${facts.git.ahead}` : null, facts.git.behind ? `↓${facts.git.behind}` : null, facts.git.dirty ? "•" : null].filter(Boolean).join(" ") : "";
-  const labelCount = labelLimitCount(card.labelLimit);
-  const labels = card.labels ? agent.labels.slice(0, labelCount) : [];
-  const moreLabels = card.labels ? Math.max(0, agent.labels.length - labels.length) : 0;
-  const folder = agent.cwd ? (card.path ? agent.cwd : card.folder && folderAddsSomething(folderOf(agent.cwd), agent.project, agent.workspace) ? folderOf(agent.cwd) : null) : null;
-  const subtasks = card.subtasks && facts.subtasks ? facts.subtasks : null;
   const plan = card.plan ? live?.plan ?? null : null;
   const pills = share !== null || !!(card.branch && agent.branch) || !!git || !!folder || labels.length > 0 || !!(card.pullRequest && facts.pullRequest) || !!plan || !!subtasks;
   // Allow and Deny always show in a row. With a pointer, the other buttons float over the card's top-right
@@ -124,7 +154,7 @@ export function AgentCard({ t, facts, card, now, live, selected, focused, button
   const touch = cannotHover();
   const showFloating = hovered || focused;
   const answer = buttons.allow || buttons.deny;
-  const others = !!(buttons.stop || buttons.archive || buttons.open);
+  const others = !!(buttons.stop || buttons.archive || buttons.open || buttons.clear);
   return (
     <Pressable
       ref={node}
@@ -159,11 +189,7 @@ export function AgentCard({ t, facts, card, now, live, selected, focused, button
       ) : null}
       {project || facts1.length ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6, minWidth: 0 }}>
-          {project && card.projectIcon ? (
-            <View style={{ width: 14, height: 14, borderRadius: 3, alignItems: "center", justifyContent: "center", backgroundColor: tileColor(project) }}>
-              <Text style={{ fontSize: 9, color: "#ffffff", fontWeight: "700" }}>{project.slice(0, 1).toUpperCase()}</Text>
-            </View>
-          ) : null}
+          {project && card.projectIcon ? <ProjectTile name={project} /> : null}
           <Text style={[t.text.small, { flex: 1 }]} numberOfLines={1}>
             {[project, ...facts1].filter(Boolean).join(" · ")}
           </Text>
@@ -180,7 +206,7 @@ export function AgentCard({ t, facts, card, now, live, selected, focused, button
           {moreLabels ? <Pill t={t} label={`+${moreLabels}`} /> : null}
           {card.pullRequest && facts.pullRequest ? <Pill t={t} icon="GitPullRequest" label={[facts.pullRequest.number ? `#${facts.pullRequest.number}` : "PR", facts.pullRequest.state].join(" ")} /> : null}
           {plan ? <Pill t={t} icon="ListChecks" label={`${plan.done}/${plan.total}`} /> : null}
-          {subtasks ? <Pill t={t} icon="Network" label={[`${subtasks.total} sub-agent${subtasks.total === 1 ? "" : "s"}`, subtasks.running ? `${subtasks.running} running` : null, subtasks.waiting ? `${subtasks.waiting} waiting` : null, subtasks.failed ? `${subtasks.failed} failed` : null].filter(Boolean).join(" · ")} /> : null}
+          {subtasks ? <Pill t={t} icon="Network" label={subtasksText(subtasks)} /> : null}
         </View>
       ) : null}
       {answer ? (
@@ -209,6 +235,7 @@ function otherButtons(t: Tokens, title: string, buttons: CardButtons) {
   return (
     <>
       {buttons.stop ? <StopButton t={t} title={title} disabled={buttons.busy} onStop={buttons.stop} /> : null}
+      {buttons.clear ? <IconButton t={t} size="sm" icon="CheckCheck" label={`Clear ${title}, to Done`} disabled={buttons.clearing} onPress={buttons.clear} /> : null}
       {buttons.archive ? <IconButton t={t} size="sm" icon="Archive" label={`Archive ${title}`} disabled={buttons.busy} onPress={buttons.archive} /> : null}
       {buttons.open ? <IconButton t={t} size="sm" icon="ArrowUpRight" label={`Open ${title}`} onPress={buttons.open} /> : null}
     </>

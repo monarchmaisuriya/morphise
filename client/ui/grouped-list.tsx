@@ -14,9 +14,10 @@ const LIST_MAX_WIDTH = 1180;
 const ROW_MARK = { dataSet: { mxCard: "" } } as object;
 const ACTIONS_MARK = { dataSet: { mxCardActions: "" } } as object;
 
-export function GroupList({ t, children }: { t: Tokens; children: ReactNode }) {
+// `scroll` goes to the list's scroller (a drag uses it to scroll near the edges and to follow scrolling).
+export function GroupList({ t, children, scroll }: { t: Tokens; children: ReactNode; scroll?: object }) {
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: t.compact ? 12 : 16, paddingTop: 4, paddingBottom: 24 }}>
+    <ScrollView {...scroll} style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: t.compact ? 12 : 16, paddingTop: 4, paddingBottom: 24 }}>
       <View style={{ width: "100%", maxWidth: LIST_MAX_WIDTH, alignSelf: "center", gap: 12 }}>{children}</View>
     </ScrollView>
   );
@@ -50,9 +51,10 @@ export function Fact({ t, icon, text, tone }: { t: Tokens; icon?: string; text?:
  * (`empty`) has a muted name but keeps its own colour, whatever its count says (a column's cards may all be hidden by filters). `trailing` sits
  * at the header's right, outside its press area (for example an add button).
  */
-export function GroupBox({ t, title, count, countTone, empty, icon, dot, tone, open, onToggle, trailing, children, label }: { t: Tokens; title: string; count: number | string; countTone?: string; empty: boolean; icon?: string; dot?: string; tone?: string; open: boolean; onToggle(): void; trailing?: ReactNode; children?: ReactNode; label?: string }) {
+// `highlight`: drawn with an accent border, as the place a dragged row would land.
+export function GroupBox({ t, title, count, countTone, empty, icon, dot, tone, open, onToggle, trailing, children, label, highlight }: { t: Tokens; title: string; count: number | string; countTone?: string; empty: boolean; icon?: string; dot?: string; tone?: string; open: boolean; onToggle(): void; trailing?: ReactNode; children?: ReactNode; label?: string; highlight?: boolean }) {
   return (
-    <View style={{ borderWidth: 1, borderColor: t.c.border, borderRadius: t.radius.card, overflow: "hidden", backgroundColor: t.c.surface0 }}>
+    <View style={{ borderWidth: 1, borderColor: highlight ? t.c.accent : t.c.border, borderRadius: t.radius.card, overflow: "hidden", backgroundColor: t.c.surface0 }}>
       <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: t.c.surface1, paddingRight: 6 }}>
         <Pressable
           accessibilityRole="button"
@@ -96,6 +98,8 @@ interface GroupRowProps {
   // What follows the title on desktop, or sits under it on phones: muted text or a row of facts.
   detail?: ReactNode;
   struck?: boolean;
+  // A second line of facts under the title (project, workspace, branch…), on every screen.
+  meta?: ReactNode;
   // Quiet facts at the right (desktop only).
   facts?: ReactNode;
   // Buttons that always show, such as Allow and Deny.
@@ -110,7 +114,7 @@ interface GroupRowProps {
   onLongPress?(): void;
 }
 
-export function GroupRow({ t, nodeRef, leading, title, detail, struck, facts, pinned, actions, selected, focused, dim, label, onPress, onLongPress }: GroupRowProps) {
+export function GroupRow({ t, nodeRef, leading, title, detail, struck, meta, facts, pinned, actions, selected, focused, dim, label, onPress, onLongPress }: GroupRowProps) {
   const [hovered, setHovered] = useState(false);
   const touch = cannotHover();
   const [pressed, setPressed] = useState(false);
@@ -143,11 +147,15 @@ export function GroupRow({ t, nodeRef, leading, title, detail, struck, facts, pi
         <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
           {titleNode}
           {detail}
+          {meta}
         </View>
       ) : (
-        <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 10, overflow: "hidden" }}>
-          {titleNode}
-          {detail}
+        <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10, overflow: "hidden" }}>
+            {titleNode}
+            {detail}
+          </View>
+          {meta}
         </View>
       )}
       {/* The facts and, over their right end, the hover actions: anchored here so they never cover the pinned buttons. */}

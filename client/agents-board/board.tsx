@@ -31,10 +31,15 @@ import {
   listSections,
   UPDATED_WITHIN,
   type UpdatedWithin,
+  clearKeyOf,
+  shownStatus,
+  statusGroups,
+  laneStatus,
 } from "../../shared/agents-board";
+import { inboxSettings, withCleared } from "../../shared/inbox";
 import { summarizePermission } from "../../shared/inbox";
 import { type ValueStore, useValue } from "../profile-store";
-import { Dropdown, Icon, IconButton, MenuItem, PopoverHost, Segmented, type Tokens, useTokens } from "../ui/kit";
+import { Dropdown, Icon, IconButton, MenuItem, PopoverHost, type Tokens, useTokens } from "../ui/kit";
 import type { WorkspaceList } from "../workspaces";
 import { AgentCard, type CardButtons, type CardFacts } from "./card";
 import { type CliActions, useAgentEntries, useCardLive, useCliActions } from "./data";
@@ -56,6 +61,7 @@ const LANE_TITLES: Record<Lane, string> = { waiting: "Waiting", running: "Runnin
 const LANE_STATUS: Record<Lane, Indicator> = { waiting: "needs_input", running: "running", review: "attention", done: "done", archived: "done" };
 const LANE_ICONS: Record<Lane, string> = { ...Object.fromEntries(LANES.map((lane) => [lane, STATUS_ICONS[LANE_STATUS[lane]]])), archived: "Archive" } as Record<Lane, string>;
 const LANE_GAP = 12;
+const NOTHING_CLEARED: readonly string[] = [];
 const BOARD_PADDING = 12;
 const SORT_TITLES: Record<SortKey, string> = { updated: "Updated", created: "Created", title: "Title", workspace: "Workspace", project: "Project", branch: "Branch", folder: "Folder", context: "Context", duration: "Duration" };
 // A lane draws this many cards, then a button for the next ones.
@@ -179,10 +185,14 @@ function BoardCard({ as, t, client, facts, card, now, selected, focused, buttons
   );
 }
 
-export function AgentsBoardView({ client, workspaces, theme, compact, navigation, layout: shape, onLayout }: { client: PluginClientContext; workspaces: ValueStore<WorkspaceList>; theme: PluginTheme; compact: boolean; navigation: PluginScreenProps["navigation"]; layout: ViewLayout; onLayout(layout: ViewLayout): void }) {
+export function AgentsBoardView({ client, workspaces, theme, compact, navigation, layout: shape, bookmarkLastAnswer }: { client: PluginClientContext; workspaces: ValueStore<WorkspaceList>; theme: PluginTheme; compact: boolean; navigation: PluginScreenProps["navigation"]; layout: ViewLayout; bookmarkLastAnswer(agentId: string, workspaceId: string | null, note: string): Promise<void> }) {
   const t = useTokens(theme, compact);
   const toast = useToast();
   const stored = useSettings(agentsBoardSettings);
+  // Finished agents cleared on this device: the same record the Workbench count reads.
+  const inbox = useSettings(inboxSettings);
+  const clearedList = inbox.status === "ready" ? inbox.values.cleared : NOTHING_CLEARED;
+  const cleared = useMemo(() => new Set(clearedList), [clearedList]);
   const settings = stored.status === "ready" ? stored.values : DEFAULT_AGENTS_BOARD;
   const card = effectiveCard(settings, compact);
   const list = useAgentEntries(client);
@@ -208,7 +218,7 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
     if (list.status !== "ready") return [];
     const workspaceOf = (id: string) => {
       const info = workspaceList.get(id);
-      return info ? { name: info.name, project: info.project, labels: info.labels } : undefined;
+      return info ? { name: info.name, project: info.project, labels: info.labels, open: info.open } : undefined;
     };
     return [...list.entries.values()].flatMap((entry) => readBoardAgent(entry, workspaceOf) ?? []);
   }, [list, workspaceList]);
@@ -223,13 +233,13 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
     for (const agent of agents) if (agent.parentId && !agent.archivedAt) map.set(agent.parentId, [...(map.get(agent.parentId) ?? []), agent]);
     return map;
   }, [agents]);
-  const allLanes = useMemo(() => assignLanes(agents, { now: now.getTime(), doneWindow: settings.board.doneWindow, showArchived: settings.board.showArchived, showSubtasks: settings.board.showSubtasks }), [agents, now, settings.board]);
+  const allLanes = useMemo(() => assignLanes(agents, { now: now.getTime(), doneWindow: settings.board.doneWindow, showArchived: settings.board.showArchived, showSubtasks: settings.board.showSubtasks, cleared }), [agents, now, settings.board, cleared]);
   const onBoard = useMemo(() => LANES.flatMap((lane) => allLanes[lane]), [allLanes]);
   const laneById = useMemo(() => new Map(LANES.flatMap((lane) => allLanes[lane].map((agent) => [agent.id, lane] as const))), [allLanes]);
   const lanes = useMemo(() => {
     const order = compareAgents(sort, now.getTime());
-    return Object.fromEntries(LANES.map((lane) => [lane, allLanes[lane].filter((agent) => matchesFilter(agent, filter, now.getTime(), lane === "waiting" || lane === "running")).sort(order)])) as Record<Lane, BoardAgent[]>;
-  }, [allLanes, filter, sort, now]);
+    return Object.fromEntries(LANES.map((lane) => [lane, allLanes[lane].filter((agent) => matchesFilter(agent, filter, now.getTime(), { activeNow: lane === "waiting" || lane === "running", status: laneStatus(lane, agent, cleared) })).sort(order)])) as Record<Lane, BoardAgent[]>;
+  }, [allLanes, filter, sort, now, cleared]);
   const laneList = LANES.filter((lane) => lane !== "archived" || settings.board.showArchived);
   const groups = useMemo(() => {
     const open = [...workspaceList.values()].filter((workspace) => workspace.open);
@@ -288,10 +298,12 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
   const factsOf = (agent: BoardAgent): CardFacts => {
     const workspace = agent.workspaceId ? workspaceList.get(agent.workspaceId) : undefined;
     const children = childrenOf.get(agent.id) ?? [];
-    const indicators = children.map(indicatorOf);
+    // As the board shows them: one cleared, or waiting in a hidden workspace, reads as done.
+    const indicators = children.map((child) => shownStatus(child, cleared));
     return {
       agent,
-      indicator: indicatorOf(agent),
+      // As the user sees it: a finished agent they cleared reads as done, where its lane put it.
+      indicator: shownStatus(agent, cleared),
       git: workspace ? { dirty: workspace.dirty, ahead: workspace.ahead, behind: workspace.behind } : null,
       pullRequest: workspace?.pullRequest ? { number: workspace.pullRequest.number, state: workspace.pullRequest.state } : null,
       subtasks: children.length ? { total: children.length, running: indicators.filter((item) => item === "running").length, waiting: indicators.filter((item) => item === "needs_input").length, failed: indicators.filter((item) => item === "failed").length } : null,
@@ -304,6 +316,27 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
     const lane = laneById.get(agent.id);
     return !agent.archivedAt && (lane === "review" || lane === "done");
   };
+  // Clears finished agents on this device (they move to Done until they finish again). An earlier key is dropped only
+  // on evidence: its agent is loaded here and has finished again or been read (its key changed). Keys of agents not
+  // loaded (older pages, or past the page limit) are kept; the list's own cap bounds them.
+  const clear = (targets: readonly BoardAgent[]) => {
+    const keys = targets.flatMap((agent) => clearKeyOf(agent) ?? []);
+    if (!keys.length) return;
+    const stale = (key: string) => {
+      const agent = byId.get(key.slice(0, key.indexOf("@")));
+      return agent !== undefined && clearKeyOf(agent) !== key;
+    };
+    const live = new Set([...(inbox.status === "ready" ? inbox.values.cleared : []).filter((key) => !stale(key)), ...keys]);
+    if (inbox.status !== "ready") return toast.error("Could not clear: this device's settings are not loaded yet");
+    void inbox.save({ ...inbox.values, cleared: withCleared(inbox.values.cleared, keys, live) }, inbox.revision).then((saved) => {
+      if (!saved) toast.error("Could not remember the cleared agents on this device");
+    });
+  };
+  // Only from To review: a finished parent kept in Running by a working sub-agent would not move.
+  const canClear = (agent: BoardAgent) => !agent.archivedAt && laneById.get(agent.id) === "review" && clearKeyOf(agent) !== null && shownStatus(agent, cleared) === "attention";
+  // Clear All for the To review lane, in the list's box header and the board's lane header.
+  const clearAll = (lane: Lane, rows: readonly BoardAgent[]) =>
+    lane === "review" && rows.some(canClear) ? <IconButton t={t} size="sm" icon="CheckCheck" label={`Clear ${rows.filter(canClear).length} finished, to Done`} disabled={inbox.saving} onPress={() => clear(rows.filter(canClear))} /> : null;
   const buttonsOf = (agent: BoardAgent): CardButtons => {
     const request = indicatorOf(agent) === "needs_input" ? summarizePermission(agent.pendingPermissions[agent.pendingPermissions.length - 1]) : null;
     const answerable = request !== null && !request.answerInChat;
@@ -314,6 +347,8 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
       deny: answerable ? () => answer(agent, "deny") : undefined,
       stop: canStop(agent) ? () => stop(agent) : undefined,
       archive: canArchive(agent) ? () => archive(agent) : undefined,
+      clear: canClear(agent) ? () => clear([agent]) : undefined,
+      clearing: inbox.saving,
     };
   };
 
@@ -382,10 +417,10 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
             style={[{ flex: 1, minWidth: 0, color: t.c.foreground, fontSize: t.compact ? 15 : 13, height: t.control - 2 }, Platform.OS === "web" ? (WEB_NO_OUTLINE as TextStyle) : null]}
           />
         </View>
-        <Segmented<ViewLayout> t={t} label="Show agents as" value={shape} onChange={onLayout} options={[{ value: "list", label: "List", icon: "List" }, { value: "board", label: "Board", icon: "Columns3" }]} />
         <IconButton t={t} icon="Settings2" label="Agents tab settings" onPress={() => client.openSettings(AGENTS_SETTINGS_TAB)} />
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, alignItems: "center" }}>
+        <FilterMenu t={t} label="Status" icon="CircleDot" groups={statusGroups(allLanes, cleared)} picked={filter.statuses} onChange={(statuses) => setFilter({ ...filter, statuses: statuses as BoardFilter["statuses"] })} />
         <FilterMenu t={t} label="Agent" icon="Bot" groups={groups.providers} picked={filter.providers} onChange={(providers) => setFilter({ ...filter, providers })} />
         <FilterMenu t={t} label="Label" icon="Tag" groups={groups.labels} picked={filter.labels} onChange={(labels) => setFilter({ ...filter, labels })} />
         <FilterMenu t={t} label="Project" icon="FolderGit2" groups={groups.projects} picked={filter.projects} onChange={(projects) => setFilter({ ...filter, projects })} />
@@ -456,7 +491,20 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
     if (folded(lane)) return laneHeader(lane, false);
     return (
       <View key={lane} style={{ width: compact ? undefined : layout.width, flex: compact ? 1 : undefined, gap: 8 }}>
-        {compact ? null : laneHeader(lane, true)}
+        {compact ? (
+          // Phones show one lane at a time, picked by the tabs above, so Clear All sits over the lane's cards.
+          clearAll(lane, cards) ? (
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>
+              <Text style={t.text.meta}>Clear the finished ones, to Done</Text>
+              {clearAll(lane, cards)}
+            </View>
+          ) : null
+        ) : (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+            <View style={{ flex: 1 }}>{laneHeader(lane, true)}</View>
+            {clearAll(lane, cards)}
+          </View>
+        )}
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 8, paddingBottom: 16 }}>
           {cards.length ? null : <Text style={[t.text.meta, { paddingHorizontal: 4 }]}>No agents</Text>}
           {cards.slice(0, limit).map((agent) => itemOf(agent, "board"))}
@@ -473,7 +521,18 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
       {sections.map(({ lane, folded: isFolded, limit }) => {
         const rows = lanes[lane];
         return (
-          <GroupBox key={lane} t={t} title={LANE_TITLES[lane]} count={rows.length} empty={rows.length === 0} icon={LANE_ICONS[lane]} tone={statusColor(t.c, LANE_STATUS[lane])} open={!isFolded} onToggle={() => setFolded(lane, !isFolded)}>
+          <GroupBox
+            key={lane}
+            t={t}
+            title={LANE_TITLES[lane]}
+            count={rows.length}
+            empty={rows.length === 0}
+            icon={LANE_ICONS[lane]}
+            tone={statusColor(t.c, LANE_STATUS[lane])}
+            open={!isFolded}
+            onToggle={() => setFolded(lane, !isFolded)}
+            trailing={clearAll(lane, rows) ?? undefined}
+          >
             {rows.slice(0, limit).map((agent) => itemOf(agent, "list"))}
             {rows.length === 0 ? <GroupFooter t={t} text="No agents" /> : null}
             {rows.length > limit ? <GroupFooter t={t} text={rows.length - limit > PAGE ? `Show ${PAGE} more of ${rows.length - limit}` : `Show ${rows.length - limit} more`} onPress={() => setListShown({ ...listShown, [lane]: limit + PAGE })} /> : null}
@@ -509,7 +568,7 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
       t={t}
       client={client}
       facts={factsOf(current)}
-      subAgents={(childrenOf.get(current.id) ?? []).map((agent) => ({ agent, indicator: indicatorOf(agent) }))}
+      subAgents={(childrenOf.get(current.id) ?? []).map((agent) => ({ agent, indicator: shownStatus(agent, cleared) }))}
       parent={current.parentId ? byId.get(current.parentId) ?? null : null}
       cli={cli}
       now={now}
@@ -521,6 +580,14 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
       }}
       onArchive={canArchive(current) ? () => archive(current) : null}
       onStop={canStop(current) ? () => stop(current) : null}
+      onClear={canClear(current) ? () => clear([current]) : null}
+      clearing={inbox.saving}
+      onBookmark={() =>
+        void bookmarkLastAnswer(current.id, current.workspaceId, "").then(
+          () => toast.show("Bookmarked the last answer"),
+          (error: unknown) => toast.error(message(error)),
+        )
+      }
     />
   ) : null;
 

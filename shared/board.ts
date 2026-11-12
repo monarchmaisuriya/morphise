@@ -155,9 +155,13 @@ export interface DropTarget {
   before: string | null;
 }
 
-/** The drop target under a pointer: the column it is over (or the nearest one, for the gaps), before the first card whose middle is below it. */
-export function dropTarget(columns: DropColumn[], x: number, y: number): DropTarget | null {
-  const distance = (frame: Frame) => (x < frame.x ? frame.x - x : x > frame.x + frame.width ? x - frame.x - frame.width : 0);
+/**
+ * The drop target under a pointer: the column it is over (or the nearest one, for the gaps), before the first card whose
+ * middle is below it. Columns side by side (a board) are told apart across; stacked sections (a list), down.
+ */
+export function dropTarget(columns: DropColumn[], x: number, y: number, stack: "horizontal" | "vertical" = "horizontal"): DropTarget | null {
+  const across = (start: number, size: number, at: number) => (at < start ? start - at : at > start + size ? at - start - size : 0);
+  const distance = (frame: Frame) => (stack === "horizontal" ? across(frame.x, frame.width, x) : across(frame.y, frame.height, y));
   const column = columns.reduce<DropColumn | null>((best, item) => (best === null || distance(item.frame) < distance(best.frame) ? item : best), null);
   if (!column) return null;
   const before = column.cards.find((card) => card.frame.y + card.frame.height / 2 > y);

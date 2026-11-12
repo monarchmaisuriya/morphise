@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createReminder,
+  parseReminder,
   isDue,
   nextDueTime,
   parseDuration,
@@ -101,5 +102,22 @@ describe("presetTitle", () => {
       "1 day",
       "7 days",
     ]);
+  });
+});
+
+describe("parseReminder", () => {
+  const monday = new Date(2026, 10, 16, 8, 0, 0);
+
+  it("reads a typed time as a reminder from one moment, within 1 minute to 7 days", () => {
+    const read = parseReminder("45m", monday);
+    expect(read.ok && read.reminder).toEqual({ at: new Date(monday.getTime() + 45 * 60_000).toISOString(), setAt: monday.toISOString() });
+    expect(parseReminder("tomorrow 9am", monday).ok).toBe(true);
+  });
+
+  it("says why a time cannot be a reminder instead of throwing", () => {
+    expect(parseReminder("monday 9am", monday)).toEqual({ ok: false, error: "A reminder must be 1 minute to 7 days away" });
+    expect(parseReminder("200h", monday)).toEqual({ ok: false, error: "A reminder must be 1 minute to 7 days away" });
+    expect(parseReminder("8am", new Date(2026, 10, 16, 7, 59, 50)).ok).toBe(false);
+    expect(parseReminder("soonish", monday).ok).toBe(false);
   });
 });

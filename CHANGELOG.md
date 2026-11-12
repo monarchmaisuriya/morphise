@@ -2,6 +2,24 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.20.0 - 2026-11-12
+
+- **Agents and Tasks are views of their own:** the Workbench lists Agents, Tasks, Today, Archived and Bookmarks; Launchpad and its two tabs are gone. The Workbench opens on Agents while something waits on you, else on Today when something is due, else on whichever of Agents and Tasks you opened last. Links to Launchpad, its tabs, the old Waiting view and the Inbox still land on the right view.
+- **Waiting is part of Agents:** the Waiting view is gone; Agents lists what waits on you first and now does everything Waiting did:
+  - a **Status** filter (Waiting, Running, Failed, To review, Done, with counts), in the list and on the board;
+  - **Clear** a finished agent you have read (on its row while you hover, or in its details), or **Clear all** from the To review header: it moves to Done on this device until it finishes again. Agents you cleared in Waiting stay cleared;
+  - **Bookmark answer** and a **Reply** box in an agent's details, besides answering a permission, the error and the last reply it already showed.
+- **Agents carries the count:** its entry shows how many agents wait on you (amber while a permission waits). "Open Workbench: agents waiting on you" in the Command Center opens it. With "Show the Agents view" off, Agents is still listed while something waits on you, since it is where you answer it.
+- **One rule for what waits on you:** the Workbench count and Agents agree. An agent waits on you when it asks permission, failed, or finished and you have not cleared it, in a workspace that is listed; one in a workspace being archived, in the background or internal reads as Done in Agents, as the count leaves it out. With sub-agents hidden, a sub-agent that waits on you still gets its own row, so it can be answered or cleared there (running and done ones fold into their parent as before). A parent that finished unread stays in To review while a sub-agent still works.
+- **Clear all** sits on the To review header in both the list and the board, and above the To review lane on phones. A cleared agent reads as Done everywhere (icon, details), and clearing never forgets agents you cleared earlier.
+- An agent's details show a plan request as formatted text, "1 of N requests" when several wait, and say so when a failed agent gave no error.
+- The Waiting view's Display menu (workspace and request lines) is gone; the card fields in Agents' settings choose what a row shows.
+- **List or board, set in Settings:** Settings, General, Workbench picks how Agents and Tasks show their items on this device (list or board); the switches are gone from their toolbars.
+- **Agent rows show what cards show:** under each agent's title, the list shows its project (with its tile), workspace, branch and Git status, folder, labels and sub-agents, and the thinking level beside the model, by the same card fields as the board.
+- **Drag and drop in the Tasks list:** drag a card's row to another place or another column's section, as on the board (a long press first on phones). A gap shows where it lands; dropping on a folded section adds it at the end.
+- **Reminders for new tasks:** the New task editor has a Reminder field: In 1 hour, Tomorrow 9:00, Monday 9:00, or a time you type (45m, 3pm, tomorrow 9am). Existing cards keep their reminder picker.
+- **A shorter sidebar Display menu:** Group by, Sort by, Rows and Chats under workspaces as choices you see at once, Show background workspaces, and "All sidebar settings" for the rest (it opens on the layout in use, as an "Edit layout" action now does too) (row height, how many per group, sub-agents, the details rows show, auto-archive), which live in Settings, Sidebar.
+
 ## 0.19.10 - 2026-11-12
 
 - **Launchpad:** the Workbench view holding Tasks and Agents is now called Launchpad, with a rocket icon. Links that opened it before still do.

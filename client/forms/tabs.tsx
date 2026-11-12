@@ -1,3 +1,4 @@
+import { useSettings } from "@getpaseo/plugin/client";
 import { SettingsAction, SettingsCard, SettingsSection, TextInput } from "@getpaseo/plugin/client/ui";
 import { type ReactNode, useMemo } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -18,6 +19,8 @@ import { statusColor } from "../ui/hues";
 import { STATUS_TITLES } from "../../shared/arrange";
 import { DEFAULT_CHAT_ROWS, rowShows } from "../../shared/row-meta";
 import { VIEW_SECTIONS } from "./view-sections";
+import { useDeviceChoice, workbenchSettings } from "../device-choices";
+import type { ViewLayout } from "../../shared/agents-board";
 import { DEFAULT_DONE_SECONDS, type StepsSettings, stepsOptions } from "../../shared/steps";
 import type { Layout, Prompt } from "../../shared/document";
 import { type ChatSettings, type ChatWebSettings, chatLook, TURN_RECAP_KIND, chatView, FOLD_KINDS, type FoldKind, TOOL_KIND_TITLES, TOOL_KINDS, type ToolKind } from "../../shared/chat-view";
@@ -858,8 +861,28 @@ export function GeneralTab(form: Form): ReactNode {
       <SettingsSection title="Steps card" info="A chat's plan as a card, in the chat or the sidebar, that shows while it works and settles when it is done. While it is on, Claude agents start with Claude Code's task-list tools, and each new Claude chat is asked to keep its task list with them, so it publishes a plan.">
         <SettingsCard>{VIEW_SECTIONS.steps.map((key) => view[key])}</SettingsCard>
       </SettingsSection>
+      <WorkbenchLayouts />
       <UpdateSection form={form} />
     </>
+  );
+}
+
+// How the Workbench's Agents and Tasks views lay out, on this device (the Workbench's device record).
+function WorkbenchLayouts() {
+  const stored = useSettings(workbenchSettings);
+  const [agents, setAgents] = useDeviceChoice(stored, "agentsLayout");
+  const [tasks, setTasks] = useDeviceChoice(stored, "tasksLayout");
+  const options: { value: ViewLayout; label: string }[] = [
+    { value: "list", label: "List, grouped by status" },
+    { value: "board", label: "Board, in columns" },
+  ];
+  return (
+    <SettingsSection title="Workbench" info="How the Workbench's Agents and Tasks views show their items, on this device.">
+      <SettingsCard>
+        <SelectField<ViewLayout> label="Agents" value={agents} options={options} onChange={setAgents} />
+        <SelectField<ViewLayout> label="Tasks" value={tasks} options={options} onChange={setTasks} />
+      </SettingsCard>
+    </SettingsSection>
   );
 }
 

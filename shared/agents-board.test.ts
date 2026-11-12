@@ -34,6 +34,11 @@ import {
   rowLine,
   LIST_PREVIEW,
   updatedWithinMs,
+  shownStatus,
+  statusGroups,
+  clearKeyOf,
+  laneStatus,
+  LANES,
 } from "./agents-board";
 
 const NOW = Date.parse("2026-11-12T12:00:00Z");
@@ -68,6 +73,7 @@ function agent(id: string, overrides: Partial<BoardAgent> = {}): BoardAgent {
     sessionId: null,
     lastError: null,
     context: null,
+    workspaceOpen: true,
     ...overrides,
   };
 }
@@ -156,7 +162,7 @@ describe("readBoardAgent", () => {
   };
 
   it("takes Paseo's fields, the parent from its label, and the workspace's labels", () => {
-    const read = readBoardAgent(entry, (id) => (id === "w1" ? { name: "Feature", project: "App", labels: ["urgent"] } : undefined));
+    const read = readBoardAgent(entry, (id) => (id === "w1" ? { name: "Feature", project: "App", labels: ["urgent"], open: true } : undefined));
     expect(read).toMatchObject({
       id: "a1",
       title: "codex",
@@ -218,7 +224,7 @@ describe("assignLanes", () => {
     expect(lanesOf(agents, { showArchived: false }).archived).toEqual([]);
   });
 
-  it("with subtasks hidden, folds a sub-agent into its parent unless it runs, waits or failed in another lane", () => {
+  it("with subtasks hidden, folds a running or done sub-agent into its parent, never one that waits on the user", () => {
     const lanes = lanesOf(
       [
         agent("parent"),
@@ -229,11 +235,13 @@ describe("assignLanes", () => {
         agent("orphan", { parentId: "missing" }),
         agent("quiet"),
         agent("failedOfQuiet", { parentId: "quiet", requiresAttention: true, attentionReason: "error" }),
+        agent("unreadChild", { parentId: "quiet", requiresAttention: true, attentionReason: "finished", attentionAt: hoursAgo(1) }),
       ],
       { showSubtasks: false },
     );
     expect(lanes.running).toEqual(["parent"]);
-    expect(lanes.review).toEqual(["other", "failedOfQuiet"]);
+    // Each one waiting on the user keeps its own row, so the list shows what the Workbench counts and it can be cleared.
+    expect(lanes.review).toEqual(["other", "failedChild", "failedOfQuiet", "unreadChild"]);
     expect(lanes.done).toEqual(["orphan", "quiet"]);
   });
 
@@ -490,8 +498,8 @@ describe("last updated filter", () => {
 
   it("never hides an agent that runs or waits now, such as a parent whose sub-agent runs", () => {
     const parent = agent("parent", { updatedAt: hoursAgo(3) });
-    expect(matchesFilter(parent, NOW_FILTER({ updatedWithin: "1h" }), NOW, true)).toBe(true);
-    expect(matchesFilter(parent, NOW_FILTER({ updatedWithin: "1h" }), NOW, false)).toBe(false);
+    expect(matchesFilter(parent, NOW_FILTER({ updatedWithin: "1h" }), NOW, { activeNow: true })).toBe(true);
+    expect(matchesFilter(parent, NOW_FILTER({ updatedWithin: "1h" }), NOW, { activeNow: false })).toBe(false);
   });
 
   it("leaves out an agent with no update time when a window is set", () => {
@@ -510,5 +518,91 @@ describe("empty list sections", () => {
       ["archived", true],
     ]);
     expect(listSections(counts, { waiting: false }, {}, true)[0]).toEqual({ lane: "waiting", folded: false, limit: Number.POSITIVE_INFINITY });
+  });
+});
+
+describe("cleared finished agents", () => {
+  const unseen = agent("unseen", { requiresAttention: true, attentionReason: "finished", attentionAt: hoursAgo(1) });
+  const failed = agent("failed", { requiresAttention: true, attentionReason: "error", attentionAt: hoursAgo(1) });
+
+  it("moves a cleared finished agent from To review to Done, until it finishes again", () => {
+    const cleared = new Set([clearKeyOf(unseen)!]);
+    expect(lanesOf([unseen], { cleared }).done).toEqual(["unseen"]);
+    expect(lanesOf([unseen]).review).toEqual(["unseen"]);
+    const again = { ...unseen, attentionAt: hoursAgo(0.1) };
+    expect(lanesOf([again], { cleared }).review).toEqual(["unseen"]);
+    expect(shownStatus(unseen, cleared)).toBe("done");
+  });
+
+  it("can clear only a finished agent with Paseo's time, never a failed one", () => {
+    expect(clearKeyOf(failed)).toBeNull();
+    expect(clearKeyOf({ ...unseen, attentionAt: null })).toBeNull();
+    expect(clearKeyOf(agent("idle"))).toBeNull();
+  });
+});
+
+describe("status filter", () => {
+  const waits = agent("waits", { attentionReason: "permission", requiresAttention: true, pendingPermissions: [{}] });
+  const runs = agent("runs", { status: "running" });
+  const fails = agent("fails", { requiresAttention: true, attentionReason: "error" });
+  const unseen = agent("unseen", { requiresAttention: true, attentionReason: "finished", attentionAt: hoursAgo(1) });
+
+  it("keeps the agents in the picked statuses, a cleared one counting as Done", () => {
+    const cleared = new Set([clearKeyOf(unseen)!]);
+    const lanes = assignLanes([waits, runs, fails, unseen], { now: NOW, doneWindow: "7d", showArchived: true, showSubtasks: true, cleared });
+    const pick = (statuses: string[]) => LANES.flatMap((lane) => lanes[lane].filter((item) => matchesFilter(item, NOW_FILTER({ statuses: statuses as never }), NOW, { status: laneStatus(lane, item, cleared) })).map((item) => item.id));
+    expect(pick([])).toEqual(["waits", "runs", "fails", "unseen"]);
+    expect(pick(["failed"])).toEqual(["fails"]);
+    expect(pick(["needs_input", "attention"])).toEqual(["waits"]);
+    expect(pick(["done"])).toEqual(["unseen"]);
+  });
+
+  it("counts each status for the menu, every status listed", () => {
+    const lanes = assignLanes([waits, runs, fails, unseen], { now: NOW, doneWindow: "7d", showArchived: true, showSubtasks: true });
+    expect(statusGroups(lanes, new Set()).map((group) => [group.value, group.count])).toEqual([
+      ["needs_input", 1],
+      ["running", 1],
+      ["failed", 1],
+      ["attention", 1],
+      ["done", 0],
+    ]);
+  });
+});
+
+describe("status of a parent whose sub-agent works", () => {
+  it("is Running, as its lane says, in the filter and the counts", () => {
+    const parent = agent("parent");
+    const child = agent("child", { status: "running", parentId: "parent" });
+    const lanes = assignLanes([parent, child], { now: NOW, doneWindow: "7d", showArchived: true, showSubtasks: false });
+    expect(lanes.running.map((item) => item.id)).toEqual(["parent"]);
+    expect(laneStatus("running", parent, new Set())).toBe("running");
+    expect(statusGroups(lanes, new Set()).find((group) => group.value === "running")?.count).toBe(1);
+    expect(statusGroups(lanes, new Set()).find((group) => group.value === "done")?.count).toBe(0);
+  });
+});
+
+describe("agents in hidden workspaces", () => {
+  it("do not wait on the user, as the Workbench count leaves them out: they read as done", () => {
+    const hidden = agent("hidden", { requiresAttention: true, attentionReason: "finished", attentionAt: hoursAgo(1), workspaceOpen: false });
+    const asks = agent("asks", { attentionReason: "permission", requiresAttention: true, pendingPermissions: [{}], workspaceOpen: false });
+    expect(shownStatus(hidden, new Set())).toBe("done");
+    expect(shownStatus(asks, new Set())).toBe("done");
+    expect(lanesOf([hidden, asks]).done).toEqual(["hidden", "asks"]);
+    // Its key still reads, so a clear made before its workspace was hidden is kept, should the workspace come back.
+    expect(clearKeyOf(hidden)).not.toBeNull();
+  });
+});
+
+describe("a parent that finished unread while a sub-agent works", () => {
+  it("waits on the user in To review, as the Workbench counts it; its running sub-agent keeps its own card", () => {
+    const parent = agent("parent", { requiresAttention: true, attentionReason: "finished", attentionAt: hoursAgo(1) });
+    const child = agent("child", { status: "running", parentId: "parent" });
+    expect(lanesOf([parent, child], { showSubtasks: false })).toMatchObject({ review: ["parent"], running: ["child"] });
+  });
+
+  it("a sub-agent waiting in a hidden workspace does not keep its parent in Running", () => {
+    const parent = agent("parent");
+    const child = agent("child", { parentId: "parent", attentionReason: "permission", requiresAttention: true, pendingPermissions: [{}], workspaceOpen: false });
+    expect(lanesOf([parent, child], { showSubtasks: false })).toMatchObject({ done: ["parent"], running: [] });
   });
 });

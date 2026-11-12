@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MAX_REMINDER_MINUTES } from "./profile";
+import { parseWhen } from "./when";
 
 // Morphise 0.2 kept a chat's reminder on the chat (agent metadata `REMINDER_KEY`) and marked the
 // one whose chat row it wrote in `REMINDER_ROW_KEY` (its setAt). 0.3 keeps reminders on tasks; the
@@ -34,6 +35,20 @@ export function reminderAt(at: Date, now: Date, note?: string): Reminder {
   const text = note?.trim();
   if (text && text.length > MAX_NOTE_LENGTH) throw new Error(`A note can be at most ${MAX_NOTE_LENGTH} characters`);
   return { at: at.toISOString(), setAt: now.toISOString(), ...(text ? { note: text } : {}) };
+}
+
+/**
+ * A typed time ("45m", "3pm", "tomorrow 9am") as a reminder set at `now`, or why it cannot be one: the time is not
+ * understood, or it is not 1 minute to 7 days away. Read once, from one moment, so what is shown is what is saved.
+ */
+export function parseReminder(text: string, now: Date): { ok: true; reminder: Reminder } | { ok: false; error: string } {
+  const when = parseWhen(text, now);
+  if (!when.ok) return when;
+  try {
+    return { ok: true, reminder: reminderAt(when.at, now) };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 export function createReminder(minutes: number, now: Date): Reminder {

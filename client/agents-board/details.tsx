@@ -15,8 +15,9 @@ import { type CardFacts, StopButton } from "./card";
 import { type CliActions, useCardLive } from "./data";
 import { GenerateTitleButton } from "./title-button";
 
-// The chosen card in full: its request or error, first prompt and last reply, sub-agents,
-// properties, usage and activity. Only what Paseo's public SDK gives is shown.
+// The chosen card in full: its request or error, first prompt and last reply, a reply box, sub-agents,
+// properties, usage and activity, with Open, Stop, Clear, Bookmark answer, Archive and Rename. Only what
+// Paseo's public SDK gives is shown.
 
 const TAIL = 100;
 const HEAD = 40;
@@ -58,6 +59,41 @@ function useHistory(client: PluginClientContext, agentId: string, updatedAt: str
   return state.key === key ? state.history : { status: "loading" };
 }
 
+// Sends a message to the agent, which starts working on it right away (for an agent that is not running).
+function Reply({ t, client, agent, onSent }: { t: Tokens; client: PluginClientContext; agent: BoardAgent; onSent(): void }) {
+  const [text, setText] = useState("");
+  const [state, setState] = useState<{ busy: boolean; error: string | null }>({ busy: false, error: null });
+  useEffect(() => {
+    setText("");
+    setState({ busy: false, error: null });
+  }, [agent.id]);
+  const send = () => {
+    const words = text.trim();
+    if (!words || state.busy) return;
+    setState({ busy: true, error: null });
+    client.paseo.agents
+      .ref(agent.id)
+      .send(words)
+      .then(
+        () => {
+          setText("");
+          setState({ busy: false, error: null });
+          onSent();
+        },
+        (error: unknown) => setState({ busy: false, error: `Could not send: ${message(error)}` }),
+      );
+  };
+  return (
+    <View style={{ gap: 6 }}>
+      <Field t={t} value={text} onChangeText={setText} placeholder={`Reply to ${agent.title}`} accessibilityLabel={`Reply to ${agent.title}`} multiline onSubmit={send} error={state.error} />
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
+        <Text style={[t.text.small, { flex: 1 }]}>The agent starts working on it right away.</Text>
+        <Button t={t} variant="primary" icon="SendHorizontal" label={state.busy ? "Sending" : "Send"} disabled={!text.trim() || state.busy} onPress={send} />
+      </View>
+    </View>
+  );
+}
+
 function Section({ t, title, children }: { t: Tokens; title: string; children: ReactNode }) {
   return (
     <View style={{ gap: 6 }}>
@@ -91,6 +127,9 @@ export function AgentDetails({
   onSelect,
   onArchive,
   onStop,
+  onClear,
+  clearing,
+  onBookmark,
 }: {
   t: Tokens;
   client: PluginClientContext;
@@ -104,6 +143,10 @@ export function AgentDetails({
   onSelect(agentId: string): void;
   onArchive: (() => void) | null;
   onStop: (() => void) | null;
+  // Marks a finished agent seen on this device; null when it is not finished-unread.
+  onClear: (() => void) | null;
+  clearing: boolean;
+  onBookmark(): void;
 }) {
   const { agent, indicator } = facts;
   const toast = useToast();
@@ -191,6 +234,8 @@ export function AgentDetails({
         <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
           {onOpen ? <Button t={t} icon="MessageSquare" label={request?.answerInChat ? "Open to answer" : "Open chat"} onPress={() => onOpen(agent.id)} /> : null}
           {onStop ? <StopButton t={t} title={agent.title} onStop={onStop} /> : null}
+          {onClear ? <Button t={t} variant="ghost" icon="CheckCheck" label="Clear" accessibilityLabel={`Clear ${agent.title}, to Done`} disabled={clearing} onPress={onClear} /> : null}
+          {history.status === "ready" && history.last ? <Button t={t} variant="ghost" icon="Bookmark" label="Bookmark answer" onPress={onBookmark} /> : null}
           {onArchive ? <Button t={t} variant="ghost" icon="Archive" label="Archive" onPress={onArchive} /> : null}
           {cli.available && renaming === null && !agent.archivedAt ? <Button t={t} variant="ghost" icon="Pencil" label="Rename" onPress={() => setRenaming(agent.title)} /> : null}
           {cli.available && renaming === null && !agent.archivedAt ? <GenerateTitleButton t={t} client={client} agentId={agent.id} /> : null}
@@ -198,9 +243,14 @@ export function AgentDetails({
       </View>
 
       {request ? (
-        <Section t={t} title={request.answerInChat ? "Asks you a question" : `Wants to use ${request.tool || "a tool"}`}>
+        <Section t={t} title={[request.answerInChat ? "Asks you a question" : request.kind === "plan" ? "Wants to start on a plan" : `Wants to use ${request.tool || "a tool"}`, agent.pendingPermissions.length > 1 ? `1 of ${agent.pendingPermissions.length} requests` : null].filter(Boolean).join(" · ")}>
           {request.title ? <Text style={t.text.body}>{request.title}</Text> : null}
-          {request.subject || request.body ? (
+          {request.description && request.description !== request.title ? <Text style={t.text.body}>{request.description}</Text> : null}
+          {request.kind === "plan" && request.body ? (
+            <Panel t={t}>
+              <Markdown>{request.body}</Markdown>
+            </Panel>
+          ) : request.subject || request.body ? (
             <Panel t={t}>
               <Text selectable style={{ color: t.c.foreground, fontSize: 12 }}>
                 {[request.subject, request.body].filter(Boolean).join("\n\n")}
@@ -218,13 +268,17 @@ export function AgentDetails({
           {answering.error ? <Text style={t.text.danger}>{answering.error}</Text> : null}
         </Section>
       ) : null}
-      {indicator === "failed" && agent.lastError ? (
+      {indicator === "failed" ? (
         <Section t={t} title="Error">
-          <Panel t={t}>
-            <Text selectable style={{ color: t.c.statusDanger, fontSize: 12 }}>
-              {agent.lastError}
-            </Text>
-          </Panel>
+          {agent.lastError ? (
+            <Panel t={t}>
+              <Text selectable style={{ color: t.c.statusDanger, fontSize: 12 }}>
+                {agent.lastError}
+              </Text>
+            </Panel>
+          ) : (
+            <Text style={t.text.meta}>Paseo gave no error message.</Text>
+          )}
         </Section>
       ) : null}
 
@@ -242,6 +296,11 @@ export function AgentDetails({
           <Panel t={t}>
             <Markdown>{history.last}</Markdown>
           </Panel>
+        </Section>
+      ) : null}
+      {!agent.archivedAt && indicator !== "running" && indicator !== "needs_input" ? (
+        <Section t={t} title="Reply">
+          <Reply t={t} client={client} agent={agent} onSent={() => toast.show(`Sent to ${agent.title}`)} />
         </Section>
       ) : null}
       {history.status === "ready" && history.steps?.length ? (

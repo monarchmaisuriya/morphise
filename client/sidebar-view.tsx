@@ -45,7 +45,7 @@ import { type AlertEntry, remindersOf } from "./reminder-alerts";
 import { type PickerDeps, ReminderPicker, type ReminderTarget } from "./reminder-picker";
 import { followUpTask, workspaceTask } from "../shared/task-ops";
 import { type ApplyTaskOperations, type TaskStore, tasksOf } from "./task-store";
-import { Button, Dropdown, Field, Icon, IconButton, MenuItem, PopoverHost, Tag, type Tokens, useTokens } from "./ui/kit";
+import { Button, Dropdown, Field, Icon, IconButton, MenuItem, PopoverHost, Segmented, Tag, type Tokens, useTokens } from "./ui/kit";
 import { BLUE, DONE_OPACITY, PURPLE, statusColor, tileColor } from "./ui/hues";
 import { usePulse } from "./ui/pulse";
 import { StepsCards } from "./steps-card";
@@ -67,14 +67,12 @@ const REMINDERS_GROUP = "reminders";
 
 // Search text, the open menu and expanded groups live outside the view, so they survive the view
 // being rebuilt when its options change.
-// The Display menu's open section is kept here too: every Display change rebuilds the view.
 // Selection mode (bulk actions) lives here too: workspace ids, so it survives a rebuild.
-const viewUi = createValueStore<{ search: string; searching: boolean; menu: "filter" | "view" | null; expanded: readonly string[]; section: string | null; selecting: boolean; selected: readonly string[] }>({
+const viewUi = createValueStore<{ search: string; searching: boolean; menu: "filter" | "view" | null; expanded: readonly string[]; selecting: boolean; selected: readonly string[] }>({
   search: "",
   searching: false,
   menu: null,
   expanded: [],
-  section: null,
   selecting: false,
   selected: [],
 });
@@ -1154,114 +1152,40 @@ function FilterMenu({ state, save, projects, shared }: FilterMenuProps) {
   );
 }
 
-// Paseo's Display menu and Morphise's extras as compact rows, each showing its current value and
-// opening its choices in place, one at a time. View choices are saved to the active layout so every
-// app shows the same list; Show background is kept on this device, as Paseo keeps it.
-function ViewMenu({ update, state, saveState, shared }: { update(patch: Partial<ViewConfig>): void; state: ViewState; saveState(next: Partial<ViewState>): void; shared: Shared }) {
-  const { t, config, shows } = shared;
-  const open = useValue(viewUi).section;
-  const setOpen = (section: string | null) => viewUi.set({ ...viewUi.get(), section });
-  const choice = <Value extends string>(key: string, title: string, current: Value, options: readonly (readonly [Value, string])[], apply: (value: Value) => void) => (
-    <View key={key}>
-      <MenuItem t={t} icon={open === key ? "ChevronDown" : "ChevronRight"} label={title} hint={options.find(([value]) => value === current)?.[1]} onPress={() => setOpen(open === key ? null : key)} />
-      {open === key ? (
-        <View style={{ paddingLeft: 14 }}>
-          {options.map(([value, label]) => (
-            <MenuItem
-              key={value}
-              t={t}
-              role="radio"
-              label={label}
-              checked={value === current}
-              onPress={() => {
-                // Choosing the current value writes nothing, so an unchanged option never adds a
-                // key that an older version cannot read.
-                if (value !== current) apply(value);
-                setOpen(null);
-              }}
-            />
-          ))}
-        </View>
-      ) : null}
+// The Display menu: the few view choices people change often, each as one row of choices you see at once, plus
+// Show background (kept on this device, as Paseo keeps it). Everything else (row height, how many per group,
+// chats and sub-agents under each row, the details rows show, auto-archive) lives in Settings, Sidebar, one press
+// away. View choices are saved to the active layout so every app shows the same list.
+function ViewMenu({ update, state, saveState, shared, openSettings }: { update(patch: Partial<ViewConfig>): void; state: ViewState; saveState(next: Partial<ViewState>): void; shared: Shared; openSettings(): void }) {
+  const { t, config } = shared;
+  // Choosing the current value writes nothing, so an unchanged option never adds a key an older version cannot read.
+  const row = <Value extends string>(title: string, current: Value, options: readonly (readonly [Value, string])[], apply: (value: Value) => void) => (
+    <View style={{ gap: 6 }}>
+      <Text style={shared.styles.meta}>{title}</Text>
+      <Segmented<Value> t={t} label={title} value={current} options={options.map(([value, label]) => ({ value, label }))} onChange={(value) => value !== current && apply(value)} />
     </View>
   );
-  const perGroup = config.rowLimit.enabled ? config.rowLimit.rows : 0;
   const chatsFor = config.showAgents ? config.agentsFor ?? "active" : "off";
-  const chatRows = config.chatRows ?? DEFAULT_CHAT_ROWS;
-  const subAgentRows = config.subAgentRows ?? DEFAULT_CHAT_ROWS;
-  const toggles: [keyof RowShows | "timeInStatus" | "counts" | "stepsCard", string, boolean, () => void][] = [
-    ["branch", "Branch", shows.branch, () => update({ details: { ...config.details, branch: !shows.branch } })],
-    ["project", "Project", shows.project, () => update({ details: { ...config.details, project: !shows.project } })],
-    ["host", "Host", shows.host, () => update({ show: { ...config.show, host: !shows.host } })],
-    ["pullRequest", "Pull request", shows.pullRequest, () => update({ show: { ...config.show, pullRequest: !shows.pullRequest } })],
-    ["checks", "Checks", shows.checks, () => update({ show: { ...config.show, checks: !shows.checks } })],
-    ["services", "Services", shows.services, () => update({ show: { ...config.show, services: !shows.services } })],
-    ["labels", "Labels", shows.labels, () => update({ show: { ...config.show, labels: !shows.labels } })],
-    ["diff", "Diff stats", shows.diff, () => update({ details: { ...config.details, diff: !shows.diff } })],
-    ["lastActivity", "Last activity", shows.lastActivity, () => update({ show: { ...config.show, lastActivity: !shows.lastActivity } })],
-    ["timeInStatus", "Time in status, not since last prompt", config.details.timeInStatus, () => update({ details: { ...config.details, timeInStatus: !config.details.timeInStatus } })],
-    ["counts", "Counts in headings", config.counts, () => update({ counts: !config.counts })],
-    // Back to the default removes the key, so a profile nobody changed stays readable by 0.8.
-    ["stepsCard", "Steps card for the open chat", config.stepsCard !== false, () => update({ stepsCard: config.stepsCard === false ? undefined : false })],
-  ];
   return (
-    <>
-      {choice("group", "Grouping", config.groupBy, [["project", "Project"], ["status", "Status"], ["activity", "Last used"], ["label", "Label"], ["none", "No groups"]] as const, (groupBy) => update({ groupBy }))}
-      {choice("sort", "Sort", config.orderBy, [["activity", "Last prompt"], ["created", "Created"], ["status", "Status"], ["name", "Name"], ["statusChanged", "Latest status change"], ["changes", "Most changed lines"]] as const, (orderBy) => update({ orderBy }))}
-      {config.list === "workspaces" ? choice("title", "Title", config.titleSource ?? "title", [["title", "Title"], ["branch", "Branch name"]] as const, (titleSource) => update({ titleSource })) : null}
-      {choice("rows", "Rows", config.rowStyle ?? "two-line", [["two-line", "Two lines"], ["one-line", "One line"]] as const, (rowStyle) => update({ rowStyle }))}
-      {choice("height", "Row height", config.density, [["compact", "Compact"], ["comfortable", "Comfortable"]] as const, (density) => update({ density }))}
-      {choice("limit", "Per group", String(perGroup), [...new Set(["5", "10", "20", ...(perGroup && ![5, 10, 20].includes(perGroup) ? [String(perGroup)] : []), "0"])].map((rows) => [rows, rows === "0" ? "Show all" : `${rows}, then Show more`] as const), (rows) => update({ rowLimit: rows === "0" ? { ...config.rowLimit, enabled: false } : { enabled: true, rows: Number(rows) } }))}
-      {config.list === "workspaces" ? (
-        <>
-          {choice("chats", "Chats", chatsFor, [["off", "Hidden"], ["active", "Open workspace only"], ["all", "Every workspace"]] as const, (value) => update(value === "off" ? { showAgents: false } : { showAgents: true, agentsFor: value }))}
-          {chatsFor !== "off" ? choice("single", "A workspace's only chat", config.singleChat ?? "show", [["show", "Listed under it"], ["hide", "Not listed (the workspace stands for it)"]] as const, (value) => update({ singleChat: value === "show" ? undefined : value })) : null}
-          {chatsFor !== "off" ? choice("chatRows", "Chats per workspace", String(chatRows), [...new Set(["3", "5", "10", "20", String(chatRows)])].map((rows) => [rows, `${rows}, then Show more`] as const), (rows) => update({ chatRows: Number(rows) })) : null}
-          {chatsFor !== "off"
-            ? choice(
-                "subAgents",
-                "Sub-agents per chat",
-                config.showSubAgents === false ? "hidden" : config.showSubAgents === "open" ? "open" : String(subAgentRows),
-                [["hidden", "Hidden"], ["open", "Only the open one"], ...[...new Set(["3", "5", "10", "20", String(subAgentRows)])].map((rows) => [rows, `${rows}, then Show more`] as const)] as const,
-                (value) => update(value === "hidden" ? { showSubAgents: false } : value === "open" ? { showSubAgents: "open" } : { showSubAgents: true, subAgentRows: Number(value) }),
-              )
-            : null}
-          {chatsFor !== "off" && config.showSubAgents !== false ? choice("singleSub", "A chat's only sub-agent", config.singleSubAgent ?? "show", [["show", "Listed under it"], ["hide", "Not listed (the chat stands for it)"]] as const, (value) => update({ singleSubAgent: value === "show" ? undefined : value })) : null}
-        </>
-      ) : null}
-      <View>
-        <MenuItem t={t} icon={open === "show" ? "ChevronDown" : "ChevronRight"} label="Show" hint={`${toggles.filter(([, , on]) => on).length} on`} onPress={() => setOpen(open === "show" ? null : "show")} />
-        {open === "show" ? (
-          <View style={{ paddingLeft: 14 }}>
-            {toggles.map(([key, label, on, toggle]) => (
-              <MenuItem key={key} t={t} role="checkbox" label={label} checked={on} onPress={toggle} />
-            ))}
-          </View>
-        ) : null}
+    <View style={{ padding: 12, gap: 14 }}>
+      {row("Group by", config.groupBy, [["project", "Project"], ["status", "Status"], ["activity", "Last used"], ["label", "Label"], ["none", "None"]] as const, (groupBy) => update({ groupBy }))}
+      {row("Sort by", config.orderBy, [["activity", "Last prompt"], ["created", "Created"], ["status", "Status"], ["name", "Name"], ["statusChanged", "Status change"], ["changes", "Changed lines"]] as const, (orderBy) => update({ orderBy }))}
+      {row("Rows", config.rowStyle ?? "two-line", [["two-line", "Two lines"], ["one-line", "One line"]] as const, (rowStyle) => update({ rowStyle }))}
+      {config.list === "workspaces" ? row("Chats under workspaces", chatsFor, [["off", "None"], ["active", "Open workspace"], ["all", "Every workspace"]] as const, (value) => update(value === "off" ? { showAgents: false } : { showAgents: true, agentsFor: value })) : null}
+      <View style={{ height: 1, backgroundColor: t.c.border, marginHorizontal: -12 }} />
+      <View style={{ marginHorizontal: -8, marginVertical: -6 }}>
+        {config.list === "workspaces" ? <MenuItem t={t} role="checkbox" icon="EyeOff" label="Show background workspaces" checked={state.showBackground} onPress={() => saveState({ showBackground: !state.showBackground })} /> : null}
+        <MenuItem t={t} icon="Settings2" label="All sidebar settings" onPress={openSettings} />
       </View>
-      {config.list === "workspaces" ? (
-        <>
-          {choice(
-            "autoArchive",
-            "Auto-archive marked done",
-            config.autoArchive ? String(config.autoArchive.days) : "off",
-            [["off", "Off"], ...[...new Set(["1", "3", "7", "14", "30", ...(config.autoArchive ? [String(config.autoArchive.days)] : [])])].map((days) => [days, `${days} ${days === "1" ? "day" : "days"} after marking`] as const)] as const,
-            (value) => update({ autoArchive: value === "off" ? undefined : { days: Number(value) } }),
-          )}
-          {open === "autoArchive" ? (
-            // Merged pull requests have Paseo's own switch; repeating it here would be a second rule.
-            <Text style={[shared.styles.meta, { paddingHorizontal: 22, paddingVertical: 4 }]}>Never archives work git could lose. For merged pull requests, turn on Paseo's "Archive merged PR workspaces" in its host settings.</Text>
-          ) : null}
-        </>
-      ) : null}
-      {config.list === "workspaces" ? <MenuItem t={t} role="checkbox" icon="EyeOff" label="Show background" checked={state.showBackground} onPress={() => saveState({ showBackground: !state.showBackground })} /> : null}
-    </>
+    </View>
   );
 }
 
 export interface ViewDeps extends PickerDeps {
   // Saves the view's group, sort and limit options to the active layout.
   updateView(patch: Partial<ViewConfig>): Promise<void>;
+  // Opens Settings, Sidebar on the layout in use (the Display menu's "All sidebar settings").
+  openSidebarSettings(): void;
   workspaces: ValueStore<WorkspaceList>;
   // False until the first workspace list arrives, while the view shows loading placeholders.
   workspacesReady: ValueStore<boolean>;
@@ -1398,8 +1322,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     const expanded = new Set(ui.expanded);
     const setSearch = (text: string) => setUi({ search: text });
     const setSearching = (on: boolean) => setUi({ searching: on });
-    // A menu opens with its sections folded.
-    const setMenu = (next: Menu) => setUi({ menu: next, section: null });
+    const setMenu = (next: Menu) => setUi({ menu: next });
     const setExpanded = (next: ReadonlySet<string>) => setUi({ expanded: [...next] });
     // Project names for the Projects filter, from the same visible workspaces.
     const projects = useWorkspaces({ where: (workspace) => isVisible(workspace, state.showBackground), groupBy: (workspace) => ({ key: workspace.project.key, title: workspace.projectDisplayName }) }).map((group) => ({ key: group.key, title: group.title ?? "Project" }));
@@ -1571,7 +1494,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
           {stepsCards && steps.position === "bottom" ? stepsCards : null}
           {ui.selecting && config.list === "workspaces" ? <BulkBar shownIds={new Set(sections.flatMap((section) => section.items.map((item) => (item as WorkspaceRef).id)))} shared={shared} /> : null}
           <Dropdown t={t} open={menu !== null} onClose={() => setMenu(null)} anchor={headerRef} width={420} maxHeight={560}>
-            {menu === "filter" ? <FilterMenu state={state} save={saveState} projects={projects} shared={shared} /> : <ViewMenu update={updateView} state={state} saveState={saveState} shared={shared} />}
+            {menu === "filter" ? <FilterMenu state={state} save={saveState} projects={projects} shared={shared} /> : <ViewMenu update={updateView} state={state} saveState={saveState} shared={shared} openSettings={() => (setMenu(null), deps.openSidebarSettings())} />}
           </Dropdown>
         </View>
         </PopoverHost>

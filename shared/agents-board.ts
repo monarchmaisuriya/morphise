@@ -2,7 +2,7 @@
 import { defineSettings } from "@getpaseo/plugin";
 import { z } from "zod";
 import { chatIndicator, type ChatStatusFields, parentFromLabels } from "./chat-status";
-import { type PermissionSummary, previewLine } from "./inbox";
+import { canClear, clearKey, type InboxReason, type PermissionSummary, previewLine, waitsOnUser } from "./inbox";
 import type { Indicator } from "./profile";
 
 // The Workbench's Agents view: its settings, and the rules that place, filter and sort agents.
@@ -48,7 +48,7 @@ const BOARD_DEFAULTS = { doneWindow: "7d", laneWidth: "default", showSubtasks: t
 
 // Every field falls back to its default on its own, so one unusable value never invalidates the record.
 export const agentsBoardSchema = z.object({
-  // Off, the Workbench lists no Agents view and nothing subscribes to agents for it.
+  // Off, the Workbench lists Agents only while an agent waits on the user; nothing subscribes to agents until it opens.
   enabled: flag(true),
   // The preset the card switches were last set from; "custom" after a hand edit.
   density: z.enum(DENSITIES).catch("standard"),
@@ -145,13 +145,17 @@ export interface BoardAgent {
   sessionId: string | null;
   lastError: string | null;
   context: { used: number; max: number } | null;
+  // False when its workspace is not listed (being archived, background or internal); true when unknown, as the
+  // Workbench count treats it.
+  workspaceOpen: boolean;
 }
 
-// What the workspace list adds to an agent: its name, project and labels.
+// What the workspace list adds to an agent: its name, project and labels, and whether the workspace is listed.
 export interface WorkspaceFacts {
   name: string;
   project: string;
   labels: readonly string[];
+  open: boolean;
 }
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -245,11 +249,36 @@ export function readBoardAgent(entry: unknown, workspaceOf: (id: string) => Work
     sessionId: text(record(agent.runtimeInfo)?.sessionId) ?? text(record(agent.persistence)?.sessionId),
     lastError: text(agent.lastError),
     context: readContext(agent.lastUsage),
+    workspaceOpen: workspace?.open !== false,
   };
 }
 
 export function indicatorOf(agent: BoardAgent): Indicator {
   return chatIndicator({ status: agent.status, requiresAttention: agent.requiresAttention, attentionReason: agent.attentionReason, pendingPermissionCount: agent.pendingPermissions.length });
+}
+
+/**
+ * The key a finished-unread agent is cleared under on this device (the same keys the Workbench count reads), or null
+ * when it cannot be cleared: it is not finished-unread, or Paseo gave no time to tell this finish from the next.
+ */
+export function clearKeyOf(agent: BoardAgent): string | null {
+  if (indicatorOf(agent) !== "attention") return null;
+  const entry = { id: agent.id, reason: "finished" as const, attentionAt: agent.attentionAt ?? "" };
+  return canClear(entry) ? clearKey(entry) : null;
+}
+
+const REASONS: Partial<Record<Indicator, InboxReason>> = { needs_input: "permission", failed: "failed", attention: "finished" };
+
+/**
+ * The status an agent shows: its own, except that one that would wait on the user but does not by the shared rule
+ * (waitsOnUser: cleared on this device, or in a workspace that is not listed) reads as done, as the Workbench count
+ * leaves it out.
+ */
+export function shownStatus(agent: BoardAgent, cleared: ReadonlySet<string>): Indicator {
+  const indicator = indicatorOf(agent);
+  const reason = REASONS[indicator];
+  if (!reason) return indicator;
+  return waitsOnUser({ id: agent.id, reason, attentionAt: agent.attentionAt ?? "" }, agent.workspaceOpen, cleared) ? indicator : "done";
 }
 
 export const folderOf = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
@@ -266,28 +295,30 @@ export interface LaneOptions {
   doneWindow: DoneWindow;
   showArchived: boolean;
   showSubtasks: boolean;
+  // Finished agents the user cleared on this device (clearKeyOf); they go to Done.
+  cleared?: ReadonlySet<string>;
 }
 
 // Waiting: needs input. Running: running, or a parent whose sub-agent still runs or waits. To
-// review: finished unseen, or failed (a failed parent stays here). Done and Archived: within the
-// done window. Null: not on the board.
+// review: finished unseen, or failed; a parent here stays here while a sub-agent works, as it waits on the user
+// (the Workbench counts it). Done and Archived: within the done window. Null: not on the board.
 function laneOf(agent: BoardAgent, childBusy: boolean, options: LaneOptions): Lane | null {
   const windowMs = doneWindowMs(options.doneWindow);
   const within = (at: string) => windowMs === null || Date.parse(at) >= options.now - windowMs;
   if (agent.archivedAt) return options.showArchived && within(agent.archivedAt) ? "archived" : null;
-  const indicator = indicatorOf(agent);
+  const indicator = shownStatus(agent, options.cleared ?? new Set());
   if (indicator === "needs_input") return "waiting";
   if (indicator === "running") return "running";
-  if (indicator === "failed") return "review";
+  if (indicator === "failed" || indicator === "attention") return "review";
   if (childBusy) return "running";
-  if (indicator === "attention") return "review";
   return within(agent.updatedAt) ? "done" : null;
 }
 
-// Each lane's agents, in the order given. With subtasks hidden, a sub-agent folds into its parent's
-// card, unless it runs, waits or failed and its parent's card is in another lane.
+// Each lane's agents, in the order given. With subtasks hidden, a sub-agent folds into its parent's card when it is done,
+// or runs while its parent's card is in Running too; one that waits on the user always keeps its own card, so the board
+// lists what the Workbench counts and it can be answered or cleared.
 export function assignLanes(agents: readonly BoardAgent[], options: LaneOptions): Record<Lane, BoardAgent[]> {
-  const busyParents = new Set(agents.filter((agent) => agent.parentId && !agent.archivedAt && busy(indicatorOf(agent))).map((agent) => agent.parentId));
+  const busyParents = new Set(agents.filter((agent) => agent.parentId && !agent.archivedAt && busy(shownStatus(agent, options.cleared ?? new Set()))).map((agent) => agent.parentId));
   const placed = new Map(agents.map((agent) => [agent.id, laneOf(agent, busyParents.has(agent.id), options)]));
   const lanes: Record<Lane, BoardAgent[]> = { waiting: [], running: [], review: [], done: [], archived: [] };
   for (const agent of agents) {
@@ -295,8 +326,9 @@ export function assignLanes(agents: readonly BoardAgent[], options: LaneOptions)
     if (!lane) continue;
     const parentLane = agent.parentId ? placed.get(agent.parentId) : undefined;
     if (!options.showSubtasks && parentLane) {
-      const indicator = indicatorOf(agent);
-      if (!(busy(indicator) || indicator === "failed") || parentLane === lane) continue;
+      const status = shownStatus(agent, options.cleared ?? new Set());
+      const waits = status === "needs_input" || status === "failed" || status === "attention";
+      if (!waits && (status !== "running" || parentLane === lane)) continue;
     }
     lanes[lane].push(agent);
   }
@@ -315,6 +347,8 @@ export interface BoardFilter {
   search: string;
   // Only agents Paseo updated within this window.
   updatedWithin: UpdatedWithin;
+  // Only agents showing these statuses (shownStatus); none picked shows all.
+  statuses: readonly Indicator[];
 }
 
 export const UPDATED_WITHIN = ["any", "1h", "6h", "12h", "24h"] as const;
@@ -325,15 +359,38 @@ export function updatedWithinMs(window: UpdatedWithin): number | null {
   return window === "any" ? null : Number(window.slice(0, -1)) * 3_600_000;
 }
 
-export const NO_FILTER: BoardFilter = { providers: [], labels: [], projects: [], workspaces: [], search: "", updatedWithin: "any" };
+export const NO_FILTER: BoardFilter = { providers: [], labels: [], projects: [], workspaces: [], search: "", updatedWithin: "any", statuses: [] };
+
+const STATUS_ORDER: readonly Indicator[] = ["needs_input", "running", "failed", "attention", "done"];
+const STATUS_LABELS: Record<Indicator, string> = { needs_input: "Waiting", running: "Running", failed: "Failed", attention: "To review", done: "Done" };
+
+/**
+ * The status an agent counts as where it sits: its lane decides (a parent in Running because a sub-agent works is
+ * running; anything in Done or Archived is done), and To review tells failed from finished-unread.
+ */
+export function laneStatus(lane: Lane, agent: BoardAgent, cleared: ReadonlySet<string>): Indicator {
+  if (lane === "waiting") return "needs_input";
+  if (lane === "running") return "running";
+  if (lane === "review") return shownStatus(agent, cleared);
+  return "done";
+}
+
+/** The Status filter's choices, every status in order, with how many agents on the board count as it (laneStatus). */
+export function statusGroups(lanes: Readonly<Record<Lane, readonly BoardAgent[]>>, cleared: ReadonlySet<string>): FilterGroup[] {
+  const counts = new Map<Indicator, number>();
+  for (const lane of LANES) for (const agent of lanes[lane]) counts.set(laneStatus(lane, agent, cleared), (counts.get(laneStatus(lane, agent, cleared)) ?? 0) + 1);
+  return STATUS_ORDER.map((status) => ({ value: status, label: STATUS_LABELS[status], count: counts.get(status) ?? 0 }));
+}
 
 /**
  * Whether an agent passes the filters. `activeNow` is true for an agent in the Waiting or Running lane (a parent is there
- * while a sub-agent works): it counts as updated now, as Paseo may not touch its record while a turn runs.
+ * while a sub-agent works): it counts as updated now, as Paseo may not touch its record while a turn runs. `status` is
+ * the status it shows (shownStatus), its own by default.
  */
-export function matchesFilter(agent: BoardAgent, filter: BoardFilter, now: number, activeNow = false): boolean {
+export function matchesFilter(agent: BoardAgent, filter: BoardFilter, now: number, context: { activeNow?: boolean; status?: Indicator } = {}): boolean {
+  if (filter.statuses.length && !filter.statuses.includes(context.status ?? indicatorOf(agent))) return false;
   const windowMs = updatedWithinMs(filter.updatedWithin);
-  if (windowMs !== null && !activeNow) {
+  if (windowMs !== null && !context.activeNow) {
     const at = Date.parse(agent.updatedAt);
     if (Number.isNaN(at) || at < now - windowMs) return false;
   }

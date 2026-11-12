@@ -51,6 +51,8 @@ export default function contribute(client: PluginClientContext) {
   const taskStore = createTaskStore();
   const chats = createValueStore<Chats>(new Map());
   const attention = createValueStore<AttentionList>(new Map());
+  // False until the first agent snapshot (or the watch failing), so no one reads "nothing waits" from an empty list.
+  const attentionReady = createValueStore(false);
   const changeAttention = (change: Parameters<typeof reduceAttention>[1]) => {
     const next = reduceAttention(attention.get(), change);
     if (next !== attention.get()) attention.set(next);
@@ -136,9 +138,17 @@ export default function contribute(client: PluginClientContext) {
   let stopped = false;
   const releases: (() => unknown)[] = [];
 
+  // The settings tabs' shared draft (see the tabs below); made first, as opening the Sidebar tab sets which layout it edits.
+  const drafts = createDraftStore();
+  // The Sidebar tab edits the layout being edited, which can differ from the one shown; every way into it (the sidebar's
+  // "All sidebar settings", an "Edit layout" action) is about the one shown, so it goes back to editing that.
+  const openSettings = (id: string) => {
+    if (id === EDITOR_SCREEN_ID) drafts.editActiveLayout();
+    client.openSettings(id);
+  };
   const deps: ActionDeps = {
     composers: (selector) => client.composers(selector),
-    openSettings: (id) => client.openSettings(id),
+    openSettings,
     openUrl: openExternalUrl,
   };
   // Every task change goes through this: operations re-applied on the newest saved list.
@@ -154,12 +164,14 @@ export default function contribute(client: PluginClientContext) {
     workspaces: workspaceList,
     workspacesReady,
     attention,
+    attentionReady,
     bookmarks: bookmarkStore,
     applyBookmark,
     bookmarkLastAnswer: (agentId, workspaceId, note) => bookmarkLastAnswer(bookmarkCapture, agentId, workspaceId, note),
     announcements,
     updateView,
     updateChat,
+    openSidebarSettings: () => openSettings(EDITOR_SCREEN_ID),
     reminderSettings: () => profileOf(store.get()).reminders,
   };
   const reconciler = createReconciler(createSections(client, deps, surfaces, switchLayout), (list) => problems.set(list));
@@ -266,7 +278,6 @@ export default function contribute(client: PluginClientContext) {
   releases.push(taskStore.subscribe(() => migrateLegacy(lastAgentEntries)));
 
   // One tab per settings screen, in this order; every tab edits one shared draft.
-  const drafts = createDraftStore();
   const tabs = [
     { id: "layouts", title: "Layouts", icon: "Layers", Component: createFormScreen(drafts, LayoutsTab, { editsProfile: false }) },
     { id: "general", title: "General", icon: "SlidersHorizontal", Component: createFormScreen(drafts, GeneralTab, { editsProfile: true }) },
@@ -386,6 +397,7 @@ export default function contribute(client: PluginClientContext) {
       migrateLegacy(snapshot.entries);
       changeChats({ snapshot: snapshot.entries });
       changeAttention({ snapshot: snapshot.entries });
+      attentionReady.set(true);
       setDirectory({ ...directory, agents: reduceAgents(directory.agents, { snapshot: snapshot.entries }) });
     },
     update: (message) => {
@@ -394,7 +406,7 @@ export default function contribute(client: PluginClientContext) {
       const agents = reduceAgents(directory.agents, { message });
       if (agents !== directory.agents) setDirectory({ ...directory, agents });
     },
-  });
+  }, () => attentionReady.set(true));
 
   return () => {
     stopped = true;

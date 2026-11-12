@@ -101,6 +101,11 @@ export function createDraftStore() {
     chooseLayout(id: string) {
       store.set({ ...store.get(), editing: id, generation: store.get().generation + 1 });
     },
+    // Back to editing the active layout, for links that open settings for what the user sees now.
+    editActiveLayout() {
+      if (store.get().editing === null) return;
+      store.set({ ...store.get(), editing: null, generation: store.get().generation + 1 });
+    },
     editingIndex(saved: Saved): number {
       const document = working(saved);
       const chosen = document.layouts.findIndex((layout) => layout.id === store.get().editing);

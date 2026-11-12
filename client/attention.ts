@@ -96,13 +96,6 @@ export function reduceAttention(current: AttentionList, change: Change): Attenti
   return new Map(current).set(read.id, read.item);
 }
 
-const ORDER: Record<AttentionReason, number> = { permission: 0, failed: 1, finished: 2 };
-
-// What needs the user first (permission, then failures, then finished work), newest first within.
-export function attentionOrder(list: AttentionList): AttentionItem[] {
-  return [...list.values()].sort((left, right) => ORDER[left.reason] - ORDER[right.reason] || right.at.localeCompare(left.at));
-}
-
 // A parent chat's sub-agents that are blocked on the user: waiting for permission or failed.
 export function waitingChildren(list: AttentionList, parentAgentId: string): number {
   let count = 0;

@@ -1,4 +1,4 @@
-// Drag and drop for board cards. A card lifts after the mouse moves a few pixels on the web, or after a long press on a
+// Drag and drop for board cards, and for the rows of the Tasks list (sections stacked down instead of columns side by side). A card lifts after the mouse moves a few pixels on the web, or after a long press on a
 // phone; a copy follows the pointer above the board, a gap opens where it will land, and releasing moves it. Where it
 // lands is worked out by shared/board.ts (dropTarget) from the cards' places measured when it was lifted.
 import { createContext, type ReactNode, type RefObject, useContext, useMemo, useRef, useState } from "react";
@@ -59,17 +59,20 @@ function measure(view: View | null | undefined): Promise<Frame | null> {
 /**
  * Holds one drag for a board. `columns` is the board as shown (columns in order, shown cards in order); `drop` runs when a card
  * is released over a target. `closes`: the lifted card's slot closes while it is dragged (manual order), so the cards below
- * it move up. Wrap the board in `DragProvider` with `value` and give `root` to its outer view.
+ * it move up. `stack`: columns side by side in a sideways scroller ("horizontal", the board), or sections one under another in
+ * a scroller that scrolls down ("vertical", the list); the outer scroller is registered as "board" either way. Wrap the
+ * board in `DragProvider` with `value` and give `root` to its outer view.
  */
-export function useBoardDrag(columns: BoardColumn[], drop: (taskId: string, target: DropTarget) => void, closes: boolean) {
+export function useBoardDrag(columns: BoardColumn[], drop: (taskId: string, target: DropTarget) => void, closes: boolean, stack: "horizontal" | "vertical" = "horizontal", gap = CARD_GAP) {
   const [state, setState] = useState<DragState | null>(null);
   const [armed, setArmed] = useState<string | null>(null);
-  const live = useRef({ columns, drop, state, closes });
-  live.current = { columns, drop, state, closes };
+  // `gap`: the space between two cards (rows in a list have none), which a closed slot also gives back.
+  const live = useRef({ columns, drop, state, closes, stack, gap });
+  live.current = { columns, drop, state, closes, stack, gap };
   const root = useRef<View | null>(null);
   const views = useRef({ columns: new Map<string, View>(), cards: new Map<string, View>() });
   // Places on screen when the card was lifted, and every scroller's offset then.
-  const frames = useRef({ root: null as Frame | null, columns: new Map<string, Frame>(), cards: new Map<string, Frame>(), scrolled: new Map<string, number>() });
+  const frames = useRef({ root: null as Frame | null, outer: null as Frame | null, columns: new Map<string, Frame>(), cards: new Map<string, Frame>(), scrolled: new Map<string, number>() });
   const scrollers = useRef(new Map<string, Scroller>());
   const pointer = useRef<{ x: number; y: number } | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -80,9 +83,13 @@ export function useBoardDrag(columns: BoardColumn[], drop: (taskId: string, targ
     const scrolledBy = (key: string) => (scrollers.current.get(key)?.offset ?? 0) - (frames.current.scrolled.get(key) ?? 0);
     // The drop target under the pointer. The places are the ones measured at the lift, moved by any scrolling since and
     // without the lifted card; the gap that opens at the target is left out, so it cannot move the target it shows.
+    // A place measured at the lift, moved by the outer scroller's scrolling since: sideways on a board, down in a list.
+    const shifted = (frame: Frame): Frame => {
+      const by = scrolledBy("board");
+      return live.current.stack === "horizontal" ? { ...frame, x: frame.x - by } : { ...frame, y: frame.y - by };
+    };
     const targetNow = (taskId: string): DropTarget | null => {
       if (!pointer.current) return null;
-      const sideways = scrolledBy("board");
       const lifted = frames.current.cards.get(taskId);
       const home = live.current.columns.find((entry) => entry.lanes.some((lane) => lane.tasks.some((task) => task.id === taskId)))?.column.id;
       const shown = live.current.columns.flatMap((entry) => {
@@ -92,12 +99,13 @@ export function useBoardDrag(columns: BoardColumn[], drop: (taskId: string, targ
         const cards = entry.lanes.flatMap((lane) => lane.tasks).flatMap((task) => {
           const card = task.id === taskId ? undefined : frames.current.cards.get(task.id);
           if (!card) return [];
-          const closed = live.current.closes && lifted && entry.column.id === home && card.y > lifted.y ? lifted.height + CARD_GAP : 0;
-          return [{ id: task.id, frame: { ...card, x: card.x - sideways, y: card.y - down - closed } }];
+          const closed = live.current.closes && lifted && entry.column.id === home && card.y > lifted.y ? lifted.height + live.current.gap : 0;
+          const moved = shifted(card);
+          return [{ id: task.id, frame: { ...moved, y: moved.y - down - closed } }];
         });
-        return [{ id: entry.column.id, frame: { ...frame, x: frame.x - sideways }, cards }];
+        return [{ id: entry.column.id, frame: shifted(frame), cards }];
       });
-      return dropTarget(shown, pointer.current.x, pointer.current.y);
+      return dropTarget(shown, pointer.current.x, pointer.current.y, live.current.stack);
     };
     const retarget = () => {
       const current = live.current.state;
@@ -107,13 +115,15 @@ export function useBoardDrag(columns: BoardColumn[], drop: (taskId: string, targ
     };
     const measureAll = async () => {
       const scrolled = new Map([...scrollers.current].map(([key, scroller]) => [key, scroller.offset] as const));
-      const [rootFrame, columnFrames, cardFrames] = await Promise.all([
+      const [rootFrame, outerFrame, columnFrames, cardFrames] = await Promise.all([
         measure(root.current),
+        measure(scrollers.current.get("board")?.view as View | null | undefined),
         Promise.all([...views.current.columns].map(async ([id, view]) => [id, await measure(view)] as const)),
         Promise.all([...views.current.cards].map(async ([id, view]) => [id, await measure(view)] as const)),
       ]);
       frames.current = {
         root: rootFrame,
+        outer: outerFrame,
         columns: new Map(columnFrames.flatMap(([id, frame]) => (frame ? [[id, frame]] : []))),
         cards: new Map(cardFrames.flatMap(([id, frame]) => (frame ? [[id, frame]] : []))),
         scrolled,
@@ -124,20 +134,24 @@ export function useBoardDrag(columns: BoardColumn[], drop: (taskId: string, targ
       if (timer.current) clearInterval(timer.current);
       timer.current = null;
     };
-    // The board scrolls sideways near its left and right edges; the column under the pointer near its top and bottom.
+    // The board scrolls sideways near its left and right edges (a list, down near its top and bottom); a column under the
+    // pointer near its top and bottom.
     const edgeScroll = () => {
       const at = pointer.current;
       if (!at) return stopScrolling();
       const steps: [Scroller, number][] = [];
       const board = scrollers.current.get("board");
-      const rootFrame = frames.current.root;
+      // The outer scroller's own edges (a list's top is below the toolbar), else the board's.
+      const rootFrame = frames.current.outer ?? frames.current.root;
       if (board && rootFrame) {
-        const direction = at.x < rootFrame.x + EDGE ? -1 : at.x > rootFrame.x + rootFrame.width - EDGE ? 1 : 0;
+        const direction = board.horizontal
+          ? at.x < rootFrame.x + EDGE ? -1 : at.x > rootFrame.x + rootFrame.width - EDGE ? 1 : 0
+          : at.y < rootFrame.y + EDGE ? -1 : at.y > rootFrame.y + rootFrame.height - EDGE ? 1 : 0;
         if (direction) steps.push([board, direction]);
       }
-      const sideways = scrolledBy("board");
-      for (const [id, frame] of frames.current.columns) {
-        if (at.x < frame.x - sideways || at.x > frame.x - sideways + frame.width) continue;
+      for (const [id, measured] of frames.current.columns) {
+        const frame = shifted(measured);
+        if (at.x < frame.x || at.x > frame.x + frame.width) continue;
         const column = scrollers.current.get(id);
         const direction = at.y < frame.y + EDGE ? -1 : at.y > frame.y + frame.height - EDGE ? 1 : 0;
         if (column && direction) steps.push([column, direction]);
@@ -200,11 +214,15 @@ export function useBoardDrag(columns: BoardColumn[], drop: (taskId: string, targ
       column: (id: string) => register("columns", id),
       card: (id: string) => register("cards", id),
       scroller(key: string, horizontal: boolean): ScrollerProps {
-        const cached = scrollerProps.get(key);
+        // Cached per direction too: the Tasks view can switch between its board (sideways) and its list (down) while
+        // mounted, and each scroller's handlers must read their own axis.
+        const cacheKey = `${key}:${horizontal ? "x" : "y"}`;
+        const cached = scrollerProps.get(cacheKey);
         if (cached) return cached;
         const entry = () => {
           let found = scrollers.current.get(key);
           if (!found) scrollers.current.set(key, (found = { view: null, horizontal, offset: 0, content: 0, size: 0 }));
+          found.horizontal = horizontal;
           return found;
         };
         const props: ScrollerProps = {
@@ -222,7 +240,7 @@ export function useBoardDrag(columns: BoardColumn[], drop: (taskId: string, targ
           // On a phone a scroll would fight the finger that drags; on the web the mouse wheel still scrolls.
           scrollEnabled: true,
         };
-        scrollerProps.set(key, props);
+        scrollerProps.set(cacheKey, props);
         return props;
       },
     };

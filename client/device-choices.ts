@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { VIEW_LAYOUTS } from "../shared/agents-board";
 
-// On this device: the Workbench rail folded to icons, Launchpad's last tab, and the Agents and Tasks views as a list or
+// On this device: the Workbench rail folded to icons, which of Agents and Tasks was opened last (boardTab, named for the tabs
+// they once were), and the Agents and Tasks views as a list or
 // lanes. Kept under the Workbench's settings id, so earlier choices carry over.
 const workbenchSchema = z.object({
   railFolded: z.boolean().default(false),

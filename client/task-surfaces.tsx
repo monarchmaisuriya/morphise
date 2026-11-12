@@ -35,9 +35,13 @@ export interface SurfaceDeps extends BoardDeps {
   workspacesReady: ValueStore<boolean>;
   // Chats and sub-agents waiting on the user.
   attention: ValueStore<AttentionList>;
+  // True once the first agent snapshot arrived (or the agent watch failed).
+  attentionReady: ValueStore<boolean>;
   bookmarks: BookmarkStore;
   applyBookmark: ApplyBookmark;
   bookmarkLastAnswer(agentId: string, workspaceId: string | null, note: string): Promise<void>;
+  // Opens Settings, Sidebar, editing the layout in use (the one the sidebar shows).
+  openSidebarSettings(): void;
 }
 
 function message(error: unknown) {

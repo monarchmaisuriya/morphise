@@ -3,7 +3,6 @@ import { type PluginWorkspacePanelProps, useSettings } from "@getpaseo/plugin/cl
 import { useToast } from "@getpaseo/plugin/client/ui";
 import { Fragment, type ReactNode, useState } from "react";
 import { Platform, Pressable, ScrollView, Text, View } from "react-native";
-import type { ViewLayout } from "../../shared/agents-board";
 import { type BoardColumn, boardColumns, dropMove, todayGroups } from "../../shared/board";
 import { parseQuickAdd } from "../../shared/quick-add";
 import { isDue, type Reminder, reminderAt } from "../../shared/reminders";
@@ -557,7 +556,7 @@ function ColumnView({ t, entry, document, now, layout, open, run, workspaceId, w
 // One card as a list row (the grouped list the Agents tab uses too): priority, title, and its facts on the same
 // line, labels at the right. A press opens the editor; the check (on hover, or always on touch) moves it to the
 // done column. Dragging stays on the board.
-function TaskRow({ t, task, document, now, workspaces, onOpen, run }: { t: Tokens; task: Task; document: TaskDocument; now: Date; workspaces: BoardDeps["workspaces"] | null; onOpen(): void; run: Run }) {
+function TaskRow({ t, task, document, now, workspaces, onOpen, run, onLongPress }: { t: Tokens; task: Task; document: TaskDocument; now: Date; workspaces: BoardDeps["workspaces"] | null; onOpen(): void; run: Run; onLongPress?(): void }) {
   const column = document.columns.find((item) => item.id === task.column);
   const done = document.columns.find((item) => item.done);
   const inDone = column?.done === true;
@@ -587,25 +586,49 @@ function TaskRow({ t, task, document, now, workspaces, onOpen, run }: { t: Token
       actions={done && !inDone ? <IconButton t={t} size="sm" icon="Check" label={`Move ${task.title} to ${done.name}`} onPress={() => void run({ kind: "moveTask", id: task.id, column: done.id })} /> : undefined}
       label={`Open ${task.title}`}
       onPress={onOpen}
+      onLongPress={onLongPress}
     />
   );
 }
 
-// The board's columns as boxes of rows: the same filters, order, rows (swimlanes) and saved views. An empty
-// column starts folded.
-function TaskList({ t, columns, document, now, open, run, workspaceId, workspaceStore, swimlanes }: { t: Tokens; columns: BoardColumn[]; document: TaskDocument; now: Date; open(target: EditorTarget): void; run: Run; workspaceId: string | null; workspaceStore: BoardDeps["workspaces"]; swimlanes: Layout["swimlanes"] }) {
-  const [folds, setFolds] = useState<Record<string, boolean>>({});
+// A row that drags as a board card does: the mouse lifts it after moving a few pixels; a phone, after a long press.
+// While it is dragged its slot closes in manual order (a gap shows where it lands) and dims otherwise.
+function DragRow({ closes, ...props }: Parameters<typeof TaskRow>[0] & { closes: boolean }) {
+  const drag = useDrag();
+  const handlers = useCardDragHandlers(props.task.id);
+  const lifted = drag.state?.taskId === props.task.id;
+  const closed = lifted && closes && drag.state?.origin != null;
   return (
-    <GroupList t={t}>
+    <View ref={drag.card(props.task.id)} {...handlers} style={closed ? { height: 0, overflow: "hidden", opacity: 0 } : { opacity: lifted ? 0.35 : 1 }}>
+      <TaskRow {...props} onLongPress={Platform.OS === "web" ? undefined : () => drag.arm(props.task.id)} />
+    </View>
+  );
+}
+
+// The board's columns as boxes of rows: the same filters, order, rows (swimlanes) and saved views, and the same drag
+// and drop: a row lands before the row under the pointer's lower half, at a section's start over its header, and at
+// its end below its last row or over a folded section. The section it would land in has an accent border. An empty
+// column starts folded.
+function TaskList({ t, columns, document, now, open, run, workspaceId, workspaceStore, swimlanes, manual }: { t: Tokens; columns: BoardColumn[]; document: TaskDocument; now: Date; open(target: EditorTarget): void; run: Run; workspaceId: string | null; workspaceStore: BoardDeps["workspaces"]; swimlanes: Layout["swimlanes"]; manual: boolean }) {
+  const [folds, setFolds] = useState<Record<string, boolean>>({});
+  const drag = useDrag();
+  return (
+    <GroupList t={t} scroll={drag.scroller("board", false)}>
       {columns.map((entry) => {
         const { column } = entry;
         const empty = entry.lanes.every((lane) => lane.tasks.length === 0);
         const folded = folds[column.id] ?? empty;
         const count = column.wipLimit ? `${entry.count} / ${column.wipLimit}` : entry.inScope;
+        // Where a dragged row would land in this section: a gap its size, in manual order.
+        const target = drag.state?.target?.column === column.id ? drag.state.target : null;
+        const slot = target && manual && drag.state?.origin ? drag.state.origin.height : null;
+        const lastId = entry.lanes.at(-1)?.tasks.at(-1)?.id;
         return (
+          <View key={column.id} ref={drag.column(column.id)}>
           <GroupBox
             key={column.id}
             t={t}
+            highlight={target !== null}
             title={entry.shown < entry.inScope ? `${column.name} · ${entry.inScope - entry.shown} hidden by filters` : column.name}
             count={count}
             empty={empty}
@@ -624,12 +647,18 @@ function TaskList({ t, columns, document, now, open, run, workspaceId, workspace
                   </View>
                 ) : null}
                 {lane.tasks.map((task) => (
-                  <TaskRow key={`${lane.key}:${task.id}`} t={t} task={task} document={document} now={now} workspaces={workspaceId === null && swimlanes !== "workspace" ? workspaceStore : null} onOpen={() => open({ kind: "existing", taskId: task.id })} run={run} />
+                  <Fragment key={`${lane.key}:${task.id}`}>
+                    {slot !== null && target?.before === task.id ? <DropSlot t={t} height={slot} /> : null}
+                    <DragRow t={t} task={task} document={document} now={now} workspaces={workspaceId === null && swimlanes !== "workspace" ? workspaceStore : null} onOpen={() => open({ kind: "existing", taskId: task.id })} run={run} closes={manual} />
+                    {slot !== null && target?.before === null && task.id === lastId ? <DropSlot t={t} height={slot} /> : null}
+                  </Fragment>
                 ))}
               </View>
             ))}
-            {empty ? <GroupFooter t={t} text={column.done ? "Finished cards land here" : "No cards"} /> : null}
+            {empty && slot !== null ? <DropSlot t={t} height={slot} /> : null}
+            {empty && slot === null ? <GroupFooter t={t} text={target ? "Drop here" : column.done ? "Finished cards land here" : "No cards"} /> : null}
           </GroupBox>
+          </View>
         );
       })}
     </GroupList>
@@ -701,8 +730,8 @@ export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, open
   const { document, now, run, problem } = useBoardState(deps);
   const t = useTokens(theme, compact);
   const [tab, setTab] = useState<Tab>(initialTab);
-  // List or columns, on this device.
-  const [shape, setShape, shapeLoading] = useDeviceChoice(useSettings(workbenchSettings), "tasksLayout");
+  // List or columns, on this device, picked in Settings, General.
+  const [shape, , shapeLoading] = useDeviceChoice(useSettings(workbenchSettings), "tasksLayout");
   // The board shows the active saved view (shared by every app) plus changes made here and not
   // saved yet; those are dropped when the active view changes, here or elsewhere.
   const [edits, setEdits] = useState<{ viewId: string | null; layout: Layout } | null>(null);
@@ -733,6 +762,9 @@ export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, open
       if (operation) void run(operation);
     },
     manual,
+    shape === "list" ? "vertical" : "horizontal",
+    // List rows sit flush, divided by a line; board cards have a gap between them.
+    shape === "list" ? 0 : CARD_GAP,
   );
 
   return (
@@ -770,7 +802,6 @@ export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, open
             <>
             {tab === "board" ? (
               <>
-                <Segmented<ViewLayout> t={t} label="Show tasks as" value={shape} onChange={setShape} options={[{ value: "list", label: "List", icon: "List" }, { value: "board", label: "Board", icon: "Columns3" }]} />
                 <PanelButton t={t} icon="Layers" label={activeView ? activeView.name : "All tasks"} open={panel === "views"} onPress={() => togglePanel("views")} />
                 <PanelButton t={t} icon="ListFilter" label="Filter" count={filters} open={panel === "filter"} onPress={() => togglePanel("filter")} />
                 <PanelButton t={t} icon="SlidersHorizontal" label="Display" open={panel === "display"} onPress={() => togglePanel("display")} />
@@ -791,7 +822,7 @@ export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, open
         // Neither layout until the device's pick loads, so a list never flashes as columns first.
         <View style={{ flex: 1 }} />
       ) : tab === "board" && shape === "list" ? (
-        <TaskList t={t} columns={columns} document={document} now={now} open={setEditing} run={run} workspaceId={workspaceId} workspaceStore={deps.workspaces} swimlanes={effective.swimlanes} />
+        <TaskList t={t} columns={columns} document={document} now={now} open={setEditing} run={run} workspaceId={workspaceId} workspaceStore={deps.workspaces} swimlanes={effective.swimlanes} manual={manual} />
       ) : tab === "board" ? (
         <ScrollView horizontal {...drag.value.scroller("board", true)} contentContainerStyle={{ paddingHorizontal: pad, paddingBottom: pad, gap: 12, alignItems: "flex-start" }}>
           {columns.map((entry) => (
@@ -834,6 +865,7 @@ export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, open
       <DragGhost>
         {(taskId) => {
           const task = document.tasks.find((item) => item.id === taskId);
+          if (task && shape === "list") return <TaskRow t={t} task={task} document={document} now={now} workspaces={null} onOpen={() => undefined} run={run} />;
           return task ? <CardView t={t} task={task} document={document} now={now} compact={t.compact || layout.density === "compact"} workspaces={workspaceId === null && layout.swimlanes !== "workspace" ? deps.workspaces : null} onOpen={() => undefined} run={run} lifted /> : null;
         }}
       </DragGhost>

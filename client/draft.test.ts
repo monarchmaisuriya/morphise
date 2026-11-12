@@ -52,6 +52,9 @@ describe("draft store", () => {
     expect(store.editingIndex(twoLayouts)).toBe(0);
     store.chooseLayout("gone");
     expect(store.editingIndex(twoLayouts)).toBe(1);
+    store.chooseLayout("a");
+    store.editActiveLayout();
+    expect(store.editingIndex(twoLayouts)).toBe(1);
   });
 
   it("sends one draft at a time, keeps edits made while saving, and builds them on the saved revision", () => {

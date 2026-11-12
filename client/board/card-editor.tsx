@@ -6,6 +6,7 @@ import { slug, type TaskOperation } from "../../shared/task-ops";
 import type { Task, TaskDocument } from "../../shared/tasks";
 import { formatDue } from "../../shared/time-text";
 import { parseDueDate, todayDate } from "../../shared/when";
+import { parseReminder } from "../../shared/reminders";
 import { useValue } from "../profile-store";
 import { ReminderPicker } from "../reminder-picker";
 import { tasksOf } from "../task-store";
@@ -24,6 +25,8 @@ interface Draft {
   priority: number | null;
   labels: string[];
   dueText: string;
+  // A new card's reminder as typed ("45m", "3pm", "tomorrow 9am"); an existing card sets its own with the picker.
+  reminderText: string;
   url: string;
   workspaceId: string | null;
 }
@@ -36,6 +39,7 @@ function draftOf(task: Task | null, column: string, workspaceId: string | null):
     priority: task?.priority ?? null,
     labels: task?.labels ?? [],
     dueText: task?.due ?? "",
+    reminderText: "",
     url: task?.links.url ?? "",
     workspaceId: task ? task.links.workspaceId ?? null : workspaceId,
   };
@@ -64,6 +68,9 @@ export function CardEditor({ deps, target, theme, compact, onClose }: { deps: Bo
   const now = new Date();
   const due = draft.dueText.trim() === "" ? null : parseDueDate(draft.dueText, now);
   const dueProblem = draft.dueText.trim() !== "" && due === null ? "Expected a date such as fri, tomorrow or 2026-11-20" : null;
+  // Read as it is typed, with the same rule (1 minute to 7 days) the save applies.
+  const remind = draft.reminderText.trim() === "" ? null : parseReminder(draft.reminderText, now);
+  const reminderProblem = remind && !remind.ok ? remind.error : null;
   const chats = useValue(deps.chats);
   const chat = task?.links.agentId ? chats.get(task.links.agentId) ?? null : null;
   const finished = task !== null && (task.archivedAt !== null || document.columns.find((column) => column.id === task.column)?.done === true);
@@ -84,11 +91,16 @@ export function CardEditor({ deps, target, theme, compact, onClose }: { deps: Bo
 
   async function save() {
     if (dueProblem) return setError(dueProblem);
+    if (reminderProblem) return setError(reminderProblem);
     if (target.kind === "existing" && !task) return setError("This task was deleted in another app; nothing was saved");
     const url = draft.url.trim();
     if (!task) {
       const links = { ...(draft.workspaceId ? { workspaceId: draft.workspaceId } : {}), ...(url ? { url } : {}) };
-      if (await run({ kind: "addTask", task: { id: newTaskId(), column: draft.column, title: draft.title.trim(), description: draft.description, priority: draft.priority, labels, due, links } })) onClose();
+      // Read again at save, from one moment, so a reminder typed as "45m" counts from now, not from when the editor opened.
+      const read = draft.reminderText.trim() === "" ? null : parseReminder(draft.reminderText, new Date());
+      if (read && !read.ok) return setError(read.error);
+      const reminder = read ? read.reminder : null;
+      if (await run({ kind: "addTask", task: { id: newTaskId(), column: draft.column, title: draft.title.trim(), description: draft.description, priority: draft.priority, labels, due, reminder, links } })) onClose();
       return;
     }
     const patch: Partial<Pick<Task, "title" | "description" | "priority" | "labels" | "due">> = {};
@@ -185,6 +197,20 @@ export function CardEditor({ deps, target, theme, compact, onClose }: { deps: Bo
             </View>
             {due && !dueProblem ? <Text style={t.text.small}>{new Date(`${due}T12:00:00`).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</Text> : null}
           </PropertyRow>
+          {!task ? (
+            <PropertyRow t={t} icon="AlarmClock" label="Reminder">
+              <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+                {[["In 1 hour", "1h"], ["Tomorrow 9:00", "tomorrow 9am"], ["Monday 9:00", "monday 9am"]].map(([label, text]) => (
+                  <Tag key={text} t={t} label={label!} on={draft.reminderText === text} onPress={() => set({ reminderText: text! })} />
+                ))}
+                <View style={{ width: 210 }}>
+                  <Field t={t} plain value={draft.reminderText} onChangeText={(reminderText) => set({ reminderText })} placeholder="None: type 45m, 3pm or tomorrow 9am" accessibilityLabel="Reminder" error={reminderProblem} />
+                </View>
+                {draft.reminderText ? <IconButton t={t} size="sm" icon="X" label="Clear the reminder" onPress={() => set({ reminderText: "" })} /> : null}
+              </View>
+              {remind?.ok ? <Text style={t.text.small}>{new Date(remind.reminder.at).toLocaleString(undefined, { weekday: "long", day: "numeric", month: "long", hour: "numeric", minute: "2-digit" })}</Text> : null}
+            </PropertyRow>
+          ) : null}
           {task ? (
             <PropertyRow t={t} icon="AlarmClock" label="Reminder">
               {finished ? (
@@ -238,7 +264,7 @@ export function CardEditor({ deps, target, theme, compact, onClose }: { deps: Bo
           </View>
           <View style={{ flexDirection: "row", gap: 8 }}>
             <Button t={t} label="Cancel" onPress={onClose} />
-            <Button t={t} variant="primary" label={task ? "Save" : "Add task"} accessibilityLabel="Save" disabled={!draft.title.trim() || !!dueProblem} onPress={() => void save()} />
+            <Button t={t} variant="primary" label={task ? "Save" : "Add task"} accessibilityLabel="Save" disabled={!draft.title.trim() || !!dueProblem || !!reminderProblem} onPress={() => void save()} />
           </View>
         </View>
         </PopoverHost>
