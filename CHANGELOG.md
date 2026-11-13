@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.22.0 - 2026-11-13
+
+- **Sidebar with several hosts:** another host's workspace rows now show their pull request, checks, services, uncommitted and unpushed work, and Morphise's Done and Unread marks. Filters, sorting and Next see those marks; opening an Unread workspace clears it on its own host. The bulk bar reads each workspace's own host: pinned, labels, Mark done skipping workspaces that need you, and the archive warning, which also counts workspaces whose details have not loaded yet. The label list covers every host. Chats grouped by workspace keep two hosts' workspaces apart, and chat rows name the right workspace. Another host's chat waiting for your permission shows as needing permission, and its parent chat counts its waiting sub-agents. (The Workbench's count and Agents view still cover the host Morphise runs on.)
+- **Tasks stay on their host:** a task links a workspace or chat by its id alone, which names one on the host Morphise runs on. So Add task and Remind me are off on other hosts' rows (marked "Other host"), and their reminders are never matched to another host's workspace or chat. Task links now keep keys they do not know, so a later version can add the host to a link without this one refusing the task list. Versions up to 0.21.6 still refuse such links, so this version writes none.
+
 ## 0.21.6 - 2026-11-13
 
 - **Row buttons line up with the title:** in two-line sidebar rows, the buttons (a reminder's snooze and done, a workspace's pin, archive and menu on hover) sit on the title line, where the time shows, instead of between the two lines.

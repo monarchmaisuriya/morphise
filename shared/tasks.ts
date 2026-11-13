@@ -83,12 +83,16 @@ const taskSchema = z.strictObject({
   due: dueDate.nullable().default(null),
   reminder: reminderSchema.nullable().default(null),
   checklist: z.array(checklistItemSchema).max(100).default([]),
+  // Open to keys a later version adds (such as the linked workspace's host): this one keeps them as
+  // they are instead of refusing the whole document. Versions up to 0.21 reject unknown link keys,
+  // so this one writes none.
   links: z
-    .strictObject({
+    .object({
       agentId: z.string().min(1).optional(),
       workspaceId: z.string().min(1).optional(),
       url: z.string().max(2048).regex(/^https?:\/\/\S+$/i, "Expected an http or https address").optional(),
     })
+    .catchall(z.json())
     .default({}),
   createdAt: isoTime,
   updatedAt: isoTime,

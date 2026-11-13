@@ -59,6 +59,9 @@ export default function contribute(client: PluginClientContext) {
   };
   const workspaceList = createValueStore<WorkspaceList>(new Map());
   const workspacesReady = createValueStore(false);
+  // This plugin's own host: the task document lives there, so its task links name that host's
+  // workspaces and chats. Until it is known, nothing offers to link a task to a workspace or chat.
+  const taskHost = createValueStore<string | null>(null);
   const changeWorkspaceList = (change: Parameters<typeof reduceWorkspaceInfo>[1]) => {
     const next = reduceWorkspaceInfo(workspaceList.get(), change);
     if (next !== workspaceList.get()) workspaceList.set(next);
@@ -163,6 +166,7 @@ export default function contribute(client: PluginClientContext) {
     chats,
     workspaces: workspaceList,
     workspacesReady,
+    taskHost,
     attention,
     attentionReady,
     bookmarks: bookmarkStore,
@@ -370,6 +374,16 @@ export default function contribute(client: PluginClientContext) {
     }),
   );
 
+  // Read with the first workspace snapshot, and again after a reconnect until it succeeds.
+  const readTaskHost = () => {
+    if (taskHost.get() !== null) return;
+    client.paseo.hosts.list().then(
+      (directory) => {
+        if (!stopped) taskHost.set(directory.self.serverId);
+      },
+      (error: unknown) => console.error("[morphise] Could not read this host's id; Add task and Remind me stay off for workspaces and chats", error),
+    );
+  };
   // If the list cannot load, Paseo's own rows are all the view has, so it stops showing placeholders.
   const workspacesFailed = () => workspacesReady.set(true);
   watch("Workspace", client.paseo.workspaces.list({ subscribe: {} }), {
@@ -378,6 +392,7 @@ export default function contribute(client: PluginClientContext) {
       taskStream.reopen();
       bookmarkStream.reopen();
       openKeeper();
+      readTaskHost();
       changeWorkspaceList({ snapshot: snapshot.entries });
       workspacesReady.set(true);
       sweepWorkspaces();

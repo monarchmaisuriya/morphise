@@ -54,6 +54,7 @@ const listed = (id: string, overrides: Record<string, unknown> = {}) => ({
   title: id,
   provider: "claude",
   workspaceId: "w1",
+  workspace: { key: "one/w1" },
   status: "idle" as const,
   requiresAttention: false,
   attentionReason: null,
@@ -81,6 +82,12 @@ describe("chat rules", () => {
 
   it("groups chats by status, or by their workspace for project and label grouping", () => {
     expect(chatGroupKey(view({ groupBy: "status" }), items[2])).toEqual({ key: "status:needs_input", title: "Needs permission" });
-    expect(chatGroupKey(view({ groupBy: "project" }), items[0])).toEqual({ key: "workspace:w1", title: "w1" });
+    expect(chatGroupKey(view({ groupBy: "project" }), { ...items[0], workspace: { key: "one/w1" } })).toEqual({ key: "workspace:one/w1", title: "w1" });
+  });
+
+  it("keeps chats of two hosts' workspaces with the same id in separate groups", () => {
+    const onOne = chatGroupKey(view({ groupBy: "project" }), { ...items[0], workspace: { key: "one/w1" } });
+    const onTwo = chatGroupKey(view({ groupBy: "project" }), { ...items[1], workspace: { key: "two/w1" } });
+    expect(onOne.key).not.toBe(onTwo.key);
   });
 });

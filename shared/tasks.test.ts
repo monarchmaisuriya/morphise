@@ -34,6 +34,13 @@ describe("taskDocumentSchema", () => {
     expect(parsed.tasks[0]).toMatchObject({ description: "", priority: null, labels: [], due: null, reminder: null, checklist: [], links: {}, completedAt: null, archivedAt: null });
   });
 
+  // A later version adds a host to links; this one must read and keep it, not refuse the document.
+  it("reads and keeps link keys it does not know, while still checking the ones it does", () => {
+    const parsed = taskDocumentSchema.parse({ tasks: [task({ links: { workspaceId: "w1", hostId: "srv_two" } })] });
+    expect(parsed.tasks[0].links).toEqual({ workspaceId: "w1", hostId: "srv_two" });
+    expect(issues({ tasks: [task({ links: { url: "ftp://example.com" } })] })).toEqual(["tasks.0.links.url: Expected an http or https address"]);
+  });
+
   it("refuses references to columns, labels and views that do not exist", () => {
     expect(issues({ tasks: [task({ column: "nowhere" })] })).toEqual(['tasks.0.column: No column has the id "nowhere"']);
     expect(issues({ tasks: [task({ labels: ["bug"] })] })).toEqual(['tasks.0.labels: No label has the id "bug"']);

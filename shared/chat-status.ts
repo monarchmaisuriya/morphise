@@ -77,7 +77,9 @@ export function compareChats(config: View) {
 
 // Chats have no project or label of their own, so those groupings group by workspace; the
 // heading looks up the workspace's name, so the title here is only the workspace id.
-export function chatGroupKey(config: View, chat: ListedChat): { key: string; title: string } {
+// A workspace group is keyed by the workspace's host and id (its ref key): the same id can be
+// another host's workspace.
+export function chatGroupKey(config: View, chat: ListedChat & { readonly workspace: { readonly key: string } }): { key: string; title: string } {
   if (config.groupBy === "status") {
     const indicator: Indicator = chatIndicator(chat);
     return { key: `status:${indicator}`, title: STATUS_TITLES[indicator] };
@@ -86,5 +88,5 @@ export function chatGroupKey(config: View, chat: ListedChat): { key: string; tit
     const index = activityGroup(chat.lastActivityAt, new Date());
     return { key: `activity:${index}`, title: ACTIVITY_GROUPS[index] };
   }
-  return { key: `workspace:${chat.workspaceId}`, title: chat.workspaceId };
+  return { key: `workspace:${chat.workspace.key}`, title: chat.workspaceId };
 }

@@ -33,6 +33,9 @@ export interface SurfaceDeps extends BoardDeps {
   updateChat(change: (chat: Record<string, unknown>) => void): Promise<void>;
   // False until the first workspace list arrives.
   workspacesReady: ValueStore<boolean>;
+  // The id of the host whose task document this app edits; null until known. Task links name
+  // that host's workspaces and chats only.
+  taskHost: ValueStore<string | null>;
   // Chats and sub-agents waiting on the user.
   attention: ValueStore<AttentionList>;
   // True once the first agent snapshot arrived (or the agent watch failed).

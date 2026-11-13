@@ -50,7 +50,8 @@ import { BLUE, DONE_OPACITY, PURPLE, statusColor, tileColor } from "./ui/hues";
 import { usePulse } from "./ui/pulse";
 import { StepsCards } from "./steps-card";
 import { DISPATCH_ICON, DISPATCH_SCREEN_ID, screenOpener } from "./dispatch";
-import type { PullRequestInfo, ServiceInfo, WorkspaceInfo, WorkspaceList } from "./workspaces";
+import type { PullRequestInfo, ServiceInfo, WorkspaceInfo } from "./workspaces";
+import { atRiskOfArchive, type HostWorkspace, markableDone, useHostAttention, useHostWorkspaces } from "./host-workspaces";
 import { viewPresence } from "./view-presence";
 import { createHoverTracker, type HoverTracker, useHovered } from "./hover-tracker";
 import { afterPointerMoves, cannotHover } from "./web";
@@ -81,7 +82,7 @@ const viewUi = createValueStore<{ search: string; searching: boolean; menu: "fil
 
 // When the open workspace became the open one, kept outside the view: every Display change
 // rebuilds the view, and a fresh ref would make a just-set Unread mark look older than the visit.
-const openedAt: { id: string | null; at: number } = { id: null, at: 0 };
+const openedAt: { key: string | null; at: number } = { key: null, at: 0 };
 
 const toggleSelected = (workspaceKey: string) => {
   const ui = viewUi.get();
@@ -165,9 +166,14 @@ interface Shared {
   later(taskId: string, minutes: number): void;
   // The Display "Show" choices.
   shows: RowShows;
-  // Pull requests, checks and services, which Paseo's workspace hooks do not carry.
-  workspaces: ValueStore<WorkspaceList>;
-  attention: ValueStore<AttentionList>;
+  // Pull requests, checks, services and marks, which Paseo's workspace hooks do not carry, by the
+  // workspace's host and id.
+  infoOf(reference: { hostId: string; id: string }): HostWorkspace;
+  // The host whose task document this app edits (null until known); see `linksTasks`.
+  taskHost: string | null;
+  // A host's chats waiting on the user, with their pending permission requests, which Paseo's
+  // snapshots do not carry.
+  attentionOf(hostId: string): AttentionList;
   hosts: readonly PluginHostSummary[];
   // Every label in use, for the row menu's Labels list.
   labels: readonly string[];
@@ -265,9 +271,18 @@ function MoreRow({ label, spoken, icon, count, child, grandchild, onPress, share
   );
 }
 
-function RemindButton({ agentId, label, onPress, shared }: { agentId: string; label: string; onPress(): void; shared: Shared }) {
+// A task link holds a bare workspace or chat id, which names one on the task document's own host.
+// So tasks, reminders and their lookups apply only to that host's rows; until it is known, to none.
+function linksTasks(shared: Shared, hostId: string): boolean {
+  return shared.taskHost !== null && hostId === shared.taskHost;
+}
+
+const OTHER_HOST_HINT = "Other host";
+
+function RemindButton({ chat, label, onPress, shared }: { chat: AgentRef; label: string; onPress(): void; shared: Shared }) {
   const { t, now } = shared;
-  const reminder = shared.chatReminders.get(agentId);
+  if (!linksTasks(shared, chat.hostId)) return <IconButton t={t} size="sm" icon="AlarmClock" label={`Reminders are for this host's chats only; ${label} is on another host`} disabled onPress={onPress} />;
+  const reminder = shared.chatReminders.get(chat.id);
   const tone = reminder ? (isDue(reminder, now) ? t.c.statusWarning : t.c.accent) : undefined;
   return <IconButton t={t} size="sm" icon="AlarmClock" tone={tone} label={reminder ? `Reminder for ${label}: ${formatDue(reminder, now)}. Change it` : `Remind me about ${label}`} onPress={onPress} />;
 }
@@ -286,7 +301,7 @@ function AgentRow({ reference, sub, subs = [], shared }: { reference: AgentRef; 
   const { props, styles, now } = shared;
   const chat = useAgent(reference, (item) => ({ name: chatName(item), indicator: chatIndicator(item), workspaceId: item.workspaceId, last: item.lastActivityAt }));
   const remind = useRemindToggle();
-  const attention = useValue(shared.attention);
+  const attention = shared.attentionOf(reference.hostId);
   // Every sub-agent listed under this chat, deeper ones too (chatTree files them under it).
   const subKeys = new Set(subs.map((agent) => agent.key));
   const runningSubs = useAgents({ hosts: [reference.hostId], where: (agent) => subKeys.has(agent.ref.key) && chatIndicator(agent) === "running" });
@@ -304,8 +319,8 @@ function AgentRow({ reference, sub, subs = [], shared }: { reference: AgentRef; 
         selected={props.active.agent?.key === reference.key}
         label={`Open chat ${chat.name}, ${STATUS_TITLES[indicator]}`}
         onPress={() => props.navigation.openAgent(reference)}
-        onLongPress={remind.toggle}
-        showActions={shared.chatReminders.has(reference.id)}
+        onLongPress={linksTasks(shared, reference.hostId) ? remind.toggle : undefined}
+        showActions={linksTasks(shared, reference.hostId) && shared.chatReminders.has(reference.id)}
         main={
           <>
             <StatusMark indicator={indicator} still={runningShownBelow(runningSubs, listedSubs)} shared={shared} />
@@ -320,7 +335,7 @@ function AgentRow({ reference, sub, subs = [], shared }: { reference: AgentRef; 
           </>
         }
         trailing={elapsed ? <Text style={styles.time}>{elapsed}</Text> : null}
-        actions={<RemindButton agentId={reference.id} label={chat.name} onPress={remind.toggle} shared={shared} />}
+        actions={<RemindButton chat={reference}label={chat.name} onPress={remind.toggle} shared={shared} />}
         shared={shared}
       />
       {remind.open ? <InlinePicker target={{ kind: "chat", agentId: reference.id, workspaceId: chat.workspaceId, title: chat.name }} title={chat.name} onDone={remind.close} shared={shared} /> : null}
@@ -381,11 +396,14 @@ function BulkBar({ shown, shared }: { shown: ReadonlyMap<string, WorkspaceRef>; 
   const paseo = usePaseo();
   const toast = useToast();
   // Only rows still listed: archived, vanished or filtered-out workspaces drop out of the selection.
+  const known = (reference: WorkspaceRef) => {
+    const info = shared.infoOf(reference);
+    return info === "loading" ? null : info;
+  };
   const selected = useValue(viewUi).selected.flatMap((key) => {
     const reference = shown.get(key);
-    return reference && shared.workspaces.get().get(reference.id)?.open !== false ? [reference] : [];
+    return reference && known(reference)?.open !== false ? [reference] : [];
   });
-  const list = useValue(shared.workspaces);
   const [confirmArchive, setConfirmArchive] = useState(false);
   const [labelsOpen, setLabelsOpen] = useState(false);
   const [newLabel, setNewLabel] = useState("");
@@ -397,23 +415,20 @@ function BulkBar({ shown, shared }: { shown: ReadonlyMap<string, WorkspaceRef>; 
   }, [confirmArchive]);
   const finish = () => viewUi.set({ ...viewUi.get(), selecting: false, selected: [] });
   // Runs one action on every selected workspace and reports how many failed, not just the first.
-  const each = async (what: string, references: readonly WorkspaceRef[], run: (workspace: ReturnType<typeof paseo.workspaces.ref>, id: string) => Promise<unknown>) => {
-    const results = await Promise.allSettled(references.map((reference) => run(paseo.workspaces.ref(reference), reference.id)));
+  const each = async (what: string, references: readonly WorkspaceRef[], run: (workspace: ReturnType<typeof paseo.workspaces.ref>, reference: WorkspaceRef) => Promise<unknown>) => {
+    const results = await Promise.allSettled(references.map((reference) => run(paseo.workspaces.ref(reference), reference)));
     const failed = results.filter((result) => result.status === "rejected").length;
     if (failed) toast.error(`Could not ${what} ${failed} of ${references.length} workspaces`);
     return failed === 0;
   };
   // Archiving deletes a Paseo worktree's folder, so the confirm step names those with work at stake:
   // uncommitted, unpushed, or not known yet.
-  const atRisk = selected.filter(({ id }) => {
-    const workspace = list.get(id);
-    return workspace?.paseoWorktree === true && !(workspace.dirty === false && workspace.ahead === 0);
-  }).length;
-  const allPinned = selected.length > 0 && selected.every(({ id }) => list.get(id)?.pinned);
-  // Marks skip workspaces that need the user, as the row menu does.
-  const markable = selected.filter(({ id }) => !["needs_input", "failed"].includes(list.get(id)?.status ?? ""));
+  const atRisk = selected.filter((reference) => atRiskOfArchive(shared.infoOf(reference))).length;
+  const allPinned = selected.length > 0 && selected.every((reference) => known(reference)?.pinned);
+  // Marks skip workspaces that need the user, as the row menu does, and ones not loaded yet.
+  const markable = selected.filter((reference) => markableDone(shared.infoOf(reference)));
   const labels = shared.labels;
-  const allHave = (label: string) => selected.length > 0 && selected.every(({ id }) => list.get(id)?.labels.includes(label));
+  const allHave = (label: string) => selected.length > 0 && selected.every((reference) => known(reference)?.labels.includes(label));
   const archive = () => {
     if (!confirmArchive) return setConfirmArchive(true);
     setConfirmArchive(false);
@@ -425,8 +440,8 @@ function BulkBar({ shown, shared }: { shown: ReadonlyMap<string, WorkspaceRef>; 
   };
   const markDone = () => {
     const skipped = selected.length - markable.length;
-    void each("mark", markable, (workspace, id) => workspace.setMetadata({ [MARK_KEY]: { kind: "done", at: new Date().toISOString(), since: list.get(id)?.statusEnteredAt ?? null } })).then((ok) => {
-      if (skipped) toast.show(`Skipped ${skipped} that ${skipped === 1 ? "needs" : "need"} you (permission or failed)`);
+    void each("mark", markable, (workspace, reference) => workspace.setMetadata({ [MARK_KEY]: { kind: "done", at: new Date().toISOString(), since: known(reference)?.statusEnteredAt ?? null } })).then((ok) => {
+      if (skipped) toast.show(`Skipped ${skipped} that ${skipped === 1 ? "needs" : "need"} you (permission or failed) or ${skipped === 1 ? "is" : "are"} still loading`);
       if (ok) finish();
     });
   };
@@ -697,7 +712,8 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
     labels: item.labels,
     directory: item.directory,
   }));
-  const info = useValue(shared.workspaces).get(reference.id) ?? null;
+  const found = shared.infoOf(reference);
+  const info = found === "loading" ? null : found;
   const { selecting, selected: selection } = useValue(viewUi);
   const picked = selection.includes(reference.key);
   // Every agent in the workspace, latest first, and each one's parent: chats with their sub-agents
@@ -797,9 +813,10 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
     );
   // Like Paseo's rows: time since the last prompt, or time in the current status when chosen.
   const elapsed = shows.lastActivity ? formatElapsed(config.details.timeInStatus ? workspace.since : workspace.lastPrompt, now) : null;
-  const reminder = shared.workspaceReminders.get(reference.id) ?? null;
+  const linked = linksTasks(shared, reference.hostId);
+  const reminder = linked ? shared.workspaceReminders.get(reference.id) ?? null : null;
   // The workspace's own reminder (not one of its chats'), which Remind me edits.
-  const ownTask = workspaceTask(tasksOf(shared.picker.tasks.get()), reference.id);
+  const ownTask = linked ? workspaceTask(tasksOf(shared.picker.tasks.get()), reference.id) : null;
   const ownReminder = ownTask?.reminder ?? null;
   const host = shared.hosts.find((item) => item.serverId === reference.hostId)?.label ?? null;
   const pr = shows.pullRequest ? info?.pullRequest ?? null : null;
@@ -930,7 +947,8 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
               t={t}
               icon="AlarmClock"
               label={ownReminder ? "Change reminder" : "Remind me"}
-              hint={ownReminder ? formatDue(ownReminder, now) : undefined}
+              hint={!linked ? OTHER_HOST_HINT : ownReminder ? formatDue(ownReminder, now) : undefined}
+              disabled={!linked}
               onPress={() => {
                 closeMenu();
                 setReminding(true);
@@ -941,7 +959,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
             {markedDone ? <MenuItem t={t} icon="RotateCcw" label="Mark as not done" onPress={() => setMark(null)} /> : markable && indicator !== "done" ? <MenuItem t={t} icon="CircleCheck" label="Mark as done" onPress={() => setMark("done")} /> : null}
             {markedUnread ? <MenuItem t={t} icon="MailOpen" label="Mark as read" onPress={() => setMark(null)} /> : markable && indicator !== "attention" ? <MenuItem t={t} icon="Mail" label="Mark as unread" onPress={() => setMark("unread")} /> : null}
             {/* A workspace belongs to one task, so one that has it says so instead. */}
-            <MenuItem t={t} icon="ListPlus" label="Add task" hint={ownTask ? "Has a task" : undefined} disabled={ownTask !== null} onPress={addTask} />
+            <MenuItem t={t} icon="ListPlus" label="Add task" hint={!linked ? OTHER_HOST_HINT : ownTask ? "Has a task" : undefined} disabled={!linked || ownTask !== null} onPress={addTask} />
             <MenuItem
               t={t}
               icon="ListChecks"
@@ -995,11 +1013,12 @@ function ChatRow({ reference, shared }: { reference: AgentRef; shared: Shared })
     name: chatName(item),
     indicator: chatIndicator(item),
     workspaceId: item.workspaceId,
+    workspace: item.workspace,
     last: item.lastActivityAt,
   }));
-  const workspace = useWorkspace(chat?.workspaceId ?? "", (item) => item.title ?? item.name);
+  const workspace = useWorkspace(chat?.workspace ?? "", (item) => item.title ?? item.name);
   const remind = useRemindToggle();
-  const attention = useValue(shared.attention);
+  const attention = shared.attentionOf(reference.hostId);
   if (!chat) return null;
   const indicator = withPermission(chat.indicator, attention, reference.id);
   const selected = props.active.agent?.key === reference.key;
@@ -1011,8 +1030,8 @@ function ChatRow({ reference, shared }: { reference: AgentRef; shared: Shared })
         selected={selected}
         label={`Open chat ${chat.name}, ${STATUS_TITLES[indicator]}`}
         onPress={() => props.navigation.openAgent(reference)}
-        onLongPress={remind.toggle}
-        showActions={shared.chatReminders.has(reference.id)}
+        onLongPress={linksTasks(shared, reference.hostId) ? remind.toggle : undefined}
+        showActions={linksTasks(shared, reference.hostId) && shared.chatReminders.has(reference.id)}
         main={
           <>
             <StatusMark indicator={indicator} shared={shared} />
@@ -1023,7 +1042,7 @@ function ChatRow({ reference, shared }: { reference: AgentRef; shared: Shared })
           </>
         }
         trailing={elapsed ? <Text style={styles.time}>{elapsed}</Text> : null}
-        actions={<RemindButton agentId={reference.id} label={chat.name} onPress={remind.toggle} shared={shared} />}
+        actions={<RemindButton chat={reference}label={chat.name} onPress={remind.toggle} shared={shared} />}
         shared={shared}
       />
       {remind.open ? <InlinePicker target={{ kind: "chat", agentId: reference.id, workspaceId: chat.workspaceId, title: chat.name }} title={chat.name} onDone={remind.close} shared={shared} /> : null}
@@ -1215,10 +1234,10 @@ export interface ViewDeps extends PickerDeps {
   updateView(patch: Partial<ViewConfig>): Promise<void>;
   // Opens Settings, Sidebar on the layout in use (the Display menu's "All sidebar settings").
   openSidebarSettings(): void;
-  workspaces: ValueStore<WorkspaceList>;
+  // The id of the host whose task document this app edits; null until known.
+  taskHost: ValueStore<string | null>;
   // False until the first workspace list arrives, while the view shows loading placeholders.
   workspacesReady: ValueStore<boolean>;
-  attention: ValueStore<AttentionList>;
 }
 
 interface RowSource {
@@ -1260,8 +1279,10 @@ function parentsOf(groups: readonly { key: string; items: readonly { id: string 
 
 // Morphise's Done and Unread marks change what a workspace's status is for every rule: filters,
 // sorting, status groups, the row limit and Next all see the marked status.
-function withMark(workspace: PluginWorkspaceSnapshot, list: WorkspaceList): PluginWorkspaceSnapshot {
-  const mark = list.get(workspace.id)?.mark ?? null;
+// A workspace not loaded yet shows no mark, as before its host's first snapshot.
+function withMark(workspace: PluginWorkspaceSnapshot, infoOf: Shared["infoOf"]): PluginWorkspaceSnapshot {
+  const info = infoOf(workspace.ref);
+  const mark = info && info !== "loading" ? info.mark : null;
   if (!mark) return workspace;
   const indicator = effectiveIndicator(workspace.indicator, workspace.statusEnteredAt, mark);
   return indicator === workspace.indicator ? workspace : { ...workspace, indicator };
@@ -1271,8 +1292,8 @@ function workspaceRows(config: ViewConfig) {
   const compareBase = compareWorkspaces(config);
   // Like Paseo's own sidebar, pinned workspaces get their own section above the groups.
   const pinnedApart = config.pinnedFirst && config.groupBy !== "none";
-  return function useWorkspaceRows(filter: Filter, props: PluginSidebarViewProps, showBackground: boolean, list: WorkspaceList): RowSource {
-    const marked = (workspace: PluginWorkspaceSnapshot) => withMark(workspace, list);
+  return function useWorkspaceRows(filter: Filter, props: PluginSidebarViewProps, showBackground: boolean, infoOf: Shared["infoOf"]): RowSource {
+    const marked = (workspace: PluginWorkspaceSnapshot) => withMark(workspace, infoOf);
     const compare = (left: PluginWorkspaceSnapshot, right: PluginWorkspaceSnapshot) => compareBase(marked(left), marked(right));
     const shown = (workspace: PluginWorkspaceSnapshot) => isVisible(workspace, showBackground) && matchesFilter(marked(workspace), filter);
     const pinned = useWorkspaces({ where: (workspace) => shown(workspace) && workspace.pinnedAt !== null, orderBy: compare });
@@ -1302,12 +1323,12 @@ function chatRows(config: ViewConfig) {
       ? (where: Where<PluginAgentSnapshot>) => [{ key: "all", title: null, items: useAgents({ where, orderBy: compare }) }]
       : (where: Where<PluginAgentSnapshot>) =>
           orderGroups<Group<AgentRef>>(useAgents({ where, orderBy: compare, groupBy: (chat) => chatGroupKey(config, chat) }), config);
-  return function useChatRows(filter: Filter, props: PluginSidebarViewProps, showBackground: boolean, list: WorkspaceList): RowSource {
+  return function useChatRows(filter: Filter, props: PluginSidebarViewProps, showBackground: boolean, infoOf: Shared["infoOf"]): RowSource {
     // Chats in archived, internal or (unless shown) background workspaces stay out, as their
     // workspaces do. A workspace the list has not loaded yet does not hide its chats.
     const inShownWorkspace = (chat: PluginAgentSnapshot) => {
-      const workspace = list.get(chat.workspaceId);
-      return !workspace || workspace.open || (showBackground && workspace.background);
+      const workspace = infoOf(chat.workspace);
+      return !workspace || workspace === "loading" || workspace.open || (showBackground && workspace.background);
     };
     const listed = (chat: PluginAgentSnapshot) => isSidebarChat(chat) && inShownWorkspace(chat);
     const shown = (chat: PluginAgentSnapshot) => listed(chat) && chatMatches(chat, filter);
@@ -1328,8 +1349,10 @@ function chatRows(config: ViewConfig) {
 }
 
 // A heading for a group of chats from one workspace, titled with that workspace's name.
-function WorkspaceGroupHeading(props: { workspaceId: string; count: number; collapsed: boolean; onToggle(): void; shared: Shared }) {
-  const name = useWorkspace(props.workspaceId, (workspace) => workspace.title ?? workspace.name);
+// Named from the group's first chat's workspace ref, so the name comes from that chat's host.
+function WorkspaceGroupHeading(props: { chat: AgentRef; count: number; collapsed: boolean; onToggle(): void; shared: Shared }) {
+  const workspace = useAgent(props.chat, (agent) => agent.workspace);
+  const name = useWorkspace(workspace ?? "", (item) => item.title ?? item.name);
   return <GroupHeading title={name ?? "Workspace"} count={props.count} collapsed={props.collapsed} onToggle={props.onToggle} shared={props.shared} />;
 }
 
@@ -1370,14 +1393,19 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     // its row is on screen. A mark made after the workspace became open (marking the open
     // workspace unread) stays until it is opened again.
     const paseo = usePaseo();
-    const openWorkspaceId = props.active.workspace?.id ?? null;
-    if (openedAt.id !== openWorkspaceId) Object.assign(openedAt, { id: openWorkspaceId, at: Date.now() });
-    const workspaceList = useValue(deps.workspaces);
-    const openMark = openWorkspaceId ? workspaceList.get(openWorkspaceId)?.mark ?? null : null;
+    const hosts = useHosts();
+    const onlineHosts = hosts.filter((host) => host.status === "online").map((host) => host.serverId);
+    const { infoOf, all: workspaceInfos } = useHostWorkspaces(onlineHosts);
+    const attentionOf = useHostAttention(onlineHosts);
+    // The open workspace by host and id: the same id can be another host's workspace.
+    const openWorkspace = props.active.workspace;
+    if (openedAt.key !== openWorkspaceKey) Object.assign(openedAt, { key: openWorkspaceKey, at: Date.now() });
+    const openInfo = openWorkspace ? infoOf(openWorkspace) : null;
+    const openMark = openInfo && openInfo !== "loading" ? openInfo.mark : null;
     useEffect(() => {
-      if (!openWorkspaceId || openMark?.kind !== "unread" || Date.parse(openMark.at) >= openedAt.at) return;
-      void paseo.workspaces.ref(openWorkspaceId).setMetadata({ [MARK_KEY]: null }).catch(report(toast, "mark the workspace read"));
-    }, [openWorkspaceId, openMark, paseo, toast]);
+      if (!openWorkspace || openMark?.kind !== "unread" || Date.parse(openMark.at) >= openedAt.at) return;
+      void paseo.workspaces.ref(openWorkspace).setMetadata({ [MARK_KEY]: null }).catch(report(toast, "mark the workspace read"));
+    }, [openWorkspace, openMark, paseo, toast]);
     const viewRef = useRef<View>(null);
     // Tells the settings screen that Paseo is showing this view.
     useEffect(() => viewPresence.set(true), []);
@@ -1410,14 +1438,15 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     };
     const filters = filter.statuses.length + (filter.projects?.length ?? 0) + Number(filter.hideDone) + Number(filter.changedOnly) + Number(filter.pinnedOnly);
     const updateView = (patch: Partial<ViewConfig>) => void deps.updateView(patch).catch(report(toast, "change the view"));
-    const source = useRows(filter, props, state.showBackground, workspaceList);
+    const source = useRows(filter, props, state.showBackground, infoOf);
     const ready = useValue(deps.workspacesReady);
-    const hosts = useHosts();
+    const taskHost = useValue(deps.taskHost);
     const { sections, protectedKeys } = source;
 
     const dueEntries = reminders.filter((entry) => isDue(entry.reminder, now));
     const dueChatIds = new Set(dueEntries.flatMap((entry) => (entry.agentId ? [entry.agentId] : [])));
-    const dueChats = new Map(useAgents({ where: (agent) => dueChatIds.has(agent.id) }).map((ref) => [ref.id, ref]));
+    // Task links name the task host's chats only.
+    const dueChats = new Map(useAgents({ where: (agent) => agent.hostId === taskHost && dueChatIds.has(agent.id) }).map((ref) => [ref.id, ref]));
     const workspaceReminders = new Map<string, Reminder>();
     const document = tasksOf(useValue(deps.tasks));
     for (const entry of reminders) {
@@ -1437,7 +1466,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
       const reminder = document.tasks.find((task) => task.id === taskId)?.reminder ?? null;
       void deps.apply({ kind: "snoozeReminder", id: taskId, at: snoozeTime(reminder, minutes, new Date()) }).catch(report(toast, "move the reminder"));
     };
-    const labels = [...new Set([...workspaceList.values()].flatMap((workspace) => workspace.labels))].sort();
+    const labels = [...new Set(workspaceInfos.flatMap((workspace) => workspace.labels))].sort();
     const setExpandedKey = (key: string, on: boolean) => setExpanded(new Set(on ? [...expanded, key] : [...expanded].filter((item) => item !== key)));
     const shared: Shared = {
       props,
@@ -1452,8 +1481,9 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
       done,
       later,
       shows: rowShows(config),
-      workspaces: deps.workspaces,
-      attention: deps.attention,
+      infoOf,
+      taskHost,
+      attentionOf,
       hosts,
       labels,
       isExpanded: (key) => expanded.has(key),
@@ -1523,7 +1553,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
           const collapsible = expanded.has(section.key) && capRows(section.items, protectedKeys, limit, false).hidden > 0;
           const heading =
             section.title === null ? null : source.groupsAreWorkspaces ? (
-              <WorkspaceGroupHeading workspaceId={section.title} count={section.items.length} collapsed={folded} onToggle={() => toggleCollapsed(section.key)} shared={shared} />
+              <WorkspaceGroupHeading chat={section.items[0] as AgentRef} count={section.items.length} collapsed={folded} onToggle={() => toggleCollapsed(section.key)} shared={shared} />
             ) : section.key.startsWith("project:") ? (
               <ProjectHeading title={section.title} first={(section.items[0] as WorkspaceRef | undefined) ?? null} count={section.items.length} collapsed={folded} onToggle={() => toggleCollapsed(section.key)} shared={shared} />
             ) : (
