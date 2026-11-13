@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.21.6 - 2026-11-13
+
+- **Row buttons line up with the title:** in two-line sidebar rows, the buttons (a reminder's snooze and done, a workspace's pin, archive and menu on hover) sit on the title line, where the time shows, instead of between the two lines.
+
 ## 0.21.5 - 2026-11-13
 
 - **Clearer reminders in the sidebar:** each due reminder takes two lines, as workspace rows do: its title gets the row's width, and when it was due (with the reminder's note, if any) goes under it in amber. The alarm sits in the column of the status dots. Before, the title, the due time and both buttons shared one line, so titles were cut short and the time wrapped.

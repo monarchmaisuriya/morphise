@@ -114,6 +114,9 @@ function viewStyles(theme: Theme, config: ViewConfig) {
     rowMain: { flex: 1, minWidth: 0, minHeight: height, flexDirection: "row" as const, alignItems: "center" as const, gap: 8 },
     // Two-line rows: the status mark and time line up with the title line.
     twoLine: { alignItems: "flex-start" as const, paddingVertical: 6 },
+    // ...and so do the row's buttons: centred on that 20pt line (6pt down), not on the whole row.
+    actions: { flexDirection: "row" as const, alignItems: "center" as const },
+    actionsTwoLine: { alignSelf: "flex-start" as const, paddingTop: 6 + 10 - (TOUCH ? 32 : 24) / 2 },
     lines: { flex: 1, minWidth: 0, gap: 1 },
     line: { flexDirection: "row" as const, alignItems: "center" as const, gap: 6, minHeight: 20 },
     subLine: { flexDirection: "row" as const, alignItems: "center" as const, gap: 8, minHeight: 16, overflow: "hidden" as const },
@@ -212,7 +215,7 @@ function RowShell({ selected, child, grandchild, twoLine, label, onPress, onLong
         {main}
         {actionsShown ? null : trailing}
       </Pressable>
-      {actionsShown ? <View style={{ flexDirection: "row", alignItems: "center" }}>{actions}</View> : null}
+      {actionsShown ? <View style={[styles.actions, twoLine ? styles.actionsTwoLine : null]}>{actions}</View> : null}
     </View>
   );
 }
