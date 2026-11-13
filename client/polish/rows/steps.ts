@@ -237,6 +237,30 @@ const seen = new Map<string, { item: Item; phase: Phase }>();
 const made = new Map<string, "head" | "none" | "alone" | "native">();
 /** What each todo update changed, against the update before it in its agent's timeline. */
 const todoChanges = new Map<string, TaskChange[]>();
+/** How often each step key occurs in each followed agent's list, and in all of them. The transformer gets no agent or position, so a key
+ * that occurs twice (a thought's or reply's opening words in two turns or two agents) can't say which step it is: it is never merged. */
+const keyCounts = new Map<string, Map<string, number>>();
+const occurrences = new Map<string, number>();
+const shared = (key: string | undefined) => !!key && (occurrences.get(key) ?? 0) > 1;
+/** Agents no longer followed, oldest first. Their steps stay placed as last followed, so unfollowing changes no row: a merged row still on
+ * screen keeps drawing its run, and no left-out step comes back as a new merged row, whose mount (steps-row) would follow its agent again
+ * and push another out (a loop whenever more chats are on screen than are followed). */
+const frozen: string[] = [];
+export const FROZEN_MAX = 8;
+/** Steps of agents released past FROZEN_MAX: drawn as with merging off, never as a merged row, for the same reason. Kept per agent (and
+ * counted, as two agents can share a key) so an agent placed again takes exactly its own keys back. */
+const releasedByAgent = new Map<string, Set<string>>();
+const released = new Map<string, number>();
+const placeOf = (key: string) => places.get(key) ?? (released.has(key) ? { head: key, index: 0, alone: true } : undefined);
+
+function unrelease(agentId: string) {
+  for (const key of releasedByAgent.get(agentId) ?? []) {
+    const left = released.get(key)! - 1;
+    if (left) released.set(key, left);
+    else released.delete(key);
+  }
+  releasedByAgent.delete(agentId);
+}
 // ponytail: seen keeps the latest few thousand steps across agents; key it per agent if long sessions show stale rows.
 const SEEN_MAX = 4000;
 const HISTORY_MAX = 1000;
@@ -322,8 +346,47 @@ function trimHistory(list: Entry[]) {
   if (cut) list.splice(0, cut);
 }
 
-/** Re-splits one agent's runs, notifying only changed runs and restoring rows that left the retained history. */
+/** Recounts an agent's step keys (none once it is no longer followed); returns the keys whose count changed. */
+function countKeys(agentId: string, list: readonly Entry[] | undefined) {
+  const before = keyCounts.get(agentId) ?? new Map<string, number>();
+  const after = new Map<string, number>();
+  let lastTodo: string | undefined;
+  for (const { item } of list ?? []) {
+    const key = stepKey(item);
+    if (!key) continue;
+    // The same list sent again is one row in Paseo (stepRuns passes over it), so it doesn't count twice.
+    if (item.type === "todo") {
+      if (key === lastTodo) continue;
+      lastTodo = key;
+    }
+    after.set(key, (after.get(key) ?? 0) + 1);
+  }
+  const changed = new Set<string>();
+  for (const key of new Set([...before.keys(), ...after.keys()])) {
+    const delta = (after.get(key) ?? 0) - (before.get(key) ?? 0);
+    if (!delta) continue;
+    const total = (occurrences.get(key) ?? 0) + delta;
+    if (total) occurrences.set(key, total);
+    else occurrences.delete(key);
+    changed.add(key);
+  }
+  if (list) keyCounts.set(agentId, after);
+  else keyCounts.delete(agentId);
+  return changed;
+}
+
+/** Re-splits one agent's runs, and those of other agents holding a key whose count changed: a key that became shared, or stopped being
+ * shared, places differently there too. */
 function rebuild(agentId: string) {
+  const changed = countKeys(agentId, lists.get(agentId));
+  place(agentId);
+  if (!changed.size) return;
+  for (const [other, counts] of keyCounts) if (other !== agentId && [...changed].some((key) => counts.has(key))) place(other);
+}
+
+/** Splits one agent's runs, notifying only changed runs and restoring rows that left the retained history. */
+function place(agentId: string) {
+  unrelease(agentId);
   const oldKeys = keysByAgent.get(agentId) ?? [];
   const oldRuns = new Map(oldKeys.flatMap((key) => runs.has(key) ? [[key, runs.get(key)!] as const] : []));
   unplace(agentId);
@@ -338,7 +401,13 @@ function rebuild(agentId: string) {
     before = item.items;
     keys.push(key);
   }
-  for (const run of stepRuns(list, skip)) {
+  // A shared key ends a run like a row of its own and is drawn as with merging off, so a collision only ever costs the merge.
+  for (const key of keyCounts.get(agentId)?.keys() ?? []) {
+    if (!shared(key)) continue;
+    places.set(key, { head: key, index: 0, alone: true });
+    keys.push(key);
+  }
+  for (const run of stepRuns(list, skip, foldReplies, (item) => breakRun(item) || shared(stepKey(item)))) {
     // The merged row stands where the run's first thought or tool call is; todo updates are only ever folded in.
     const head = stepKey(run.steps.find((s) => s.type !== "todo")!)!;
     const before = oldRuns.get(head);
@@ -382,7 +451,7 @@ function stale(key: string) {
 }
 
 function expected(key: string) {
-  const place = places.get(key);
+  const place = placeOf(key);
   return place?.alone ? "alone" : (place?.index ?? 0) > 0 ? "none" : "head";
 }
 
@@ -391,7 +460,9 @@ const GROWING_MS = 60_000;
 /** A followed agent is mid-run: its timeline ends in a step that changed within the last minute. */
 function runGrowing() {
   const now = Date.now();
-  for (const list of lists.values()) {
+  for (const [agentId, list] of lists) {
+    // A frozen list never updates, so its last step would look busy for the whole window.
+    if (frozen.includes(agentId)) continue;
     const last = list.at(-1);
     if (last && last.at !== undefined && now - last.at < GROWING_MS && last.item.type !== "assistant_message" && stepKey(last.item) && !skip(last.item)) return true;
   }
@@ -411,8 +482,9 @@ function recheckAfterGrowing() {
  * have yet (a tab just opened, the subscription a beat behind) leads a run of one until they catch up. Except a tool call while a run is
  * growing: Paseo sometimes transforms it before the plugin's event arrives, and as a run of one it showed as its own row for ~80ms, then
  * merged (the split-then-merge flicker). It almost always joins that run, so it stays out until its event places it; if it turns out to
- * start a run instead, it is stale and the re-transform shows it. A streaming thought waits the same way, but only while it streams: its
- * key is its opening words, which may never match, so once complete an unplaced thought shows rather than staying out. */
+ * start a run instead, it is stale and the re-transform shows it. A streaming thought waits the same way. Only a step still racing its
+ * event waits (a running call, a streaming thought): a finished one no followed timeline has (another agent's, or history trimmed away)
+ * shows at once rather than staying out while some agent is busy. */
 export function placeStep(item: Item, phase: Phase): { key: string; as: "head" | "none" | "alone" } | undefined {
   const key = stepKey(item);
   const reply = item.type === "assistant_message";
@@ -423,8 +495,8 @@ export function placeStep(item: Item, phase: Phase): { key: string; as: "head" |
   seen.delete(key);
   seen.set(key, { item, phase });
   if (seen.size > SEEN_MAX) for (const old of [...seen.keys()].slice(0, SEEN_MAX / 4)) forget(old);
-  const place = places.get(key);
-  const waits = item.type === "tool_call" || (item.type === "reasoning" && phase === "streaming");
+  const place = placeOf(key);
+  const waits = (item.type === "tool_call" && item.status === "running") || (item.type === "reasoning" && phase === "streaming");
   const held = !place && waits && runGrowing();
   // Held back while some followed agent is busy: if no run claims it (its agent is not followed, as
   // on phones before a merged row of it shows), it must still show once that window ends.
@@ -441,24 +513,35 @@ export function placeStep(item: Item, phase: Phase): { key: string; as: "head" |
 export function followAgent(paseo: PluginClientContext["paseo"], agentId: string) {
   // A provider subagent's pane (`provider:<parent>:<child>`) has no daemon agent behind it, so nothing to fetch or subscribe to.
   if (agentId.startsWith("provider:")) return () => {};
+  const thawed = frozen.indexOf(agentId);
+  if (thawed >= 0) frozen.splice(thawed, 1);
   const timeline = paseo.agents.ref(agentId).timeline;
+  /** Live events that came while the latest load was in flight. */
   let pending: Array<{ seq?: number; item: Item; at: number; turn?: string }> | undefined;
+  // A load started later (a replacement while the first was in flight) supersedes earlier ones: only the latest commits.
+  let generation = 0;
+  // A list frozen from an earlier follow misses the events of the gap: live events land only on a list this follow loaded.
+  let committed = false;
   let closed = false;
   const load = async () => {
-    pending = [];
+    const mine = ++generation;
+    const buffered: NonNullable<typeof pending> = [];
+    pending = buffered;
     try {
       const page = await timeline.refetch({ direction: "tail", limit: 1000, projection: "projected" });
-      if (closed) return;
+      if (closed || mine !== generation) return;
       const list = historyEntries(page.entries, page.agent?.status === "idle" ? page.agent.updatedAt : undefined);
       const end = page.endCursor?.seq ?? -1;
-      for (const e of pending) if (e.seq === undefined || e.seq > end) applyItem(list, e.item, e.at, e.turn);
+      for (const e of buffered) if (e.seq === undefined || e.seq > end) applyItem(list, e.item, e.at, e.turn);
       trimHistory(list);
       lists.set(agentId, list);
+      committed = true;
       rebuild(agentId);
     } catch (error) {
       console.warn("[morphise] Couldn't load the timeline to merge steps", error);
+      if (!committed && !closed && mine === generation) drop(agentId);
     } finally {
-      pending = undefined;
+      if (mine === generation) pending = undefined;
     }
   };
   const subscription = timeline.subscribe((payload) => {
@@ -468,7 +551,7 @@ export function followAgent(paseo: PluginClientContext["paseo"], agentId: string
       const at = timestampMs("timestamp" in payload ? payload.timestamp : undefined) ?? Date.now();
       const turn = (event as { turnId?: string }).turnId;
       if (pending) return void pending.push({ seq: "seq" in payload ? payload.seq : undefined, item, at, turn });
-      const list = lists.get(agentId);
+      const list = committed ? lists.get(agentId) : undefined;
       if (list && applyItem(list, item, at, turn)) {
         trimHistory(list);
         rebuild(agentId);
@@ -480,14 +563,32 @@ export function followAgent(paseo: PluginClientContext["paseo"], agentId: string
     if (closed) return;
     closed = true;
     subscription();
-    for (const key of keysByAgent.get(agentId) ?? []) {
-      forget(key);
-      if (runs.has(key)) touch(key);
-    }
-    unplace(agentId);
-    keysByAgent.delete(agentId);
-    lists.delete(agentId);
+    frozen.push(agentId);
+    if (frozen.length > FROZEN_MAX) release(frozen.shift()!);
   };
+}
+
+/** Forgets an agent's steps: placed against no list, its merged rows are told and rows already made are transformed again; agents sharing
+ * a key with it may merge that key again. */
+function drop(agentId: string) {
+  lists.delete(agentId);
+  rebuild(agentId);
+  keysByAgent.delete(agentId);
+}
+
+function release(agentId: string) {
+  const keys = new Set(keysByAgent.get(agentId));
+  // Dropped first: dropping places the agent against no list, which would take back keys already released.
+  drop(agentId);
+  releasedByAgent.set(agentId, keys);
+  for (const key of keys) released.set(key, (released.get(key) ?? 0) + 1);
+}
+
+/** Drops every agent no longer followed, and what was released: merging stopped altogether, so nothing draws from them any more. */
+export function forgetFrozenAgents() {
+  for (const agentId of frozen.splice(0)) drop(agentId);
+  releasedByAgent.clear();
+  released.clear();
 }
 
 /** After a fresh transform everything is made again. */
@@ -499,12 +600,13 @@ export const onUnplacedStep = (fn: () => void) => void (onUnplaced = fn);
 export const noteShownAgent = (agentId: string) => onShown(agentId);
 export const onShownAgent = (fn: (agentId: string) => void) => void (onShown = fn);
 
-/** A run's steps as the app last saw them and its duration; a single step when the head isn't known (yet). */
-export function runOf(head: string): { steps: Array<{ item: Item; phase: Phase }>; ms?: number; open?: boolean } {
+/** A run's steps as the app last saw them and its duration; a single step when the run isn't known (yet, or any more: its agent released,
+ * or the head trimmed from what the app saw). `own` is the head step the merged row was made from, so it always draws something. */
+export function runOf(head: string, own?: { item: Item; phase: Phase }): { steps: Array<{ item: Item; phase: Phase }>; ms?: number; open?: boolean } {
   const run = runs.get(head);
   if (!run) {
-    const own = seen.get(head);
-    return { steps: own ? [own] : [] };
+    const step = own ?? seen.get(head);
+    return { steps: step ? [step] : [] };
   }
   return { steps: run.steps.map((item) => seen.get(stepKey(item)!) ?? { item, phase: "complete" as const }), ms: run.ms, open: run.open };
 }

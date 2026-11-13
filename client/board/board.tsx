@@ -6,7 +6,7 @@ import { Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { type BoardColumn, boardColumns, dropMove, todayGroups } from "../../shared/board";
 import { parseQuickAdd } from "../../shared/quick-add";
 import { isDue, type Reminder, reminderAt } from "../../shared/reminders";
-import { firstOpenColumn, type TaskOperation, workspaceTask } from "../../shared/task-ops";
+import { firstOpenColumn, snoozeTime, type TaskOperation, workspaceTask } from "../../shared/task-ops";
 import { DEFAULT_FILTER, type Task, type TaskDocument, type TaskFilter, type TaskView } from "../../shared/tasks";
 import { formatDue } from "../../shared/time-text";
 import { todayDate } from "../../shared/when";
@@ -17,7 +17,7 @@ import { useReminderClock } from "../reminder-clock";
 import { tasksOf } from "../task-store";
 import { Button, Field, Icon, IconButton, MenuItem, Segmented, Tag, type Tokens, useTokens } from "../ui/kit";
 import { GroupBox, GroupFooter, GroupList, GroupRow } from "../ui/grouped-list";
-import { CardEditor, type EditorTarget, newTaskId } from "./card-editor";
+import { CardEditor, type EditorTarget, useDraftId } from "./card-editor";
 import { CustomiseBoard } from "./customise";
 import { CARD_GAP, DragGhost, DragProvider, useBoardDrag, useCardDragHandlers, useDrag } from "./drag";
 import type { BoardDeps } from "./deps";
@@ -151,14 +151,14 @@ function CardView({ t, task, document, now, compact, workspaces, onOpen, run, li
 
 // A card on the board: it can be dragged (the mouse moves it on the web; a long press picks it up on a phone). While it
 // is, its slot closes in manual order (a gap shows where it lands instead) and dims otherwise. It stays mounted, with no
-// height, because it holds the gesture.
-function BoardCard({ closes, ...props }: Parameters<typeof CardView>[0] & { closes: boolean }) {
+// height, because it holds the gesture. `laneKey`: the lane this copy is drawn in (a card with two labels has two).
+function BoardCard({ closes, laneKey, ...props }: Parameters<typeof CardView>[0] & { closes: boolean; laneKey: string }) {
   const drag = useDrag();
-  const handlers = useCardDragHandlers(props.task.id);
+  const handlers = useCardDragHandlers(laneKey, props.task.id);
   const lifted = drag.state?.taskId === props.task.id;
   const closed = lifted && closes && drag.state?.origin != null;
   return (
-    <View ref={drag.card(props.task.id)} {...handlers} style={closed ? { height: 0, marginTop: -CARD_GAP, overflow: "hidden", opacity: 0 } : { opacity: lifted ? 0.35 : 1 }}>
+    <View ref={drag.card(laneKey, props.task.id)} {...handlers} style={closed ? { height: 0, marginTop: -CARD_GAP, overflow: "hidden", opacity: 0 } : { opacity: lifted ? 0.35 : 1 }}>
       <CardView {...props} onLongPress={Platform.OS === "web" ? undefined : () => drag.arm(props.task.id)} />
     </View>
   );
@@ -174,6 +174,7 @@ function DropSlot({ t, height }: { t: Tokens; height: number }) {
 // The add field, with the board's buttons (`trailing`) in the same row. Enter (Return on a phone) adds the card.
 function QuickAdd({ t, document, run, workspaceId, trailing }: { t: Tokens; document: TaskDocument; run: Run; workspaceId: string | null; trailing: ReactNode }) {
   const [text, setText] = useState("");
+  const [draftId, nextDraft] = useDraftId();
   // Read on every keystroke: relative times ("45m") count from when they were typed, not from the
   // board clock.
   const now = new Date();
@@ -191,17 +192,21 @@ function QuickAdd({ t, document, run, workspaceId, trailing }: { t: Tokens; docu
   const column = parsed?.column ? document.columns.find((item) => item.id === parsed.column) : null;
   async function add() {
     if (!parsed || problems.length) return;
+    const sent = text;
     const ok = await run({
       kind: "addTask",
-      task: { id: newTaskId(), title: parsed.title, column: parsed.column ?? firstOpenColumn(document).id, priority: parsed.priority, due: parsed.due, reminder, links: workspaceId ? { workspaceId } : {} },
+      task: { id: draftId, title: parsed.title, column: parsed.column ?? firstOpenColumn(document).id, priority: parsed.priority, due: parsed.due, reminder, links: workspaceId ? { workspaceId } : {} },
       labelNames: parsed.labelNames,
     });
-    if (ok) setText("");
+    if (!ok) return;
+    // Text typed while the add was saving is the next task: it keeps its own draft and stays in the field.
+    setText((current) => (current === sent ? "" : current));
+    nextDraft();
   }
   return (
     <View style={{ gap: 6 }}>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-        <Field t={t} grow plain icon="Plus" value={text} onChangeText={setText} onSubmit={() => void add()} accessibilityLabel="Quick add a task" placeholder="Add a task… try: Fix login p1 @bug #review due:fri tomorrow 9am" />
+        <Field t={t} grow plain icon="Plus" value={text} onChangeText={(next) => { setText(next); nextDraft(); }} onSubmit={() => void add()} accessibilityLabel="Quick add a task" placeholder="Add a task… try: Fix login p1 @bug #review due:fri tomorrow 9am" />
         {trailing}
       </View>
       {parsed ? (
@@ -468,9 +473,11 @@ function ColumnView({ t, entry, document, now, layout, open, run, workspaceId, w
   const target = drag.state?.target?.column === column.id ? drag.state.target : null;
   const slot = target && manual && drag.state?.origin ? drag.state.origin.height : null;
   const lastId = entry.lanes.at(-1)?.tasks.at(-1)?.id;
+  const lastLane = entry.lanes.at(-1)?.key;
   const empty = entry.lanes.every((lane) => lane.tasks.length === 0);
   const [adding, setAdding] = useState(false);
   const [text, setText] = useState("");
+  const [draftId, nextDraft] = useDraftId();
   const add = () => setAdding(true);
   // Adds a card to this column from one line (quick-add syntax works) and stays open for the next.
   const [problem, setProblem] = useState<string | null>(null);
@@ -485,7 +492,12 @@ function ColumnView({ t, entry, document, now, layout, open, run, workspaceId, w
       return setProblem(error instanceof Error ? error.message : String(error));
     }
     setProblem(null);
-    void run({ kind: "addTask", task: { id: newTaskId(), title: parsed.title, column: column.id, priority: parsed.priority, due: parsed.due, reminder, links: workspaceId ? { workspaceId } : {} }, labelNames: parsed.labelNames }).then((ok) => ok && setText(""));
+    const sent = text;
+    void run({ kind: "addTask", task: { id: draftId, title: parsed.title, column: column.id, priority: parsed.priority, due: parsed.due, reminder, links: workspaceId ? { workspaceId } : {} }, labelNames: parsed.labelNames }).then((ok) => {
+      if (!ok) return;
+      setText((current) => (current === sent ? "" : current));
+      nextDraft();
+    });
   };
   return (
     <View ref={drag.column(column.id)} style={{ width: t.compact ? 284 : 300, maxHeight: "100%", borderRadius: t.radius.panel, backgroundColor: target ? t.c.surface2 : t.c.surface1, paddingBottom: 8 }}>
@@ -505,7 +517,7 @@ function ColumnView({ t, entry, document, now, layout, open, run, workspaceId, w
       <ScrollView {...drag.scroller(column.id, false)} contentContainerStyle={{ paddingHorizontal: 8, gap: CARD_GAP }}>
         {adding ? (
           <View style={{ gap: 6 }}>
-            <Field t={t} autoFocus value={text} onChangeText={(next) => { setText(next); setProblem(null); }} onSubmit={submit} error={problem} placeholder="Card title, then Enter" accessibilityLabel={`New card in ${column.name}`} />
+            <Field t={t} autoFocus value={text} onChangeText={(next) => { setText(next); setProblem(null); nextDraft(); }} onSubmit={submit} error={problem} placeholder="Card title, then Enter" accessibilityLabel={`New card in ${column.name}`} />
             <View style={{ flexDirection: "row", gap: 6 }}>
               <Button t={t} variant="primary" label="Add" disabled={!text.trim()} onPress={submit} />
               <Button t={t} variant="ghost" label="Close" onPress={() => { setAdding(false); setText(""); setProblem(null); }} />
@@ -519,9 +531,9 @@ function ColumnView({ t, entry, document, now, layout, open, run, workspaceId, w
             {lane.title ? <LaneTitle t={t} laneKey={lane.key} title={lane.title} workspaces={workspaceStore} /> : null}
             {lane.tasks.map((task) => (
               <Fragment key={`${lane.key}:${task.id}`}>
-                {slot !== null && target?.before === task.id ? <DropSlot t={t} height={slot} /> : null}
-                <BoardCard t={t} task={task} document={document} now={now} compact={t.compact || layout.density === "compact"} workspaces={workspaceId === null && layout.swimlanes !== "workspace" ? workspaceStore : null} onOpen={() => open({ kind: "existing", taskId: task.id })} run={run} closes={manual} />
-                {slot !== null && target?.before === null && task.id === lastId ? <DropSlot t={t} height={slot} /> : null}
+                {slot !== null && target?.before === task.id && target.lane === lane.key ? <DropSlot t={t} height={slot} /> : null}
+                <BoardCard t={t} task={task} document={document} now={now} compact={t.compact || layout.density === "compact"} workspaces={workspaceId === null && layout.swimlanes !== "workspace" ? workspaceStore : null} onOpen={() => open({ kind: "existing", taskId: task.id })} run={run} closes={manual} laneKey={lane.key} />
+                {slot !== null && target?.before === null && lane.key === lastLane && task.id === lastId ? <DropSlot t={t} height={slot} /> : null}
               </Fragment>
             ))}
           </View>
@@ -580,13 +592,13 @@ function TaskRow({ t, task, document, now, workspaces, onOpen, run, onLongPress,
 
 // A row that drags as a board card does: the mouse lifts it after moving a few pixels; a phone, after a long press.
 // While it is dragged its slot closes in manual order (a gap shows where it lands) and dims otherwise.
-function DragRow({ closes, ...props }: Parameters<typeof TaskRow>[0] & { closes: boolean }) {
+function DragRow({ closes, laneKey, ...props }: Parameters<typeof TaskRow>[0] & { closes: boolean; laneKey: string }) {
   const drag = useDrag();
-  const handlers = useCardDragHandlers(props.task.id);
+  const handlers = useCardDragHandlers(laneKey, props.task.id);
   const lifted = drag.state?.taskId === props.task.id;
   const closed = lifted && closes && drag.state?.origin != null;
   return (
-    <View ref={drag.card(props.task.id)} {...handlers} style={closed ? { height: 0, overflow: "hidden", opacity: 0 } : { opacity: lifted ? 0.35 : 1 }}>
+    <View ref={drag.card(laneKey, props.task.id)} {...handlers} style={closed ? { height: 0, overflow: "hidden", opacity: 0 } : { opacity: lifted ? 0.35 : 1 }}>
       <TaskRow {...props} onLongPress={Platform.OS === "web" ? undefined : () => drag.arm(props.task.id)} />
     </View>
   );
@@ -610,6 +622,7 @@ function TaskList({ t, columns, document, now, open, run, workspaceId, workspace
         const target = drag.state?.target?.column === column.id ? drag.state.target : null;
         const slot = target && manual && drag.state?.origin ? drag.state.origin.height : null;
         const lastId = entry.lanes.at(-1)?.tasks.at(-1)?.id;
+        const lastLane = entry.lanes.at(-1)?.key;
         return (
           <View key={column.id} ref={drag.column(column.id)}>
           <GroupBox
@@ -635,9 +648,9 @@ function TaskList({ t, columns, document, now, open, run, workspaceId, workspace
                 ) : null}
                 {lane.tasks.map((task) => (
                   <Fragment key={`${lane.key}:${task.id}`}>
-                    {slot !== null && target?.before === task.id ? <DropSlot t={t} height={slot} /> : null}
-                    <DragRow t={t} task={task} document={document} now={now} workspaces={workspaceId === null && swimlanes !== "workspace" ? workspaceStore : null} onOpen={() => open({ kind: "existing", taskId: task.id })} run={run} closes={manual} compactCards={compactCards} />
-                    {slot !== null && target?.before === null && task.id === lastId ? <DropSlot t={t} height={slot} /> : null}
+                    {slot !== null && target?.before === task.id && target.lane === lane.key ? <DropSlot t={t} height={slot} /> : null}
+                    <DragRow t={t} task={task} document={document} now={now} workspaces={workspaceId === null && swimlanes !== "workspace" ? workspaceStore : null} onOpen={() => open({ kind: "existing", taskId: task.id })} run={run} closes={manual} laneKey={lane.key} compactCards={compactCards} />
+                    {slot !== null && target?.before === null && lane.key === lastLane && task.id === lastId ? <DropSlot t={t} height={slot} /> : null}
                   </Fragment>
                 ))}
               </View>
@@ -681,8 +694,8 @@ function TodayRow({ t, task, document, now, open, run, openChat }: { t: Tokens; 
       actions={
         <>
           {task.links.agentId && openChat ? <IconButton t={t} icon="MessageSquare" label={`Open the chat for ${task.title}`} onPress={() => openChat(task.links.agentId!)} /> : null}
-          {task.reminder ? <Button t={t} variant="ghost" label="+15m" accessibilityLabel={`Remind me about ${task.title} 15 minutes later`} onPress={() => void run({ kind: "remindAgain", id: task.id, minutes: 15 })} /> : null}
-          {task.reminder ? <Button t={t} variant="ghost" label="+1h" accessibilityLabel={`Remind me about ${task.title} an hour later`} onPress={() => void run({ kind: "remindAgain", id: task.id, minutes: 60 })} /> : null}
+          {task.reminder ? <Button t={t} variant="ghost" label="+15m" accessibilityLabel={`Remind me about ${task.title} 15 minutes later`} onPress={() => void run({ kind: "snoozeReminder", id: task.id, at: snoozeTime(task.reminder, 15, new Date()) })} /> : null}
+          {task.reminder ? <Button t={t} variant="ghost" label="+1h" accessibilityLabel={`Remind me about ${task.title} an hour later`} onPress={() => void run({ kind: "snoozeReminder", id: task.id, at: snoozeTime(task.reminder, 60, new Date()) })} /> : null}
           {done ? <Button t={t} icon="Check" label="Done" accessibilityLabel={`Move ${task.title} to ${done.name}`} onPress={() => void run({ kind: "moveTask", id: task.id, column: done.id })} /> : null}
         </>
       }

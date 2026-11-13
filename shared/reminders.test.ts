@@ -114,8 +114,13 @@ describe("parseReminder", () => {
     expect(parseReminder("tomorrow 9am", monday).ok).toBe(true);
   });
 
+  it("reads today's weekday with a time still ahead as today", () => {
+    const read = parseReminder("mon 5pm", new Date(2026, 10, 16, 10, 0, 0));
+    expect(read.ok && read.reminder.at).toBe(new Date(2026, 10, 16, 17, 0, 0).toISOString());
+    expect(parseReminder("monday 9am", monday).ok).toBe(true);
+  });
+
   it("says why a time cannot be a reminder instead of throwing", () => {
-    expect(parseReminder("monday 9am", monday)).toEqual({ ok: false, error: "A reminder must be 1 minute to 7 days away" });
     expect(parseReminder("200h", monday)).toEqual({ ok: false, error: "A reminder must be 1 minute to 7 days away" });
     expect(parseReminder("8am", new Date(2026, 10, 16, 7, 59, 50)).ok).toBe(false);
     expect(parseReminder("soonish", monday).ok).toBe(false);

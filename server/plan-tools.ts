@@ -1,5 +1,6 @@
 import { activeProfile, type ProfileDocument } from "../shared/document";
 import type { SettingsState } from "./settings-watch";
+import { TITLE_HELPER } from "./titles";
 
 // The steps card draws an agent's plan, which Paseo builds from Claude Code's task-list tools
 // (TodoWrite, TaskCreate, TaskUpdate). Claude Code gives those tools only to older models (Opus
@@ -21,7 +22,11 @@ interface ProfileReader {
 interface OpenRequest {
   provider: string;
   env?: Record<string, string>;
+  metadata?: Readonly<Record<string, unknown>>;
 }
+
+// Morphise's title helper is told to use no tools; it gets neither the task-list tools nor the request to use them.
+const isTitleHelper = (metadata: Readonly<Record<string, unknown>> | undefined) => metadata?.[TITLE_HELPER] === true;
 
 const isClaude = (provider: string) => provider === "claude" || provider.startsWith("claude/");
 
@@ -38,7 +43,7 @@ async function stepsCardOn(profile: ProfileReader, purpose: string): Promise<boo
 
 export function createPlanTools(profile: ProfileReader) {
   return async <Request extends OpenRequest>({ request }: { request: Request }): Promise<Request | undefined> => {
-    if (!isClaude(request.provider)) return undefined;
+    if (!isClaude(request.provider) || isTitleHelper(request.metadata)) return undefined;
     // A value the user set for this launch wins.
     if (request.env && TODO_TOOLS_ENV in request.env) return undefined;
     if (!(await stepsCardOn(profile, "give the agent its task-list tools"))) return undefined;
@@ -48,13 +53,14 @@ export function createPlanTools(profile: ProfileReader) {
 
 interface CreateRequest {
   config: { provider: string; systemPrompt?: string };
+  metadata?: Readonly<Record<string, unknown>>;
 }
 
 /** For `agent.create.before`: a new Claude agent's instructions end with TASK_LIST_INSTRUCTION while the steps card is on. */
 export function createPlanInstruction(profile: ProfileReader) {
   return async <Request extends CreateRequest>({ request }: { request: Request }): Promise<Request | undefined> => {
     const { config } = request;
-    if (!isClaude(config.provider) || config.systemPrompt?.includes(TASK_LIST_INSTRUCTION)) return undefined;
+    if (!isClaude(config.provider) || isTitleHelper(request.metadata) || config.systemPrompt?.includes(TASK_LIST_INSTRUCTION)) return undefined;
     if (!(await stepsCardOn(profile, "ask the agent to keep a task list"))) return undefined;
     return { ...request, config: { ...config, systemPrompt: config.systemPrompt ? `${config.systemPrompt}\n\n${TASK_LIST_INSTRUCTION}` : TASK_LIST_INSTRUCTION } };
   };

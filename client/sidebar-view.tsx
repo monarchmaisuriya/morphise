@@ -15,7 +15,7 @@ import {
 } from "@getpaseo/plugin/client";
 import type { PluginAgentSnapshot, PluginWorkspaceSnapshot } from "@getpaseo/plugin";
 import { copyText, useToast } from "@getpaseo/plugin/client/ui";
-import { type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Animated, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import {
   capRows,
@@ -43,7 +43,7 @@ import { createValueStore, type ValueStore, useValue } from "./profile-store";
 import { useReminderClock } from "./reminder-clock";
 import { type AlertEntry, remindersOf } from "./reminder-alerts";
 import { type PickerDeps, ReminderPicker, type ReminderTarget } from "./reminder-picker";
-import { followUpTask, workspaceTask } from "../shared/task-ops";
+import { followUpTask, snoozeTime, workspaceTask } from "../shared/task-ops";
 import { type ApplyTaskOperations, type TaskStore, tasksOf } from "./task-store";
 import { Button, Dropdown, Field, Icon, IconButton, MenuItem, PopoverHost, Segmented, Tag, type Tokens, useTokens } from "./ui/kit";
 import { BLUE, DONE_OPACITY, PURPLE, statusColor, tileColor } from "./ui/hues";
@@ -52,7 +52,8 @@ import { StepsCards } from "./steps-card";
 import { DISPATCH_ICON, DISPATCH_SCREEN_ID, screenOpener } from "./dispatch";
 import type { PullRequestInfo, ServiceInfo, WorkspaceInfo, WorkspaceList } from "./workspaces";
 import { viewPresence } from "./view-presence";
-import { cannotHover } from "./web";
+import { createHoverTracker, type HoverTracker, useHovered } from "./hover-tracker";
+import { afterPointerMoves, cannotHover } from "./web";
 
 type ViewConfig = Profile["sidebar"]["view"];
 type Theme = PluginSidebarViewProps["theme"];
@@ -67,7 +68,8 @@ const REMINDERS_GROUP = "reminders";
 
 // Search text, the open menu and expanded groups live outside the view, so they survive the view
 // being rebuilt when its options change.
-// Selection mode (bulk actions) lives here too: workspace ids, so it survives a rebuild.
+// Selection mode (bulk actions) lives here too: workspace keys, so it survives a rebuild and each
+// action goes to the workspace's own host.
 const viewUi = createValueStore<{ search: string; searching: boolean; menu: "filter" | "view" | null; expanded: readonly string[]; selecting: boolean; selected: readonly string[] }>({
   search: "",
   searching: false,
@@ -81,9 +83,9 @@ const viewUi = createValueStore<{ search: string; searching: boolean; menu: "fil
 // rebuilds the view, and a fresh ref would make a just-set Unread mark look older than the visit.
 const openedAt: { id: string | null; at: number } = { id: null, at: 0 };
 
-const toggleSelected = (workspaceId: string) => {
+const toggleSelected = (workspaceKey: string) => {
   const ui = viewUi.get();
-  viewUi.set({ ...ui, selected: ui.selected.includes(workspaceId) ? ui.selected.filter((id) => id !== workspaceId) : [...ui.selected, workspaceId] });
+  viewUi.set({ ...ui, selected: ui.selected.includes(workspaceKey) ? ui.selected.filter((key) => key !== workspaceKey) : [...ui.selected, workspaceKey] });
 };
 
 // Sizes match Paseo's own sidebar (measured on 0.16.0-beta.1): 36px rows inset 8px with an 8px
@@ -172,6 +174,8 @@ interface Shared {
   setExpanded(key: string, on: boolean): void;
   // Which chats and sub-agents are drawn under a workspace.
   listing: ChatListing;
+  // The one row or heading the pointer is over (see hover-tracker.ts).
+  hover: HoverTracker;
 }
 
 function report(toast: ReturnType<typeof useToast>, what: string) {
@@ -191,11 +195,12 @@ function useRemindToggle() {
 // a right-click on the web, runs `onLongPress`.
 function RowShell({ selected, child, grandchild, twoLine, label, onPress, onLongPress, main, trailing, actions, showActions, disabled, rowRef, onHover, shared }: { selected: boolean; child?: boolean; twoLine?: boolean; label: string; onPress(): void; onLongPress?(): void; main: ReactNode; trailing?: ReactNode; actions?: ReactNode; showActions?: boolean; disabled?: boolean; rowRef?: RefObject<View | null>; onHover?(on: boolean): void; grandchild?: boolean; shared: Shared }) {
   const { styles } = shared;
-  const [hovered, setHovered] = useState(false);
-  const hover = (on: boolean) => {
-    setHovered(on);
-    onHover?.(on);
-  };
+  const key = useId();
+  const hovered = useHovered(shared.hover, key);
+  useEffect(() => {
+    onHover?.(hovered);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hovered]);
   const actionsShown = !!actions && (hovered || showActions || TOUCH);
   // Right-click opens the same menu as a long press. React Native Web forwards `onContextMenu`
   // but its Pressable never maps a mouse right-click to `onLongPress`, and React Native's types
@@ -203,7 +208,7 @@ function RowShell({ selected, child, grandchild, twoLine, label, onPress, onLong
   const contextMenu = onLongPress && Platform.OS === "web" ? { onContextMenu: (event: { preventDefault(): void }) => (event.preventDefault(), onLongPress()) } : {};
   return (
     // A plain View, not a Pressable: on web a Pressable becomes a Tab stop even when told not to.
-    <View ref={rowRef} onPointerEnter={() => hover(true)} onPointerLeave={() => hover(false)} style={[styles.row, child ? styles.child : null, grandchild ? styles.grandchild : null, selected ? styles.selected : hovered ? styles.hovered : null]}>
+    <View ref={rowRef} onPointerMove={() => shared.hover.mark(key)} style={[styles.row, child ? styles.child : null, grandchild ? styles.grandchild : null, selected ? styles.selected : hovered ? styles.hovered : null]}>
       <Pressable accessibilityRole={disabled ? "text" : "button"} accessibilityLabel={label} disabled={disabled} onPress={onPress} onLongPress={onLongPress} style={[styles.rowMain, twoLine ? styles.twoLine : null]} {...contextMenu}>
         {main}
         {actionsShown ? null : trailing}
@@ -369,12 +374,15 @@ function RowAction({ icon, label, onPress, shared }: { icon: string; label: stri
 }
 
 // The bar under the list in selection mode: what is selected, and actions on all of it at once.
-function BulkBar({ shownIds, shared }: { shownIds: ReadonlySet<string>; shared: Shared }) {
+function BulkBar({ shown, shared }: { shown: ReadonlyMap<string, WorkspaceRef>; shared: Shared }) {
   const { t, styles } = shared;
   const paseo = usePaseo();
   const toast = useToast();
   // Only rows still listed: archived, vanished or filtered-out workspaces drop out of the selection.
-  const selected = useValue(viewUi).selected.filter((id) => shownIds.has(id) && shared.workspaces.get().get(id)?.open !== false);
+  const selected = useValue(viewUi).selected.flatMap((key) => {
+    const reference = shown.get(key);
+    return reference && shared.workspaces.get().get(reference.id)?.open !== false ? [reference] : [];
+  });
   const list = useValue(shared.workspaces);
   const [confirmArchive, setConfirmArchive] = useState(false);
   const [labelsOpen, setLabelsOpen] = useState(false);
@@ -387,23 +395,23 @@ function BulkBar({ shownIds, shared }: { shownIds: ReadonlySet<string>; shared: 
   }, [confirmArchive]);
   const finish = () => viewUi.set({ ...viewUi.get(), selecting: false, selected: [] });
   // Runs one action on every selected workspace and reports how many failed, not just the first.
-  const each = async (what: string, ids: readonly string[], run: (workspace: ReturnType<typeof paseo.workspaces.ref>, id: string) => Promise<unknown>) => {
-    const results = await Promise.allSettled(ids.map((id) => run(paseo.workspaces.ref(id), id)));
+  const each = async (what: string, references: readonly WorkspaceRef[], run: (workspace: ReturnType<typeof paseo.workspaces.ref>, id: string) => Promise<unknown>) => {
+    const results = await Promise.allSettled(references.map((reference) => run(paseo.workspaces.ref(reference), reference.id)));
     const failed = results.filter((result) => result.status === "rejected").length;
-    if (failed) toast.error(`Could not ${what} ${failed} of ${ids.length} workspaces`);
+    if (failed) toast.error(`Could not ${what} ${failed} of ${references.length} workspaces`);
     return failed === 0;
   };
   // Archiving deletes a Paseo worktree's folder, so the confirm step names those with work at stake:
   // uncommitted, unpushed, or not known yet.
-  const atRisk = selected.filter((id) => {
+  const atRisk = selected.filter(({ id }) => {
     const workspace = list.get(id);
     return workspace?.paseoWorktree === true && !(workspace.dirty === false && workspace.ahead === 0);
   }).length;
-  const allPinned = selected.length > 0 && selected.every((id) => list.get(id)?.pinned);
+  const allPinned = selected.length > 0 && selected.every(({ id }) => list.get(id)?.pinned);
   // Marks skip workspaces that need the user, as the row menu does.
-  const markable = selected.filter((id) => !["needs_input", "failed"].includes(list.get(id)?.status ?? ""));
+  const markable = selected.filter(({ id }) => !["needs_input", "failed"].includes(list.get(id)?.status ?? ""));
   const labels = shared.labels;
-  const allHave = (label: string) => selected.length > 0 && selected.every((id) => list.get(id)?.labels.includes(label));
+  const allHave = (label: string) => selected.length > 0 && selected.every(({ id }) => list.get(id)?.labels.includes(label));
   const archive = () => {
     if (!confirmArchive) return setConfirmArchive(true);
     setConfirmArchive(false);
@@ -671,7 +679,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   }));
   const info = useValue(shared.workspaces).get(reference.id) ?? null;
   const { selecting, selected: selection } = useValue(viewUi);
-  const picked = selection.includes(reference.id);
+  const picked = selection.includes(reference.key);
   // Every agent in the workspace, latest first, and each one's parent: chats with their sub-agents
   // under them. The tree is built from all of them, so a sub-agent never loses its parent to a
   // filter; the status filter then picks which chats are listed.
@@ -699,7 +707,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   // workspace. `openChat` is the listed chat that holds it, and stays listed past the limit.
   const openChat = chatsShown ? owningRowKey({ top: chats, children: tree.children }, props.active.agent?.key ?? null, config.showSubAgents !== false) : null;
   const selected = isOpen && openChat === null;
-  const handle = () => paseo.workspaces.ref(reference.id);
+  const handle = () => paseo.workspaces.ref(reference);
   const closeMenu = () => {
     setMenu(null);
     setNewLabel("");
@@ -856,8 +864,8 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
           twoLine={twoLine}
           selected={selecting ? picked : selected}
           label={selecting ? `${picked ? "Deselect" : "Select"} ${workspace.title}` : `Open workspace ${workspace.title}, ${STATUS_TITLES[indicator]}`}
-          onPress={() => (selecting ? toggleSelected(reference.id) : props.navigation.openWorkspace(reference))}
-          onLongPress={() => (selecting ? toggleSelected(reference.id) : setMenu("actions"))}
+          onPress={() => (selecting ? toggleSelected(reference.key) : props.navigation.openWorkspace(reference))}
+          onLongPress={() => (selecting ? toggleSelected(reference.key) : setMenu("actions"))}
           onHover={hover}
           showActions={confirmArchive || menu !== null}
           main={main}
@@ -921,7 +929,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
               hint="for bulk actions"
               onPress={() => {
                 closeMenu();
-                viewUi.set({ ...viewUi.get(), selecting: true, selected: [reference.id] });
+                viewUi.set({ ...viewUi.get(), selecting: true, selected: [reference.key] });
               }}
             />
             {info?.pullRequest ? (
@@ -1028,10 +1036,11 @@ function GroupHeading({ title, count, collapsed, onToggle, shared }: { title: st
 function ProjectHeading({ title, first, count, collapsed, onToggle, shared }: { title: string; first: WorkspaceRef | null; count: number; collapsed: boolean; onToggle(): void; shared: Shared }) {
   const { styles, config, props, t } = shared;
   const project = useWorkspace(first ?? "", (workspace) => workspace.project) ?? null;
-  const [hovered, setHovered] = useState(false);
+  const key = useId();
+  const hovered = useHovered(shared.hover, key);
   const chevron = collapsed || hovered;
   return (
-    <View onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)} style={[styles.project, hovered ? styles.hovered : null]}>
+    <View onPointerMove={() => shared.hover.mark(key)} style={[styles.project, hovered ? styles.hovered : null]}>
       <Pressable accessibilityRole="button" accessibilityLabel={`${collapsed ? "Expand" : "Collapse"} ${title}, ${count} ${count === 1 ? "workspace" : "workspaces"}`} onPress={onToggle} style={styles.projectMain}>
         {chevron ? (
           <View style={styles.tile}>
@@ -1315,7 +1324,11 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     // Rows show times, so the clock ticks every minute.
     const now = useReminderClock(reminders.map((entry) => entry.reminder), true);
     const viewState = useSettings(viewStateSettings);
-    const state = viewState.status === "ready" ? viewState.values : DEFAULT_VIEW_STATE;
+    // The latest view change not saved yet. Each tap builds on it and one save runs at a time,
+    // against the newest revision, so a quick second tap is neither refused nor lost.
+    const [unsaved, setUnsaved] = useState<ViewState | null>(null);
+    const viewSaving = useRef(false);
+    const state = unsaved ?? (viewState.status === "ready" ? viewState.values : DEFAULT_VIEW_STATE);
     const ui = useValue(viewUi);
     const setUi = (patch: Partial<typeof ui>) => viewUi.set({ ...viewUi.get(), ...patch });
     const { search, searching, menu } = ui;
@@ -1328,6 +1341,8 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     const projects = useWorkspaces({ where: (workspace) => isVisible(workspace, state.showBackground), groupBy: (workspace) => ({ key: workspace.project.key, title: workspace.projectDisplayName }) }).map((group) => ({ key: group.key, title: group.title ?? "Project" }));
     const toast = useToast();
     const headerRef = useRef<View>(null);
+    const [hover] = useState(createHoverTracker);
+    useEffect(() => afterPointerMoves(hover.settle, hover.clear), [hover]);
     // The open workspace's chats, latest first, for steps cards shown for every chat.
     const openWorkspaceKey = props.active.workspace?.key ?? null;
     const workspaceChats = useAgents({ where: (agent) => agent.workspace.key === openWorkspaceKey && agent.parentAgentId === null, orderBy: ["lastActivityAt", "desc"] });
@@ -1349,10 +1364,19 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
 
     const saveState = (next: Partial<ViewState>) => {
       if (viewState.status !== "ready") return;
-      void viewState.save({ ...viewState.values, ...next }, viewState.revision).then((saved) => {
+      setUnsaved((current) => ({ ...(current ?? viewState.values), ...next }));
+    };
+    useEffect(() => {
+      if (!unsaved || viewState.status !== "ready" || viewSaving.current) return;
+      viewSaving.current = true;
+      void viewState.save(unsaved, viewState.revision).then((saved) => {
+        viewSaving.current = false;
+        // A change made while this one saved is copied so this effect runs again and saves it.
+        setUnsaved((current) => (current === unsaved ? null : current && { ...current }));
         if (!saved) toast.error("Could not remember this view change on this device");
       });
-    };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [unsaved, viewState.status]);
 
     const on = config.filterBar;
     const filter: Filter = {
@@ -1389,7 +1413,10 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
       if (reminder) chatReminders.set(agentId, reminder);
     }
     const done = (taskId: string) => void deps.apply({ kind: "setReminder", id: taskId, reminder: null }).catch(report(toast, "mark the reminder done"));
-    const later = (taskId: string, minutes: number) => void deps.apply({ kind: "remindAgain", id: taskId, minutes }).catch(report(toast, "move the reminder"));
+    const later = (taskId: string, minutes: number) => {
+      const reminder = document.tasks.find((task) => task.id === taskId)?.reminder ?? null;
+      void deps.apply({ kind: "snoozeReminder", id: taskId, at: snoozeTime(reminder, minutes, new Date()) }).catch(report(toast, "move the reminder"));
+    };
     const labels = [...new Set([...workspaceList.values()].flatMap((workspace) => workspace.labels))].sort();
     const setExpandedKey = (key: string, on: boolean) => setExpanded(new Set(on ? [...expanded, key] : [...expanded].filter((item) => item !== key)));
     const shared: Shared = {
@@ -1419,6 +1446,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
         isExpanded: (key) => expanded.has(key),
         openKey: props.active.agent?.key ?? null,
       },
+      hover,
     };
     const collapsed = new Set(state.collapsed);
     const toggleCollapsed = (key: string) =>
@@ -1492,7 +1520,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
         })}
       </ScrollView>
           {stepsCards && steps.position === "bottom" ? stepsCards : null}
-          {ui.selecting && config.list === "workspaces" ? <BulkBar shownIds={new Set(sections.flatMap((section) => section.items.map((item) => (item as WorkspaceRef).id)))} shared={shared} /> : null}
+          {ui.selecting && config.list === "workspaces" ? <BulkBar shown={new Map(sections.flatMap((section) => section.items.map((item) => [item.key, item as WorkspaceRef] as const)))} shared={shared} /> : null}
           <Dropdown t={t} open={menu !== null} onClose={() => setMenu(null)} anchor={headerRef} width={420} maxHeight={560}>
             {menu === "filter" ? <FilterMenu state={state} save={saveState} projects={projects} shared={shared} /> : <ViewMenu update={updateView} state={state} saveState={saveState} shared={shared} openSettings={() => (setMenu(null), deps.openSidebarSettings())} />}
           </Dropdown>

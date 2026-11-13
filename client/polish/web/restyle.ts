@@ -8,8 +8,8 @@ import { watchDom, type DomElement, type MutationObserverClass, type WebDocument
 import { readHostAppearance } from "./host";
 import { dropGhost, ghostOutlinePreview, hoverCardsRemoved, notePointer, stopHoverCards, swapOutlinePreview, watchHoverCards } from "./hover-cards";
 import { ICON_VARS } from "./icons";
-import { redrawDiagrams, setDiagramColors, themeMermaid, type PeleDiagrams } from "./mermaid";
-import { decoratePopovers, markLitRows, MODEL_SELECTOR_CSS, noteClick, noteThinkingFallback, stopLitRows } from "./model-picker";
+import { redrawDiagrams, setDiagramColors, stopCardDraws, themeMermaid, type PeleDiagrams } from "./mermaid";
+import { decoratePopovers, litRowsRemoved, markLitRows, MODEL_SELECTOR_CSS, noteClick, noteThinkingFallback, stopLitRows } from "./model-picker";
 import { runningRemoved, tagParts } from "./parts";
 import { NATIVE_CSS } from "./restyle-css";
 import { markBlocks, RICH_TEXT_CSS } from "./rich-text";
@@ -192,6 +192,7 @@ export function restyleNative(enabled: () => boolean, pele?: PeleDiagrams, onCha
     // A click closes a full screen diagram the way the reader would, taking its key listener with it.
     for (const el of Array.from(document.querySelectorAll("[data-cp-diagram-full]"))) el.click();
     for (const el of Array.from(document.querySelectorAll("[data-cp-rail], [data-cp-tip], [data-cp-hint], [data-cp-redraw], [data-cp-redraw-card], [data-cp-compact]"))) el.remove();
+    stopCardDraws(true);
     for (const name of ["data-cp-redrawn", "data-cp-running", "data-cp-running-label"]) for (const el of Array.from(document.querySelectorAll(`[${name}]`))) el.removeAttribute(name);
     // The context card's remembered height (keepCardHeight).
     for (const el of Array.from(document.querySelectorAll(CTX))) el.style.removeProperty("min-height");
@@ -222,6 +223,8 @@ export function restyleNative(enabled: () => boolean, pele?: PeleDiagrams, onCha
       if (!style) return;
       runningRemoved(nodes);
       hoverCardsRemoved();
+      litRowsRemoved();
+      stopCardDraws();
       ghostOutlinePreview(nodes);
     },
     wantsAttributeRoots: () => !!style,

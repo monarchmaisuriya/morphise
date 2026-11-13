@@ -126,6 +126,13 @@ export function todayGroups(document: TaskDocument, now: Date): TodayGroup[] {
   return groups.filter((group) => group.tasks.length > 0);
 }
 
+// What the Workbench opens Tasks for (Settings, "What needs you"): reminders due, overdue and due today; not
+// reminders still later today.
+export function dueOrDueTodayCount(document: TaskDocument, now: Date): number {
+  const today = todayDate(now);
+  return openTasks(document).filter((task) => (task.reminder !== null && isDue(task.reminder, now)) || (task.due !== null && task.due <= today)).length;
+}
+
 // What the sidebar row counts: reminders due and overdue due dates on open tasks.
 export function dueCount(document: TaskDocument, now: Date): number {
   const today = todayDate(now);

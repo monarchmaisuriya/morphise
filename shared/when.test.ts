@@ -35,6 +35,21 @@ describe("parseWhen", () => {
     expect(at("wed")).toBe("2026-11-18T09:00:00.000Z");
   });
 
+  it("reads today's weekday as today while its time is ahead, and as next week once it has passed or without a time", () => {
+    const monday = new Date("2026-11-16T10:00:00Z"); // Monday 10:00 in London
+    const on = (text: string) => {
+      const result = parseWhen(text, monday);
+      return result.ok ? result.at.toISOString() : result.error;
+    };
+    expect(on("mon 5pm")).toBe("2026-11-16T17:00:00.000Z");
+    expect(on("Monday 10:01")).toBe("2026-11-16T10:01:00.000Z");
+    expect(on("mon 10:00")).toBe("2026-11-23T10:00:00.000Z");
+    expect(on("mon 9am")).toBe("2026-11-23T09:00:00.000Z");
+    expect(on("mon")).toBe("2026-11-23T09:00:00.000Z");
+    expect(at("wed 5pm")).toBe("2026-11-11T17:00:00.000Z");
+    expect(parseDueDate("mon", monday)).toBe("2026-11-23");
+  });
+
   it("refuses anything it does not understand or that is not in the future", () => {
     const error = "Expected a time such as 45m, 17:30 or tomorrow 9am";
     for (const text of ["", "soon", "0m", "25:00", "13pm", "today 9am"]) expect(at(text)).toBe(error);

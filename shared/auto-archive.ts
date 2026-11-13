@@ -27,8 +27,9 @@ export interface ArchiveCandidate {
 const DAY = 24 * 60 * 60 * 1000;
 
 // The folder survives archiving (not a Paseo worktree), or it holds no work git could lose.
+// An unknown (null) project kind proves nothing, like unknown git state.
 function nothingToLose(workspace: ArchiveCandidate): boolean {
-  if (workspace.projectKind !== "git" && workspace.paseoWorktree !== true) return true;
+  if (workspace.projectKind !== null && workspace.projectKind !== "git" && workspace.paseoWorktree !== true) return true;
   if (workspace.paseoWorktree === false) return true;
   return workspace.dirty === false && workspace.ahead === 0;
 }

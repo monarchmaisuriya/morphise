@@ -22,7 +22,7 @@ import { setRowSetup } from "./look";
 import { agentEventData, noticeData, noticeSchema, planSchema, stepsSchema, thoughtSchema, todoData, todoSchema, toolData, toolSchema } from "./model";
 import { NoticeItem } from "./notice-row";
 import { PlanItem } from "./plan-row";
-import { followAgent, onShownAgent, onStaleSteps, onUnplacedStep, placeStep, resetMade, setMergeMin, setReplyFolding, setStepSkip, stepKey, type Phase } from "./steps";
+import { followAgent, forgetFrozenAgents, onShownAgent, onStaleSteps, onUnplacedStep, placeStep, resetMade, setMergeMin, setReplyFolding, setStepSkip, stepKey, type Phase } from "./steps";
 import { StepsItem } from "./steps-row";
 import { ThoughtItem } from "./thought-row";
 import { TodoItem } from "./todo-row";
@@ -59,6 +59,7 @@ let registrations = 0;
 function stopFollowing() {
   followed.forEach((stop) => stop());
   followed.clear();
+  forgetFrozenAgents();
   shown.length = 0;
 }
 
@@ -82,7 +83,7 @@ export function registerChatRows(client: PluginClientContext, actions: RowAction
     const placed = placeStep(item, phase);
     // A step of a run too short to merge falls through to the rules for merging off.
     if (!placed || placed.as === "alone") return undefined;
-    return placed.as === "none" ? NONE : one(STEPS_ROW_KIND, { head: placed.key });
+    return placed.as === "none" ? NONE : one(STEPS_ROW_KIND, { head: placed.key, item, phase });
   };
 
   // A todo update on its own row. Paseo splits one update that completes a task and starts the next into two rows with the same list;

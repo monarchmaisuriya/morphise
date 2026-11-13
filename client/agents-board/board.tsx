@@ -203,7 +203,7 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
   const [sort, setSort] = useState<SortKey>("updated");
   const [selected, setSelected] = useState<string | null>(null);
   const [focused, setFocused] = useState<string | null>(null);
-  const [phoneLane, setPhoneLane] = useState<Lane>("waiting");
+  const [pickedPhoneLane, setPhoneLane] = useState<Lane>("waiting");
   const [shown, setShown] = useState<Partial<Record<Lane, number>>>({});
   // The list's own "Show more" counts, apart from the lanes', as the two start from different row counts.
   const [listShown, setListShown] = useState<Partial<Record<Lane, number>>>({});
@@ -241,6 +241,8 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
     return Object.fromEntries(LANES.map((lane) => [lane, allLanes[lane].filter((agent) => matchesFilter(agent, filter, now.getTime(), { activeNow: lane === "waiting" || lane === "running", status: laneStatus(lane, agent, cleared) })).sort(order)])) as Record<Lane, BoardAgent[]>;
   }, [allLanes, filter, sort, now, cleared]);
   const laneList = LANES.filter((lane) => lane !== "archived" || settings.board.showArchived);
+  // The lane a phone shows: the one picked, or the first listed once the picked one is gone (Show archived turned off).
+  const phoneLane = laneList.includes(pickedPhoneLane) ? pickedPhoneLane : laneList[0];
   const groups = useMemo(() => {
     const open = [...workspaceList.values()].filter((workspace) => workspace.open);
     const known = { labels: [...new Set(open.flatMap((workspace) => workspace.labels))], projects: [...new Set(open.map((workspace) => workspace.project).filter(Boolean))], workspaces: open.map((workspace) => ({ id: workspace.id, name: workspace.name })) };

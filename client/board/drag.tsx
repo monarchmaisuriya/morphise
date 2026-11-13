@@ -1,9 +1,10 @@
 // Drag and drop for board cards, and for the rows of the Tasks list (sections stacked down instead of columns side by side). A card lifts after the mouse moves a few pixels on the web, or after a long press on a
 // phone; a copy follows the pointer above the board, a gap opens where it will land, and releasing moves it. Where it
-// lands is worked out by shared/board.ts (dropTarget) from the cards' places measured when it was lifted.
-import { createContext, type ReactNode, type RefObject, useContext, useMemo, useRef, useState } from "react";
-import { Animated, type GestureResponderHandlers, type NativeScrollEvent, type NativeSyntheticEvent, PanResponder, Platform, type ScrollView, View } from "react-native";
-import { type BoardColumn, type DropTarget, dropTarget, type Frame } from "../../shared/board";
+// lands is worked out by drop-places.ts (boardDropTarget) from the cards' places measured when it was lifted.
+import { createContext, type ReactNode, type RefObject, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { Animated, type GestureResponderHandlers, type NativeScrollEvent, type NativeSyntheticEvent, PanResponder, Platform, type ScrollView, View, type ViewProps } from "react-native";
+import type { BoardColumn, DropTarget, Frame } from "../../shared/board";
+import { boardDropTarget, copyKey, type CopyTarget } from "./drop-places";
 
 // Within this distance of the board's sides (or a column's top and bottom), a held card scrolls it.
 const EDGE = 56;
@@ -15,7 +16,7 @@ export interface DragState {
   taskId: string;
   // The card's place when it was lifted, relative to the board; null until measured.
   origin: Frame | null;
-  target: DropTarget | null;
+  target: CopyTarget | null;
 }
 
 interface Scroller {
@@ -33,11 +34,12 @@ interface DragApi {
   offset: Animated.ValueXY;
   arm(taskId: string | null): void;
   isArmed(taskId: string): boolean;
-  start(taskId: string): void;
+  start(laneKey: string, taskId: string): void;
   move(x: number, y: number, dx: number, dy: number): void;
   end(drop: boolean): void;
   column(id: string): (view: View | null) => void;
-  card(id: string): (view: View | null) => void;
+  // One drawn copy of a card: a task in two lanes (rows by label) is drawn, and measured, twice.
+  card(laneKey: string, taskId: string): (view: View | null) => void;
   scroller(key: string, horizontal: boolean): ScrollerProps;
 }
 
@@ -71,7 +73,7 @@ export function useBoardDrag(columns: BoardColumn[], drop: (taskId: string, targ
   live.current = { columns, drop, state, closes, stack, gap };
   const root = useRef<View | null>(null);
   const views = useRef({ columns: new Map<string, View>(), cards: new Map<string, View>() });
-  // Places on screen when the card was lifted, and every scroller's offset then.
+  // Places on screen when the card was lifted (cards by copyKey), and every scroller's offset then.
   const frames = useRef({ root: null as Frame | null, outer: null as Frame | null, columns: new Map<string, Frame>(), cards: new Map<string, Frame>(), scrolled: new Map<string, number>() });
   const scrollers = useRef(new Map<string, Scroller>());
   const pointer = useRef<{ x: number; y: number } | null>(null);
@@ -81,37 +83,21 @@ export function useBoardDrag(columns: BoardColumn[], drop: (taskId: string, targ
   const api = useMemo(() => {
     // How far a scroller has moved since the card was lifted.
     const scrolledBy = (key: string) => (scrollers.current.get(key)?.offset ?? 0) - (frames.current.scrolled.get(key) ?? 0);
-    // The drop target under the pointer. The places are the ones measured at the lift, moved by any scrolling since and
-    // without the lifted card; the gap that opens at the target is left out, so it cannot move the target it shows.
     // A place measured at the lift, moved by the outer scroller's scrolling since: sideways on a board, down in a list.
     const shifted = (frame: Frame): Frame => {
       const by = scrolledBy("board");
       return live.current.stack === "horizontal" ? { ...frame, x: frame.x - by } : { ...frame, y: frame.y - by };
     };
-    const targetNow = (taskId: string): DropTarget | null => {
+    const targetNow = (taskId: string): CopyTarget | null => {
       if (!pointer.current) return null;
-      const lifted = frames.current.cards.get(taskId);
-      const home = live.current.columns.find((entry) => entry.lanes.some((lane) => lane.tasks.some((task) => task.id === taskId)))?.column.id;
-      const shown = live.current.columns.flatMap((entry) => {
-        const frame = frames.current.columns.get(entry.column.id);
-        if (!frame) return [];
-        const down = scrolledBy(entry.column.id);
-        const cards = entry.lanes.flatMap((lane) => lane.tasks).flatMap((task) => {
-          const card = task.id === taskId ? undefined : frames.current.cards.get(task.id);
-          if (!card) return [];
-          const closed = live.current.closes && lifted && entry.column.id === home && card.y > lifted.y ? lifted.height + live.current.gap : 0;
-          const moved = shifted(card);
-          return [{ id: task.id, frame: { ...moved, y: moved.y - down - closed } }];
-        });
-        return [{ id: entry.column.id, frame: shifted(frame), cards }];
-      });
-      return dropTarget(shown, pointer.current.x, pointer.current.y, live.current.stack);
+      const { columns, closes, gap, stack } = live.current;
+      return boardDropTarget(columns, frames.current, taskId, pointer.current, { closes, gap, stack, outer: shifted, down: scrolledBy });
     };
     const retarget = () => {
       const current = live.current.state;
       if (!current) return;
       const target = targetNow(current.taskId);
-      setState((previous) => (previous && (previous.target?.column !== target?.column || previous.target?.before !== target?.before) ? { ...previous, target } : previous));
+      setState((previous) => (previous && (previous.target?.column !== target?.column || previous.target?.before !== target?.before || previous.target?.lane !== target?.lane) ? { ...previous, target } : previous));
     };
     const measureAll = async () => {
       const scrolled = new Map([...scrollers.current].map(([key, scroller]) => [key, scroller.offset] as const));
@@ -185,12 +171,12 @@ export function useBoardDrag(columns: BoardColumn[], drop: (taskId: string, targ
     const scrollerProps = new Map<string, ScrollerProps>();
     return {
       arm: (taskId: string | null) => setArmed(taskId),
-      start(taskId: string) {
+      start(laneKey: string, taskId: string) {
         offset.setValue({ x: 0, y: 0 });
         setState({ taskId, origin: null, target: null });
         live.current.state = { taskId, origin: null, target: null };
         void measureAll().then(() => {
-          const card = frames.current.cards.get(taskId);
+          const card = frames.current.cards.get(copyKey(laneKey, taskId));
           const board = frames.current.root;
           if (card && board) setState((previous) => (previous?.taskId === taskId ? { ...previous, origin: { ...card, x: card.x - board.x, y: card.y - board.y } } : previous));
         });
@@ -212,7 +198,7 @@ export function useBoardDrag(columns: BoardColumn[], drop: (taskId: string, targ
         if (current && target) live.current.drop(current.taskId, target);
       },
       column: (id: string) => register("columns", id),
-      card: (id: string) => register("cards", id),
+      card: (laneKey: string, taskId: string) => register("cards", copyKey(laneKey, taskId)),
       scroller(key: string, horizontal: boolean): ScrollerProps {
         // Cached per direction too: the Tasks view can switch between its board (sideways) and its list (down) while
         // mounted, and each scroller's handlers must read their own axis.
@@ -245,6 +231,14 @@ export function useBoardDrag(columns: BoardColumn[], drop: (taskId: string, targ
       },
     };
   }, [offset]);
+  // A board closed mid-drag stops its edge scrolling.
+  useEffect(
+    () => () => {
+      if (timer.current) clearInterval(timer.current);
+      timer.current = null;
+    },
+    [],
+  );
 
   const value: DragApi = {
     ...api,
@@ -265,23 +259,26 @@ export function useDrag(): DragApi {
   return api;
 }
 
-/** The pan handlers that drag one card; spread them on a view around the card. */
-export function useCardDragHandlers(taskId: string): GestureResponderHandlers {
+/** The pan handlers that drag one drawn copy of a card; spread them on a view around the card. */
+export function useCardDragHandlers(laneKey: string, taskId: string): GestureResponderHandlers & Pick<ViewProps, "onTouchEnd" | "onTouchCancel"> {
   const api = useDrag();
-  const latest = useRef({ api, taskId });
-  latest.current = { api, taskId };
+  const latest = useRef({ api, laneKey, taskId });
+  latest.current = { api, laneKey, taskId };
   const responder = useRef(
     PanResponder.create({
       // The web lifts a card once the mouse has moved; a phone only after a long press picked it up, so a swipe still scrolls.
       onMoveShouldSetPanResponderCapture: (_event, gesture) => (Platform.OS === "web" ? Math.abs(gesture.dx) + Math.abs(gesture.dy) > 6 : latest.current.api.isArmed(latest.current.taskId)),
-      onPanResponderGrant: () => latest.current.api.start(latest.current.taskId),
+      onPanResponderGrant: () => latest.current.api.start(latest.current.laneKey, latest.current.taskId),
       onPanResponderMove: (_event, gesture) => latest.current.api.move(gesture.moveX, gesture.moveY, gesture.dx, gesture.dy),
       onPanResponderRelease: () => latest.current.api.end(true),
       onPanResponderTerminate: () => latest.current.api.end(false),
       onPanResponderTerminationRequest: () => false,
     }),
   ).current;
-  return responder.panHandlers;
+  // A long press arms the card, but the pan responder (and its end) only runs once the finger moves; lifting it without
+  // a drag must disarm it, or the armed card keeps the board from scrolling. Touch ends bubble up from the card.
+  const disarm = useRef({ onTouchEnd: () => latest.current.api.arm(null), onTouchCancel: () => latest.current.api.arm(null) }).current;
+  return { ...responder.panHandlers, ...disarm };
 }
 
 /** The lifted copy of the dragged card, drawn above the board and following the pointer. */

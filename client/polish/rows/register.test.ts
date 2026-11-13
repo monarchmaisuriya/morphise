@@ -5,6 +5,7 @@ import type { RowActions } from "../../chat-rows";
 import { setPrefs } from "../prefs";
 import { currentRowSetup } from "./look";
 import { registerChatRows } from "./register";
+import { noteShownAgent } from "./steps";
 
 // The transformers as Paseo would call them; the row components are not drawn here.
 const platform = vi.hoisted(() => ({ OS: "web" }));
@@ -114,6 +115,64 @@ describe("chat rows in the timeline", () => {
     const { transformers, stop } = register({ toolCalls: "cards", phones: "paseo" });
     expect(transformers.size).toBe(0);
     stop();
+  });
+
+  it("with more chats on screen than it follows, following one never re-shows another (no follow loop)", async () => {
+    vi.useFakeTimers();
+    try {
+      setPrefs(polishPrefs({ toolCalls: "cards" }));
+      // Four chats is one more than the three recently shown agents followed; twelve also passes the frozen limit (3 shown + 8 frozen).
+      const agents = Array.from({ length: 12 }, (_, i) => `loop-${i}`);
+      const steps = new Map(agents.map((id) => [id, [1, 2].map((n) => call({ type: "shell", command: "ls" }, "completed", { callId: `${id}-${n}` }))]));
+      let follows = 0;
+      const transformers = new Map<string, Transform>();
+      const client = {
+        addTimelineTransformer: (t: { query: { itemType: string }; transform: Transform }) => (transformers.set(t.query.itemType, t.transform), () => transformers.delete(t.query.itemType)),
+        addTimelineRenderer: () => () => {},
+        paseo: {
+          agents: {
+            ref: (id: string) => ({
+              timeline: {
+                refetch: async () => ({ entries: [{ type: "user_message", text: "go" }, ...steps.get(id)!].map((item, i) => ({ item, timestamp: new Date(i).toISOString() })), endCursor: { seq: 3 } }),
+                subscribe: () => (follows++, Object.assign(() => {}, { ready: Promise.resolve() })),
+              },
+            }),
+          },
+        },
+      } as unknown as Parameters<typeof registerChatRows>[0];
+      const stop = registerChatRows(client, actions, { chat: { toolCalls: "cards" }, hidden: [], stepsInChat: false, steps: () => ({}) as never });
+      // Each tick Paseo draws every mounted chat; a merged row that wasn't drawn before mounts, and after the pass its effect notes its
+      // agent (StepsItem's useEffect), as React runs effects after the commit.
+      const drawn = new Map<string, Set<string>>();
+      const draw = (id: string) => {
+        const before = drawn.get(id) ?? new Set<string>();
+        const now = new Set<string>();
+        for (const item of steps.get(id)!) {
+          const row = transformers.get("tool_call")?.({ item, phase: "complete" })?.items[0];
+          if (row?.kind === "polish-steps") now.add(row.data.head as string);
+        }
+        drawn.set(id, now);
+        return [...now].some((head) => !before.has(head));
+      };
+      const ticks = async (mounted: string[]) => {
+        for (let i = 0; i < 20; i++) {
+          const mounts = mounted.filter(draw);
+          await vi.advanceTimersByTimeAsync(0);
+          mounts.forEach((id) => noteShownAgent(id));
+          await vi.advanceTimersByTimeAsync(60);
+        }
+      };
+      // The chats open one by one.
+      for (let n = 1; n <= agents.length; n++) await ticks(agents.slice(0, n));
+      const settled = follows;
+      await ticks(agents);
+      expect(follows - settled, "no agent is followed again while nothing new happens").toBe(0);
+      expect(settled).toBeLessThanOrEqual(agents.length);
+      stop();
+      await vi.advanceTimersByTimeAsync(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("hands rows the Morphise options they draw with, and the file actions", () => {

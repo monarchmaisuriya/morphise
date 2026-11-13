@@ -20,52 +20,64 @@ const MAX_AGENTS = 2000;
 // Released on unmount.
 export function useAgentEntries(client: PluginClientContext): ListState {
   const [state, setState] = useState<ListState>({ status: "loading" });
-  useEffect(() => {
-    let released = false;
-    let release = () => {};
-    const filter = { includeArchived: true };
-    client.paseo.agents.list({ subscribe: {}, filter, page: { limit: PAGE } }).then(
-      ({ subscription }) => {
-        if (released) return void subscription.release();
-        let entries: AgentEntries = new Map();
-        // Older pages fill in behind the live first page; a live entry is never replaced by an older read.
-        const readOlder = async (cursor: string | null) => {
-          let read = entries.size;
-          while (cursor && !released && read < MAX_AGENTS) {
-            const page = await client.paseo.agents.list({ filter, page: { limit: PAGE, cursor } });
-            if (released) return;
-            entries = new Map([...entriesFromSnapshot(page.entries), ...entries]);
-            setState({ status: "ready", entries });
-            read += page.entries.length;
-            cursor = page.pageInfo.hasMore ? page.pageInfo.nextCursor : null;
-          }
-        };
-        const stop = subscription.subscribe({
-          snapshot: (snapshot) => {
-            entries = entriesFromSnapshot(snapshot.entries);
-            setState({ status: "ready", entries });
-            readOlder(snapshot.pageInfo.hasMore ? snapshot.pageInfo.nextCursor : null).catch((error: unknown) => console.warn("[morphise] Could not read older agents for the Agents view", error));
-          },
-          update: (update) => {
-            const next = applyAgentUpdate(entries, update as { type: string; payload?: unknown });
-            if (next === entries) return;
-            entries = next;
-            setState({ status: "ready", entries });
-          },
-        });
-        release = () => {
-          stop();
-          void subscription.release();
-        };
-      },
-      (error: unknown) => !released && setState({ status: "error", error: message(error) }),
-    );
-    return () => {
-      released = true;
-      release();
-    };
-  }, [client]);
+  useEffect(() => watchAgentEntries(client, setState), [client]);
   return state;
+}
+
+/** Reports every agent on the host to `report` until the returned function releases the watch. */
+export function watchAgentEntries(client: PluginClientContext, report: (state: ListState) => void): () => void {
+  let released = false;
+  let release = () => {};
+  const filter = { includeArchived: true };
+  client.paseo.agents.list({ subscribe: {}, filter, page: { limit: PAGE } }).then(
+    ({ subscription }) => {
+      if (released) return void subscription.release();
+      let entries: AgentEntries = new Map();
+      // Each snapshot starts the list over: older pages read for an earlier one are dropped, and so are agents removed
+      // since this one, which an older page read afterwards may still hold.
+      let generation = 0;
+      let removed = new Set<string>();
+      // Older pages fill in behind the live first page; a live entry is never replaced by an older read.
+      const readOlder = async (cursor: string | null, from: number) => {
+        let read = entries.size;
+        while (cursor && !released && read < MAX_AGENTS) {
+          const page = await client.paseo.agents.list({ filter, page: { limit: PAGE, cursor } });
+          if (released || from !== generation) return;
+          const older = [...entriesFromSnapshot(page.entries)].filter(([id]) => !removed.has(id));
+          entries = new Map([...older, ...entries]);
+          report({ status: "ready", entries });
+          read += page.entries.length;
+          cursor = page.pageInfo.hasMore ? page.pageInfo.nextCursor : null;
+        }
+      };
+      const stop = subscription.subscribe({
+        snapshot: (snapshot) => {
+          generation += 1;
+          removed = new Set();
+          entries = entriesFromSnapshot(snapshot.entries);
+          report({ status: "ready", entries });
+          readOlder(snapshot.pageInfo.hasMore ? snapshot.pageInfo.nextCursor : null, generation).catch((error: unknown) => console.warn("[morphise] Could not read older agents for the Agents view", error));
+        },
+        update: (update) => {
+          const change = update as { type: string; payload?: { kind?: unknown; agentId?: unknown } };
+          if (change.type === "agent_update" && change.payload?.kind === "remove" && typeof change.payload.agentId === "string") removed.add(change.payload.agentId);
+          const next = applyAgentUpdate(entries, change);
+          if (next === entries) return;
+          entries = next;
+          report({ status: "ready", entries });
+        },
+      });
+      release = () => {
+        stop();
+        void subscription.release();
+      };
+    },
+    (error: unknown) => !released && report({ status: "error", error: message(error) }),
+  );
+  return () => {
+    released = true;
+    release();
+  };
 }
 
 // ---------- Usage and plan, for cards on screen ----------

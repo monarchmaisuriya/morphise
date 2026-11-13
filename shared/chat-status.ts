@@ -31,12 +31,6 @@ export function parentFromLabels(labels: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-// Open top-level chats, for automation rules and follow-up titles: a chat that closes leaves
-// this set instead of looking finished.
-export function isListedChat(chat: { readonly status: ChatStatusFields["status"]; readonly parentAgentId: string | null }): boolean {
-  return chat.status !== "closed" && chat.parentAgentId === null;
-}
-
 // Chats the sidebar lists: every top-level chat Paseo gives plugins, closed ones too. Paseo leaves
 // archived agents out of that list; "closed" only means the agent process stopped, and its tab
 // can still be open.

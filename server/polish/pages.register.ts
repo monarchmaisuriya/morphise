@@ -4,6 +4,7 @@ import { browserStatus, installBrowser, openHtml, removeBrowser, storedPage } fr
 import { polishPrefs } from "../../shared/polish/prefs";
 import { installHeadlessShell, removeHeadlessShell, shellStatus, staleShell } from "./pages/headless-shell";
 import { baseProvider, closeLocalServer, PREAPPROVES, localServerUsedBefore, openHtmlPage, readStoredPage, startHtmlTool, withHtmlTool } from "./pages/html-tool";
+import { TITLE_HELPER } from "../titles";
 import type { ProfileReader } from "./profile-reader";
 
 type CreateHook = (payload: PluginHookPayload<"agent.create.before">, context: PluginHookContext) => Promise<PluginHookResult<"agent.create.before">>;
@@ -24,10 +25,10 @@ async function htmlPagesOn(profile: ProfileReader) {
 const htmlTool = () => startHtmlTool().catch((error: unknown) => (console.error("[morphise] html_render tool unavailable", error), undefined));
 
 // Adds the tools to a new agent while the option is on; never to internal agents (commit and PR
-// messages). Exported for its test.
+// messages) or Morphise's title helper. Exported for its test.
 export function addHtmlTools(profile: ProfileReader): CreateHook {
   return async ({ request }, { paseo }) => {
-    if (request.config.internal || !(await htmlPagesOn(profile))) return undefined;
+    if (request.config.internal || request.metadata?.[TITLE_HELPER] === true || !(await htmlPagesOn(profile))) return undefined;
     // Unreadable daemon config: judge the provider by its own id, so a derived one goes without the tools rather than failing to start.
     const providers = await paseo.config.get().then(({ config }) => config.providers, () => undefined);
     const base = baseProvider(request.config.provider, providers);

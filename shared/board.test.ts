@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { boardColumns, dropMove, dropTarget, dueCount, matchesTaskFilter, todayGroups } from "./board";
+import { boardColumns, dropMove, dropTarget, dueCount, dueOrDueTodayCount, matchesTaskFilter, todayGroups } from "./board";
 import { applyTaskOperation, type TaskOperation } from "./task-ops";
 import { DEFAULT_FILTER, EMPTY_TASKS, type TaskDocument } from "./tasks";
 
@@ -94,6 +94,11 @@ describe("todayGroups and dueCount", () => {
       ["Reminders later today", ["soon"]],
     ]);
     expect(dueCount(document, now)).toBe(2);
+  });
+
+  it("counts what is due for the Workbench's opening: due reminders, overdue and due today, not reminders later today", () => {
+    expect(dueOrDueTodayCount(document, now)).toBe(3);
+    expect(dueOrDueTodayCount(build(add("soon", { reminder: reminder("2026-11-11T18:00:00.000Z") })), now)).toBe(0);
   });
 });
 

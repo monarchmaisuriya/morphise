@@ -23,11 +23,22 @@ export function formatQuote(source: QuoteSource): string {
     const fence = text.includes("```") ? "````" : "```";
     return `${fence}${code.language ?? ""}\n${text}\n${fence}`;
   }
-  const body = code ? "`" + text.replace(/`/g, "\\`") + "`" : text;
+  const body = code ? codeSpan(text) : text;
   return body
     .split("\n")
     .map((line) => (line.trim() ? `> ${line}` : ">"))
     .join("\n");
+}
+
+/**
+ * One line of code as a Markdown code span. Backslashes don't escape inside a span, so the delimiter is a backtick run longer than
+ * any inside; a space pads code that starts or ends with a backtick (Markdown strips one such space from each side).
+ */
+function codeSpan(text: string): string {
+  const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length));
+  const fence = "`".repeat(longest + 1);
+  const pad = text.startsWith("`") || text.endsWith("`") ? " " : "";
+  return `${fence}${pad}${text}${pad}${fence}`;
 }
 
 /** Quote plus reply, as one paragraph group. */

@@ -2,6 +2,27 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.21.4 - 2026-11-13
+
+- **Remind me works for chats whose agent stopped:** a workspace's header Remind me button said "no open chat" when the workspace's chat was closed (its agent process stopped, its tab still open). Closed chats now stay in Morphise's chat list, so that button, task titles, a task's linked chat and path shortening find them. Closing a chat still does not count as finishing it for automation rules.
+- **Sidebar hover no longer sticks:** when the sidebar re-sorted under a resting pointer (a workspace starting work moves up), the row under it could keep its buttons and its hover card open after the pointer left. The sidebar now works out which row the pointer is over on every pointer move, so a moved row cannot stay hovered.
+
+From a review of the whole codebase:
+
+- **HTML pages:** pages agents draw with `html_render` can no longer fetch or post data, or load remote images, in the chat, in the daemon's page check or in a browser tab (a Content-Security-Policy that comes before anything of the page). Scripts, styles and fonts still load over https, as the tool promises. Morphise's title helper gets neither the HTML tools nor the task-list tools, and runs in its provider's strictest mode. The pages server's token file is readable only by you.
+- **Settings:** the Advanced (JSON) tab no longer reverts a newer save made elsewhere; an edit made while a save is on its way no longer overwrites another app's save (it shows a conflict instead). Quick taps on sidebar filters and folds are no longer refused. "Code and diffs" can be set to 30 lines while terminal output shows all, and changing terminal output no longer changes the code limit. A failing Dispatch save no longer retries forever.
+- **Sidebar:** with several hosts, row and bulk actions go to the workspace's own host.
+- **Tasks:**
+  - A double Enter or Enter then Add no longer adds a task twice; a different task typed while the first saves is no longer lost.
+  - Cards that reach Done another way (a deleted column, a new Done column, added straight into Done) get the Done rules; changing the Done column keeps completion dates and leaves archived cards alone.
+  - Ticking a checklist item, moving a column and snoozing a reminder give the same result when replayed after a save conflict.
+  - On phones, a long press without a drag no longer stops the board scrolling. With rows by label, drag and drop lands cards where they are dropped.
+  - "mon 5pm" on a Monday morning sets today's 5pm.
+- **Workbench and Agents:** with "What needs you", Tasks opens for due reminders, overdue and due-today cards, not reminders later today. The phone lane falls back to a listed one when Archived is hidden. A reconnect no longer brings back an agent removed meanwhile.
+- **Chat rows:** steps whose text repeats in another turn or agent are drawn unmerged instead of hiding a run; finished tool calls are no longer held back while another agent works; merged rows no longer go blank when their agent is no longer followed, and on phones a follow loop with four or more chats is gone; overlapping timeline loads no longer drop live steps; long outputs no longer slow each redraw. Turn recaps count every line of large edits and keep long paths apart.
+- **Chat polish (web):** diagrams no longer go blank when the plugin unloads; Paseo's Copy code button stays after Redraw; the selection bar no longer fires a copy event on every scroll; quoted inline code with backticks keeps its text; several listeners and styles are released when the plugin stops.
+- **Other:** auto-archive no longer treats a workspace of unknown kind as safe to archive; two clicks on Update no longer start two updates; a title job gives up after three minutes.
+
 ## 0.21.3 - 2026-11-13
 
 - **The Workbench reopens on the view you used last:** Agents, Tasks or Bookmarks, per device, whether you picked it or a link opened it. Jumping to what needs you (Agents while an agent waits, Tasks when something is due) is now a choice, off by default: Settings, General, Workbench, "Open the Workbench on" (The view used last, or What needs you). "When something is due, open Tasks on" shows with What needs you. Links that ask for a view still open it.

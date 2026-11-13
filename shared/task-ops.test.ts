@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyTaskOperation, firstOpenColumn, followUpTask, type TaskOperation, workspaceTask } from "./task-ops";
+import { applyTaskOperation, doneBefore, firstOpenColumn, followUpTask, snoozeTime, type TaskOperation, workspaceTask } from "./task-ops";
 import { EMPTY_TASKS, type TaskDocument, viewSchema } from "./tasks";
 
 const now = new Date("2026-11-11T14:30:00.000Z");
@@ -59,16 +59,49 @@ describe("tasks", () => {
     expect(document.tasks[0].reminder).toBeNull();
   });
 
+  it("applies the Done rules to a card added straight into Done", () => {
+    const reminder = { at: later.toISOString(), setAt: now.toISOString() };
+    const rule: TaskOperation = { kind: "saveRule", rule: { id: "r", enabled: true, when: { kind: "enters-done" }, then: { kind: "clear-reminder" } } };
+    const document = apply(EMPTY_TASKS, rule, add("a", { column: "done", reminder }));
+    expect(document.tasks[0].completedAt).toBe(now.toISOString());
+    expect(document.tasks[0].reminder).toBeNull();
+  });
+
+  it("applies the Done rules to the open cards of a column that becomes Done, leaving archived cards and completion dates alone", () => {
+    const reminder = { at: later.toISOString(), setAt: now.toISOString() };
+    const rule: TaskOperation = { kind: "saveRule", rule: { id: "r", enabled: true, when: { kind: "enters-done" }, then: { kind: "clear-reminder" } } };
+    const setup = apply(EMPTY_TASKS, rule, add("a", { column: "review", reminder }), add("b"), { kind: "moveTask", id: "b", column: "done" }, add("c", { column: "review", reminder }), { kind: "archiveTask", id: "c" });
+    const switched = applyTaskOperation(setup, { kind: "setDoneColumn", id: "review" }, later);
+    const [a, b, c] = switched.tasks;
+    expect([a.completedAt, a.reminder]).toEqual([later.toISOString(), null]);
+    expect([c.completedAt, c.reminder]).toEqual([null, reminder]);
+    expect(doneBefore(switched, "2030-01-01T00:00:00.000Z").map((task) => task.id)).toEqual(["a"]);
+    // A misclick back keeps the original completion dates, so auto-archive's clock does not restart.
+    const back = applyTaskOperation(switched, { kind: "setDoneColumn", id: "done" }, new Date("2026-11-12T09:00:00.000Z"));
+    expect(back.tasks.find((task) => task.id === "b")?.completedAt).toBe(b.completedAt);
+    expect(b.completedAt).toBe(now.toISOString());
+  });
+
   it("snoozes a due reminder by replacing it, keeping its note", () => {
     const reminder = { at: now.toISOString(), setAt: "2026-11-11T14:00:00.000Z", note: "check CI" };
-    const document = apply(EMPTY_TASKS, add("a", { reminder }), { kind: "remindAgain", id: "a", minutes: 15 });
+    const document = apply(EMPTY_TASKS, add("a", { reminder }), { kind: "snoozeReminder", id: "a", at: snoozeTime(reminder, 15, now) });
     expect(document.tasks[0].reminder).toEqual({ at: "2026-11-11T14:45:00.000Z", setAt: now.toISOString(), note: "check CI" });
   });
 
   it("pushes a reminder that is not due yet later by the minutes, instead of moving it closer", () => {
     const reminder = { at: "2026-11-11T15:14:00.000Z", setAt: now.toISOString() };
-    const document = apply(EMPTY_TASKS, add("a", { reminder }), { kind: "remindAgain", id: "a", minutes: 15 });
+    const document = apply(EMPTY_TASKS, add("a", { reminder }), { kind: "snoozeReminder", id: "a", at: snoozeTime(reminder, 15, now) });
     expect(document.tasks[0].reminder?.at).toBe("2026-11-11T15:29:00.000Z");
+  });
+
+  it("snoozes to the time chosen when the user acted, so applying it again after a conflict does not push it twice", () => {
+    const reminder = { at: "2026-11-11T15:14:00.000Z", setAt: now.toISOString(), note: "check CI" };
+    const seen = apply(EMPTY_TASKS, add("a", { reminder }));
+    const snooze: TaskOperation = { kind: "snoozeReminder", id: "a", at: snoozeTime(seen.tasks[0].reminder, 15, now) };
+    const once = apply(seen, snooze);
+    expect(once.tasks[0].reminder).toEqual({ at: "2026-11-11T15:29:00.000Z", setAt: now.toISOString(), note: "check CI" });
+    expect(apply(once, snooze).tasks[0].reminder?.at).toBe("2026-11-11T15:29:00.000Z");
+    expect(snoozeTime({ at: "2026-11-11T14:00:00.000Z", setAt: "2026-11-11T13:00:00.000Z" }, 15, now)).toBe("2026-11-11T14:45:00.000Z");
   });
 
   it("sets or clears one link, leaving the task's other links alone", () => {
@@ -85,14 +118,16 @@ describe("tasks", () => {
     expect(document.tasks.map((task) => [task.id, task.archivedAt])).toEqual([["a", null]]);
   });
 
-  it("toggles a checklist item", () => {
-    const document = apply(EMPTY_TASKS, add("a", { checklist: [{ id: "i", text: "write test", done: false }] }), { kind: "toggleChecklistItem", id: "a", itemId: "i" });
+  it("ticks or unticks a checklist item to the state chosen, so applying it again after a conflict keeps that state", () => {
+    const tick: TaskOperation = { kind: "setChecklistItem", id: "a", itemId: "i", done: true };
+    const document = apply(EMPTY_TASKS, add("a", { checklist: [{ id: "i", text: "write test", done: false }] }), tick, tick);
     expect(document.tasks[0].checklist[0].done).toBe(true);
+    expect(apply(document, { kind: "setChecklistItem", id: "a", itemId: "i", done: false }).tasks[0].checklist[0].done).toBe(false);
   });
 
   it("adds and removes single checklist items, keeping items others changed", () => {
     let document = apply(EMPTY_TASKS, add("a", { checklist: [{ id: "i", text: "write test", done: false }] }));
-    document = apply(document, { kind: "toggleChecklistItem", id: "a", itemId: "i" }, { kind: "addChecklistItem", id: "a", item: { id: "j", text: "ship" } });
+    document = apply(document, { kind: "setChecklistItem", id: "a", itemId: "i", done: true }, { kind: "addChecklistItem", id: "a", item: { id: "j", text: "ship" } });
     expect(document.tasks[0].checklist).toEqual([{ id: "i", text: "write test", done: true }, { id: "j", text: "ship", done: false }]);
     document = apply(document, { kind: "removeChecklistItem", id: "a", itemId: "i" }, { kind: "addChecklistItem", id: "a", item: { id: "j", text: "ship" } });
     expect(document.tasks[0].checklist).toEqual([{ id: "j", text: "ship", done: false }]);
@@ -112,9 +147,27 @@ describe("columns, labels, views", () => {
     expect(() => apply(EMPTY_TASKS, { kind: "deleteColumn", id: "done" })).toThrow("The Done column cannot be deleted");
   });
 
-  it("moves a column left or right", () => {
-    const document = apply(EMPTY_TASKS, { kind: "moveColumn", id: "review", by: -1 });
+  it("moves a deleted column's tasks to the first open column even when Done is first", () => {
+    const doneFirst = apply(EMPTY_TASKS, { kind: "moveColumn", id: "done", index: 0 });
+    expect(doneFirst.columns[0].id).toBe("done");
+    const document = apply(doneFirst, add("a"), { kind: "deleteColumn", id: "todo" });
+    expect(document.tasks[0].column).toBe("backlog");
+    expect(document.tasks[0].completedAt).toBeNull();
+  });
+
+  it("applies the Done rules when deleting the last open column sends its tasks to Done", () => {
+    const reminder = { at: later.toISOString(), setAt: now.toISOString() };
+    const rule: TaskOperation = { kind: "saveRule", rule: { id: "r", enabled: true, when: { kind: "enters-done" }, then: { kind: "clear-reminder" } } };
+    const document = apply(EMPTY_TASKS, rule, add("a", { reminder }), ...["backlog", "doing", "review", "todo"].map((id): TaskOperation => ({ kind: "deleteColumn", id })));
+    expect(document.tasks[0].column).toBe("done");
+    expect([document.tasks[0].completedAt, document.tasks[0].reminder]).toEqual([now.toISOString(), null]);
+  });
+
+  it("moves a column to the place chosen, so applying it again after a conflict does not move it further", () => {
+    const left: TaskOperation = { kind: "moveColumn", id: "review", index: 2 };
+    const document = apply(EMPTY_TASKS, left, left);
     expect(document.columns.map((column) => column.id)).toEqual(["backlog", "todo", "review", "doing", "done"]);
+    expect(apply(document, { kind: "moveColumn", id: "review", index: 99 }).columns.map((column) => column.id)).toEqual(["backlog", "todo", "doing", "done", "review"]);
   });
 
   it("removes a deleted label from views older versions saved, as they still read them", () => {

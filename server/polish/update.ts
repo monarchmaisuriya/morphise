@@ -70,19 +70,21 @@ export async function checkForUpdate(): Promise<UpdateStatus> {
 
 // Starts the update and returns at once: installing runs the build step (npm ci) and then restarts
 // this plugin process, which outlasts any RPC. The update runs detached, so it survives the restart;
-// once it is done the new version's check reports it as current. One at a time.
+// once it is done the new version's check reports it as current. One at a time: the flag is taken
+// before finding the id, so a second click during that wait starts nothing.
 let updating = false;
 export async function installUpdate(): Promise<{ error?: string }> {
   if (updating) return {};
+  updating = true;
   try {
     const id = await ownId();
     const child = spawn(CLI, ["plugin", "update", id, "--yes", "--json"], { detached: true, stdio: "ignore" });
-    updating = true;
     child.on("error", () => (updating = false));
     child.on("close", () => (updating = false));
     child.unref();
     return {};
   } catch (error) {
+    updating = false;
     return { error: error instanceof Error ? error.message : String(error) };
   }
 }

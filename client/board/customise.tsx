@@ -122,8 +122,8 @@ export function CustomiseBoard({ deps, theme, compact, onClose }: { deps: BoardD
               <ColorDots t={t} current={column.color} onPick={(color) => void run({ kind: "updateColumn", id: column.id, patch: { color } })} />
               <View style={{ flexDirection: "row", alignItems: "center", gap: 2, marginLeft: "auto" }}>
                 <Button t={t} variant={column.done ? "secondary" : "ghost"} icon={column.done ? "CircleCheck" : "Circle"} label="Done" checked={column.done} accessibilityLabel={`${column.name} is the Done column`} onPress={() => void run({ kind: "setDoneColumn", id: column.id })} />
-                <IconButton t={t} size="sm" icon="ChevronLeft" label={`Move ${column.name} left`} disabled={index === 0} onPress={() => void run({ kind: "moveColumn", id: column.id, by: -1 })} />
-                <IconButton t={t} size="sm" icon="ChevronRight" label={`Move ${column.name} right`} disabled={index === document.columns.length - 1} onPress={() => void run({ kind: "moveColumn", id: column.id, by: 1 })} />
+                <IconButton t={t} size="sm" icon="ChevronLeft" label={`Move ${column.name} left`} disabled={index === 0} onPress={() => void run({ kind: "moveColumn", id: column.id, index: index - 1 })} />
+                <IconButton t={t} size="sm" icon="ChevronRight" label={`Move ${column.name} right`} disabled={index === document.columns.length - 1} onPress={() => void run({ kind: "moveColumn", id: column.id, index: index + 1 })} />
                 <IconButton t={t} size="sm" icon="Trash2" label={column.done ? "The Done column cannot be deleted" : `Delete ${column.name}; its cards move to the first column`} disabled={column.done} onPress={() => void run({ kind: "deleteColumn", id: column.id })} />
               </View>
             </Row>

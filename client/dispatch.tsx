@@ -142,14 +142,22 @@ function Dispatch({ t, deps, openWorkspace, header }: { t: Tokens; deps: Dispatc
     };
   }, [paseo]);
   // Saves run against the revision they read, so a second quick choice can be refused; this saves
-  // again with the newest revision until the stored choices match the ones made here.
+  // again with the newest revision until the stored choices match the ones made here. A save that
+  // fails with the revision and choices unchanged is not a conflict, so it stops and shows.
   const chosenKey = JSON.stringify(chosen);
+  const attempt = settings.status === "ready" ? `${settings.revision}:${chosenKey}` : null;
+  const [failedAttempt, setFailedAttempt] = useState<string | null>(null);
+  const saveStopped = attempt !== null && failedAttempt === attempt;
   useEffect(() => {
-    if (settings.status !== "ready" || settings.saving) return;
+    if (settings.status !== "ready" || settings.saving || saveStopped) return;
     const next = { ...settings.values, ...chosen };
-    if (JSON.stringify(next) !== JSON.stringify(settings.values)) void settings.save(next, settings.revision);
+    if (JSON.stringify(next) !== JSON.stringify(settings.values)) {
+      void settings.save(next, settings.revision).then((ok) => {
+        if (!ok) setFailedAttempt(attempt);
+      });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.status, settings.saving, settings.status === "ready" ? settings.revision : null, chosenKey]);
+  }, [settings.status, settings.saving, attempt, saveStopped]);
   const current: DispatchSettings = { ...saved, ...chosen };
 
   const listed = entries ? modelChoices(entries, used) : [];
@@ -276,6 +284,7 @@ function Dispatch({ t, deps, openWorkspace, header }: { t: Tokens; deps: Dispatc
           </View>
         </View>
         {problem ? <Text style={[t.text.danger, { paddingHorizontal: 4 }]}>{problem}</Text> : status ? <Text style={[t.text.small, { paddingHorizontal: 4 }]}>{status}</Text> : null}
+        {saveStopped ? <Text style={[t.text.danger, { paddingHorizontal: 4 }]}>Could not remember these choices: {settings.saveError ?? "the save failed"}</Text> : null}
         {!canWorktree && project ? <Text style={[t.text.small, { paddingHorizontal: 4 }]}>{project.name} is not a git project, so agents work in its folder.</Text> : null}
       </ScrollView>
     </KeyboardAvoidingView>

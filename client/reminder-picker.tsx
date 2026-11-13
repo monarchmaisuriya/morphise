@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Text, View } from "react-native";
 import type { Profile } from "../shared/profile";
 import { MAX_NOTE_LENGTH, presetTitle, type Reminder, reminderAt } from "../shared/reminders";
-import { followUpTask, workspaceTask, type TaskOperation } from "../shared/task-ops";
+import { followUpTask, snoozeTime, workspaceTask, type TaskOperation } from "../shared/task-ops";
 import type { TaskDocument } from "../shared/tasks";
 import { formatDue } from "../shared/time-text";
 import { parseWhen } from "../shared/when";
@@ -49,8 +49,8 @@ function operationFor(target: ReminderTarget, reminder: Reminder | null): TaskOp
 }
 
 function againOperation(document: TaskDocument, target: ReminderTarget, minutes: number): TaskOperation | null {
-  const taskId = followUpOf(document, target)?.id;
-  return taskId ? { kind: "remindAgain", id: taskId, minutes } : null;
+  const task = followUpOf(document, target);
+  return task ? { kind: "snoozeReminder", id: task.id, at: snoozeTime(task.reminder, minutes, new Date()) } : null;
 }
 
 // The absolute time a choice resolves to, shown beside it: "21:47", "Thu 09:00".

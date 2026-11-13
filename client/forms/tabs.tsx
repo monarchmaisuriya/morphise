@@ -23,7 +23,7 @@ import { useDeviceChoice, workbenchSettings } from "../device-choices";
 import type { ViewLayout } from "../../shared/agents-board";
 import { DEFAULT_DONE_SECONDS, type StepsSettings, stepsOptions } from "../../shared/steps";
 import type { Layout, Prompt } from "../../shared/document";
-import { type ChatSettings, type ChatWebSettings, chatLook, TURN_RECAP_KIND, chatView, FOLD_KINDS, type FoldKind, TOOL_KIND_TITLES, TOOL_KINDS, type ToolKind } from "../../shared/chat-view";
+import { type ChatSettings, type ChatWebSettings, chatLook, withLineLimit, TURN_RECAP_KIND, chatView, FOLD_KINDS, type FoldKind, TOOL_KIND_TITLES, TOOL_KINDS, type ToolKind } from "../../shared/chat-view";
 import { EMPTY_PROFILE, type Profile, TIMELINE_ITEM_TYPES } from "../../shared/profile";
 import { presetTitle } from "../../shared/reminders";
 import { useValue } from "../profile-store";
@@ -653,6 +653,12 @@ export function ChatTab(form: Form): ReactNode {
       else delete profile.chat;
     });
   const setChat = <Key extends keyof ChatSettings>(key: Key, value: ChatSettings[Key] | undefined) => change((next) => void (next[key] = value));
+  const setLineLimit = (key: "outputLines" | "codeLines", value: number) =>
+    change((next) => {
+      const limits = withLineLimit(next, key, value);
+      next.outputLines = limits.outputLines;
+      next.codeLines = limits.codeLines;
+    });
   const setWeb = <Key extends keyof ChatWebSettings>(key: Key, value: ChatWebSettings[Key] | undefined) =>
     change((next) => {
       const web: ChatWebSettings = { ...(next.web ?? {}) };
@@ -743,8 +749,8 @@ export function ChatTab(form: Form): ReactNode {
           {tools ? (
             <SettingsSection title="Long output" info="Long text shows its first and last lines, with Show all for the rest.">
               <SettingsCard>
-                <SelectField label="Terminal output" value={String(look.outputLines ?? 0)} options={lineChoices([6, 12, 20, 40])} onChange={(value) => setChat("outputLines", Number(value) === 12 ? undefined : Number(value))} />
-                <SelectField label="Code and diffs" value={String(look.codeLines ?? 0)} options={lineChoices([15, 30, 60, 120])} onChange={(value) => setChat("codeLines", Number(value) === 30 ? undefined : Number(value))} />
+                <SelectField label="Terminal output" value={String(look.outputLines ?? 0)} options={lineChoices([6, 12, 20, 40])} onChange={(value) => setLineLimit("outputLines", Number(value))} />
+                <SelectField label="Code and diffs" value={String(look.codeLines ?? 0)} options={lineChoices([15, 30, 60, 120])} onChange={(value) => setLineLimit("codeLines", Number(value))} />
                 <SwitchField label="Wrap long lines" hint="Long lines wrap. When this is off, they scroll sideways." value={look.wrap} onChange={(value) => setChat("wrap", value ? undefined : false)} />
               </SettingsCard>
             </SettingsSection>

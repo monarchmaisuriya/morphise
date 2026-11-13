@@ -5,7 +5,7 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { copyText, useToast } from "@getpaseo/plugin/client/ui";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Animated, Image, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { foldLines, rowStartsOpen, wordDiff } from "../../../shared/chat-view";
 import type { RowActions } from "../../chat-rows";
@@ -97,7 +97,7 @@ function Diff({ s, lines, theme, keep, wrap, numbers, stripes = false }: { s: St
   const c = theme.colors;
   const [all, setAll] = useState(false);
   const shown = !all && keep !== null && lines.length > keep + 2 ? lines.slice(0, keep) : lines;
-  const pairs = changedWords(lines);
+  const pairs = useMemo(() => changedWords(lines), [lines]);
   const numberDigits = gutterDigits(lines, numbers);
   const lineStyle = wrap ? { flex: 1, minWidth: 0 } : { flexGrow: 1, flexShrink: 0 };
   return (

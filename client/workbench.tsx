@@ -3,7 +3,7 @@ import { useSettings } from "@getpaseo/plugin/client";
 import { SidebarRow, useToast } from "@getpaseo/plugin/client/ui";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
-import { dueCount, todayGroups } from "../shared/board";
+import { dueCount, dueOrDueTodayCount } from "../shared/board";
 import { agentsBoardSettings } from "../shared/agents-board";
 import { inboxSettings } from "../shared/inbox";
 import { AgentsBoardView } from "./agents-board/board";
@@ -70,8 +70,8 @@ function useWorkbenchCounts(deps: SurfaceDeps) {
     // Null until the task document arrives, for the same reason.
     tasksLoaded: tasksReady,
     permission: waiting.some((item) => item.reason === "permission"),
-    today: todayGroups(document, now).reduce((sum, group) => sum + group.tasks.length, 0),
     due: dueCount(document, now),
+    dueOrDueToday: dueOrDueTodayCount(document, now),
   };
 }
 
@@ -185,7 +185,7 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
     const openedForDue = useRef(false);
     if (opening.current === null && countsReady) {
       const waits = openOn === "needs" && (counts.waiting ?? 0) > 0;
-      openedForDue.current = openOn === "needs" && !waits && counts.today > 0;
+      openedForDue.current = openOn === "needs" && !waits && counts.dueOrDueToday > 0;
       opening.current = waits ? "agents" : openedForDue.current ? "board" : lastOpened;
     }
     const view: WorkbenchView = picked ?? asked ?? fallbackView ?? opening.current ?? lastOpened;

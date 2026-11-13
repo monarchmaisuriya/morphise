@@ -20,6 +20,15 @@ describe("tool rows", () => {
     expect(failed.detail?.kind).toBe("output");
   });
 
+  it("a call's row is worked out once per item, and long whitespace in its output costs linear time", () => {
+    const call = tool({ type: "shell", command: "ls", output: "a\n\n  " });
+    expect(toolData(call)).toBe(toolData(call));
+    expect(toolData(call).detail).toMatchObject({ kind: "output", text: "a" });
+    const started = Date.now();
+    toolData(tool({ type: "shell", command: "ls", output: " ".repeat(60000) + "x" }));
+    expect(Date.now() - started).toBeLessThan(200);
+  });
+
   it("edit: counts come from old/new strings when no unified diff", () => {
     const d = toolData(tool({ type: "edit", filePath: "/a/b/c/d/e.ts", oldString: "x\ny", newString: "z" }));
     expect(d.meta).toBe("+1 −2");

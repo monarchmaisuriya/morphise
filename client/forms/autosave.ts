@@ -11,6 +11,7 @@ const AUTOSAVE_RETRY_MS = 300;
 interface Saver {
   status: string;
   revision?: string;
+  values?: ProfileDocument;
   save(values: ProfileDocument, revision: string): Promise<boolean>;
 }
 
@@ -38,16 +39,15 @@ export function useAutoSave(drafts: DraftStore, settings: Saver, valid: boolean)
     const run = () => {
       pending.current = null;
       const current = latest.current;
-      if (current.status !== "ready" || !current.revision) return;
-      const sending = drafts.take();
+      if (current.status !== "ready" || !current.revision || !current.values) return;
+      const sending = drafts.take({ document: current.values, revision: current.revision });
       if (!sending) {
         // Another save is running: send this draft right after it, also once the screen has closed,
         // so an edit never waits for the next visit (and then overwrites newer changes).
-        if (drafts.get().draft) pending.current = { timer: setTimeout(run, AUTOSAVE_RETRY_MS), run };
+        if (drafts.get().draft && !drafts.get().conflict) pending.current = { timer: setTimeout(run, AUTOSAVE_RETRY_MS), run };
         return;
       }
-      const revision = sending.revision ?? current.revision;
-      void current.save(sending.document, revision).then((ok) => drafts.finish(ok));
+      void current.save(sending.document, sending.revision).then((ok) => drafts.finish(ok));
     };
     pending.current = { timer: setTimeout(run, AUTOSAVE_DELAY_MS), run };
     return () => {

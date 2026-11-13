@@ -24,10 +24,10 @@ function duration(ms: number) {
 
 /** A run of thoughts and tool calls folded into one row (design: Merged steps · A), its steps read from the timelines steps.ts follows. */
 export function StepsItem(props: PluginTimelineItemProps<z.output<typeof stepsSchema>>) {
-  const { head } = props.item.data;
+  const { head, item, phase } = props.item.data;
   const subscribe = useCallback((listener: () => void) => subscribeRun(head, listener), [head]);
   useSyncExternalStore(subscribe, () => runVersion(head));
-  const { steps, ms, open: tail } = runOf(head);
+  const { steps, ms, open: tail } = runOf(head, { item, phase });
   const working = useAgent(props.agentId, (a) => a.status === "running") ?? false;
   useEffect(() => noteShownAgent(props.agentId), [props.agentId]);
   return <MergedSteps {...props} steps={steps} ms={ms} growing={!!tail && working} />;

@@ -230,13 +230,20 @@ function readSnapshot(ignore: DomElement): Snapshot | null {
   const transcript = start.closest(CHAT_SCROLL);
   if (!transcript || end.closest(CHAT_SCROLL) !== transcript) return null;
 
+  const lines = lineRects(range);
+  if (!lines) return null;
+
+  return { source: readSource(selection, range, start), plain, ...lines, anchor: start, agentId: agentIdOf(nearestUnique(transcript, ACTIVE_AGENT_TAB)) };
+}
+
+/** The range's first and last line boxes where they are now, or null when it has no box on screen. */
+function lineRects(range: DomRange): Pick<Snapshot, "first" | "last"> | null {
   const rects = range.getClientRects();
   const bounds = range.getBoundingClientRect();
   const first = rects.length > 0 ? rects[0]! : bounds;
   const last = rects.length > 0 ? rects[rects.length - 1]! : bounds;
   if (first.width === 0 && first.height === 0) return null;
-
-  return { source: readSource(selection, range, start), plain, first, last, anchor: start, agentId: agentIdOf(nearestUnique(transcript, ACTIVE_AGENT_TAB)) };
+  return { first, last };
 }
 
 /**
@@ -531,7 +538,7 @@ export function installSelectionBar({ client, bookmarkPassage }: BarDeps): () =>
     snapshot = next;
     mode = "bar";
     panel.setAttribute("data-mode", "bar");
-    // Rebuilt only when its buttons change: showBar also runs on every scroll and resize, and a
+    // Rebuilt only when its buttons change: showBar runs again on each release over a shown bar, and a
     // rebuild there would drop a button's focus or a click in progress.
     const markup = items.map(barMarkup).join("");
     if (markup !== barShown) {
@@ -749,8 +756,20 @@ export function installSelectionBar({ client, bookmarkPassage }: BarDeps): () =>
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed) hide();
   };
+  // A scroll or resize only moves the selection: the bar follows its lines without reading it again, since reading it fires a
+  // copy event through the host on every frame of a streaming reply's auto-scroll.
+  let moving = 0;
+  const follow = () => {
+    moving = 0;
+    const selection = window.getSelection();
+    if (mode !== "bar" || !snapshot || !selection || selection.isCollapsed || selection.rangeCount !== 1) return;
+    const lines = lineRects(selection.getRangeAt(0));
+    if (!lines) return hide();
+    snapshot = { ...snapshot, ...lines };
+    placeBar(snapshot);
+  };
   const onViewportChange: DomListener = () => {
-    if (mode === "bar") schedule();
+    if (mode === "bar" && moving === 0) moving = window.setTimeout(follow, 0);
   };
   // A bar drawn with the old buttons closes when the profile changes them.
   const stopPrefs = subscribePrefs(() => {
@@ -767,6 +786,7 @@ export function installSelectionBar({ client, bookmarkPassage }: BarDeps): () =>
   return () => {
     stopPrefs();
     window.clearTimeout(pending);
+    window.clearTimeout(moving);
     window.clearTimeout(noteTimer);
     document.removeEventListener("pointerdown", onPointerDown, true);
     document.removeEventListener("pointerup", onPointerUp, true);

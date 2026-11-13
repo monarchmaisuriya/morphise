@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { polishPrefs } from "./polish/prefs";
-import { accentColor, breaksSteps, turnRecap, chatLook, chatView, diffCounts, diffLines, foldLines, isTurnTrigger, lastTurnMarkdown, mcpName, relativePath, rowFate, rowStartsOpen, shellProgram, skippedStep, startsOpen, summarizeToolCall, thinkingStartsOpen, thoughtFirstLine, transformedTypes, wordDiff } from "./chat-view";
+import { accentColor, breaksSteps, turnRecap, chatLook, withLineLimit, chatView, diffCounts, diffLines, foldLines, isTurnTrigger, lastTurnMarkdown, mcpName, relativePath, rowFate, rowStartsOpen, shellProgram, skippedStep, startsOpen, summarizeToolCall, thinkingStartsOpen, thoughtFirstLine, transformedTypes, wordDiff } from "./chat-view";
 
 // Shaped like Paseo's timeline items (protocol AgentTimelineItem, ToolCallTimelineItem).
 const call = (detail: Record<string, unknown>, status = "completed", extra: Record<string, unknown> = {}) => ({ type: "tool_call", callId: "c1", name: "Bash", detail, status, error: null, ...extra });
@@ -168,6 +168,21 @@ describe("tool cards", () => {
     expect(chatLook(undefined)).toMatchObject({ fold: "finished", outputLines: 12, codeLines: 30, textSize: "medium", codeSize: "medium", density: "normal", timestamps: false, wrap: true, labels: "both", paths: "relative", accent: null, reasoning: "show" });
     expect(chatLook({ outputLines: 0 }).outputLines).toBeNull();
   });
+
+  it("stores a line limit only when it differs from what the setting falls back to, including the code limit inherited from 'show all' output", () => {
+    expect(withLineLimit({}, "codeLines", 30)).toEqual({});
+    expect(withLineLimit({}, "outputLines", 12)).toEqual({});
+    expect(withLineLimit({ outputLines: 0 }, "codeLines", 0)).toEqual({ outputLines: 0 });
+    const chosen = withLineLimit({ outputLines: 0 }, "codeLines", 30);
+    expect(chosen).toEqual({ outputLines: 0, codeLines: 30 });
+    expect(chatLook(chosen).codeLines).toBe(30);
+  });
+
+  it("keeps the code limit as shown when terminal output changes what it falls back to", () => {
+    const next = withLineLimit({ outputLines: 0 }, "outputLines", 12);
+    expect(chatLook(next).outputLines).toBe(12);
+    expect(chatLook(next).codeLines).toBeNull();
+  });
 });
 
 describe("diff edge cases", () => {
@@ -297,6 +312,22 @@ describe("turnRecap", () => {
     // A prompt that arrived after the turn ended belongs to the next turn.
     const later = [...entries, at({ type: "user_message", text: "Next" }, "2026-11-12T10:03:00.000Z")];
     expect(turnRecap(later, Date.parse("2026-11-12T10:02:05.000Z"), "completed")?.files).toHaveLength(1);
+  });
+
+  it("counts a large change's lines in full and keeps long paths that start alike apart", () => {
+    const added = Array.from({ length: 20_000 }, (_, index) => `+line ${index}`).join("\n");
+    const root = `/w/${"d".repeat(320)}`;
+    const entries = [
+      at({ type: "user_message", text: "Big" }, "2026-11-12T10:00:00.000Z"),
+      at({ ...call({ type: "edit", filePath: "/w/big.ts", unifiedDiff: `@@ -1 +1,20000 @@\n-old\n${added}` }), callId: "e1" }, "2026-11-12T10:00:10.000Z"),
+      at({ ...call({ type: "write", filePath: `${root}/a.ts`, content: "a\nb" }), callId: "w1" }, "2026-11-12T10:00:11.000Z"),
+      at({ ...call({ type: "write", filePath: `${root}/b.ts`, content: "c" }), callId: "w2" }, "2026-11-12T10:00:12.000Z"),
+    ];
+    expect(turnRecap(entries, Date.parse("2026-11-12T10:01:00.000Z"), "completed")?.files).toEqual([
+      { path: "/w/big.ts", added: 20_000, removed: 1 },
+      { path: `${root}/a.ts`, added: 2, removed: 0 },
+      { path: `${root}/b.ts`, added: 1, removed: 0 },
+    ]);
   });
 });
 

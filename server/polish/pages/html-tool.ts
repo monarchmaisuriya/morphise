@@ -1,12 +1,13 @@
 // Ported from Chat Polish (lthieu96/paseo-chat-polish, MIT, see NOTICE.md): server/html.ts
 import type { PluginHookRequests } from "@getpaseo/plugin/server";
 import { createHash, randomBytes } from "node:crypto";
-import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Script } from "node:vm";
 import { HTML_PREVIEW_TOOL, HTML_SERVER, HTML_TOOL, heightsLine, localImages, pageIdLine } from "../../../shared/polish/html";
+import { PAGE_POLICY } from "../../../shared/polish/page";
 import { headlessShell } from "./headless-shell";
 import { pagesCacheDir } from "./cache";
 import { checkPage, type PageCheck } from "./page-check";
@@ -214,10 +215,10 @@ export function withHtmlTool(config: AgentConfig, { url, token }: { url: string;
 
 const MCP_PATH = "/mcp";
 // Served with a sandbox policy like the chat's frame, plus forms and modals a browser tab can show: the page gets an opaque origin, so it
-// can't read anything else served here.
+// can't read anything else served here. The page's own network policy comes with it, whatever document the app saved.
 const PAGE_HEADERS = {
   "Content-Type": "text/html; charset=utf-8",
-  "Content-Security-Policy": "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals",
+  "Content-Security-Policy": `sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals; ${PAGE_POLICY}`,
   "X-Content-Type-Options": "nosniff",
   "Cache-Control": "no-store",
 };
@@ -285,9 +286,12 @@ function localServer() {
     if (port !== saved?.port || token !== saved?.token) {
       // Unsaved, the server still works until the plugin stops; only the next start picks a new address.
       await mkdir(pagesCacheDir(), { recursive: true })
-        .then(() => writeFile(addressFile(), JSON.stringify({ port, token })))
+        .then(() => writeFile(addressFile(), JSON.stringify({ port, token }), { mode: 0o600 }))
         .catch((error: unknown) => console.warn("[morphise] couldn't save the html server's address", error));
     }
+    // The token lets any process that reads it call the tools as an agent. A mode only applies when a file is created, so one saved
+    // before (or rewritten in place) is narrowed here too.
+    await chmod(addressFile(), 0o600).catch(() => undefined);
     return { server, port, token };
   })();
   listening.catch(() => (listening = undefined));

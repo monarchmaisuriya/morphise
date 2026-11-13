@@ -49,6 +49,14 @@ export function newTaskId(): string {
   return `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+// The id of what is being added, held for the whole draft: pressing Enter or Add again before the add lands re-sends the
+// same id, which adding ignores, so nothing is added twice. `next` makes a new one; call it when the text changes (a different
+// task typed meanwhile is not taken for the same one) and once an add succeeds.
+export function useDraftId(make: () => string = newTaskId): [id: string, next: () => void] {
+  const [id, setId] = useState(make);
+  return [id, () => setId(make())];
+}
+
 // The full editor for one card: every field, its reminder, checklist, links and actions.
 export function CardEditor({ deps, target, theme, compact, onClose }: { deps: BoardDeps; target: EditorTarget; theme: PluginTheme; compact: boolean; onClose(): void }) {
   const document: TaskDocument = tasksOf(useValue(deps.tasks));
@@ -56,6 +64,8 @@ export function CardEditor({ deps, target, theme, compact, onClose }: { deps: Bo
   // What the card held when the editor opened. Save sends only the fields changed since, so edits
   // made meanwhile elsewhere (a rule moving the card, another app) are kept.
   const [original] = useState<Draft>(() => draftOf(task, target.kind === "new" ? target.column : "", target.kind === "new" ? target.workspaceId : null));
+  // A new card's id; the editor closes once it is added.
+  const [newId] = useDraftId();
   const [draft, setDraft] = useState<Draft>(original);
   const [newItem, setNewItem] = useState("");
   const [newLabel, setNewLabel] = useState("");
@@ -100,7 +110,7 @@ export function CardEditor({ deps, target, theme, compact, onClose }: { deps: Bo
       const read = draft.reminderText.trim() === "" ? null : parseReminder(draft.reminderText, new Date());
       if (read && !read.ok) return setError(read.error);
       const reminder = read ? read.reminder : null;
-      if (await run({ kind: "addTask", task: { id: newTaskId(), column: draft.column, title: draft.title.trim(), description: draft.description, priority: draft.priority, labels, due, reminder, links } })) onClose();
+      if (await run({ kind: "addTask", task: { id: newId, column: draft.column, title: draft.title.trim(), description: draft.description, priority: draft.priority, labels, due, reminder, links } })) onClose();
       return;
     }
     const patch: Partial<Pick<Task, "title" | "description" | "priority" | "labels" | "due">> = {};
@@ -273,12 +283,18 @@ export function CardEditor({ deps, target, theme, compact, onClose }: { deps: Bo
   );
 }
 
-function Checklist({ t, task, checked, newItem, setNewItem, run }: { t: Tokens; task: Task; checked: number; newItem: string; setNewItem(text: string): void; run(...operations: TaskOperation[]): Promise<boolean> }) {
+function Checklist({ t, task, checked, newItem, setNewItem, run }: { t: Tokens; task: Task; checked: number; newItem: string; setNewItem(text: string | ((current: string) => string)): void; run(...operations: TaskOperation[]): Promise<boolean> }) {
   const total = task.checklist.length;
+  const [itemId, nextItem] = useDraftId(() => `i-${Date.now().toString(36)}`);
   const add = () => {
     const text = newItem.trim();
     if (!text) return;
-    void run({ kind: "addChecklistItem", id: task.id, item: { id: `i-${Date.now().toString(36)}`, text } }).then((ok) => ok && setNewItem(""));
+    const sent = newItem;
+    void run({ kind: "addChecklistItem", id: task.id, item: { id: itemId, text } }).then((ok) => {
+      if (!ok) return;
+      setNewItem((current) => (current === sent ? "" : current));
+      nextItem();
+    });
   };
   return (
     <View style={{ gap: 8 }}>
@@ -294,14 +310,14 @@ function Checklist({ t, task, checked, newItem, setNewItem, run }: { t: Tokens; 
       ) : null}
       {task.checklist.map((item) => (
         <View key={item.id} style={{ flexDirection: "row", alignItems: "center", gap: 8, minHeight: t.compact ? 40 : 30 }}>
-          <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: item.done }} accessibilityLabel={item.text} onPress={() => void run({ kind: "toggleChecklistItem", id: task.id, itemId: item.id })} style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: item.done }} accessibilityLabel={item.text} onPress={() => void run({ kind: "setChecklistItem", id: task.id, itemId: item.id, done: !item.done })} style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10 }}>
             <Icon name={item.done ? "SquareCheck" : "Square"} size={16} color={item.done ? t.c.statusSuccess : t.c.foregroundMuted} />
             <Text style={[t.text.body, { flex: 1, color: item.done ? t.c.foregroundMuted : t.c.foreground, textDecorationLine: item.done ? "line-through" : "none" }]}>{item.text}</Text>
           </Pressable>
           <IconButton t={t} size="sm" icon="X" label={`Remove ${item.text}`} onPress={() => void run({ kind: "removeChecklistItem", id: task.id, itemId: item.id })} />
         </View>
       ))}
-      <Field t={t} icon="Plus" value={newItem} onChangeText={setNewItem} onSubmit={add} placeholder="Add an item and press Enter" accessibilityLabel="Add a checklist item" />
+      <Field t={t} icon="Plus" value={newItem} onChangeText={(next) => { setNewItem(next); nextItem(); }} onSubmit={add} placeholder="Add an item and press Enter" accessibilityLabel="Add a checklist item" />
     </View>
   );
 }

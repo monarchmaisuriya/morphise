@@ -23,6 +23,8 @@ interface DraftState {
   editing: string | null;
   // Bumped when the draft is replaced or dropped, so uncontrolled inputs re-read their value.
   generation: number;
+  // Why the draft cannot save, when another app saved on top of this app's own save.
+  conflict: string | null;
 }
 
 // Settings documents are plain JSON, so a JSON copy is a full, independent copy.
@@ -39,7 +41,7 @@ function canonical(value: unknown): string {
 }
 
 export function createDraftStore() {
-  const store = createValueStore<DraftState>({ draft: null, editing: null, generation: 0 });
+  const store = createValueStore<DraftState>({ draft: null, editing: null, generation: 0, conflict: null });
   // The draft being saved right now, or null.
   let sending: Draft | null = null;
   // The last document this app saved, and the input version (see inputVersion).
@@ -66,13 +68,22 @@ export function createDraftStore() {
       store.set({ ...store.get(), draft: { document: copy(document), revision } });
     },
     discard() {
-      store.set({ ...store.get(), draft: null, generation: store.get().generation + 1 });
+      store.set({ ...store.get(), draft: null, generation: store.get().generation + 1, conflict: null });
     },
-    // Starts a save: the draft to send, or null when there is none or a save is already running.
-    take(): Draft | null {
-      if (sending) return null;
-      sending = store.get().draft;
-      return sending;
+    // Starts a save: the draft and the revision to send it against, or null when there is none,
+    // a save is already running, or it conflicts. A draft edited during this app's own save builds
+    // on what that save stored, so it saves only while the stored document is still that one.
+    take(saved: Saved): { document: ProfileDocument; revision: string } | null {
+      const draft = store.get().draft;
+      if (sending || !draft) return null;
+      if (draft.revision === null && canonical(saved.document) !== lastSent) {
+        const conflict = "another app saved these settings while this app was saving";
+        if (store.get().conflict !== conflict) store.set({ ...store.get(), conflict });
+        return null;
+      }
+      if (store.get().conflict !== null) store.set({ ...store.get(), conflict: null });
+      sending = draft;
+      return { document: draft.document, revision: draft.revision ?? saved.revision };
     },
     // Ends the save `take` started. A failed save keeps the draft as it is (the error is shown);
     // a draft edited while saving stays, and its next save builds on the revision just saved.

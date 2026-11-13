@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chatIndicator, isListedChat, isSidebarChat, parentFromLabels } from "./chat-status";
+import { chatIndicator, isSidebarChat, parentFromLabels } from "./chat-status";
 
 const chat = (overrides: Partial<Parameters<typeof chatIndicator>[0]> = {}) => ({
   status: "idle" as const,
@@ -41,14 +41,6 @@ describe("isSidebarChat", () => {
   it("lists every top-level chat, closed ones too, and no sub-agents", () => {
     expect(isSidebarChat({ parentAgentId: null })).toBe(true);
     expect(isSidebarChat({ parentAgentId: "parent" })).toBe(false);
-  });
-});
-
-describe("isListedChat", () => {
-  it("lists open top-level chats only", () => {
-    expect(isListedChat({ status: "idle", parentAgentId: null })).toBe(true);
-    expect(isListedChat({ status: "closed", parentAgentId: null })).toBe(false);
-    expect(isListedChat({ status: "running", parentAgentId: "parent" })).toBe(false);
   });
 });
 

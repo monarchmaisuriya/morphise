@@ -47,7 +47,8 @@ const STANDARD_CARD: CardSettings = { ...CARD_PRESETS.standard.fields, labelLimi
 const BOARD_DEFAULTS = { doneWindow: "7d", laneWidth: "default", showSubtasks: true, showArchived: true, showEmptyGroups: true } as const;
 
 // Every field falls back to its default on its own, so one unusable value never invalidates the record.
-export const agentsBoardSchema = z.object({
+// Keys this version does not know are kept (loose), so saving the record here keeps a newer version's.
+export const agentsBoardSchema = z.looseObject({
   // Off, the Workbench lists Agents only while an agent waits on the user; nothing subscribes to agents until it opens.
   enabled: flag(true),
   // The preset the card switches were last set from; "custom" after a hand edit.
@@ -57,6 +58,7 @@ export const agentsBoardSchema = z.object({
       ...(Object.fromEntries(CARD_FIELDS.map((field) => [field, flag(STANDARD_CARD[field])])) as Record<CardField, z.ZodCatch<z.ZodBoolean>>),
       labelLimit: z.enum(LABEL_LIMITS).catch(STANDARD_CARD.labelLimit),
     })
+    .loose()
     .catch({ ...STANDARD_CARD }),
   board: z
     .object({
@@ -66,8 +68,9 @@ export const agentsBoardSchema = z.object({
       showArchived: flag(BOARD_DEFAULTS.showArchived),
       showEmptyGroups: flag(BOARD_DEFAULTS.showEmptyGroups),
     })
+    .loose()
     .catch({ ...BOARD_DEFAULTS }),
-  phone: z.object({ minimalCards: flag(false) }).catch({ minimalCards: false }),
+  phone: z.looseObject({ minimalCards: flag(false) }).catch({ minimalCards: false }),
 });
 
 export type AgentsBoardSettings = z.output<typeof agentsBoardSchema>;

@@ -137,6 +137,20 @@ export function chatLook(saved: ChatSettings | undefined): ChatLook {
   };
 }
 
+// The settings after picking a line limit (0 shows all). A limit is stored only when it differs from what the setting falls back to
+// unset, so a code limit picked while output shows all is stored even at 30. Unset code lines fall back on the output limit, so a change
+// to that pins the code limit where it shows.
+export function withLineLimit(saved: ChatSettings | undefined, key: "outputLines" | "codeLines", value: number): ChatSettings {
+  const before = chatLook(saved);
+  const next: ChatSettings = { ...saved };
+  const fallback = chatLook({ ...saved, [key]: undefined })[key] ?? 0;
+  if (value === fallback) delete next[key];
+  else next[key] = value;
+  const other = key === "outputLines" ? "codeLines" : "outputLines";
+  if ((chatLook(next)[other] ?? 0) !== (before[other] ?? 0)) next[other] = before[other] ?? 0;
+  return next;
+}
+
 export interface ChatView {
   // Morphise draws rows here: on, and not a phone set to Paseo's rows. Hiding applies either way.
   draw: boolean;
@@ -243,6 +257,8 @@ export interface ToolSummary {
   subject: string;
   // For file tools, the whole path, so file actions never act on a cut one.
   path?: string;
+  // For edits and writes, lines added and removed, counted before the body is cut.
+  lines?: { added: number; removed: number };
   status: ToolStatus;
   error: string;
   body: string;
@@ -283,6 +299,7 @@ export function summarizeToolCall(item: unknown): ToolSummary | null {
   let subject = "";
   let body = "";
   let bodyKind: BodyKind = "output";
+  let lines: ToolSummary["lines"];
   const facts: string[] = [];
   switch (detailType) {
     case "shell": {
@@ -306,8 +323,8 @@ export function summarizeToolCall(item: unknown): ToolSummary | null {
       if (diff) {
         body = diff;
         bodyKind = "diff";
-        const { added, removed } = diffCounts(diff);
-        facts.push(`+${added} −${removed}`);
+        lines = diffCounts(diff);
+        facts.push(`+${lines.added} −${lines.removed}`);
       } else {
         // No diff from the provider: old and new text as a diff of whole lines.
         const before = text(detail?.oldString);
@@ -315,8 +332,8 @@ export function summarizeToolCall(item: unknown): ToolSummary | null {
         if (before || after) {
           body = [...(before ? before.split("\n").map((line) => `-${line}`) : []), ...(after ? after.split("\n").map((line) => `+${line}`) : [])].join("\n");
           bodyKind = "diff";
-          const { added, removed } = diffCounts(body);
-          facts.push(`+${added} −${removed}`);
+          lines = diffCounts(body);
+          facts.push(`+${lines.added} −${lines.removed}`);
         }
       }
       break;
@@ -325,7 +342,8 @@ export function summarizeToolCall(item: unknown): ToolSummary | null {
       subject = text(detail?.filePath);
       body = text(detail?.content);
       bodyKind = "content";
-      if (body) facts.push(`+${lineCount(body)}`);
+      lines = { added: body ? lineCount(body) : 0, removed: 0 };
+      if (body) facts.push(`+${lines.added}`);
       break;
     }
     case "search": {
@@ -373,7 +391,7 @@ export function summarizeToolCall(item: unknown): ToolSummary | null {
   if (status === "failed" && (detailType === "edit" || detailType === "write")) facts.unshift("Not applied");
   const firstLine = subject.split("\n")[0] ?? "";
   const file = detailType === "read" || detailType === "edit" || detailType === "write";
-  return { kind: toolKind(detailType), detail: detailType, name: text(call.name) || "Tool", subject: cut(firstLine, 300), ...(file ? { path: firstLine } : {}), status, error: cut(error, 2000), body: cut(body, BODY_MAX), bodyKind, facts };
+  return { kind: toolKind(detailType), detail: detailType, name: text(call.name) || "Tool", subject: cut(firstLine, 300), ...(file ? { path: firstLine } : {}), ...(lines ? { lines } : {}), status, error: cut(error, 2000), body: cut(body, BODY_MAX), bodyKind, facts };
 }
 
 // The verb a card leads with.
@@ -698,10 +716,10 @@ export function turnRecap(allEntries: readonly unknown[], endedAt: number, outco
   for (const call of calls.values()) {
     const summary = summarizeToolCall(call);
     if (!summary) continue;
-    if ((summary.detail === "edit" || summary.detail === "write") && summary.status === "completed" && summary.subject) {
-      const counts = summary.bodyKind === "diff" ? diffCounts(summary.body) : { added: summary.body ? lineCount(summary.body) : 0, removed: 0 };
-      const file = files.get(summary.subject) ?? { path: summary.subject, added: 0, removed: 0 };
-      files.set(summary.subject, { path: file.path, added: file.added + counts.added, removed: file.removed + counts.removed });
+    if ((summary.detail === "edit" || summary.detail === "write") && summary.status === "completed" && summary.path) {
+      const counts = summary.lines ?? { added: 0, removed: 0 };
+      const file = files.get(summary.path) ?? { path: summary.path, added: 0, removed: 0 };
+      files.set(summary.path, { path: file.path, added: file.added + counts.added, removed: file.removed + counts.removed });
     }
     if (summary.detail === "shell" && summary.status === "failed") {
       const exit = /^exit (\d+)$/.exec(summary.facts.find((fact) => fact.startsWith("exit ")) ?? "");

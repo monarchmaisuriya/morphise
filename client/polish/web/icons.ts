@@ -100,5 +100,10 @@ export function nativeIconSet(chosen: () => string) {
   return () => {
     unsubscribe();
     stop();
+    // The sets the daemon sent leave with the plugin; loaded again, it asks for them again.
+    iconSetStyle?.remove();
+    iconSetStyle = undefined;
+    for (const set of Object.keys(iconSets)) delete iconSets[set];
+    iconSetListeners.forEach((listener) => listener());
   };
 }

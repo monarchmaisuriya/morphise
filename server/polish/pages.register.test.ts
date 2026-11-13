@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { PluginHookContext } from "@getpaseo/plugin/server";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { documentSchema } from "../../shared/document";
+import { TITLE_HELPER } from "../titles";
 import { addHtmlTools } from "./pages.register";
 import { closeLocalServer } from "./pages/html-tool";
 
@@ -41,6 +42,11 @@ describe("HTML page tools for new agents", () => {
     expect(await addHtmlTools(profile())(request(), context())).toBeUndefined();
     expect(await addHtmlTools(profile(false))(request(), context())).toBeUndefined();
     expect(await addHtmlTools(profile(true))(request({ internal: true }), context())).toBeUndefined();
+  });
+
+  it("never gives them to Morphise's title helper, which reads chat text that may carry instructions", async () => {
+    const helper = { request: { ...request().request, metadata: { [TITLE_HELPER]: true } } };
+    expect(await addHtmlTools(profile(true))(helper, context())).toBeUndefined();
   });
 
   it("creates the agent as Paseo would when the profile cannot be read", async () => {

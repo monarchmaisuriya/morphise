@@ -20,6 +20,12 @@ describe("dueForArchive", () => {
     expect(dueForArchive({ ...base, ahead: null }, rule, now)).toBe(false);
   });
 
+  it("never archives a workspace whose project kind and worktree state are both unknown until its git state shows it clean", () => {
+    const unknown = { ...base, projectKind: null, paseoWorktree: null, dirty: null, ahead: null };
+    expect(dueForArchive(unknown, rule, now)).toBe(false);
+    expect(dueForArchive({ ...unknown, dirty: false, ahead: 0 }, rule, now)).toBe(true);
+  });
+
   it("archives a folder that archiving keeps, whatever its git state", () => {
     expect(dueForArchive({ ...base, paseoWorktree: false, dirty: true }, rule, now)).toBe(true);
     expect(dueForArchive({ ...base, projectKind: "directory", paseoWorktree: null, dirty: null, ahead: null }, rule, now)).toBe(true);

@@ -312,10 +312,11 @@ export function createFormScreen(
     };
 
     const dirty = draftState.draft !== null;
+    const saveError = settings.saveError ?? draftState.conflict;
     const status = issues.size
       ? `${issues.size === 1 ? "1 problem" : `${issues.size} problems`} to fix before this saves; each is shown beside its field.`
-      : settings.saveError
-        ? `Save failed: ${settings.saveError}. Your changes are kept; discard them to load what was saved.`
+      : saveError
+        ? `Save failed: ${saveError}. Your changes are kept; discard them to load what was saved.`
         : dirty
           ? "Saving"
           : "Changes save on their own and apply on every connected app.";
@@ -332,8 +333,8 @@ export function createFormScreen(
           </SettingsCard>
         ) : null}
         {render(form)}
-        <Text style={issues.size || settings.saveError ? styles.danger : styles.muted}>{status}</Text>
-        {dirty && (issues.size > 0 || settings.saveError) ? (
+        <Text style={issues.size || saveError ? styles.danger : styles.muted}>{status}</Text>
+        {dirty && (issues.size > 0 || saveError) ? (
           <SettingsCard>
             <SettingsAction label="Discard the changes that did not save" actionLabel="Discard" onPress={() => drafts.discard()} />
           </SettingsCard>

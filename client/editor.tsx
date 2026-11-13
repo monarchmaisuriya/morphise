@@ -35,8 +35,9 @@ export function createProfileEditor({ store, problems, drafts, reconnect }: Edit
     const connectionError = useValue(store).connectionError;
     const draftState = useValue(drafts);
     const toast = useToast();
-    // What is typed, kept while it is being edited so the text is not reformatted mid-typing.
-    const [typed, setTyped] = useState<string | null>(null);
+    // What is typed, kept while it is being edited so the text is not reformatted mid-typing, with
+    // the input version it was typed at (see DraftStore.inputVersion).
+    const [typed, setTyped] = useState<{ text: string; version: number | null } | null>(null);
     // The draft document this editor last wrote; any other draft came from another tab.
     const written = useRef<unknown>(null);
     useEffect(() => setTyped(null), [draftState.generation]);
@@ -45,7 +46,11 @@ export function createProfileEditor({ store, problems, drafts, reconnect }: Edit
     }, [draftState.draft]);
 
     const saved: Saved | null = settings.status === "ready" ? { document: settings.values, revision: settings.revision } : null;
-    const text = typed ?? formatDocument(saved ? drafts.working(saved) : EMPTY_DOCUMENT);
+    const version = saved ? drafts.inputVersion(saved) : null;
+    // Typed text goes in the same render that shows another app's save, so the next keystroke
+    // edits the newer document instead of saving the older text over it.
+    const current = typed && typed.version === version ? typed.text : null;
+    const text = current ?? formatDocument(saved ? drafts.working(saved) : EMPTY_DOCUMENT);
     const parsed = useMemo(() => parseDocumentText(text), [text]);
     useAutoSave(drafts, settings, parsed.ok);
     // The action waiting for a second press: loading the starter or clearing replaces everything at once.
@@ -87,7 +92,7 @@ export function createProfileEditor({ store, problems, drafts, reconnect }: Edit
 
     // Typing valid JSON updates the shared draft; invalid text stays here with its errors.
     function change(next: string) {
-      setTyped(next);
+      setTyped({ text: next, version });
       const result = parseDocumentText(next);
       if (result.ok && saved) {
         drafts.replace(saved, result.document);
@@ -113,7 +118,8 @@ export function createProfileEditor({ store, problems, drafts, reconnect }: Edit
       }
     }
 
-    const dirty = draftState.draft !== null || (settings.status === "invalid" && typed !== null);
+    const dirty = draftState.draft !== null || (settings.status === "invalid" && current !== null);
+    const saveError = settings.saveError ?? draftState.conflict;
     const profile = parsed.ok ? activeProfile(parsed.document) : null;
     return (
       <View style={styles.list}>
@@ -149,7 +155,7 @@ export function createProfileEditor({ store, problems, drafts, reconnect }: Edit
           />
           <View style={styles.list}>
             {parsed.ok ? null : parsed.errors.map((error) => <Text key={error} style={styles.danger}>{error}</Text>)}
-            {settings.saveError ? <Text style={styles.danger}>Save failed: {settings.saveError}</Text> : null}
+            {saveError ? <Text style={styles.danger}>Save failed: {saveError}</Text> : null}
             {profile?.style.enabled ? (
               <Text style={styles.warning}>
                 The style layer is unsupported: it works on desktop and browser only, and any Paseo update can
@@ -170,7 +176,7 @@ export function createProfileEditor({ store, problems, drafts, reconnect }: Edit
                 onPress={() => void replaceInvalid()}
               />
             ) : null}
-            {dirty && (!parsed.ok || settings.saveError) ? (
+            {dirty && (!parsed.ok || saveError) ? (
               <SettingsAction
                 label="Discard the changes that did not save"
                 actionLabel="Discard"

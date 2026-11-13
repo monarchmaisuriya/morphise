@@ -8,10 +8,10 @@ import type { Profile } from "../shared/profile";
 import { parseQuickAdd } from "../shared/quick-add";
 import { reminderAt } from "../shared/reminders";
 import type { reminderRowSchema } from "../shared/reminder-contracts";
-import { firstOpenColumn } from "../shared/task-ops";
+import { firstOpenColumn, snoozeTime } from "../shared/task-ops";
 import { formatDue } from "../shared/time-text";
 import { parseWhen } from "../shared/when";
-import { newTaskId } from "./board/card-editor";
+import { newTaskId, useDraftId } from "./board/card-editor";
 import type { BoardDeps } from "./board/deps";
 import { chatForWorkspace } from "./chats";
 import { type ValueStore, useValue } from "./profile-store";
@@ -63,8 +63,9 @@ export async function runRemindCommand(deps: BoardDeps, agentId: string, workspa
   await deps.apply({ kind: "remindChat", agentId, workspaceId, title, reminder: reminderAt(when.at, now) });
 }
 
-// `/task Fix login p1 @bug tomorrow 9am`: a task linked to this chat, in quick-add syntax.
-export async function runTaskCommand(deps: BoardDeps, agentId: string, workspaceId: string, args: string) {
+// `/task Fix login p1 @bug tomorrow 9am`: a task linked to this chat, in quick-add syntax. `id`: the new task's, so a
+// caller that may run this twice for one add (a button pressed twice) adds it once.
+export async function runTaskCommand(deps: BoardDeps, agentId: string, workspaceId: string, args: string, id = newTaskId()) {
   const now = new Date();
   const document = tasksOf(deps.tasks.get());
   const parsed = parseQuickAdd(args.trim() || chatTitle(deps, agentId), document, now);
@@ -72,7 +73,7 @@ export async function runTaskCommand(deps: BoardDeps, agentId: string, workspace
   const reminder = parsed.reminderAt ? reminderAt(parsed.reminderAt, now) : null;
   await deps.apply({
     kind: "addTask",
-    task: { id: newTaskId(), title: parsed.title, column: parsed.column ?? firstOpenColumn(document).id, priority: parsed.priority, due: parsed.due, reminder, links: { agentId, workspaceId } },
+    task: { id, title: parsed.title, column: parsed.column ?? firstOpenColumn(document).id, priority: parsed.priority, due: parsed.due, reminder, links: { agentId, workspaceId } },
     labelNames: parsed.labelNames,
   });
 }
@@ -84,6 +85,7 @@ export function createChatPopover(deps: BoardDeps) {
     const t = useTokens(theme, layout.compact);
     const toast = useToast();
     const chats = useValue(deps.chats);
+    const [taskId, nextTask] = useDraftId();
     // A pill belongs to one chat; a header button to a workspace, so it uses that workspace's chat.
     const chatId = props.context === "agent" ? props.agentId : chatForWorkspace(chats, workspaceId, null);
     if (!chatId) {
@@ -96,8 +98,9 @@ export function createChatPopover(deps: BoardDeps) {
     }
     const title = chats.get(chatId)?.title ?? "this chat";
     const addTask = () =>
-      void runTaskCommand(deps, chatId, workspaceId, "").then(
+      void runTaskCommand(deps, chatId, workspaceId, "", taskId).then(
         () => {
+          nextTask();
           toast.show(`Added “${title}” to your tasks`, { variant: "success" });
           close();
         },
@@ -156,8 +159,8 @@ export function createReminderRow(deps: BoardDeps) {
         {open && task ? (
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginLeft: 26 }}>
             <Button t={t} icon="Check" label="Done" accessibilityLabel="Clear this reminder" onPress={() => run({ kind: "setReminder", id: task.id, reminder: null })} />
-            <Button t={t} label="+15m" accessibilityLabel="Remind me again in 15 minutes" onPress={() => run({ kind: "remindAgain", id: task.id, minutes: 15 })} />
-            <Button t={t} label="+1h" accessibilityLabel="Remind me again in an hour" onPress={() => run({ kind: "remindAgain", id: task.id, minutes: 60 })} />
+            <Button t={t} label="+15m" accessibilityLabel="Remind me again in 15 minutes" onPress={() => run({ kind: "snoozeReminder", id: task.id, at: snoozeTime(task.reminder, 15, new Date()) })} />
+            <Button t={t} label="+1h" accessibilityLabel="Remind me again in an hour" onPress={() => run({ kind: "snoozeReminder", id: task.id, at: snoozeTime(task.reminder, 60, new Date()) })} />
             {done ? <Button t={t} variant="ghost" icon="CircleCheck" label={`Move to ${done.name}`} onPress={() => run({ kind: "moveTask", id: task.id, column: done.id })} /> : null}
           </View>
         ) : null}

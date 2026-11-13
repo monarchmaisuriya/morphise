@@ -79,13 +79,19 @@ const BOOT = `(function(){var t=document.getElementById("cp-theme"),r=document.d
 // A page on its own (browser tab) has no chat around it: it takes the chat's background and a centered column.
 const STANDALONE = "html{background:var(--bg)}body{max-width:1120px;margin:0 auto;padding:32px 24px}";
 
-/** The agent's page with the theme, kit and boot script first in its head. */
+/**
+ * What a page may reach, in every place it runs (chat frame, daemon's check, browser tab): nothing on the network but scripts, styles and
+ * fonts over https, since the tool's description lets a page load a library from an https CDN (so a script or style address can still carry
+ * data out), and workers from blob: URLs, which charting libraries make. Its local images arrive inlined as data URIs.
+ */
+export const PAGE_POLICY = "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' https:; style-src 'unsafe-inline' https:; font-src https: data:; img-src data: blob:; worker-src blob:; connect-src 'none'; form-action 'none'";
+
+/**
+ * The agent's page after a head of ours: the policy, theme, kit and boot script. A meta policy covers only what follows it, so the page comes
+ * after all of it. The parser still files the page's own <meta>, <style>, <title> and <link> into this head, folds its <html> attributes onto
+ * the root and drops its doctype and <head> tag.
+ */
 export function htmlPage(html: string, theme: string, standalone = false) {
-  const head = `<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style id="cp-theme">${theme}</style><style>${KIT}${standalone ? STANDALONE : ""}</style><script>${BOOT}</script>`;
-  // ponytail: the first <head>/<html> tag wins, even one inside a comment or script before the real one; scan past those if pages break.
-  const open = /<head(?:\s[^>]*)?>/i.exec(html) ?? /<html(?:\s[^>]*)?>/i.exec(html) ?? /^\s*<!doctype[^>]*>/i.exec(html);
-  if (!open) return `<!doctype html><head>${head}</head>${html}`;
-  const at = open.index + open[0].length;
-  const inHead = /^<head/i.test(open[0]);
-  return html.slice(0, at) + (inHead ? head : `<head>${head}</head>`) + html.slice(at);
+  const head = `<meta http-equiv="Content-Security-Policy" content="${PAGE_POLICY}"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style id="cp-theme">${theme}</style><style>${KIT}${standalone ? STANDALONE : ""}</style><script>${BOOT}</script>`;
+  return `<!doctype html><html><head>${head}</head>${html}`;
 }

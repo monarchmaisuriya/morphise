@@ -144,13 +144,15 @@ export const registerWeb: PolishPart = ({ client }) => {
 
   // An icon set comes from the daemon once, the first time it is picked; until then Paseo keeps Lucide.
   const requestedIcons = new Set<string>();
+  // A set that arrives after the plugin stopped would add a stylesheet nothing removes.
+  let stopped = false;
   const loadIcons = () => {
     const set = nativeIcons();
     if (set === "lucide" || iconTwins(set) || requestedIcons.has(set)) return;
     requestedIcons.add(set);
     client
       .rpc(getIconSet, { set })
-      .then((twins) => addIconSet(set, twins))
+      .then((twins) => void (stopped || addIconSet(set, twins)))
       .catch((error: unknown) => {
         requestedIcons.delete(set);
         console.warn(`[morphise] Icon set ${set} unavailable, keeping Lucide`, error);
@@ -171,6 +173,7 @@ export const registerWeb: PolishPart = ({ client }) => {
   });
 
   return () => {
+    stopped = true;
     unwatchTables();
     unsubscribePrefs();
     unsubscribeProviders();

@@ -18,8 +18,19 @@ describe("formatQuote", () => {
     expect(formatQuote({ text: "```\ninner\n```", code: { language: null } })).toBe("````\n```\ninner\n```\n````");
   });
 
-  it("keeps one line of code as a quoted code span with backticks escaped", () => {
-    expect(formatQuote({ text: "a `b` c", code: { language: null } })).toBe("> `a \\`b\\` c`");
+  it("keeps one line of code as a quoted code span", () => {
+    expect(formatQuote({ text: "a b", code: { language: null } })).toBe("> `a b`");
+  });
+
+  // Markdown code spans take no backslash escapes: the delimiter outruns every backtick run inside.
+  it("delimits a code span with more backticks than any run in the code", () => {
+    expect(formatQuote({ text: "a `b` c", code: { language: null } })).toBe("> ``a `b` c``");
+    expect(formatQuote({ text: "a ``b`` c", code: { language: null } })).toBe("> ```a ``b`` c```");
+  });
+
+  it("pads a code span whose code starts or ends with a backtick", () => {
+    expect(formatQuote({ text: "`x`", code: { language: null } })).toBe("> `` `x` ``");
+    expect(formatQuote({ text: "x`", code: { language: null } })).toBe("> `` x` ``");
   });
 });
 

@@ -71,6 +71,8 @@ let peleCss = "";
 // The last mermaid document Paseo gave a diagram frame, for a settings preview. Chat Polish also read it out of Paseo's
 // bundle before any chat drew one (app-script.ts); Morphise does not load Paseo's scripts (M, 2026-11-12).
 let paseoMermaidDoc = "";
+// How long a frame reloaded as the plugin unloads gets to load Paseo's mermaid and ask for its request.
+const RELOAD_REPLAY_MS = 10_000;
 
 /** The document a diagram frame loads: Pele's bridge, or Paseo's mermaid as a chat last loaded it (none until one has). */
 export const diagramDoc = (pele: boolean) => (pele ? PELE_DOC : paseoMermaidDoc || undefined);
@@ -226,6 +228,12 @@ export function themeMermaid(enabled: () => boolean, pele?: PeleDiagrams) {
   // A reloaded frame waits for a render request that only Paseo sends, so replay the last one it took.
   const requests = new WeakMap<object, unknown>();
   const reloading = new WeakSet<object>();
+  const replay = (source: object) => {
+    if (!reloading.delete(source)) return false;
+    (source as Frame).postMessage(requests.get(source), "*");
+    return true;
+  };
+  const awaitingReplay = () => Array.from(document.querySelectorAll(MERMAID_FRAME)).some((frame) => reloading.has(frameWindow(frame) ?? {}));
   const onMessage: MessageListener = ({ source, data }) => {
     const d = data as { type?: unknown; revision?: unknown; source?: unknown; colorScheme?: unknown } | null;
     if (!source || typeof source !== "object" || !d) return;
@@ -252,9 +260,9 @@ export function themeMermaid(enabled: () => boolean, pele?: PeleDiagrams) {
       // The colors may have changed while this frame was still loading.
       refresh(source);
     } else if (d.type === "bridgeReady") {
-      if (reloading.delete(source)) (source as Frame).postMessage(requests.get(source), "*");
+      if (replay(source)) return;
       // Paseo's full screen viewer starts a model of its own, which won't draw a redrawn diagram either.
-      else if (fullscreenSource !== undefined && Array.from(document.querySelectorAll('[data-testid="mermaid-fullscreen-viewport"] iframe')).some((f) => frameWindow(f) === source)) {
+      if (fullscreenSource !== undefined && Array.from(document.querySelectorAll('[data-testid="mermaid-fullscreen-viewport"] iframe')).some((f) => frameWindow(f) === source)) {
         void claim(source as Frame, fullscreenSource, [1]);
         fullscreenSource = undefined;
       }
@@ -324,6 +332,14 @@ export function themeMermaid(enabled: () => boolean, pele?: PeleDiagrams) {
     document.removeEventListener("click", onClick, true);
     rethemeMermaid = undefined;
     claimDiagram = undefined;
+    // Turning the restyle off just reloaded Pele's frames with Paseo's mermaid; they still need their request replayed.
+    if (!awaitingReplay()) return;
+    const drain = () => window.removeEventListener("message", onReloaded);
+    const onReloaded: MessageListener = ({ source, data }) => {
+      if (source && typeof source === "object" && (data as { type?: unknown } | null)?.type === "bridgeReady" && replay(source) && !awaitingReplay()) drain();
+    };
+    window.addEventListener("message", onReloaded);
+    setTimeout(drain, RELOAD_REPLAY_MS);
   };
 }
 
@@ -351,8 +367,17 @@ export function redrawDiagram(box: DomElement, button: DomElement) {
   button.setAttribute("title", t("web.redrawDiagram"));
   const viewport = box.nextElementSibling;
   const taken = viewport?.matches('[data-testid="mermaid-viewport"]') && claimDiagram ? claimDiagram(viewport, source) : Promise.resolve(false);
-  // Once Paseo takes the drawing, it unmounts the source block.
-  void taken.then((ok) => setTimeout(() => box.isConnected && drawCard(box, button, source), ok ? 800 : 0));
+  // Once Paseo takes the drawing, it unmounts the source block. Turning the restyle off removes the button, and a card drawn then
+  // would never get its drawing.
+  void taken.then((ok) => setTimeout(() => button.isConnected && drawCard(box, button, source), ok ? 800 : 0));
+}
+
+// Each redraw card still waiting on its frame, with what stops the wait.
+const drawingCards = new Map<DomElement, () => void>();
+
+/** Stops waiting on redraw cards that left the page, or on every card (the restyle turned off). */
+export function stopCardDraws(all = false) {
+  for (const [card, stop] of drawingCards) if (all || !card.isConnected) stop();
 }
 
 function drawCard(box: DomElement, button: DomElement, source: string) {
@@ -363,7 +388,7 @@ function drawCard(box: DomElement, button: DomElement, source: string) {
   const frame = peleFrame();
   card.appendChild(frame);
   box.appendChild(card);
-  const stop = drawDiagram(frame, source, (size) => {
+  const listening = drawDiagram(frame, source, (size) => {
     stop();
     if (!size) {
       card.remove();
@@ -374,6 +399,11 @@ function drawCard(box: DomElement, button: DomElement, source: string) {
     frame.setAttribute("style", `height: auto; max-width: ${size.width}px; aspect-ratio: ${size.width} / ${size.height}`);
     box.setAttribute("data-cp-redrawn", "");
   });
+  const stop = () => {
+    listening();
+    drawingCards.delete(card);
+  };
+  drawingCards.set(card, stop);
 }
 
 function peleFrame() {

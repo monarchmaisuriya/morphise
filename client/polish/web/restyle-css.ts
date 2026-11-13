@@ -545,7 +545,8 @@ ${CODE_BLOCK} :is(div, span) { line-height: 1.5 !important; }
 :root:not([data-cp-rt-code="b"]):not([data-cp-rt-code="c"]) [data-cp-redraw] { top: 5px; }
 [data-cp-redraw]:hover { opacity: 1; }
 [data-cp-redraw="failed"] { background-color: var(--cp-warn); opacity: 1; }
-[data-cp-part="diagram-toggle"] ~ [data-cp-redraw], [data-cp-redrawn] > :is([data-paseo-markdown-language], [data-cp-redraw], [data-cp-part="diagram-toggle"]) { display: none !important; }
+/* A redrawn diagram's source block keeps only Paseo's Copy code button; the text it hides is the block's first child. */
+[data-cp-part="diagram-toggle"] ~ [data-cp-redraw], [data-cp-redrawn] > :is([data-cp-redraw], [data-cp-part="diagram-toggle"]), [data-cp-redrawn] > [data-paseo-markdown-language] > div:first-child { display: none !important; }
 [data-cp-redraw] ~ [data-cp-part="diagram-toggle"] { right: 58px !important; }
 [data-cp-redraw-card] { display: flex; justify-content: center; padding: 12px; cursor: zoom-in; border: 1px solid var(--cp-rule); border-radius: 8px; background-color: var(--cp-sunken); }
 [data-cp-redraw-card] > iframe { display: block; width: 100%; height: 120px; border: 0; background: transparent; pointer-events: none; }

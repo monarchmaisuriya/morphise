@@ -158,6 +158,11 @@ export function markLitRows(roots: DomElement[]) {
   }
 }
 
+/** Stops watching pickers that left the page: a closed popover never changes again, so its own observer can't tell. */
+export function litRowsRemoved() {
+  for (const surface of watchedSurfaces.keys()) if (!surface.isConnected) stopLitRows(surface);
+}
+
 /** Stops watching one picker's rows, or every picker's (the restyle turned off or the plugin unloaded). */
 export function stopLitRows(surface?: DomElement) {
   for (const [watched, observer] of watchedSurfaces) {

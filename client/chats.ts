@@ -1,9 +1,10 @@
-import { chatIndicator, type ChatStatusFields, isListedChat, parentFromLabels } from "../shared/chat-status";
+import { chatIndicator, type ChatStatusFields, isSidebarChat, parentFromLabels } from "../shared/chat-status";
 import type { Indicator } from "../shared/profile";
 import type { ChatTransition } from "../shared/rules";
 
-// Open chats as the app sees them in the SDK agent list: titles for follow-up tasks and pills,
-// workspaces for header buttons, and status changes for automation rules.
+// Top-level chats as the app sees them in the SDK agent list: titles for follow-up tasks and pills,
+// workspaces for header buttons, and status changes for automation rules. Closed chats stay listed
+// (their process stopped, but the tab can still be open, as in the sidebar); closing is not a status change.
 
 export interface ChatInfo {
   title: string;
@@ -11,6 +12,8 @@ export interface ChatInfo {
   indicator: Indicator;
   // `provider/model`, the form Paseo's agent config takes.
   model: string;
+  // The agent process stopped; Paseo can still show the chat's tab.
+  closed: boolean;
 }
 
 export type Chats = ReadonlyMap<string, ChatInfo>;
@@ -25,7 +28,7 @@ function readChat(value: unknown): { id: string; info: ChatInfo | null } | null 
   const agent = record(value);
   if (!agent || typeof agent.id !== "string") return null;
   const status = agent.status as ChatStatusFields["status"];
-  if (!isListedChat({ status, parentAgentId: parentFromLabels(agent.labels) })) return { id: agent.id, info: null };
+  if (!isSidebarChat({ parentAgentId: parentFromLabels(agent.labels) })) return { id: agent.id, info: null };
   const indicator = chatIndicator({
     status,
     requiresAttention: agent.requiresAttention === true,
@@ -36,11 +39,11 @@ function readChat(value: unknown): { id: string; info: ChatInfo | null } | null 
   const provider = typeof agent.provider === "string" ? agent.provider : "";
   // Empty when the model is unknown: Paseo's agent config needs both parts.
   const model = provider && typeof agent.model === "string" && agent.model ? `${provider}/${agent.model}` : "";
-  return { id: agent.id, info: { title, workspaceId: typeof agent.workspaceId === "string" ? agent.workspaceId : "", indicator, model } };
+  return { id: agent.id, info: { title, workspaceId: typeof agent.workspaceId === "string" ? agent.workspaceId : "", indicator, model, closed: status === "closed" } };
 }
 
 const same = (left: ChatInfo | undefined, right: ChatInfo | null) =>
-  left?.title === right?.title && left?.workspaceId === right?.workspaceId && left?.indicator === right?.indicator && left?.model === right?.model;
+  left?.title === right?.title && left?.workspaceId === right?.workspaceId && left?.indicator === right?.indicator && left?.model === right?.model && left?.closed === right?.closed;
 
 // A snapshot replaces the list without reporting transitions (nothing "entered" a status);
 // updates report each chat that entered a different status.
@@ -68,14 +71,20 @@ export function reduceChats(current: Chats, change: Change): { chats: Chats; tra
   const chats = new Map(current);
   if (read.info) chats.set(read.id, read.info);
   else chats.delete(read.id);
-  const transitions = read.info && before && before.indicator !== read.info.indicator ? [{ agentId: read.id, to: read.info.indicator }] : [];
+  // Only an open chat moving between statuses counts: closing (or reopening) is not finishing.
+  const transitions = read.info && before && !before.closed && !read.info.closed && before.indicator !== read.info.indicator ? [{ agentId: read.id, to: read.info.indicator }] : [];
   return { chats, transitions };
 }
 
 // The chat a workspace-level "Remind me" is about: the one in focus if it belongs to that
-// workspace, otherwise the workspace's first open chat.
+// workspace, otherwise the workspace's first open chat, otherwise its first closed one.
 export function chatForWorkspace(chats: Chats, workspaceId: string, focusedAgentId: string | null): string | null {
   if (focusedAgentId && chats.get(focusedAgentId)?.workspaceId === workspaceId) return focusedAgentId;
-  for (const [agentId, chat] of chats) if (chat.workspaceId === workspaceId) return agentId;
-  return null;
+  let closed: string | null = null;
+  for (const [agentId, chat] of chats) {
+    if (chat.workspaceId !== workspaceId) continue;
+    if (!chat.closed) return agentId;
+    closed ??= agentId;
+  }
+  return closed;
 }

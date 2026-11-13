@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { documentSchema } from "../shared/document";
 import { createPlanInstruction, createPlanTools, TASK_LIST_INSTRUCTION, TODO_TOOLS_ENV } from "./plan-tools";
+import { TITLE_HELPER } from "./titles";
 
 const ready = (stepsCard?: boolean) => {
   const document = documentSchema.parse({});
@@ -19,6 +20,10 @@ describe("task-list tools for the steps card", () => {
     expect(await createPlanTools(ready())({ request: { provider: "codex" } })).toBeUndefined();
     expect(await createPlanTools(ready(false))({ request: { provider: "claude" } })).toBeUndefined();
     expect(await createPlanTools(ready())({ request: { provider: "claude", env: { [TODO_TOOLS_ENV]: "0" } } })).toBeUndefined();
+  });
+
+  it("leaves Morphise's title helper without the tools", async () => {
+    expect(await createPlanTools(ready())({ request: { provider: "claude", metadata: { [TITLE_HELPER]: true } } })).toBeUndefined();
   });
 
   it("opens the agent as Paseo would when the profile cannot be read", async () => {
@@ -40,5 +45,9 @@ describe("task-list instruction for the steps card", () => {
     expect(await createPlanInstruction(ready(false))(config("claude"))).toBeUndefined();
     expect(await createPlanInstruction(ready())(config("claude", `x\n\n${TASK_LIST_INSTRUCTION}`))).toBeUndefined();
     expect(await createPlanInstruction({ read: async () => Promise.reject(new Error("disk")) })(config("claude"))).toBeUndefined();
+  });
+
+  it("does not ask Morphise's title helper, which is told to use no tools", async () => {
+    expect(await createPlanInstruction(ready())({ request: { ...config("claude").request, metadata: { [TITLE_HELPER]: true } } })).toBeUndefined();
   });
 });

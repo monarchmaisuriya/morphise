@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { reduceChats } from "./chats";
+import { chatForWorkspace, reduceChats } from "./chats";
 
 const agent = (id: string, extra: Record<string, unknown> = {}) => ({
   id,
@@ -30,10 +30,21 @@ describe("reduceChats", () => {
     expect(chats.get("a")?.model).toBe("claude/opus");
   });
 
-  it("keeps each open chat's title, workspace and status from a snapshot, without reporting changes", () => {
+  it("keeps each chat's title, workspace and status from a snapshot, closed ones too, without reporting changes", () => {
     const { chats, transitions } = reduceChats(new Map(), { snapshot: [{ agent: agent("a") }, { agent: agent("b", { status: "closed" }) }] });
-    expect([...chats]).toEqual([["a", { title: "Chat a", workspaceId: "w1", indicator: "done", model: "" }]]);
+    expect([...chats]).toEqual([
+      ["a", { title: "Chat a", workspaceId: "w1", indicator: "done", model: "", closed: false }],
+      ["b", { title: "Chat b", workspaceId: "w1", indicator: "done", model: "", closed: true }],
+    ]);
     expect(transitions).toEqual([]);
+  });
+
+  it("reports no status change when a chat closes or reopens, so closing does not look finished", () => {
+    const start = reduceChats(new Map(), { snapshot: [{ agent: agent("a", { status: "running" }) }] }).chats;
+    const closed = reduceChats(start, upsert(agent("a", { status: "closed" })));
+    expect(closed.chats.get("a")?.closed).toBe(true);
+    expect(closed.transitions).toEqual([]);
+    expect(reduceChats(closed.chats, upsert(agent("a", { status: "running" }))).transitions).toEqual([]);
   });
 
   it("reports a chat entering a new status", () => {
@@ -52,5 +63,18 @@ describe("reduceChats", () => {
   it("forgets a removed chat", () => {
     const start = reduceChats(new Map(), { snapshot: [{ agent: agent("a") }] }).chats;
     expect(reduceChats(start, { message: { type: "agent_update", payload: { kind: "remove", agentId: "a" } } }).chats.size).toBe(0);
+  });
+});
+
+describe("chatForWorkspace", () => {
+  const chats = reduceChats(new Map(), {
+    snapshot: [{ agent: agent("shut", { status: "closed" }) }, { agent: agent("open") }, { agent: agent("other", { workspaceId: "w2", status: "closed" }) }],
+  }).chats;
+
+  it("picks the focused chat, else an open one, else a closed one whose tab can still be open", () => {
+    expect(chatForWorkspace(chats, "w1", "shut")).toBe("shut");
+    expect(chatForWorkspace(chats, "w1", null)).toBe("open");
+    expect(chatForWorkspace(chats, "w2", null)).toBe("other");
+    expect(chatForWorkspace(chats, "w3", null)).toBeNull();
   });
 });

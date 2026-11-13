@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { readPageId } from "../../../shared/polish/html";
+import { PAGE_POLICY } from "../../../shared/polish/page";
 
 interface RpcReply {
   result: { isError: boolean; content: Array<{ type: string; text: string }>; tools: Array<{ name: string; description: string }>; serverInfo: { name: string } };
@@ -99,6 +100,9 @@ describe("the html_render MCP server", () => {
     expect(page.status).toBe(200);
     expect(await page.text()).toBe("<p>hi</p>");
     expect(page.headers.get("content-security-policy")).toMatch(/^sandbox allow-scripts/);
+    expect(page.headers.get("content-security-policy")).toContain(`; ${PAGE_POLICY}`);
+    // The token in it lets any local process call the tools as an agent.
+    expect((await stat(join(cache, "server.json"))).mode & 0o777).toBe(0o600);
     expect((await fetch(new URL("/../server.json", url))).status).toBe(404);
     expect((await fetch(url.replace(/[0-9a-f]{64}/, "0".repeat(64)))).status).toBe(404);
     expect(await localServerUsedBefore()).toBe(true);

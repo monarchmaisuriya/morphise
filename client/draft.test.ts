@@ -59,31 +59,49 @@ describe("draft store", () => {
 
   it("sends one draft at a time, keeps edits made while saving, and builds them on the saved revision", () => {
     const store = createDraftStore();
-    store.edit(saved, (document) => void (document.prompts = []));
-    const sent = store.take();
+    store.edit(saved, (document) => void (document.layouts[0].profile.sidebar.view.counts = false));
+    const sent = store.take(saved);
     expect(sent?.revision).toBe("r1");
-    expect(store.take()).toBeNull();
+    expect(store.take(saved)).toBeNull();
     store.edit(saved, (document) => void (document.activeLayout = "default"));
     store.finish(true);
     expect(store.get().draft?.revision).toBeNull();
-    expect(store.take()?.document.activeLayout).toBe("default");
+    const next = store.take({ document: sent!.document, revision: "r2" });
+    expect(next?.revision).toBe("r2");
+    expect(next?.document.activeLayout).toBe("default");
     store.finish(true);
     expect(store.dirty()).toBe(false);
+  });
+
+  it("refuses an edit made during its own save when another app saved after that save, and keeps it", () => {
+    const store = createDraftStore();
+    store.edit(saved, (document) => void (document.layouts[0].profile.sidebar.view.counts = false));
+    store.take(saved);
+    store.edit(saved, (document) => void (document.activeLayout = "default"));
+    store.finish(true);
+    // Another app saved on top of this app's save: the stored document is not the one sent.
+    const theirs = { document: documentSchema.parse({}), revision: "r3" };
+    expect(store.take(theirs)).toBeNull();
+    expect(store.get().conflict).not.toBeNull();
+    expect(store.get().draft?.document.activeLayout).toBe("default");
+    store.discard();
+    expect(store.get().conflict).toBeNull();
   });
 
   it("keeps the draft when a save fails", () => {
     const store = createDraftStore();
     store.edit(saved, (document) => void (document.prompts = []));
-    const sent = store.take();
+    const draft = store.get().draft;
+    store.take(saved);
     store.finish(false);
-    expect(store.get().draft).toBe(sent);
+    expect(store.get().draft).toBe(draft);
   });
 
   it("changes the input version for another app's save, not for its own", () => {
     const store = createDraftStore();
     expect(store.inputVersion(saved)).toBe(0);
     store.edit(saved, (document) => void (document.layouts[0].profile.sidebar.view.counts = false));
-    const sent = store.take();
+    const sent = store.take(saved);
     store.finish(true);
     // The stored copy comes back with its keys in schema order.
     const reverse = (value: unknown): unknown =>

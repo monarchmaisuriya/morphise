@@ -5,6 +5,8 @@ import {
   applyItem,
   changesOfTodo,
   followAgent,
+  forgetFrozenAgents,
+  FROZEN_MAX,
   historyEntries,
   isTodo,
   onStaleSteps,
@@ -13,6 +15,7 @@ import {
   runOf,
   runSplits,
   setMergeMin,
+  setReplyFolding,
   stepKey,
   stepRuns,
   stepSummary,
@@ -46,9 +49,11 @@ async function follow(items: AgentTimelineItem[], id: string, ready: Promise<voi
       }),
     },
   } as unknown as Paseo;
-  const stop = followAgent(paseo, id);
+  const unfollow = followAgent(paseo, id);
   await tick();
-  return { stop, send: (item: AgentTimelineItem, seq?: number) => handler({ seq, timestamp: new Date().toISOString(), event: { type: "timeline", item } }) };
+  // Stopping also drops what unfollowed agents leave placed, so one test's steps never collide with the next's.
+  const stop = () => (unfollow(), forgetFrozenAgents());
+  return { stop, unfollow, send:(item: AgentTimelineItem, seq?: number) => handler({ seq, timestamp: new Date().toISOString(), event: { type: "timeline", item } }) };
 }
 
 describe("merged steps", () => {
@@ -266,6 +271,144 @@ describe("merged steps", () => {
     // A finished thought the timeline never matches still shows, rather than staying hidden.
     expect(placeStep({ type: "reasoning", text: "Words the daemon never sent" } as AgentTimelineItem, "complete")?.as).toBe("head");
     stop();
+  });
+
+  it("a finished call no followed timeline has shows while another agent is busy, rather than staying out", async () => {
+    const { stop, send } = await follow([prompt("go")], "busy-agent");
+    onTestFinished(stop);
+    send(tool({ type: "shell", command: "sleep 9" }, { callId: "busy-a", status: "running" }), 1);
+    expect(placeStep(tool({ type: "shell", command: "ls" }, { callId: "unfollowed-done" }), "complete")?.as).toBe("head");
+    // Only a call still racing its event waits.
+    expect(placeStep(tool({ type: "shell", command: "ls" }, { callId: "unfollowed-running", status: "running" }), "streaming")?.as).toBe("none");
+  });
+
+  it("the same opening words in two turns are never merged, so neither turn draws the other's steps", async () => {
+    const thought = { type: "reasoning", text: "Let me check the file." } as AgentTimelineItem;
+    const [a, b, c, d] = ["dup-a", "dup-b", "dup-c", "dup-d"].map((id) => shell(id));
+    const live = await follow([prompt("one"), thought, a!, b!, reply("ok"), prompt("two"), thought, c!, d!, reply("ok")], "dup-turns");
+    onTestFinished(live.stop);
+    expect(placeStep(thought, "complete")?.as).toBe("alone");
+    expect([a, b, c, d].map((s) => placeStep(s!, "complete")?.as)).toEqual(["head", "none", "head", "none"]);
+    expect(runOf("t:dup-a").steps.map((s) => stepKey(s.item))).toEqual(["t:dup-a", "t:dup-b"]);
+    expect(runOf("t:dup-c").steps.map((s) => stepKey(s.item))).toEqual(["t:dup-c", "t:dup-d"]);
+  });
+
+  it("with Collapse turns, a turn's last reply that repeats an earlier folded reply stays Paseo's", async () => {
+    setReplyFolding(true);
+    onTestFinished(() => setReplyFolding(false));
+    const live = await follow([prompt("one"), shell("rep-a"), reply("Done."), shell("rep-b"), reply("All good."), prompt("two"), reply("Done.")], "dup-replies");
+    onTestFinished(live.stop);
+    expect(placeStep(reply("Done."), "complete")?.as).not.toBe("none");
+  });
+
+  it("an unfollowed agent left mid-call doesn't count as busy, so other agents' running calls aren't held", async () => {
+    onTestFinished(forgetFrozenAgents);
+    const live = await follow([prompt("go")], "frozen-busy");
+    live.send(tool({ type: "shell", command: "sleep 9" }, { callId: "frozen-busy-a", status: "running" }), 1);
+    live.unfollow();
+    expect(placeStep(tool({ type: "shell", command: "ls" }, { callId: "elsewhere-running", status: "running" }), "streaming")?.as).toBe("head");
+  });
+
+  it("an agent followed again after its release no longer holds its old steps out of merging", async () => {
+    onTestFinished(forgetFrozenAgents);
+    const old = shell("released-old");
+    (await follow([prompt("go"), old, shell("released-old-2")], "released-agent")).unfollow();
+    for (let i = 0; i < FROZEN_MAX; i++) (await follow([prompt("go"), shell(`released-filler-${i}`)], `released-filler-${i}`)).unfollow();
+    expect(placeStep(old, "complete")?.as).toBe("alone");
+    // Followed again with a history that no longer has that step (trimmed): the step is unknown again, not released.
+    await follow([prompt("go"), shell("released-new")], "released-agent");
+    expect(placeStep(old, "complete")?.as).toBe("head");
+  });
+
+  it("an agent followed again whose reload fails keeps no stale list for live events to land on", async () => {
+    onTestFinished(forgetFrozenAgents);
+    const [a, b, c] = ["thaw-a", "thaw-b", "thaw-c"].map((id) => shell(id));
+    (await follow([prompt("go"), a!, b!], "thawed")).unfollow();
+    expect(placeStep(b!, "complete")?.as).toBe("none");
+    let handler: (payload: unknown) => void = () => {};
+    const failing = {
+      agents: {
+        ref: () => ({
+          timeline: {
+            refetch: async () => Promise.reject(new Error("offline")),
+            subscribe: (h: (payload: unknown) => void) => ((handler = h), Object.assign(() => {}, { ready: Promise.resolve() })),
+          },
+        }),
+      },
+    } as unknown as Paseo;
+    const warn = console.warn;
+    console.warn = () => {};
+    onTestFinished(() => void (console.warn = warn));
+    onTestFinished(followAgent(failing, "thawed"));
+    await tick();
+    handler({ seq: 9, timestamp: new Date().toISOString(), event: { type: "timeline", item: c } });
+    expect([b, c].map((s) => placeStep(s!, "complete")?.as)).toEqual(["head", "head"]);
+  });
+
+  it("the same opening words in two agents are not merged while both are placed, and merge again once one is dropped", async () => {
+    const thought = { type: "reasoning", text: "Looking at the tests now." } as AgentTimelineItem;
+    const x = await follow([prompt("go"), thought, shell("x-a"), shell("x-b")], "dup-x");
+    onTestFinished(x.stop);
+    const y = await follow([prompt("go"), thought, shell("y-a"), shell("y-b")], "dup-y");
+    expect(placeStep(thought, "complete")?.as).toBe("alone");
+    expect(placeStep(shell("x-a"), "complete")?.as).toBe("head");
+    expect(placeStep(shell("y-a"), "complete")?.as).toBe("head");
+    y.stop();
+    expect(placeStep(thought, "complete")?.as).toBe("head");
+    expect(runOf(stepKey(thought)!).steps.map((s) => stepKey(s.item))).toEqual([stepKey(thought), "t:x-a", "t:x-b"]);
+  });
+
+  it("an agent no longer followed keeps its rows as they were; released later, its steps are drawn unmerged, never as a merged row", async () => {
+    let stale = 0;
+    onStaleSteps(() => stale++);
+    onTestFinished(() => (onStaleSteps(() => {}), forgetFrozenAgents()));
+    const a = shell("gone-a");
+    const b = shell("gone-b");
+    const live = await follow([prompt("go"), a, b, reply("done")], "unfollowed");
+    expect(placeStep(a, "complete")?.as).toBe("head");
+    expect(placeStep(b, "complete")?.as).toBe("none");
+    live.unfollow();
+    // Nothing changed, so nothing is transformed again and no left-out step comes back as a merged row of its own.
+    expect(stale).toBe(0);
+    expect([a, b].map((s) => placeStep(s, "complete")?.as)).toEqual(["head", "none"]);
+    expect(runOf("t:gone-a").steps.map((s) => stepKey(s.item))).toEqual(["t:gone-a", "t:gone-b"]);
+    // Past the frozen limit the oldest is released: its rows are made again, each as with merging off.
+    for (let i = 0; i < FROZEN_MAX; i++) (await follow([prompt("go"), shell(`filler-${i}`)], `filler-${i}`)).unfollow();
+    expect(stale, "the left-out step must be transformed again").toBeGreaterThan(0);
+    expect([a, b].map((s) => placeStep(s, "complete")?.as)).toEqual(["alone", "alone"]);
+    // A merged row still mounted when its run went draws its own step rather than nothing.
+    expect(runOf("t:gone-a", { item: a, phase: "complete" }).steps.map((s) => stepKey(s.item))).toEqual(["t:gone-a"]);
+  });
+
+  it("overlapping loads: only the latest commits, with the live events that came during it", async () => {
+    const pages: Array<(items: AgentTimelineItem[]) => void> = [];
+    let handler: (payload: unknown) => void = () => {};
+    const paseo = {
+      agents: {
+        ref: () => ({
+          timeline: {
+            refetch: () =>
+              new Promise((resolve) =>
+                pages.push((items) => resolve({ entries: items.map((item, i) => ({ item, timestamp: new Date(i).toISOString() })), endCursor: { seq: items.length } })),
+              ),
+            subscribe: (h: (payload: unknown) => void) => ((handler = h), Object.assign(() => {}, { ready: Promise.resolve() })),
+          },
+        }),
+      },
+    } as unknown as Paseo;
+    const stop = followAgent(paseo, "reloaded");
+    onTestFinished(() => (stop(), forgetFrozenAgents()));
+    await tick();
+    handler({ event: { type: "replacement" } });
+    expect(pages).toHaveLength(2);
+    const fresh = [prompt("go"), shell("load-c"), shell("load-d")];
+    handler({ seq: 9, timestamp: new Date().toISOString(), event: { type: "timeline", item: shell("load-e") } });
+    pages[0]!([prompt("go"), shell("load-a"), shell("load-b")]);
+    await tick();
+    pages[1]!(fresh);
+    await tick();
+    expect(runOf("t:load-c").steps.map((s) => stepKey(s.item))).toEqual(["t:load-c", "t:load-d", "t:load-e"]);
+    expect(runOf("t:load-a").steps).toEqual([]);
   });
 });
 

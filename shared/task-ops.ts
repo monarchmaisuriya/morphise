@@ -3,7 +3,9 @@ import { type ChecklistItem, type Column, type Label, type Rule, type Task, type
 
 // Every change to the task document, as plain data. An app applies one to the latest document and
 // saves with its revision; on a conflict it applies the same operation again to the newer
-// document, so each operation is written to give the right result on any version.
+// document, so each operation is written to give the right result on any version. That is why
+// operations carry the state the user chose (ticked, a column's place, a reminder time), never a
+// change relative to what is stored, which a second apply would repeat.
 
 export interface NewTask {
   id: string;
@@ -28,10 +30,11 @@ export type TaskOperation =
   // One link at a time, so a workspace change and a web address edited elsewhere both survive.
   | { kind: "setLink"; id: string; link: "workspaceId" | "url"; value: string | null }
   | { kind: "setReminder"; id: string; reminder: Reminder | null }
-  | { kind: "remindAgain"; id: string; minutes: number }
+  // The reminder moves to `at` (from snoozeTime, worked out when the user acted), keeping its note.
+  | { kind: "snoozeReminder"; id: string; at: string }
   | { kind: "addChecklistItem"; id: string; item: Pick<ChecklistItem, "id" | "text"> }
   | { kind: "removeChecklistItem"; id: string; itemId: string }
-  | { kind: "toggleChecklistItem"; id: string; itemId: string }
+  | { kind: "setChecklistItem"; id: string; itemId: string; done: boolean }
   | { kind: "archiveTask"; id: string }
   | { kind: "archiveDoneBefore"; cutoff: string }
   | { kind: "restoreTask"; id: string }
@@ -39,7 +42,8 @@ export type TaskOperation =
   | { kind: "addColumn"; column: Pick<Column, "id" | "name"> & Partial<Column> }
   | { kind: "updateColumn"; id: string; patch: Partial<Pick<Column, "name" | "color" | "wipLimit">> }
   | { kind: "setDoneColumn"; id: string }
-  | { kind: "moveColumn"; id: string; by: -1 | 1 }
+  // `index` is the column's place after the move.
+  | { kind: "moveColumn"; id: string; index: number }
   | { kind: "deleteColumn"; id: string }
   | { kind: "saveLabel"; label: Pick<Label, "id" | "name"> & Partial<Label> }
   | { kind: "deleteLabel"; id: string }
@@ -168,9 +172,16 @@ function insertTask(document: TaskDocument, input: NewTask, now: Date) {
     links,
     createdAt: time,
     updatedAt: time,
-    completedAt: document.columns.find((item) => item.id === column)?.done ? time : null,
+    completedAt: null,
     archivedAt: null,
   });
+  applyDoneRules(document, document.tasks[document.tasks.length - 1], false, now);
+}
+
+// Where a reminder snoozed by `minutes` goes: later than the reminder or than now, whichever is
+// later, so a due reminder is snoozed and an upcoming one is pushed back, never brought closer.
+export function snoozeTime(reminder: Reminder | null, minutes: number, now: Date): string {
+  return new Date(Math.max(now.getTime(), reminder ? Date.parse(reminder.at) : 0) + minutes * 60_000).toISOString();
 }
 
 function touch(task: Task, now: Date) {
@@ -181,10 +192,22 @@ function clearsReminderOnDone(document: TaskDocument): boolean {
   return document.rules.some((rule) => rule.enabled && rule.when.kind === "enters-done" && rule.then.kind === "clear-reminder");
 }
 
+// The one place a card enters or leaves Done, however it got there: entering stamps completedAt
+// (which auto-archive reads) and runs the clear-reminder rule; leaving clears completedAt.
+function applyDoneRules(document: TaskDocument, task: Task, wasInDone: boolean, now: Date) {
+  const inDone = task.column === doneColumn(document).id;
+  if (inDone && !wasInDone) {
+    task.completedAt = now.toISOString();
+    if (clearsReminderOnDone(document)) task.reminder = null;
+  } else if (!inDone) {
+    task.completedAt = null;
+  }
+}
+
 function move(document: TaskDocument, task: Task, column: string, position: number | undefined, now: Date) {
   if (!document.columns.some((item) => item.id === column)) throw new TaskOperationError(`No column has the id "${column}"`);
   const from = task.column;
-  const enteringDone = doneColumn(document).id === column && from !== column;
+  const wasInDone = doneColumn(document).id === from;
   const siblings = document.tasks
     .filter((item) => item.column === column && item.id !== task.id)
     .sort((left, right) => left.order - right.order);
@@ -195,12 +218,7 @@ function move(document: TaskDocument, task: Task, column: string, position: numb
     item.order = order;
   });
   if (from !== column) renumber(document, from);
-  if (enteringDone) {
-    task.completedAt = now.toISOString();
-    if (clearsReminderOnDone(document)) task.reminder = null;
-  } else if (doneColumn(document).id !== column) {
-    task.completedAt = null;
-  }
+  applyDoneRules(document, task, wasInDone, now);
   touch(task, now);
 }
 
@@ -245,12 +263,9 @@ function mutate(document: TaskDocument, operation: TaskOperation, now: Date): vo
       touch(task, now);
       return;
     }
-    case "remindAgain": {
+    case "snoozeReminder": {
       const task = findTask(document, operation.id);
-      // Later than the reminder or than now, whichever is later: a due reminder is snoozed, an
-      // upcoming one is pushed back, never brought closer.
-      const from = Math.max(now.getTime(), task.reminder ? Date.parse(task.reminder.at) : 0);
-      task.reminder = reminderAt(new Date(from + operation.minutes * 60_000), now, task.reminder?.note);
+      task.reminder = reminderAt(new Date(operation.at), now, task.reminder?.note);
       touch(task, now);
       return;
     }
@@ -268,11 +283,12 @@ function mutate(document: TaskDocument, operation: TaskOperation, now: Date): vo
       touch(task, now);
       return;
     }
-    case "toggleChecklistItem": {
+    case "setChecklistItem": {
       const task = findTask(document, operation.id);
       const item = task.checklist.find((entry) => entry.id === operation.itemId);
       if (!item) throw new TaskOperationError(`No checklist item has the id "${operation.itemId}"`);
-      item.done = !item.done;
+      if (item.done === operation.done) return;
+      item.done = operation.done;
       touch(task, now);
       return;
     }
@@ -315,17 +331,27 @@ function mutate(document: TaskDocument, operation: TaskOperation, now: Date): vo
       Object.assign(column, copy(operation.patch));
       return;
     }
-    case "setDoneColumn":
+    case "setDoneColumn": {
       if (!document.columns.some((column) => column.id === operation.id)) throw new TaskOperationError(`No column has the id "${operation.id}"`);
+      const previous = doneColumn(document).id;
+      if (previous === operation.id) return;
       document.columns.forEach((column) => {
         column.done = column.id === operation.id;
       });
+      // Open cards now in Done that were never stamped enter it; completion dates and archived cards are kept, so a misclick back and
+      // forth does not restart auto-archive's clock or drop an archived card's reminder.
+      for (const task of document.tasks) {
+        if (task.archivedAt !== null || task.column !== operation.id || task.completedAt !== null) continue;
+        applyDoneRules(document, task, false, now);
+        touch(task, now);
+      }
       return;
+    }
     case "moveColumn": {
       const index = document.columns.findIndex((column) => column.id === operation.id);
-      const target = index + operation.by;
-      if (index < 0 || target < 0 || target >= document.columns.length) return;
-      [document.columns[index], document.columns[target]] = [document.columns[target], document.columns[index]];
+      if (index < 0) return;
+      const [column] = document.columns.splice(index, 1);
+      document.columns.splice(Math.max(0, Math.min(operation.index, document.columns.length)), 0, column);
       return;
     }
     case "deleteColumn": {
@@ -333,10 +359,11 @@ function mutate(document: TaskDocument, operation: TaskOperation, now: Date): vo
       if (!column) return;
       if (column.done) throw new TaskOperationError("The Done column cannot be deleted");
       document.columns = document.columns.filter((item) => item.id !== operation.id);
-      const fallback = document.columns[0].id;
+      const fallback = firstOpenColumn(document).id;
       for (const task of document.tasks) if (task.column === operation.id) {
         task.column = fallback;
         task.order = nextOrder(document, fallback);
+        applyDoneRules(document, task, false, now);
       }
       document.rules = document.rules.filter((rule) => !(rule.then.kind === "move" && rule.then.column === operation.id));
       return;

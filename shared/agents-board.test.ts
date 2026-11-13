@@ -105,6 +105,12 @@ describe("agents board settings", () => {
     expect(parsed.board.laneWidth).toBe("default");
   });
 
+  it("keeps keys a newer version added through a read and a save, so saving here does not erase them", () => {
+    const stored = { ...DEFAULT_AGENTS_BOARD, sortBy: "age", card: { ...DEFAULT_AGENTS_BOARD.card, cost: true }, board: { ...DEFAULT_AGENTS_BOARD.board, lanes: ["a"] }, phone: { minimalCards: true, swipe: false } };
+    const saved = setCardSetting(agentsBoardSchema.parse(stored), "branch", false);
+    expect(agentsBoardSchema.parse(saved)).toMatchObject({ sortBy: "age", card: { cost: true, branch: false }, board: { lanes: ["a"] }, phone: { swipe: false } });
+  });
+
   it("a preset sets all 16 fields and the label limit at once", () => {
     const full = applyDensity(DEFAULT_AGENTS_BOARD, "full");
     expect(full.density).toBe("full");

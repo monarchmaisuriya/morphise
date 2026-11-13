@@ -9,6 +9,7 @@ interface StyleElement {
   remove(): void;
 }
 type PressListener = (event: { target: unknown }) => void;
+type PointerListener = (event: { relatedTarget?: unknown }) => void;
 interface PageElement {
   getBoundingClientRect(): { top: number; bottom: number };
   scrollIntoView(options: { block: "start"; behavior: "smooth" }): void;
@@ -20,7 +21,9 @@ declare const document: {
   head: { appendChild(node: StyleElement): unknown };
   visibilityState: "visible" | "hidden";
   addEventListener(type: "pointerdown", listener: PressListener, capture: boolean): void;
+  addEventListener(type: "pointermove" | "pointerout", listener: PointerListener, capture: boolean): void;
   removeEventListener(type: "pointerdown", listener: PressListener, capture: boolean): void;
+  removeEventListener(type: "pointermove" | "pointerout", listener: PointerListener, capture: boolean): void;
 };
 interface NotificationConstructor {
   new (title: string, options: { body: string; tag: string }): unknown;
@@ -190,6 +193,24 @@ export function onPressOutside(inside: unknown, handler: () => void): () => void
   };
   document.addEventListener("pointerdown", listener, true);
   return () => document.removeEventListener("pointerdown", listener, true);
+}
+
+// Runs `moved` after each pointer move anywhere on the page has been through React's own handlers (they
+// listen on the app's root, which an event reaches before the document), and `left` when the pointer leaves
+// the window. Hover built on these cannot go stale: a browser drops a moved node's hover without any leave
+// event, but the next move still arrives here. Native apps have no hover; nothing is applied.
+export function afterPointerMoves(moved: () => void, left: () => void): () => void {
+  if (Platform.OS !== "web" || typeof document === "undefined") return () => {};
+  const onMove: PointerListener = () => moved();
+  const onOut: PointerListener = (event) => {
+    if (!event.relatedTarget) left();
+  };
+  document.addEventListener("pointermove", onMove, false);
+  document.addEventListener("pointerout", onOut, false);
+  return () => {
+    document.removeEventListener("pointermove", onMove, false);
+    document.removeEventListener("pointerout", onOut, false);
+  };
 }
 
 export function applyStyleSheet(css: string): () => void {

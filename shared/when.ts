@@ -78,7 +78,10 @@ export function parseWhen(input: string, now: Date): { ok: true; at: Date } | { 
   if (days === null) return fail;
   if (rest.length === 0) return days === 0 ? fail : result(onDay(now, days, DAY_START));
   const time = readClock(rest.join(" "));
-  return time ? result(onDay(now, days, time)) : fail;
+  if (!time) return fail;
+  // Today's own weekday with a time still ahead is today; once that time has passed, next week.
+  const today = onDay(now, 0, time);
+  return result(WEEKDAYS[first] === now.getDay() && today.getTime() > now.getTime() ? today : onDay(now, days, time));
 }
 
 const pad = (value: number) => String(value).padStart(2, "0");

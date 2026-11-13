@@ -58,8 +58,12 @@ export type Tone = z.output<typeof tone>;
 
 export const planSchema = z.object({ text: z.string(), phase: z.enum(["streaming", "complete"]) });
 export const thoughtSchema = z.object({ text: z.string(), phase: z.enum(["streaming", "complete"]) });
-/** A merged run of steps, named by its first step's key (steps.ts holds the steps). */
-export const stepsSchema = z.object({ head: z.string() });
+/** A merged run of steps, named by its first step's key (steps.ts holds the steps), with that step itself to draw when the run is gone. */
+export const stepsSchema = z.object({
+  head: z.string(),
+  item: z.custom<AgentTimelineItem>((v) => typeof v === "object" && v !== null),
+  phase: z.enum(["streaming", "complete"]),
+});
 /** A todo update on its own row: the list at that point, and the task then in progress (its active form). */
 export const todoSchema = z.object({
   items: z.array(z.object({ text: z.string(), status: z.enum(["pending", "in_progress", "completed"]) })),
@@ -74,7 +78,8 @@ export const noticeSchema = z.object({
 });
 
 const clipLines = (text: string) => {
-  const lines = text.replace(/\s+$/, "").split("\n");
+  // trimEnd strips what /\s+$/ would, in linear time: the regex retries every start in a long run of whitespace.
+  const lines = text.trimEnd().split("\n");
   const kept = lines.length > MAX_LINES ? [`… ${lines.length - MAX_LINES} earlier lines`, ...lines.slice(-MAX_LINES)] : lines;
   const joined = kept.join("\n");
   return joined.length > MAX_CHARS ? "…" + joined.slice(-MAX_CHARS) : joined;
@@ -401,7 +406,18 @@ export function agentEventData(item: Item<"tool_call">, lang: Language = "en"): 
   };
 }
 
+const toolRows = new WeakMap<Item<"tool_call">, { lang: Language; data: ToolData }>();
+
+/** A call's row, worked out once per item and language: a merged row asks again for every step whenever its run changes. */
 export function toolData(item: Item<"tool_call">, lang: Language = "en"): ToolData {
+  const cached = toolRows.get(item);
+  if (cached?.lang === lang) return cached.data;
+  const data = toolRow(item, lang);
+  toolRows.set(item, { lang, data });
+  return data;
+}
+
+function toolRow(item: Item<"tool_call">, lang: Language): ToolData {
   const kind = toolKind(item.detail.type);
   // Claude background-task completions: the label is the task summary, the text is raw XML.
   const base: Described =
