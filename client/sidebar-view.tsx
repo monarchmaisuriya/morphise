@@ -132,7 +132,6 @@ function viewStyles(theme: Theme, config: ViewConfig) {
     childLabel: { color: c.foregroundMuted, fontSize: 13, flexShrink: 1 },
     secondary: { color: c.foregroundMuted, fontSize: 12, flexShrink: 1, opacity: 0.75 },
     time: { color: c.foregroundMuted, fontSize: 12, opacity: 0.7, marginLeft: "auto" as const },
-    due: { color: c.statusWarning, fontSize: 12, marginLeft: "auto" as const },
     added: { color: c.statusSuccess, fontSize: 12 },
     removed: { color: c.statusDanger, fontSize: 12 },
     dot: { width: 7, height: 7, borderRadius: 4 },
@@ -476,20 +475,38 @@ function ReminderRow({ entry, chat, shared }: { entry: AlertEntry; chat: AgentRe
   const { props, styles, now } = shared;
   const due = formatDue(entry.reminder, now);
   const open = chat ? () => props.navigation.openAgent(chat) : null;
+  const warning = props.theme.colors.statusWarning;
+  // Two lines, as workspace rows: the title gets the row's width, and when it is due (with the reminder's note) goes under it.
   return (
     <RowShell
       selected={false}
       showActions
+      twoLine
       disabled={!open}
       label={open ? `Open the chat for ${entry.title}, reminder ${due}` : `${entry.title}, reminder ${due}`}
       onPress={() => open?.()}
       main={
         <>
-          <Icon name="AlarmClock" size={14} color={props.theme.colors.statusWarning} />
-          <Text style={styles.label} numberOfLines={1}>
-            {entry.title}
-          </Text>
-          <Text style={styles.due}>{due}</Text>
+          <View style={[styles.slot, { height: 20 }]}>
+            <Icon name="AlarmClock" size={14} color={warning} />
+          </View>
+          <View style={styles.lines}>
+            <View style={styles.line}>
+              <Text style={styles.label} numberOfLines={1}>
+                {entry.title}
+              </Text>
+            </View>
+            <View style={styles.subLine}>
+              <Text style={[styles.meta, { color: warning, flexShrink: 0 }]} numberOfLines={1}>
+                {due}
+              </Text>
+              {entry.reminder.note ? (
+                <Text style={styles.meta} numberOfLines={1}>
+                  {entry.reminder.note}
+                </Text>
+              ) : null}
+            </View>
+          </View>
         </>
       }
       actions={

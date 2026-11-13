@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.21.5 - 2026-11-13
+
+- **Clearer reminders in the sidebar:** each due reminder takes two lines, as workspace rows do: its title gets the row's width, and when it was due (with the reminder's note, if any) goes under it in amber. The alarm sits in the column of the status dots. Before, the title, the due time and both buttons shared one line, so titles were cut short and the time wrapped.
+
 ## 0.21.4 - 2026-11-13
 
 - **Remind me works for chats whose agent stopped:** a workspace's header Remind me button said "no open chat" when the workspace's chat was closed (its agent process stopped, its tab still open). Closed chats now stay in Morphise's chat list, so that button, task titles, a task's linked chat and path shortening find them. Closing a chat still does not count as finishing it for automation rules.
