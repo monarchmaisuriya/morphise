@@ -2,10 +2,10 @@
 import { randomBytes } from "node:crypto";
 import { stat } from "node:fs/promises";
 import { LIMITS, type Limits } from "../../shared/run/limits";
-import { cardIdOf, isEnded, runNumberOf, type LiveView, type PastRun, type Phase, type RunRow } from "../../shared/run/row";
+import { blockShell, cardIdOf, isEnded, runNumberOf, type BlockShell, type LiveView, type PastRun, type Phase, type RunRow } from "../../shared/run/row";
 import { createScreen, fitLines, jsonBytes, looksBinary, type Screen } from "./screen";
 import { pickSpawner, type Proc, type Spawner } from "./proc";
-import { shellCommand } from "./shells";
+import { blockShellApplies, shellCommand } from "./shells";
 
 export interface RunsDeps {
   // Rejects if the agent isn't loaded.
@@ -22,6 +22,8 @@ export interface StartInput {
   // The agent's own folder, read by the caller from Paseo; never taken from the client.
   cwd: string;
   command: string;
+  // The shell the code block named; Rerun takes the first run's.
+  shell?: BlockShell;
   rerunOf?: RunRow;
 }
 
@@ -51,6 +53,7 @@ interface Run {
   readonly agentId: string;
   readonly command: string;
   readonly cwd: string;
+  readonly shell: BlockShell | undefined;
   readonly cardId: string;
   readonly runNumber: number;
   past: PastRun[];
@@ -175,6 +178,7 @@ export function createRunRegistry(deps: RunsDeps): RunRegistry {
       output: run.screen.tail(lines),
       sentAt: run.sentAt,
       terminal: run.terminal,
+      ...(run.shell ? { shell: run.shell } : {}),
       cardId: run.cardId,
       runNumber: run.runNumber,
       ...(run.past.length > 0 ? { past: run.past } : {}),
@@ -280,15 +284,16 @@ export function createRunRegistry(deps: RunsDeps): RunRegistry {
   function launch(run: Run, spawner: Spawner) {
     try {
       run.proc = spawner.start(
-        { ...shellCommand(deps.env, run.command), cwd: run.cwd, env: commandEnv(deps.env, run.cwd, spawner.terminal), flushMs: limits.exitFlushMs },
+        { ...shellCommand(deps.env, run.command, { shell: run.shell }), cwd: run.cwd, env: commandEnv(deps.env, run.cwd, spawner.terminal), flushMs: limits.exitFlushMs },
         {
           data: (text) => ingest(run, text),
           exit: (code, signal) => settle(run, code, signal),
-          error: (problem) => failToStart(run, `Couldn't start: ${problem}`),
+          // The bare reason: the card and the panel label it "Couldn't start" themselves.
+          error: (problem) => failToStart(run, problem),
         },
       );
     } catch (error) {
-      failToStart(run, `Couldn't start a shell: ${message(error)}`);
+      failToStart(run, message(error));
     }
   }
 
@@ -355,6 +360,9 @@ export function createRunRegistry(deps: RunsDeps): RunRegistry {
         agentId: input.agentId,
         command: input.command,
         cwd: input.cwd,
+        // Only where a code block's shell is used (not Windows), so the row never names a shell that didn't run.
+        // A rerun takes the daemon's own record of the first run when it still has it.
+        shell: blockShellApplies() ? (input.shell ?? previous?.shell ?? blockShell.safeParse(rerunOf?.shell).data) : undefined,
         cardId,
         runNumber: rerunOf ? runNumberOf(rerunOf) + 1 : 1,
         past,

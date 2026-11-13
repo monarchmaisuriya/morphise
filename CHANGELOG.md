@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.26.0 - 2026-11-13
+
+- **A code block runs in the shell it names:** Run on a ```bash block uses bash, ```sh uses sh and ```zsh uses zsh, whatever your login shell is, so bash-only commands such as `read -p` no longer fail in zsh. Other blocks and `/run` keep your login shell, and Rerun uses the first run's shell. The daemon looks for the shell only in /opt/homebrew/bin, /usr/local/bin, /bin and /usr/bin (a newer Homebrew bash first), never on PATH, so a tool that ships its own `bash` into a user folder can't receive your commands; when it isn't installed, the card says so. Settings, Messages, Commands, "Shell for code blocks" can switch back to the login shell. Windows keeps PowerShell.
+
 ## 0.25.0 - 2026-11-13
 
 - **A minimal output panel under the code block:** a status dot and time, then icon buttons for Stop, Copy, In chat and Close, each naming itself on hover. The chat's one-line card is quieter: a dot, the command, its status and one expand button.

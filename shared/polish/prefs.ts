@@ -100,12 +100,15 @@ export const polishSchema = tolerant({
   runLines: z.union([z.literal(10), z.literal(15), z.literal(25), z.literal(40)]).optional(),
   runPanelButtons: z.enum(["icons", "both"]).optional(),
   runCard: z.enum(["line", "hidden"]).optional(),
+  // The shell a Run button uses: the one the block's fence names (```bash runs in bash), or always the
+  // login shell. `/run` always uses the login shell.
+  runShell: z.enum(["block", "login"]).optional(),
 });
 export type PolishSettings = z.output<typeof polishSchema>;
 
 // Each option's default; a saved value equal to it is removed (older Morphise versions reject keys
 // they do not know, so an unchanged profile carries none).
-export const POLISH_DEFAULTS: Partial<Record<keyof PolishSettings, unknown>> = { mergeMin: 2, diffLineNumbers: true, thoughtFirstLine: false, barButtons: "both", barPosition: "above", sideModel: "", thumbCorners: "rounded", replyWidth: "paseo", floatingRadius: 10, floatingGap: 8, loaderColor: "paseo", pageHeight: 0, uiFont: "paseo", markdownStyle: "paseo", hoverPreviews: false, hoverDelay: 1, previewWrap: true, previewLineNumbers: true, previewStripes: false, tableCopy: false, runButtons: true, runOutput: "block", runLines: 15, runPanelButtons: "icons", runCard: "line", merge: true, failedOpen: true, images: "native", imageStacks: false, imageStackOpen: "hover", selection: true, restyle: false, window: "paseo", loader: "dots", loaderSize: "s", diagrams: "mermaid", iconSet: "lucide", html: false, syntax: "one-dark-darker-mariana" };
+export const POLISH_DEFAULTS: Partial<Record<keyof PolishSettings, unknown>> = { mergeMin: 2, diffLineNumbers: true, thoughtFirstLine: false, barButtons: "both", barPosition: "above", sideModel: "", thumbCorners: "rounded", replyWidth: "paseo", floatingRadius: 10, floatingGap: 8, loaderColor: "paseo", pageHeight: 0, uiFont: "paseo", markdownStyle: "paseo", hoverPreviews: false, hoverDelay: 1, previewWrap: true, previewLineNumbers: true, previewStripes: false, tableCopy: false, runButtons: true, runOutput: "block", runLines: 15, runPanelButtons: "icons", runCard: "line", runShell: "block", merge: true, failedOpen: true, images: "native", imageStacks: false, imageStackOpen: "hover", selection: true, restyle: false, window: "paseo", loader: "dots", loaderSize: "s", diagrams: "mermaid", iconSet: "lucide", html: false, syntax: "one-dark-darker-mariana" };
 
 // Chat Polish's Prefs, as its ported code reads them.
 export interface Prefs {
@@ -163,6 +166,7 @@ export interface Prefs {
   runLines: 10 | 15 | 25 | 40;
   runPanelButtons: "icons" | "both";
   runCard: "line" | "hidden";
+  runShell: "block" | "login";
 }
 
 const hidden = (kinds: readonly string[] | undefined): Hideable[] => HIDEABLE.filter((kind) => kinds?.includes(kind));
@@ -223,5 +227,6 @@ export function polishPrefs(chat: ChatSettings | undefined): Prefs {
     runLines: polish.runLines ?? 15,
     runPanelButtons: polish.runPanelButtons ?? "icons",
     runCard: polish.runCard ?? "line",
+    runShell: polish.runShell ?? "block",
   };
 }

@@ -57,6 +57,10 @@ export const pastRun = z.object({
 });
 export type PastRun = z.infer<typeof pastRun>;
 
+// A shell a code block's fence names (```bash, ```sh, ```zsh). Unset = the user's login shell.
+export const blockShell = z.enum(["bash", "sh", "zsh"]);
+export type BlockShell = z.infer<typeof blockShell>;
+
 // The timeline row's `data`, schema version 1. Everything but `rev` is a projection
 // of the server's run (server/run/runs.ts owns it). A finished row renders from this alone.
 export const runRow = z.object({
@@ -71,6 +75,10 @@ export const runRow = z.object({
   sentAt: z.number().nullable(),
   // The command ran in a real terminal, so it could take typing.
   terminal: z.boolean().optional(),
+  // The shell it ran in, when its code block named one; Rerun uses it again. Stored as any short text so a
+  // later version's shell doesn't make this version refuse the row; the daemon checks it against
+  // `blockShell` before using it.
+  shell: z.string().max(16).optional(),
   cardId: z.string().optional(),
   runNumber: z.number().int().positive().optional(),
   past: z.array(pastRun).optional(),

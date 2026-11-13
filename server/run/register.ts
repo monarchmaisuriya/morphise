@@ -43,10 +43,10 @@ export function registerRun(server: PluginServerContext): () => Promise<void> {
   const logs = createLogStore({ root: defaultLogRoot() });
   void logs.prune().catch(() => undefined);
 
-  server.handle(start, async ({ agentId, command, rerunOf }, context) => {
+  server.handle(start, async ({ agentId, command, shell, rerunOf }, context) => {
     bind(context);
     const cwd = await agentFolder(context.paseo, agentId);
-    return runs.start({ agentId, cwd, command, rerunOf });
+    return runs.start({ agentId, cwd, command, shell, rerunOf });
   });
   server.handle(stop, ({ runId, force }, context) => (bind(context), runs.stop(runId, force), { ok: true as const }));
   server.handle(input, ({ runId, keys }) => (runs.input(runId, keys), { ok: true as const }));

@@ -1,14 +1,24 @@
 // The command a code block in a reply holds, when it is a shell block: the fence language says so
 // (sh, bash, zsh, shell, console, shell-session), or an untagged block is all `$ ` prompt lines.
 // A block that shows a session (prompt lines and their output) runs its prompt lines only.
+import type { BlockShell } from "../../../shared/run/row";
 
 const SHELL_LANGUAGES = new Set(["sh", "bash", "zsh", "shell", "console", "shell-session", "shellsession"]);
 const PROMPT = /^\$ /;
 // `<<WORD` or `<<-WORD` (not a `<<<` here-string, which stays on its line).
 const HEREDOC = /(^|[^<])<<-?\s*['"]?[A-Za-z_]/;
 
+const fenceOf = (language: string | null) => language?.trim().split(/\s+/)[0]?.toLowerCase() || null;
+
+// The shell a block's fence names: ```bash runs in bash even when the login shell is zsh. Other shell
+// fences (shell, console) and untagged blocks name none, so the login shell runs them.
+export function shellOf(language: string | null): BlockShell | undefined {
+  const fence = fenceOf(language);
+  return fence === "bash" || fence === "sh" || fence === "zsh" ? fence : undefined;
+}
+
 export function shellCommandOf(language: string | null, code: string): string | null {
-  const fence = language?.trim().split(/\s+/)[0]?.toLowerCase() || null;
+  const fence = fenceOf(language);
   if (fence !== null && !SHELL_LANGUAGES.has(fence)) return null;
   const lines = code.replace(/\s+$/, "").split("\n");
   const written = lines.filter((line) => line.trim() !== "");

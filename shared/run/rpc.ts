@@ -2,7 +2,7 @@
 import { defineRpc } from "@getpaseo/plugin";
 import { z } from "zod";
 import { LIMITS } from "./limits";
-import { liveView, runRow } from "./row";
+import { blockShell, liveView, runRow } from "./row";
 
 const runId = z.string().regex(/^[a-z0-9-]{6,64}$/);
 const agentId = z.string().min(1);
@@ -18,6 +18,9 @@ export const start = defineRpc({
   input: z.object({
     agentId,
     command: z.string().trim().min(1).max(LIMITS.commandChars),
+    // The shell a code block's fence names; unset runs the user's login shell. A name, never a path:
+    // the daemon finds the program itself.
+    shell: blockShell.optional(),
     rerunOf: runRow.optional(),
   }),
   output: z.object({ runId }),

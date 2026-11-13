@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { runStep, shellCommandOf } from "./command";
+import { runStep, shellCommandOf, shellOf } from "./command";
 
 describe("shellCommandOf", () => {
   it("runs a shell block as written, without its trailing line breaks", () => {
@@ -57,5 +57,12 @@ describe("runStep", () => {
   it("does nothing without a command, and says so without a chat", () => {
     expect(runStep(null, "a1", [], false)).toEqual({ kind: "skip" });
     expect(runStep("ls", null, [], false)).toEqual({ kind: "no-chat" });
+  });
+});
+
+describe("shellOf", () => {
+  it("names the shell a fence asks for, and leaves the rest to the login shell", () => {
+    expect([shellOf("bash"), shellOf("sh"), shellOf("zsh"), shellOf("Bash title=x")]).toEqual(["bash", "sh", "zsh", "bash"]);
+    expect([shellOf("shell"), shellOf("console"), shellOf("shell-session"), shellOf(null), shellOf("")]).toEqual([undefined, undefined, undefined, undefined, undefined]);
   });
 });

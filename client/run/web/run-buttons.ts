@@ -11,7 +11,7 @@ import { currentPrefs, subscribePrefs } from "../../polish/prefs";
 import { chatAgentOf } from "../../polish/web/chat-agent";
 import { type DomElement, watchDom, within } from "../../polish/web/dom";
 import { applyStyleSheet } from "../../web";
-import { runStep, shellCommandOf } from "./command";
+import { runStep, shellCommandOf, shellOf } from "./command";
 import { applyPanelLook, openPanel, PANEL_CSS, type RunPanel } from "./panel";
 
 declare function setTimeout(callback: () => void, ms: number): number;
@@ -126,7 +126,9 @@ export function installRunButtons(client: PluginClientContext): () => void {
     // Read before the await: Paseo may redraw the block while the run starts.
     const key = keyOf(block);
     try {
-      const { runId } = await client.rpc(start, { agentId: step.agentId, command: step.command });
+      // Settings, Commands: the shell the block's fence names, unless set to the login shell.
+      const shell = currentPrefs().runShell === "block" ? shellOf(block.getAttribute(LANGUAGE)) : undefined;
+      const { runId } = await client.rpc(start, { agentId: step.agentId, command: step.command, shell });
       show(button, "started");
       if (key) showPanel(key, runId, block);
     } catch (error) {

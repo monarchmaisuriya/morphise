@@ -570,3 +570,26 @@ posixTest("sending an earlier run records it in the card's history, and the card
   );
   await h.registry.shutdown();
 });
+
+posixTest("a code block's shell runs the command, shows on the row, and Rerun keeps it", async () => {
+  // A login shell that isn't bash, so the test fails if the named shell were ignored. `$0` is the program that ran.
+  const h = harness({ terminal: "off", env: { ...process.env, SHELL: "/bin/zsh" } });
+  const { runId } = await h.registry.start({ agentId: AGENT, cwd: dir(), command: 'echo "ran:$0"', shell: "bash" });
+  const first = await ended(h.registry, runId);
+  assert.equal(first.shell, "bash");
+  assert.match(h.text(runId).join("\n"), /ran:\S*\/bash$/m);
+  const again = await rerun(h.registry, first);
+  const second = await ended(h.registry, again);
+  assert.equal(second.shell, "bash");
+  assert.match(h.text(again).join("\n"), /ran:\S*\/bash$/m);
+  // A row from a later version naming a shell this one doesn't know reruns in the login shell.
+  const unknown = await ended(h.registry, (await h.registry.start({ agentId: AGENT, cwd: dir(), command: 'echo "ran:$0"', rerunOf: { ...second, runId: "elsewhere", cardId: "elsewhere", shell: "fish" } })).runId);
+  assert.equal(unknown.shell, undefined);
+});
+
+posixTest("a run with no shell named uses the login shell and leaves the row without one", async () => {
+  const h = harness({ terminal: "off" });
+  const runId = await run(h.registry, "echo plain");
+  const row = await ended(h.registry, runId);
+  assert.equal(row.shell, undefined);
+});

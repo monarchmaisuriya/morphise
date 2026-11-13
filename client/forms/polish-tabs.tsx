@@ -149,6 +149,7 @@ export function MessagesTab(form: Form): ReactNode {
           <SwitchField label="Run buttons on shell code blocks" hint="A Run button beside Copy code on bash, sh and zsh blocks; the output opens under the block. Commands that need administrator rights, delete files, discard changes, force-push or run a script from the internet ask first." value={prefs.runButtons} onChange={(value) => set("runButtons", value)} />
           {prefs.runButtons ? (
             <>
+              <SelectField label="Shell for code blocks" hint="The block's language runs a bash block in bash and a zsh block in zsh, whatever your login shell is; other blocks and /run use your login shell. Windows always uses PowerShell." value={prefs.runShell} options={[{ value: "block", label: "The block's language" }, { value: "login", label: "My login shell" }]} onChange={(value) => set("runShell", value)} />
               <SelectField label="Where Run shows output" hint="Under the code block, as in Claude Desktop, or only in the run's card at the end of the chat. Phones always use the card." value={prefs.runOutput} options={[{ value: "block", label: "Under the code block" }, { value: "card", label: "In the chat card" }]} onChange={(value) => set("runOutput", value)} />
               {prefs.runOutput === "block" ? (
                 <>
