@@ -335,7 +335,6 @@ button {
 button:hover:not(:disabled) { background: var(--pq-hover); }
 button:disabled { opacity: 0.4; cursor: default; }
 .icon-only { padding: 5px 7px; }
-.lead { display: inline-flex; align-items: center; gap: 5px; padding: 0 2px 0 7px; color: var(--pq-muted); }
 .divider { width: 1px; align-self: stretch; margin: 4px 2px; background: var(--pq-border); }
 .quote {
   max-height: 54px;
@@ -384,7 +383,6 @@ function barMarkup(item: BarItem): string {
   if (item.kind === "divider") return '<span class="divider"></span>';
   const icon = item.icon ? svg(BAR_ICONS[item.icon]) : "";
   const word = item.word ? `<span data-word="${item.word}"></span>` : "";
-  if (item.kind === "lead") return `<span class="lead">${icon}${word}</span>`;
   const iconOnly = item.word ? "" : ` class="icon-only" data-label="${item.label}"`;
   return `<button data-action="${item.action}" data-title="${item.title}"${iconOnly}>${icon}${word}</button>`;
 }

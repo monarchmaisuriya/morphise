@@ -24,11 +24,10 @@ export type BarAction = "quote" | "reply" | "side" | "copy-text" | "copy-markdow
 
 /**
  * One piece of the bar, left to right. A button shows its icon, its word, or both; `title` is its tooltip and `label` its accessible
- * name when the word is not shown. The lead names the copy group; a divider sits only between two groups that both show.
+ * name when the word is not shown. A divider sits only between two groups that both show.
  */
 export type BarItem =
   | { kind: "button"; action: BarAction; icon?: BarIcon; word?: Word; label: Word; title: Word }
-  | { kind: "lead"; icon: BarIcon; word?: Word }
   | { kind: "divider" };
 
 /** The bar's pieces for the profile's actions and button style; none when the bar is off. */
@@ -42,10 +41,9 @@ export function barItems(prefs: Pick<Prefs, "selection" | "selectionActions" | "
   const answers = items.length > 0;
   if (shown.includes("copy")) {
     if (answers) items.push({ kind: "divider" });
-    items.push({ kind: "lead", icon: "copy", word: iconsOnly ? undefined : "copy" });
-    // With labels the two formats are words only (the lead carries the icon); icons only, each gets its own.
-    items.push({ kind: "button", action: "copy-text", icon: iconsOnly ? "text" : undefined, word: iconsOnly ? undefined : "text", label: "text", title: "textTitle" });
-    items.push({ kind: "button", action: "copy-markdown", icon: iconsOnly ? "markdown" : undefined, word: iconsOnly ? undefined : "markdown", label: "markdown", title: "markdownTitle" });
+    // With labels each format is the copy icon and its word ("Text", "Markdown"); icons only, each has its own icon.
+    items.push({ kind: "button", action: "copy-text", icon: iconsOnly ? "text" : "copy", word: iconsOnly ? undefined : "text", label: "text", title: "textTitle" });
+    items.push({ kind: "button", action: "copy-markdown", icon: iconsOnly ? "markdown" : "copy", word: iconsOnly ? undefined : "markdown", label: "markdown", title: "markdownTitle" });
   }
   if (shown.includes("bookmark")) {
     if (items.length > 0) items.push({ kind: "divider" });

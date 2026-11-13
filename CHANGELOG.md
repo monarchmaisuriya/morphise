@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.27.1 - 2026-11-13
+
+- **Selection bar:** the greyed "Copy" label is gone; Text and Markdown each show the copy icon instead. With icons only, the two keep their own icons.
+
 ## 0.27.0 - 2026-11-13
 
 - **Type into a command under its code block:** when a command asks for input (`read -p`, a password, a confirm prompt), click its output in the panel under the block, or the keyboard button, and type; Enter sends Return, Ctrl+C interrupts, Esc stops typing. Typed keys no longer have to go through the chat card, and they never reach the message box. A password the command hides stays hidden. The panel offers typing only while the command runs in a terminal; the daemon's live view now says whether it does. Tab now goes to the command (in the card too) instead of moving the page's focus, words from an input method or a dead key arrive whole, and typing carries on when Paseo redraws the block. Paseo's own shortcuts still come first, so on Windows and Linux keys such as Ctrl+W reach Paseo.

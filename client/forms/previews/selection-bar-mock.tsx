@@ -31,13 +31,6 @@ function Bar({ theme, prefs }: { theme: PluginTheme; prefs: Prefs }) {
     <View accessibilityLabel="Selection bar" style={{ alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 2, padding: 3, borderRadius: 10, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface1, shadowColor: "#000000", shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 6 }}>
       {items.map((item, index) => {
         if (item.kind === "divider") return <View key={index} style={{ width: 1, alignSelf: "stretch", marginVertical: 4, marginHorizontal: 2, backgroundColor: c.border }} />;
-        if (item.kind === "lead")
-          return (
-            <View key={index} style={{ flexDirection: "row", alignItems: "center", gap: 5, paddingLeft: 7, paddingRight: 2 }}>
-              <Icon name={ICON_NAMES[item.icon]} size={14} color={c.foregroundMuted} />
-              {item.word ? <Text style={{ color: c.foregroundMuted, fontSize: 13, lineHeight: 18 }}>{say(item.word)}</Text> : null}
-            </View>
-          );
         return <BarButton key={index} theme={theme} icon={item.icon ? ICON_NAMES[item.icon] : undefined} word={item.word ? say(item.word) : undefined} iconOnly={!item.word} />;
       })}
     </View>

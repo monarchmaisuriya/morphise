@@ -3,21 +3,21 @@ import { polishPrefs } from "../../../shared/polish/prefs";
 import { barItems, barTop } from "./bar-layout";
 
 const prefs = (polish: NonNullable<NonNullable<Parameters<typeof polishPrefs>[0]>["polish"]>) => polishPrefs({ polish });
-const shape = (items: ReturnType<typeof barItems>) => items.map((item) => (item.kind === "button" ? `${item.action}:${item.icon ?? ""}:${item.word ?? ""}` : item.kind === "lead" ? `lead:${item.word ?? ""}` : "|"));
+const shape = (items: ReturnType<typeof barItems>) => items.map((item) => (item.kind === "button" ? `${item.action}:${item.icon ?? ""}:${item.word ?? ""}` : "|"));
 
 describe("selection bar buttons", () => {
   it("draws 0.16's bar by default: icons with words, words only for the copy formats, Bookmark as an icon", () => {
-    expect(shape(barItems(prefs({})))).toEqual(["quote:quote:quote", "reply:reply:reply", "side:side:side", "|", "lead:copy", "copy-text::text", "copy-markdown::markdown", "|", "bookmark:bookmark:"]);
+    expect(shape(barItems(prefs({})))).toEqual(["quote:quote:quote", "reply:reply:reply", "side:side:side", "|", "copy-text:copy:text", "copy-markdown:copy:markdown", "|", "bookmark:bookmark:"]);
   });
 
   it("drops every word for icons only, giving each copy format its own icon and every button an accessible name", () => {
     const items = barItems(prefs({ barButtons: "icons" }));
-    expect(shape(items)).toEqual(["quote:quote:", "reply:reply:", "side:side:", "|", "lead:", "copy-text:text:", "copy-markdown:markdown:", "|", "bookmark:bookmark:"]);
+    expect(shape(items)).toEqual(["quote:quote:", "reply:reply:", "side:side:", "|", "copy-text:text:", "copy-markdown:markdown:", "|", "bookmark:bookmark:"]);
     for (const item of items) if (item.kind === "button") expect(item.label).toBeTruthy();
   });
 
   it("puts a divider only between two groups that both show, and nothing when the bar is off", () => {
-    expect(shape(barItems(prefs({ selectionActions: ["copy", "bookmark"] })))).toEqual(["lead:copy", "copy-text::text", "copy-markdown::markdown", "|", "bookmark:bookmark:"]);
+    expect(shape(barItems(prefs({ selectionActions: ["copy", "bookmark"] })))).toEqual(["copy-text:copy:text", "copy-markdown:copy:markdown", "|", "bookmark:bookmark:"]);
     expect(shape(barItems(prefs({ selectionActions: ["reply"] })))).toEqual(["reply:reply:reply"]);
     expect(barItems(prefs({ selection: false }))).toEqual([]);
   });
