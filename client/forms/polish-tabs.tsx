@@ -147,6 +147,18 @@ export function MessagesTab(form: Form): ReactNode {
       <SettingsSection title="Commands" info="Desktop and web: run a shell command from a reply, as you, in that chat's folder, with live output in the chat. /run followed by a command works everywhere, phones included, in a chat that has replied at least once. The runner is ported from Shell Yeah by Steve Castaneda (MIT).">
         <SettingsCard>
           <SwitchField label="Run buttons on shell code blocks" hint="A Run button beside Copy code on bash, sh and zsh blocks; the output opens under the block. Commands that need administrator rights, delete files, discard changes, force-push or run a script from the internet ask first." value={prefs.runButtons} onChange={(value) => set("runButtons", value)} />
+          {prefs.runButtons ? (
+            <>
+              <SelectField label="Where Run shows output" hint="Under the code block, as in Claude Desktop, or only in the run's card at the end of the chat. Phones always use the card." value={prefs.runOutput} options={[{ value: "block", label: "Under the code block" }, { value: "card", label: "In the chat card" }]} onChange={(value) => set("runOutput", value)} />
+              {prefs.runOutput === "block" ? (
+                <>
+                  <SelectField label="Output lines under the block" hint="More lines scroll inside the panel." value={String(prefs.runLines)} options={[10, 15, 25, 40].map((lines) => ({ value: String(lines), label: `${lines} lines` }))} onChange={(value) => set("runLines", Number(value) as 10 | 15 | 25 | 40)} />
+                  <SelectField label="Panel buttons" hint="Icons name themselves when you rest the pointer on them." value={prefs.runPanelButtons} options={[{ value: "icons", label: "Icons" }, { value: "both", label: "Icons and labels" }]} onChange={(value) => set("runPanelButtons", value)} />
+                  <SelectField label="Card in the chat while the output is under the block" hint="Hidden in this window only; phones and other windows still show the card. Closing the panel brings the card back." value={prefs.runCard} options={[{ value: "line", label: "One line" }, { value: "hidden", label: "Hidden" }]} onChange={(value) => set("runCard", value)} />
+                </>
+              ) : null}
+            </>
+          ) : null}
         </SettingsCard>
       </SettingsSection>
       <SettingsSection title="Diagrams" info="Mermaid diagrams in replies, in your theme's colours while Paseo's items are restyled (Look tab).">

@@ -93,12 +93,19 @@ export const polishSchema = tolerant({
   tableCopy: z.boolean().optional(),
   // Web: a Run button beside Copy code on shell code blocks in replies (on unless turned off).
   runButtons: z.boolean().optional(),
+  // Web: where a Run button's output shows (under its code block, or only in the chat's card), how many
+  // lines the panel under the block shows before it scrolls, its buttons, and whether the chat's card
+  // still shows as one line while the panel does.
+  runOutput: z.enum(["block", "card"]).optional(),
+  runLines: z.union([z.literal(10), z.literal(15), z.literal(25), z.literal(40)]).optional(),
+  runPanelButtons: z.enum(["icons", "both"]).optional(),
+  runCard: z.enum(["line", "hidden"]).optional(),
 });
 export type PolishSettings = z.output<typeof polishSchema>;
 
 // Each option's default; a saved value equal to it is removed (older Morphise versions reject keys
 // they do not know, so an unchanged profile carries none).
-export const POLISH_DEFAULTS: Partial<Record<keyof PolishSettings, unknown>> = { mergeMin: 2, diffLineNumbers: true, thoughtFirstLine: false, barButtons: "both", barPosition: "above", sideModel: "", thumbCorners: "rounded", replyWidth: "paseo", floatingRadius: 10, floatingGap: 8, loaderColor: "paseo", pageHeight: 0, uiFont: "paseo", markdownStyle: "paseo", hoverPreviews: false, hoverDelay: 1, previewWrap: true, previewLineNumbers: true, previewStripes: false, tableCopy: false, runButtons: true, merge: true, failedOpen: true, images: "native", imageStacks: false, imageStackOpen: "hover", selection: true, restyle: false, window: "paseo", loader: "dots", loaderSize: "s", diagrams: "mermaid", iconSet: "lucide", html: false, syntax: "one-dark-darker-mariana" };
+export const POLISH_DEFAULTS: Partial<Record<keyof PolishSettings, unknown>> = { mergeMin: 2, diffLineNumbers: true, thoughtFirstLine: false, barButtons: "both", barPosition: "above", sideModel: "", thumbCorners: "rounded", replyWidth: "paseo", floatingRadius: 10, floatingGap: 8, loaderColor: "paseo", pageHeight: 0, uiFont: "paseo", markdownStyle: "paseo", hoverPreviews: false, hoverDelay: 1, previewWrap: true, previewLineNumbers: true, previewStripes: false, tableCopy: false, runButtons: true, runOutput: "block", runLines: 15, runPanelButtons: "icons", runCard: "line", merge: true, failedOpen: true, images: "native", imageStacks: false, imageStackOpen: "hover", selection: true, restyle: false, window: "paseo", loader: "dots", loaderSize: "s", diagrams: "mermaid", iconSet: "lucide", html: false, syntax: "one-dark-darker-mariana" };
 
 // Chat Polish's Prefs, as its ported code reads them.
 export interface Prefs {
@@ -152,6 +159,10 @@ export interface Prefs {
   previewStripes: boolean;
   tableCopy: boolean;
   runButtons: boolean;
+  runOutput: "block" | "card";
+  runLines: 10 | 15 | 25 | 40;
+  runPanelButtons: "icons" | "both";
+  runCard: "line" | "hidden";
 }
 
 const hidden = (kinds: readonly string[] | undefined): Hideable[] => HIDEABLE.filter((kind) => kinds?.includes(kind));
@@ -208,5 +219,9 @@ export function polishPrefs(chat: ChatSettings | undefined): Prefs {
     previewStripes: polish.previewStripes === true,
     tableCopy: polish.tableCopy === true,
     runButtons: polish.runButtons !== false,
+    runOutput: polish.runOutput ?? "block",
+    runLines: polish.runLines ?? 15,
+    runPanelButtons: polish.runPanelButtons ?? "icons",
+    runCard: polish.runCard ?? "line",
   };
 }

@@ -12,7 +12,7 @@ import { chatAgentOf } from "../../polish/web/chat-agent";
 import { type DomElement, watchDom, within } from "../../polish/web/dom";
 import { applyStyleSheet } from "../../web";
 import { runStep, shellCommandOf } from "./command";
-import { openPanel, PANEL_CSS, type RunPanel } from "./panel";
+import { applyPanelLook, openPanel, PANEL_CSS, type RunPanel } from "./panel";
 
 declare function setTimeout(callback: () => void, ms: number): number;
 declare function clearTimeout(id: number): void;
@@ -45,11 +45,14 @@ ${PANEL_CSS}`;
 
 type State = "idle" | "confirm" | "busy" | "started" | "error";
 
+// Settings, Commands: output under the code block, or only in the chat's card.
+const underBlock = () => currentPrefs().runOutput === "block";
+
 function show(button: DomElement, state: State, detail = "") {
   button.setAttribute("data-state", state);
   // `detail` on screen is only ever a risk from risksOf's fixed list, never text from the chat.
   button.innerHTML = state === "started" ? CHECK : state === "confirm" ? `${PLAY}<span>Run anyway? It ${detail}</span>` : PLAY;
-  const label = state === "confirm" ? `Run anyway? It ${detail}` : state === "error" ? `Couldn't run: ${detail}` : state === "started" ? "Started; the output is under the command" : "Run this command in this chat's folder";
+  const label = state === "confirm" ? `Run anyway? It ${detail}` : state === "error" ? `Couldn't run: ${detail}` : state === "started" ? (underBlock() ? "Started; the output is under the command" : "Started; the output is in the chat") : "Run this command in this chat's folder";
   button.setAttribute("aria-label", label);
   button.setAttribute("title", label);
   if (state === "busy") button.setAttribute("disabled", "");
@@ -75,6 +78,8 @@ export function installRunButtons(client: PluginClientContext): () => void {
   // The block on the page now for `key`: Paseo may have redrawn the one that was pressed.
   const blockFor = (key: string) => Array.from(document.querySelectorAll(CODE_BLOCK)).find((block) => shown(block) && keyOf(block) === key) ?? null;
   const showPanel = (key: string, runId: string, pressed: DomElement) => {
+    // "In the chat card" opens no panel, whichever way one would open.
+    if (!underBlock()) return;
     panels.get(key)?.detach();
     panels.get(key)?.element.remove();
     panels.delete(key);
@@ -84,7 +89,7 @@ export function installRunButtons(client: PluginClientContext): () => void {
     if (!block) return;
     panels.set(
       key,
-      openPanel(client, block, runId, () => {
+      openPanel(client, block, runId, currentPrefs(), () => {
         panels.delete(key);
         runOfBlock.delete(key);
       }),
@@ -179,7 +184,19 @@ export function installRunButtons(client: PluginClientContext): () => void {
     },
     removeAll,
   );
-  const unsubscribe = subscribePrefs(() => (enabled() ? addWithin([document.body]) : removeAll()));
+  // Open panels follow the settings: their height and buttons change in place, and "in the chat card"
+  // closes them so their cards show in full.
+  const prefsChanged = () => {
+    if (!enabled()) return removeAll();
+    for (const panel of Array.from(panels.values())) {
+      if (underBlock()) applyPanelLook(panel.element, currentPrefs());
+      else panel.close();
+    }
+    // Runs remembered for blocks not on the page would bring their panels back.
+    if (!underBlock()) runOfBlock.clear();
+    addWithin([document.body]);
+  };
+  const unsubscribe = subscribePrefs(prefsChanged);
   return () => {
     unsubscribe();
     stopWatching();

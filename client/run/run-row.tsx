@@ -23,6 +23,7 @@ import {
 } from "../../shared/run/view";
 import { Icon } from "../ui/kit";
 import { useResolvedRun, useRunUi } from "./live";
+import { usePrefs } from "../polish/prefs";
 import { inlineRuns } from "./web/panel-model";
 import { OutputWell } from "./output";
 import { PasteButton } from "./paste";
@@ -70,6 +71,8 @@ export function RunRowView({ agentId, item, theme, layout, timestamp }: PluginTi
   const ui = useRunUi(row.runId);
   // This window shows the run under its code block (web): the card keeps one line.
   const shownUnderBlock = useSyncExternalStore(inlineRuns.subscribe, () => inlineRuns.has(row.runId), () => false);
+  // Settings, Commands: the card can hide while its output shows under the code block (this window only).
+  const { runCard } = usePrefs();
   const running = run.phase.kind === "running" && run.lostAt === null;
   const latestRunning = latest.phase.kind === "running" && latest.lostAt === null;
   const newerRunning = past !== null && latestRunning;
@@ -162,14 +165,26 @@ export function RunRowView({ agentId, item, theme, layout, timestamp }: PluginTi
   );
 
   if (shownUnderBlock) {
+    if (runCard === "hidden") return null;
     return (
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: colors.border }}>
-        <Text style={{ flex: 1, minWidth: 0, color: colors.foregroundMuted, fontSize: 12 }} numberOfLines={1}>
-          {`$ ${row.command.split("\n")[0]} · ${statusText(pres) || "Running"} · output shown under the command`}
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 4, paddingStart: 12, paddingEnd: 4, borderRadius: 10, borderWidth: 1, borderColor: withAlpha(colors.border, 0.7) }}>
+        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: toneColor(pres.tone, colors) }} />
+        <Text style={{ flex: 1, minWidth: 0, fontFamily: mono(), fontSize: 12, color: colors.foregroundMuted }} numberOfLines={1}>
+          {`$ ${row.command.split("\n")[0]}`}
         </Text>
-        <Pressable accessibilityRole="button" accessibilityLabel="Show the output here instead" onPress={() => inlineRuns.release(row.runId)}>
-          <Text style={{ color: colors.accent, fontSize: 12 }}>Show here</Text>
-        </Pressable>
+        <Text style={{ flexShrink: 0, fontSize: 12, color: toneColor(pres.tone, colors), fontVariant: ["tabular-nums"] }} numberOfLines={1}>
+          {statusText(pres) || "Running"}
+        </Text>
+        <Button
+          icon="Maximize2"
+          label="Output is under the command; show it here"
+          tone="quiet"
+          iconOnly
+          compact={compact}
+          colors={colors}
+          accessibilityLabel="Output is under the command; show it here"
+          onPress={() => inlineRuns.release(row.runId)}
+        />
       </View>
     );
   }

@@ -2,6 +2,12 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.25.0 - 2026-11-13
+
+- **A minimal output panel under the code block:** a status dot and time, then icon buttons for Stop, Copy, In chat and Close, each naming itself on hover. The chat's one-line card is quieter: a dot, the command, its status and one expand button.
+- **New settings (Settings, Messages, Commands):** where Run shows output (under the code block, or only in the chat card), output lines under the block (10, 15, 25 or 40), panel buttons (icons, or icons and labels), and the chat card while the output is under the block (one line, or hidden in that window). Changes apply to panels already open.
+- **Overview:** commands run in your login shell, so on most Macs a ```bash block with bash-only syntax (such as `read -p`) fails in zsh.
+
 ## 0.24.1 - 2026-11-13
 
 - **A plainer run card:** a small status dot instead of the round badge, the output straight on the card instead of in a second box, a thin border instead of a shadow, and Copy, Rerun and Send as bare icons (their names show on hover). A button that is the next step keeps its words: Stop while running, Send to agent after a failure. The "can't see this" line is gone; "Sent to … at …" still shows once you send.
