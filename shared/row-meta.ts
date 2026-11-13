@@ -52,6 +52,7 @@ export function statusLine(indicator: Indicator, latestChat: string | null, rowN
 }
 
 export const DEFAULT_CHAT_ROWS = 5;
+export const DEFAULT_REMINDER_ROWS = 5;
 
 // The top-level row that holds the open agent: the open chat itself, or the chat an open sub-agent
 // sits under when sub-agents are shown. Null when the open agent is not in this workspace's tree,

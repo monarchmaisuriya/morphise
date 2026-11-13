@@ -12,6 +12,7 @@ import { BAR_ICONS, barItems, barTop, type BarItem } from "../bar-layout";
 import { formatQuote, formatReply, sendBehaviorOf, type QuoteSource, type SendBehavior } from "../format";
 import { choosePalette, parseColor, type Rgba } from "../palette";
 import { say } from "../strings";
+import { CHAT_SCROLL, chatAgentOf } from "../../web/chat-agent";
 
 /*
  * The selection bar: Quote, Reply, Side chat, Copy (Text or Markdown), and Bookmark for text
@@ -32,12 +33,6 @@ import { say } from "../strings";
 // ---------------------------------------------------------------------------
 // Host DOM contract (checked against the Paseo 0.16.0-beta.2 bundle)
 
-/** One chat transcript. Inactive tabs keep theirs mounted with `display: none`. */
-const CHAT_SCROLL = '[data-testid="agent-chat-scroll"]';
-/** A split-view pane; its tab row names the agent whose chat it shows. */
-const PANE = '[data-testid^="workspace-pane-"]';
-const ACTIVE_AGENT_TAB = '[data-testid^="workspace-tab-agent_"][aria-selected="true"]';
-const AGENT_TAB_PREFIX = "workspace-tab-agent_";
 /** Markdown serialization hints the host puts on rendered assistant messages. */
 const CODE_BLOCK = '[data-paseo-markdown-tag="pre"]';
 const CODE_SPAN = '[data-paseo-markdown-tag="code"]';
@@ -233,7 +228,7 @@ function readSnapshot(ignore: DomElement): Snapshot | null {
   const lines = lineRects(range);
   if (!lines) return null;
 
-  return { source: readSource(selection, range, start), plain, ...lines, anchor: start, agentId: agentIdOf(nearestUnique(transcript, ACTIVE_AGENT_TAB)) };
+  return { source: readSource(selection, range, start), plain, ...lines, anchor: start, agentId: chatAgentOf(transcript) };
 }
 
 /** The range's first and last line boxes where they are now, or null when it has no box on screen. */
@@ -244,24 +239,6 @@ function lineRects(range: DomRange): Pick<Snapshot, "first" | "last"> | null {
   const last = rects.length > 0 ? rects[rects.length - 1]! : bounds;
   if (first.width === 0 && first.height === 0) return null;
   return { first, last };
-}
-
-/**
- * The first visible match walking up from `from`, stopping at its pane. Two visible matches at the
- * same level mean two chats share it: no answer beats a wrong one.
- */
-function nearestUnique(from: DomElement, selector: string): DomElement | null {
-  for (let node = from.parentElement; node; node = node.parentElement) {
-    const visible = Array.from(node.querySelectorAll(selector)).filter((element) => element.getClientRects().length > 0);
-    if (visible.length === 1) return visible[0]!;
-    if (visible.length > 1 || node.matches(PANE)) return null;
-  }
-  return null;
-}
-
-function agentIdOf(tab: DomElement | null): string | null {
-  const testId = tab?.getAttribute("data-testid");
-  return testId?.startsWith(AGENT_TAB_PREFIX) ? testId.slice(AGENT_TAB_PREFIX.length) || null : null;
 }
 
 function readSource(selection: DomSelection, range: DomRange, start: DomElement): QuoteSource {

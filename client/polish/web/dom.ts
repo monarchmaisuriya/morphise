@@ -27,6 +27,7 @@ export interface DomElement {
   hasAttribute(name: string): boolean;
   matches(selector: string): boolean;
   closest(selector: string): DomElement | null;
+  getClientRects(): ArrayLike<unknown>;
   tagName: string;
   removeAttribute(name: string): void;
   addEventListener(type: "click" | "mouseover" | "mouseleave" | "wheel" | "touchstart" | "pointerdown", listener: (event: { target: unknown }) => void, capture?: boolean): void;

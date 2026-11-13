@@ -9,4 +9,5 @@ export const VIEW_SECTIONS = {
   chats: ["showAgents", "agentsFor", "singleChat", "chatRows", "showSubAgents", "singleSubAgent", "subAgentRows"],
   steps: ["stepsCard", "steps"],
   archive: ["autoArchive"],
+  reminders: ["reminderRows"],
 } as const satisfies Record<string, readonly ViewKey[]>;

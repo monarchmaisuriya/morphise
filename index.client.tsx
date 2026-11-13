@@ -19,6 +19,7 @@ import { registerMedia } from "./client/polish/media.register";
 import { registerPages } from "./client/polish/pages.register";
 import { registerSelection } from "./client/polish/selection.register";
 import { registerWeb } from "./client/polish/web.register";
+import { registerRun } from "./client/run/register";
 import { chimeWav } from "./client/chime";
 import { type AttentionList, reduceAttention } from "./client/attention";
 import { ANSWER_TAIL, bookmarkLastAnswer, bookmarkPassage, createBookmarkStore, createBookmarkWriter } from "./client/bookmark-store";
@@ -190,6 +191,8 @@ export default function contribute(client: PluginClientContext) {
   // Ported strings (chat rows, page restyle) follow Paseo's language: Chinese for zh-*, else English.
   const unfollowLocale = followLocale(client.i18n, () => {});
   const stopPolish = [registerSelection, registerWeb, registerMedia, registerPages].map((register) => register(polish));
+  // /run and the run cards, ported from Shell Yeah (see NOTICE.md).
+  const stopRun = registerRun(client);
   const apply = () =>
     reconciler.apply({
       profile: profileOf(store.get()),
@@ -430,6 +433,7 @@ export default function contribute(client: PluginClientContext) {
     bookmarkStream.stop();
     reconciler.dispose();
     stopPolish.forEach((stop) => stop());
+    stopRun();
     unfollowLocale();
   };
 }

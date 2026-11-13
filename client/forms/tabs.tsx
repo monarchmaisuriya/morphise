@@ -17,7 +17,7 @@ import type { Action } from "../../shared/actions";
 import { Icon, IconButton, tokens } from "../ui/kit";
 import { statusColor } from "../ui/hues";
 import { STATUS_TITLES } from "../../shared/arrange";
-import { DEFAULT_CHAT_ROWS, rowShows } from "../../shared/row-meta";
+import { DEFAULT_CHAT_ROWS, DEFAULT_REMINDER_ROWS, rowShows } from "../../shared/row-meta";
 import { VIEW_SECTIONS } from "./view-sections";
 import { useDeviceChoice, workbenchSettings } from "../device-choices";
 import type { ViewLayout } from "../../shared/agents-board";
@@ -383,6 +383,7 @@ function viewFields(form: Form): { [Key in keyof ViewConfig]-?: ReactNode } {
         onChange={(value) => setOptional("singleSubAgent", value, "show")}
       />
     ) : null,
+    reminderRows: <SelectField label="Due reminders listed, then Show more" value={String(view.reminderRows ?? DEFAULT_REMINDER_ROWS)} options={counts([3, 5, 10, 20], view.reminderRows ?? DEFAULT_REMINDER_ROWS)} onChange={(value) => setOptional("reminderRows", Number(value), DEFAULT_REMINDER_ROWS)} />,
     subAgentRows: view.showAgents && view.showSubAgents !== false && view.showSubAgents !== "open" ? (
       <SelectField label="Sub-agents per chat, then Show more" value={String(view.subAgentRows ?? DEFAULT_CHAT_ROWS)} options={counts([3, 5, 10, 20], view.subAgentRows ?? DEFAULT_CHAT_ROWS)} onChange={(value) => setOptional("subAgentRows", Number(value), DEFAULT_CHAT_ROWS)} />
     ) : null,
@@ -869,7 +870,33 @@ export function GeneralTab(form: Form): ReactNode {
       </SettingsSection>
       <WorkbenchLayouts />
       <UpdateSection form={form} />
+      <CreditsSection form={form} />
     </>
+  );
+}
+
+// Plugins Morphise ports code from (each file names its source; NOTICE.md holds the licences).
+const CREDITS: readonly { name: string; author: string; uses: string }[] = [
+  { name: "Chat Polish", author: "Hieu Le", uses: "chat rows, merged steps, pictures, pages, diagrams and the restyle" },
+  { name: "Shell Yeah", author: "Steve Castaneda", uses: "the command runner behind /run and the Run buttons" },
+  { name: "Quote", author: "Chechulin Serhii", uses: "the bar over selected text" },
+  { name: "Better Paseo", author: "ABorakati", uses: "the Agents view and generated titles" },
+];
+
+function CreditsSection({ form }: { form: Form }) {
+  const c = form.theme.colors;
+  return (
+    <SettingsSection title="Credits" info="Morphise includes code from these MIT-licensed Paseo plugins. Their licences are in NOTICE.md in Morphise's repository.">
+      <SettingsCard>
+        <View style={{ padding: 12, gap: 6 }}>
+          {CREDITS.map((credit) => (
+            <Text key={credit.name} style={{ color: c.foregroundMuted, fontSize: 13 }}>
+              <Text style={{ color: c.foreground, fontWeight: "600" }}>{credit.name}</Text> by {credit.author}: {credit.uses}.
+            </Text>
+          ))}
+        </View>
+      </SettingsCard>
+    </SettingsSection>
   );
 }
 
@@ -947,6 +974,7 @@ export function SidebarTab(form: Form): ReactNode {
       </SettingsSection>
       <SettingsSection title="Reminders">
         <SettingsCard>
+          {VIEW_SECTIONS.reminders.map((key) => view[key])}
           {reminders.sound}
           {reminders.desktopNotification}
         </SettingsCard>

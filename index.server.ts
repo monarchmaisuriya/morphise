@@ -11,6 +11,7 @@ import { createTaskKeeper } from "./server/task-keeper";
 import { registerMedia } from "./server/polish/media.register";
 import { registerPages } from "./server/polish/pages.register";
 import { registerUpdate } from "./server/polish/update.register";
+import { registerRun } from "./server/run/register";
 import { profileSettings } from "./shared/document";
 import { remindersKeeper } from "./shared/reminder-contracts";
 import { bookmarkSettings } from "./shared/bookmarks";
@@ -58,6 +59,8 @@ export default function contribute(server: PluginServerContext) {
   const stopPlanInstruction = server.addHook("agent.create.before", createPlanInstruction(profile));
   // The daemon side of the parts ported from Chat Polish (see NOTICE.md).
   const stopPolish = [registerMedia, registerPages, registerUpdate].map((register) => register(server, profile));
+  // Shell commands the user runs from a chat (/run, Run buttons), ported from Shell Yeah (see NOTICE.md).
+  const stopRun = registerRun(server);
   const keeper = createTaskKeeper(tasks);
   server.handle(remindersKeeper, keeper.watch);
   return () => {
@@ -66,5 +69,7 @@ export default function contribute(server: PluginServerContext) {
     stopPlanInstruction();
     stopPolish.forEach((stop) => stop());
     keeper.dispose();
+    // Marks running commands interrupted and ends their processes before the plugin stops.
+    return stopRun();
   };
 }

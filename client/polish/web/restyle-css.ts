@@ -530,8 +530,8 @@ ${CODE_BLOCK} :is(div, span) { line-height: 1.5 !important; }
 /* Code block A: the language in a header strip, with Paseo's copy button in it. B floats the language instead; C has none. */
 :root:not([data-cp-rt-code="b"]):not([data-cp-rt-code="c"]) ${CODE_BLOCK}${LANG} { padding-top: 0 !important; }
 :root:not([data-cp-rt-code="b"]):not([data-cp-rt-code="c"]) ${CODE_BLOCK}${LANG}::before { content: attr(data-paseo-markdown-language); margin: 0 -14px 10px; padding: 7px 14px; border-bottom: 1px solid var(--cp-rule); font-family: var(--cp-mono); font-size: 12px; line-height: 18px; color: var(--cp-muted); }
-:root:not([data-cp-rt-code="b"]):not([data-cp-rt-code="c"]) ${CODE_BLOCK}${LANG} > button[aria-label="Copy code"] { top: 5px !important; opacity: 0.6 !important; }
-:root:not([data-cp-rt-code="b"]):not([data-cp-rt-code="c"]) ${CODE_BLOCK}${LANG} > button[aria-label="Copy code"]:hover { opacity: 1 !important; }
+:root:not([data-cp-rt-code="b"]):not([data-cp-rt-code="c"]) ${CODE_BLOCK}${LANG} > :is(button[aria-label="Copy code"], [data-morphise-run]) { top: 5px !important; opacity: 0.6 !important; }
+:root:not([data-cp-rt-code="b"]):not([data-cp-rt-code="c"]) ${CODE_BLOCK}${LANG} > :is(button[aria-label="Copy code"], [data-morphise-run]):hover { opacity: 1 !important; }
 /* Mermaid: the diagram itself is themed inside its frame (themeMermaid); the card matches code blocks, its zoom controls faint until hover. */
 [data-testid="mermaid-viewport"] { background-color: var(--cp-sunken) !important; border-color: var(--cp-rule) !important; border-radius: 8px !important; }
 [data-testid="mermaid-viewport"] [data-testid="zoomable-viewport-toolbar"] { opacity: 0.6; transition: opacity 0.15s; }

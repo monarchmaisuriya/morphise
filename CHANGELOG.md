@@ -2,6 +2,12 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.23.0 - 2026-11-13
+
+- **Run commands from a chat:** `/run` followed by a command runs it as you, in that chat's folder, on every platform. On desktop and web, a Run button beside Paseo's Copy code does the same for a reply's shell code blocks (on by default; Settings, Messages, Commands). Each run is a card in the chat with live output, Stop and typing into it (2FA codes, passwords), then the exit code, Copy, Rerun and Send to agent. Commands that need administrator rights, delete files, discard changes, force-push, run a script from the internet or contain hidden characters ask first, and the confirm covers only the text it showed. Commands run only when you press Run or send `/run`, always in the chat's own folder; archiving a chat stops its commands and deletes their output (kept a week, at most 100 MB). The runner is ported from Shell Yeah by Steve Castaneda (MIT); Shell Yeah can be installed beside Morphise.
+- **Reminders in the sidebar fold and stay short:** the Reminders group lists its first 5 due reminders, then Show more (Settings, Sidebar, Reminders: 3, 5, 10 or 20). Every group heading now shows its fold chevron while open too.
+- **Credits:** README, OVERVIEW and a new Credits section in Settings, General name the four MIT-licensed plugins Morphise ports code from (Chat Polish, Shell Yeah, Quote, Better Paseo); NOTICE.md also lists the licences of the packages Morphise installs or uses (pele, sharp with libvips, node-pty, the icon sets).
+
 ## 0.22.0 - 2026-11-13
 
 - **Sidebar with several hosts:** another host's workspace rows now show their pull request, checks, services, uncommitted and unpushed work, and Morphise's Done and Unread marks. Filters, sorting and Next see those marks; opening an Unread workspace clears it on its own host. The bulk bar reads each workspace's own host: pinned, labels, Mark done skipping workspaces that need you, and the archive warning, which also counts workspaces whose details have not loaded yet. The label list covers every host. Chats grouped by workspace keep two hosts' workspaces apart, and chat rows name the right workspace. Another host's chat waiting for your permission shows as needing permission, and its parent chat counts its waiting sub-agents. (The Workbench's count and Agents view still cover the host Morphise runs on.)

@@ -34,7 +34,7 @@ import { chatGroupKey, chatIndicator, chatMatches, chatName, compareChats, isSid
 import { INDICATORS, type Indicator, type Profile } from "../shared/profile";
 import { stepsOptions } from "../shared/steps";
 import { type AttentionList, waitingChildren } from "./attention";
-import { type ChatListing, chatTree, DEFAULT_CHAT_ROWS, effectiveIndicator, listedChatKeys, listedSubAgents, listedTopChats, listsChats, MARK_KEY, markApplies, owningRowKey, type RowShows, rowShows, rowTitle, runningShownBelow, statusLine } from "../shared/row-meta";
+import { type ChatListing, chatTree, DEFAULT_CHAT_ROWS, DEFAULT_REMINDER_ROWS, effectiveIndicator, listedChatKeys, listedSubAgents, listedTopChats, listsChats, MARK_KEY, markApplies, owningRowKey, type RowShows, rowShows, rowTitle, runningShownBelow, statusLine } from "../shared/row-meta";
 import { newTaskId } from "./board/card-editor";
 import { isDue, type Reminder } from "../shared/reminders";
 import { formatDue, formatElapsed } from "../shared/time-text";
@@ -1064,7 +1064,8 @@ function GroupHeading({ title, count, collapsed, onToggle, shared }: { title: st
       </Text>
       {config.counts ? <Text style={styles.count}>{count}</Text> : null}
       <View style={{ flex: 1 }} />
-      {collapsed ? <Icon name="ChevronRight" size={12} color={props.theme.colors.foregroundMuted} /> : null}
+      {/* Open or folded, the chevron says the heading folds its group. */}
+      <Icon name={collapsed ? "ChevronRight" : "ChevronDown"} size={12} color={props.theme.colors.foregroundMuted} />
     </Pressable>
   );
 }
@@ -1503,6 +1504,9 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
       saveState({ collapsed: collapsed.has(key) ? state.collapsed.filter((item) => item !== key) : [...state.collapsed, key] });
     const nothing = sections.every((section) => section.items.length === 0) && dueEntries.length === 0;
     const remindersFolded = collapsed.has(REMINDERS_GROUP);
+    // The first few due reminders, then Show more (Settings, Sidebar, Reminders).
+    const reminderLimit = config.reminderRows ?? DEFAULT_REMINDER_ROWS;
+    const shownReminders = expanded.has(REMINDERS_GROUP) ? dueEntries : dueEntries.slice(0, reminderLimit);
 
     const placeholder = config.list === "chats" ? "Search chats" : "Search name, branch or project";
     const activeTags = [
@@ -1540,7 +1544,9 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
         {dueEntries.length > 0 ? (
           <View>
             <GroupHeading title="Reminders" count={dueEntries.length} collapsed={remindersFolded} onToggle={() => toggleCollapsed(REMINDERS_GROUP)} shared={shared} />
-            {remindersFolded ? null : dueEntries.map((entry) => <ReminderRow key={`${entry.taskId}:${entry.reminder.setAt}`} entry={entry} chat={entry.agentId ? dueChats.get(entry.agentId) ?? null : null} shared={shared} />)}
+            {remindersFolded ? null : shownReminders.map((entry) => <ReminderRow key={`${entry.taskId}:${entry.reminder.setAt}`} entry={entry} chat={entry.agentId ? dueChats.get(entry.agentId) ?? null : null} shared={shared} />)}
+            {!remindersFolded && shownReminders.length < dueEntries.length ? <MoreRow icon="ChevronDown" label="Show more" spoken={`Show ${dueEntries.length - shownReminders.length} more reminders`} count={dueEntries.length - shownReminders.length} onPress={() => setExpandedKey(REMINDERS_GROUP, true)} shared={shared} /> : null}
+            {!remindersFolded && expanded.has(REMINDERS_GROUP) && dueEntries.length > reminderLimit ? <MoreRow icon="ChevronUp" label="Show less" spoken="Show fewer reminders" onPress={() => setExpandedKey(REMINDERS_GROUP, false)} shared={shared} /> : null}
           </View>
         ) : null}
         {nothing && !ready ? <LoadingRows shared={shared} /> : null}

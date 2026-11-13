@@ -91,12 +91,14 @@ export const polishSchema = tolerant({
   previewStripes: z.boolean().optional(),
   // Web: copy and cell selection on Paseo's tables.
   tableCopy: z.boolean().optional(),
+  // Web: a Run button beside Copy code on shell code blocks in replies (on unless turned off).
+  runButtons: z.boolean().optional(),
 });
 export type PolishSettings = z.output<typeof polishSchema>;
 
 // Each option's default; a saved value equal to it is removed (older Morphise versions reject keys
 // they do not know, so an unchanged profile carries none).
-export const POLISH_DEFAULTS: Partial<Record<keyof PolishSettings, unknown>> = { mergeMin: 2, diffLineNumbers: true, thoughtFirstLine: false, barButtons: "both", barPosition: "above", sideModel: "", thumbCorners: "rounded", replyWidth: "paseo", floatingRadius: 10, floatingGap: 8, loaderColor: "paseo", pageHeight: 0, uiFont: "paseo", markdownStyle: "paseo", hoverPreviews: false, hoverDelay: 1, previewWrap: true, previewLineNumbers: true, previewStripes: false, tableCopy: false, merge: true, failedOpen: true, images: "native", imageStacks: false, imageStackOpen: "hover", selection: true, restyle: false, window: "paseo", loader: "dots", loaderSize: "s", diagrams: "mermaid", iconSet: "lucide", html: false, syntax: "one-dark-darker-mariana" };
+export const POLISH_DEFAULTS: Partial<Record<keyof PolishSettings, unknown>> = { mergeMin: 2, diffLineNumbers: true, thoughtFirstLine: false, barButtons: "both", barPosition: "above", sideModel: "", thumbCorners: "rounded", replyWidth: "paseo", floatingRadius: 10, floatingGap: 8, loaderColor: "paseo", pageHeight: 0, uiFont: "paseo", markdownStyle: "paseo", hoverPreviews: false, hoverDelay: 1, previewWrap: true, previewLineNumbers: true, previewStripes: false, tableCopy: false, runButtons: true, merge: true, failedOpen: true, images: "native", imageStacks: false, imageStackOpen: "hover", selection: true, restyle: false, window: "paseo", loader: "dots", loaderSize: "s", diagrams: "mermaid", iconSet: "lucide", html: false, syntax: "one-dark-darker-mariana" };
 
 // Chat Polish's Prefs, as its ported code reads them.
 export interface Prefs {
@@ -149,6 +151,7 @@ export interface Prefs {
   previewLineNumbers: boolean;
   previewStripes: boolean;
   tableCopy: boolean;
+  runButtons: boolean;
 }
 
 const hidden = (kinds: readonly string[] | undefined): Hideable[] => HIDEABLE.filter((kind) => kinds?.includes(kind));
@@ -204,5 +207,6 @@ export function polishPrefs(chat: ChatSettings | undefined): Prefs {
     previewLineNumbers: polish.previewLineNumbers !== false,
     previewStripes: polish.previewStripes === true,
     tableCopy: polish.tableCopy === true,
+    runButtons: polish.runButtons !== false,
   };
 }

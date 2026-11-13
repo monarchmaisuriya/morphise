@@ -144,6 +144,11 @@ export function MessagesTab(form: Form): ReactNode {
           <SwitchField label="Copy and cell selection on tables" hint="A copy button at a table's top-left corner. Double-click a cell, or drag across cells (Cmd or Ctrl adds more), then Copy or Add to chat." value={prefs.tableCopy} onChange={(value) => set("tableCopy", value)} />
         </SettingsCard>
       </SettingsSection>
+      <SettingsSection title="Commands" info="Desktop and web: run a shell command from a reply, as you, in that chat's folder, with live output in the chat. /run followed by a command works everywhere, phones included. The runner is ported from Shell Yeah by Steve Castaneda (MIT).">
+        <SettingsCard>
+          <SwitchField label="Run buttons on shell code blocks" hint="A Run button beside Copy code on bash, sh and zsh blocks. Commands that need administrator rights, delete files, discard changes, force-push or run a script from the internet ask first." value={prefs.runButtons} onChange={(value) => set("runButtons", value)} />
+        </SettingsCard>
+      </SettingsSection>
       <SettingsSection title="Diagrams" info="Mermaid diagrams in replies, in your theme's colours while Paseo's items are restyled (Look tab).">
         <SettingsCard>
           <SelectField label={t("prefs.row.renderer")} hint={t("prefs.hint.renderer")} value={prefs.diagrams} options={[{ value: "mermaid", label: "Paseo's mermaid" }, { value: "pele", label: "Pele, on this host's daemon" }]} onChange={(value) => set("diagrams", value)} />
