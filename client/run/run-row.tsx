@@ -27,10 +27,9 @@ import { inlineRuns } from "./web/panel-model";
 import { OutputWell } from "./output";
 import { PasteButton } from "./paste";
 import { makePalette, withAlpha, type ThemeColors } from "./palette";
-import { Badge, Button, IconSwap, PressScale, mono, nativeDriver, raised, toneColor, useReducedMotion, type ButtonTone } from "./ui";
+import { Button, IconSwap, PressScale, mono, nativeDriver, toneColor, useReducedMotion, type ButtonTone } from "./ui";
 
 const NOTE_ICON: Record<NoteIcon, string> = {
-  "eye-off": "EyeOff",
   eye: "Eye",
   scissors: "Scissors",
   clock: "Clock",
@@ -154,7 +153,7 @@ export function RunRowView({ agentId, item, theme, layout, timestamp }: PluginTi
             busy={busy === action.id}
             disabled={action.disabled}
             compact={compact}
-            iconOnly={compact && !action.primary}
+            iconOnly={!action.primary}
             colors={colors}
             accessibilityLabel={action.label}
           />
@@ -212,13 +211,8 @@ export function RunRowView({ agentId, item, theme, layout, timestamp }: PluginTi
         ) : pres.well?.kind === "message" ? (
           <View
             style={{
-              marginHorizontal: 6,
-              borderRadius: 6,
-              backgroundColor: palette.well,
-              borderWidth: 1,
-              borderColor: withAlpha(colors.border, 0.6),
-              paddingVertical: 8,
-              paddingHorizontal: 10,
+              paddingVertical: 4,
+              paddingHorizontal: 12,
             }}
           >
             <Text selectable style={{ fontFamily: mono(), fontSize: 12, lineHeight: 18, color: colors.foreground }}>
@@ -244,7 +238,7 @@ function buttonTone(action: Action): ButtonTone {
   return action.primary ? "primary" : "quiet";
 }
 
-// The card: surface, ring, the running sweep along the top edge, and one flash of the
+// The card: surface, hairline border, the running sweep along the top edge, and one flash of the
 // status color when a run this mount watched comes to an end.
 function Card({
   children,
@@ -287,7 +281,7 @@ function Card({
     <View
       testID="morphise-run"
       onLayout={onLayout}
-      style={[{ borderRadius: 12, backgroundColor: colors.surface1, overflow: "hidden", borderWidth: 1, borderColor: "transparent" }, raised(colors)]}
+      style={{ borderRadius: 10, backgroundColor: colors.surface1, overflow: "hidden", borderWidth: 1, borderColor: withAlpha(colors.border, 0.7) }}
     >
       {running && !showingEarlierRun ? (
         reduced ? (
@@ -316,7 +310,7 @@ function Card({
           left: 0,
           right: 0,
           bottom: 0,
-          borderRadius: 12,
+          borderRadius: 10,
           borderWidth: 1,
           borderColor: toneColor(tone, colors),
           opacity: flash,
@@ -374,18 +368,18 @@ function Header({
       onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
       style={{
         gap: 4,
-        paddingVertical: 10,
+        paddingVertical: 8,
         paddingHorizontal: 12,
-        minHeight: 40,
+        minHeight: 36,
         backgroundColor: highlighted ? withAlpha(colors.surface2, 0.5) : "transparent",
       }}
     >
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-        <Badge kind={pres.badge} tone={pres.tone} colors={colors} />
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: toneColor(pres.tone, colors) }} />
         <Text
           onLayout={command.onShownLayout}
           numberOfLines={expanded ? undefined : 1}
-          style={{ flex: 1, minWidth: 0, fontFamily: mono(), fontSize: 13, lineHeight: 18, fontWeight: "600", color: colors.foreground }}
+          style={{ flex: 1, minWidth: 0, fontFamily: mono(), fontSize: 13, lineHeight: 18, fontWeight: "500", color: colors.foreground }}
         >
           <Text selectable={false} style={{ color: colors.foregroundMuted, fontWeight: "400" }}>
             ${" "}
@@ -398,7 +392,7 @@ function Header({
           pointerEvents="none"
           onLayout={command.onFullLayout}
           numberOfLines={1}
-          style={{ position: "absolute", left: 0, top: 0, opacity: 0, fontFamily: mono(), fontSize: 13, lineHeight: 18, fontWeight: "600" }}
+          style={{ position: "absolute", left: 0, top: 0, opacity: 0, fontFamily: mono(), fontSize: 13, lineHeight: 18, fontWeight: "500" }}
         >{`$ ${first}`}</Text>
         {rest.length > 0 ? (
           <Text
@@ -424,7 +418,7 @@ function Header({
           ) : null}
         </IconSwap>
       </View>
-      {stacked && switcherView ? <View style={{ flexDirection: "row", paddingStart: 18 }}>{switcherView}</View> : null}
+      {stacked && switcherView ? <View style={{ flexDirection: "row", paddingStart: 14 }}>{switcherView}</View> : null}
     </View>
   );
   if (!foldable) return content(false);

@@ -13,9 +13,10 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import type { Badge as BadgeKind, Tone } from "../../shared/run/view";
+import type { Tone } from "../../shared/run/view";
 import { Icon } from "../ui/kit";
-import { isLight, withAlpha, type ThemeColors } from "./palette";
+import { useTooltip } from "../web";
+import type { ThemeColors } from "./palette";
 
 // Read at render time, not import time. The native driver can't run on web,
 // and web is the only place filter blur renders.
@@ -65,11 +66,13 @@ export function toneColor(tone: Tone, colors: ThemeColors): string {
 
 // A button that scales to 0.96 while pressed.
 export function PressScale({
+  ref,
   style,
   outerStyle,
   children,
   ...props
 }: Omit<PressableProps, "style" | "children"> & {
+  ref?: React.Ref<View>;
   outerStyle?: StyleProp<ViewStyle>;
   style?: StyleProp<ViewStyle> | ((state: { pressed: boolean; hovered: boolean }) => StyleProp<ViewStyle>);
   children: React.ReactNode;
@@ -81,6 +84,7 @@ export function PressScale({
   return (
     <Pressable
       {...props}
+      ref={ref}
       style={outerStyle}
       onHoverIn={(event) => {
         setHovered(true);
@@ -155,27 +159,6 @@ export function Spinner({ color, size = 12 }: { color: string; size?: number }) 
   );
 }
 
-const BADGE_ICON: Record<Exclude<BadgeKind, "spinner">, string> = { check: "Check", x: "X", square: "Square", unplug: "Unplug" };
-
-// 20 px status tile: a tinted circle with a 12 px glyph that morphs between states.
-export function Badge({ kind, tone, colors }: { kind: BadgeKind; tone: Tone; colors: ThemeColors }) {
-  const color = toneColor(tone, colors);
-  const light = isLight(colors) ?? false;
-  const glyph = kind === "spinner" ? <Spinner color={colors.accent} size={12} /> : <Icon name={BADGE_ICON[kind]} size={12} color={color} />;
-  return (
-    <View
-      style={[
-        { width: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-        { backgroundColor: withAlpha(color, light ? 0.12 : 0.14) },
-      ]}
-    >
-      <IconSwap swapKey={kind} size={12}>
-        {glyph}
-      </IconSwap>
-    </View>
-  );
-}
-
 export type ButtonTone = "primary" | "quiet" | "danger-filled";
 
 export function Button({
@@ -211,14 +194,18 @@ export function Button({
   accessibilityLabel: string;
 }) {
   const filled = tone === "primary" || tone === "danger-filled";
-  const background = tone === "primary" ? colors.accent : tone === "danger-filled" ? colors.statusDanger : colors.surface2;
+  // A quiet button is bare until hovered; one floating over the output keeps its surface.
+  const background = tone === "primary" ? colors.accent : tone === "danger-filled" ? colors.statusDanger : floating ? colors.surface2 : "transparent";
   const foreground =
     tone === "primary" ? colors.accentForeground : tone === "danger-filled" ? colors.surface0 : colors.foreground;
   const height = compact ? 36 : 28;
   const labelStyle = { color: foreground, fontSize: 12, lineHeight: 16, fontWeight: filled ? ("600" as const) : ("500" as const) };
   const showLabel = !iconOnly || filled;
+  // An icon without words gets its name as a hover tooltip.
+  const tooltip = useTooltip(showLabel ? undefined : label, colors);
   return (
     <PressScale
+      ref={tooltip}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       aria-busy={busy}
@@ -235,7 +222,7 @@ export function Button({
         alignItems: "center",
         justifyContent: "center",
         gap: 6,
-        backgroundColor: filled || !hovered || disabled ? background : colors.border,
+        backgroundColor: filled || !hovered || disabled ? background : floating ? colors.border : colors.surface2,
         opacity: disabled ? 0.5 : filled && hovered ? 0.88 : 1,
       })}
     >

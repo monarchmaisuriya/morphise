@@ -146,7 +146,8 @@ export function makePalette(colors: ThemeColors): Palette {
   const readable = Object.values(colors).every((c) => typeof c === "string" && parseColor(c) !== null);
   const guard = (fg: string, bg: string) => (readable ? ensureContrast(fg, bg, MIN_CONTRAST, [colors.surface0, colors.foreground]) : fg);
   const light = isLight(colors) ?? false;
-  const well = light ? colors.surface2 : colors.surface0;
+  // The output sits straight on the run card, so its background is the card's.
+  const well = colors.surface1;
   const text = colors.foreground;
   const ansi = ansiColors(colors);
   const cache = new Map<string, Style>();

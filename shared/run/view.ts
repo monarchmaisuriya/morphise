@@ -3,9 +3,8 @@ import { LIMITS } from "./limits";
 import { cardIdOf, lineText, runNumberOf, type Line, type LiveView, type PastRun, type Phase, type RunRow } from "./row";
 
 export type Tone = "active" | "success" | "danger" | "warning";
-export type Badge = "spinner" | "check" | "x" | "square" | "unplug";
 export type ActionId = "stop" | "force-stop" | "copy" | "rerun" | "send";
-export type NoteIcon = "eye-off" | "eye" | "scissors" | "clock" | "info" | "keyboard";
+export type NoteIcon = "eye" | "scissors" | "clock" | "info" | "keyboard";
 
 // A row after merging its data with the freshest live reply (see client/run/live.ts).
 export type ResolvedRun = Pick<RunRow, "runId" | "command" | "cwd"> & { terminal: boolean } & Pick<LiveView, "rev" | "phase" | "output" | "sentAt" | "cursor"> & {
@@ -27,7 +26,6 @@ export type Well = { kind: "output"; skipped: number } | { kind: "message"; text
 
 export interface Presentation {
   tone: Tone;
-  badge: Badge;
   // "Done", "Exit 1", "Killed (SIGKILL)", "Stopped", "Interrupted", "Couldn't start", "Stopping", "" while running.
   label: string;
   // Fixed once ended: "12.4 s" | "850 ms" | "1 m 05 s". null while running or before.
@@ -61,10 +59,6 @@ export function agentName(provider: string | null | undefined): string {
   return (provider && AGENT_NAMES[provider]) || "the agent";
 }
 
-export function capitalize(text: string): string {
-  return text.charAt(0).toUpperCase() + text.slice(1);
-}
-
 // `phone`: Paseo's phone layout, where the card has a Paste button.
 export function describe(run: ResolvedRun, now: number, opts: { agent?: string; phone?: boolean } = {}): Presentation {
   const agent = opts.agent ?? "the agent";
@@ -89,7 +83,6 @@ export function describe(run: ResolvedRun, now: number, opts: { agent?: string; 
     const takesKeys = run.terminal;
     return {
       tone: "active",
-      badge: "spinner",
       label: stopping ? "Stopping" : "",
       elapsed: null,
       timerFrom: phase.startedAt - run.clockOffset,
@@ -112,11 +105,7 @@ export function describe(run: ResolvedRun, now: number, opts: { agent?: string; 
   // A button drops the article: "Send to agent", not "Send to the agent".
   const send = action("send", run.sentAt === null ? `Send to ${agent.replace(/^the /, "")}` : "Send again", sendIsPrimary);
   const actions = sendIsPrimary ? [send, action("copy", "Copy"), action("rerun", "Rerun")] : [action("copy", "Copy"), action("rerun", "Rerun"), send];
-  const notes: Presentation["notes"] = [
-    run.sentAt === null
-      ? { icon: "eye-off", text: `${capitalize(agent)} can't see this` }
-      : { icon: "eye", text: `Sent to ${agent} ${formatClock(run.sentAt)}` },
-  ];
+  const notes: Presentation["notes"] = run.sentAt === null ? [] : [{ icon: "eye", text: `Sent to ${agent} ${formatClock(run.sentAt)}` }];
   if (skipped > 0) notes.push({ icon: "scissors", text: `Last ${formatCount(lines.length)} of ${formatCount(total)} lines` });
   const notFound = (phase.kind === "failed" && phase.exitCode === 127) || /command not found/i.test(outputText);
   const hint = notFound ? NO_SHELL_FILES_HINT : !run.terminal && INPUT_PATTERNS.test(outputText) ? NO_KEYBOARD_HINT : null;
@@ -130,17 +119,16 @@ export function describe(run: ResolvedRun, now: number, opts: { agent?: string; 
         : { kind: "output", skipped };
   switch (phase.kind) {
     case "ok":
-      return { ...base, tone: "success", badge: "check", label: "Done", well };
+      return { ...base, tone: "success", label: "Done", well };
     case "failed":
-      if (phase.message !== null) return { ...base, tone: "danger", badge: "x", label: "Couldn't start", elapsed: null, well };
-      return { ...base, tone: "danger", badge: "x", label: phase.signal ? `Killed (${phase.signal})` : `Exit ${phase.exitCode ?? "?"}`, well };
+      if (phase.message !== null) return { ...base, tone: "danger", label: "Couldn't start", elapsed: null, well };
+      return { ...base, tone: "danger", label: phase.signal ? `Killed (${phase.signal})` : `Exit ${phase.exitCode ?? "?"}`, well };
     case "stopped":
-      return { ...base, tone: "warning", badge: "square", label: "Stopped", well };
+      return { ...base, tone: "warning", label: "Stopped", well };
     case "interrupted":
       return {
         ...base,
         tone: "warning",
-        badge: "unplug",
         label: "Interrupted",
         well,
         notes: [...notes, { icon: "info" as const, text: "Stopped when the plugin restarted" }].slice(0, 2),

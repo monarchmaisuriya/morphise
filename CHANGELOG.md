@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.24.1 - 2026-11-13
+
+- **A plainer run card:** a small status dot instead of the round badge, the output straight on the card instead of in a second box, a thin border instead of a shadow, and Copy, Rerun and Send as bare icons (their names show on hover). A button that is the next step keeps its words: Stop while running, Send to agent after a failure. The "can't see this" line is gone; "Sent to … at …" still shows once you send.
+
 ## 0.24.0 - 2026-11-13
 
 - **Run output under the code block, as in Claude Desktop:** on desktop and web, pressing Run opens the command's live output under that code block, with its status and time, Stop, Copy, In chat (the card, to type into the command, rerun or send it) and Close. Text selected in it copies with its line breaks. The Run button is always shown, not only on hover. The run's card in the chat stays its record (Rerun, Send to agent, typing into it, and phones and other windows), shrunk to one line while the output shows under the block; Show here brings it back.

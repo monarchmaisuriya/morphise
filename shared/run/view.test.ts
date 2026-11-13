@@ -34,7 +34,6 @@ test("a running row shows a ticking timer, a line count, and Stop", () => {
     T0 + 6_000,
   );
   assert.equal(p.tone, "active");
-  assert.equal(p.badge, "spinner");
   assert.equal(p.label, "");
   assert.equal(p.timerFrom, T0);
   assert.equal(primary(p), "stop");
@@ -62,19 +61,18 @@ test("stop requested: Stopping is disabled for three seconds, then Force stop ta
   assert.equal(primary(force), "force-stop");
 });
 
-test("each ended state has its own label, tone and badge", () => {
-  const cases: Array<[Phase, string, string, string]> = [
-    [{ kind: "ok", ...ended }, "Done · 12s", "success", "check"],
-    [{ kind: "failed", ...ended, exitCode: 1, signal: null, message: null }, "Exit 1 · 12s", "danger", "x"],
-    [{ kind: "failed", ...ended, exitCode: null, signal: "SIGKILL", message: null }, "Killed (SIGKILL) · 12s", "danger", "x"],
-    [{ kind: "stopped", ...ended, exitCode: 130, signal: null }, "Stopped · 12s", "warning", "square"],
-    [{ kind: "interrupted", ...ended }, "Interrupted · 12s", "warning", "unplug"],
+test("each ended state has its own label and tone", () => {
+  const cases: Array<[Phase, string, string]> = [
+    [{ kind: "ok", ...ended }, "Done · 12s", "success"],
+    [{ kind: "failed", ...ended, exitCode: 1, signal: null, message: null }, "Exit 1 · 12s", "danger"],
+    [{ kind: "failed", ...ended, exitCode: null, signal: "SIGKILL", message: null }, "Killed (SIGKILL) · 12s", "danger"],
+    [{ kind: "stopped", ...ended, exitCode: 130, signal: null }, "Stopped · 12s", "warning"],
+    [{ kind: "interrupted", ...ended }, "Interrupted · 12s", "warning"],
   ];
-  for (const [phase, status, tone, badge] of cases) {
+  for (const [phase, status, tone] of cases) {
     const p = describe(run(phase), T0 + 20_000);
     assert.equal(statusText(p), status);
     assert.equal(p.tone, tone);
-    assert.equal(p.badge, badge);
   }
   const interrupted = describe(run({ kind: "interrupted", ...ended }), T0);
   assert.ok(interrupted.notes.some((n) => n.text === "Stopped when the plugin restarted"));
@@ -104,22 +102,22 @@ test("Send to the agent is filled for a failure, quiet otherwise", () => {
   assert.equal(sent.actions.find((a) => a.id === "send")?.label, "Send again");
   assert.equal(sent.notes[0].icon, "eye");
   assert.match(sent.notes[0].text, /^Sent to Claude \d{1,2}:\d{2}$/);
-  assert.deepEqual(ok.notes[0], { icon: "eye-off", text: "Claude can't see this" });
+  assert.deepEqual(ok.notes, [], "nothing to say until it is sent");
 });
 
 test("truncated output gets a scissors note; empty output gets no well", () => {
   const cut = { output: { lines: Array(412).fill("x"), total: 12_408 } };
-  assert.deepEqual(describe(run({ kind: "ok", ...ended }, cut), T0).notes[1], { icon: "scissors", text: "Last 412 of 12,408 lines" });
+  assert.deepEqual(describe(run({ kind: "ok", ...ended }, cut), T0).notes[0], { icon: "scissors", text: "Last 412 of 12,408 lines" });
   assert.equal(
     describe(run({ kind: "ok", ...ended }, { output: { lines: Array(60).fill("x"), total: 60 } }), T0).notes.length,
-    1,
+    0,
     "every line is in the box, so nothing is called hidden",
   );
   const collapsed = describe(run({ kind: "ok", ...ended }, cut), T0);
   assert.deepEqual(collapsed.well, { kind: "output", skipped: 11_996 });
   assert.equal(collapsed.foldable, true);
   const padded = describe(run({ kind: "ok", ...ended }, { output: { lines: ["", ...Array(8).fill("x"), ""], total: 10 } }), T0);
-  assert.equal(padded.notes.length, 1);
+  assert.equal(padded.notes.length, 0);
   assert.equal(padded.foldable, false, "blank lines at either end don't count toward the box height");
   const tall = describe(run({ kind: "ok", ...ended }, { output: { lines: Array(13).fill("x"), total: 13 } }), T0);
   assert.equal(tall.foldable, true, "past 12 lines the header arrow can make the box taller");
@@ -209,7 +207,6 @@ test("a running card fits its output for its first second, then holds a terminal
 test("a running row the daemon lost reads as interrupted at the moment it was lost", () => {
   const p = describe(run({ kind: "running", startedAt: T0, stopRequestedAt: null }, { lostAt: T0 + 41_000 }), T0 + 90_000);
   assert.equal(statusText(p), "Interrupted · 41s");
-  assert.equal(p.badge, "unplug");
   assert.equal(p.timerFrom, null);
 });
 
@@ -260,7 +257,7 @@ test("an earlier run shows as its own status and output, with Rerun, Copy and Se
   const p = describe(pastRunView(card, failed), T0);
   assert.deepEqual([p.label, p.elapsed, p.timerFrom, p.keyboard], ["Exit 1", "12s", null, false]);
   assert.deepEqual(ids(p), ["send", "copy", "rerun"]);
-  assert.deepEqual(p.notes[1], { icon: "scissors", text: "Last 1 of 40 lines" });
+  assert.deepEqual(p.notes[0], { icon: "scissors", text: "Last 1 of 40 lines" });
   assert.deepEqual(pastRow(card, failed), {
     runId: "r2",
     rev: 9,

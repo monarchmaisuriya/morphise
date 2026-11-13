@@ -130,7 +130,7 @@ test("jest-style badges stay legible: black on green, white on red", () => {
 });
 
 test("theme colors this file can't read are used as given instead of throwing", () => {
-  const p = makePalette({ ...DARK, surface0: "not a color", statusDanger: "" });
+  const p = makePalette({ ...DARK, surface1: "not a color", statusDanger: "" });
   assert.equal(p.well, "not a color");
   assert.equal(p.ansi.length, 16);
   assert.doesNotThrow(() => p.style("31;1"));

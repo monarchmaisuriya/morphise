@@ -123,11 +123,12 @@ export function OutputWell({
   );
 
   const frame = {
-    marginHorizontal: 10,
+    // No box of its own: the text lines up with the command, and a ring shows only while typing.
+    marginHorizontal: 2,
     borderRadius: 6,
     backgroundColor: palette.well,
     borderWidth: 1,
-    borderColor: listening ? colors.accent : withAlpha(colors.border, 0.6),
+    borderColor: listening ? colors.accent : "transparent",
     overflow: "hidden" as const,
   };
 
