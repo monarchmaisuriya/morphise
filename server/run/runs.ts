@@ -335,6 +335,7 @@ export function createRunRegistry(deps: RunsDeps): RunRegistry {
       sentAt: run.sentAt,
       lastOutputAt: run.lastOutputAt,
       serverNow: deps.now(),
+      terminal: run.terminal,
     };
   }
 

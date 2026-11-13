@@ -22,6 +22,7 @@ import {
   type RunInView,
 } from "../../shared/run/view";
 import { Icon } from "../ui/kit";
+import { createKeySender } from "./key-sender";
 import { useResolvedRun, useRunUi } from "./live";
 import { usePrefs } from "../polish/prefs";
 import { inlineRuns } from "./web/panel-model";
@@ -568,35 +569,11 @@ const KeyInput = forwardRef<TextInput, { send(keys: string): void; compact: bool
   );
 });
 
-// Sends keys in the order they were pressed, one request at a time, joining what was typed
-// while a request was out. Pastes past the request limit go in pieces.
+// The card's key sender (createKeySender), sending to this run and showing a failure as a toast.
 function useKeySender(runId: string): (keys: string) => void {
   const rpcInput = useRpc(input);
   const toast = useToast();
-  const queue = useRef({ pending: [] as string[], sending: false });
-  return useCallback(
-    (keys: string) => {
-      const q = queue.current;
-      q.pending.push(...keys);
-      if (q.sending) return;
-      q.sending = true;
-      void (async () => {
-        try {
-          while (q.pending.length > 0) {
-            // Half the limit in characters: one character can take two of the limit's units.
-            const chunk = q.pending.splice(0, LIMITS.inputChars / 2).join("");
-            await rpcInput({ runId, keys: chunk });
-          }
-        } catch (error) {
-          q.pending = [];
-          toast.error(errorMessage(error));
-        } finally {
-          q.sending = false;
-        }
-      })();
-    },
-    [runId],
-  );
+  return useMemo(() => createKeySender((keys) => rpcInput({ runId, keys }), { onError: (error) => toast.error(errorMessage(error)) }), [runId]);
 }
 
 function Footer({ pres, colors, compact, actions }: { pres: Presentation; colors: ThemeColors; compact: boolean; actions: React.ReactNode }) {

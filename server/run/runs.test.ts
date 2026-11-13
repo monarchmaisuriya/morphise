@@ -593,3 +593,12 @@ posixTest("a run with no shell named uses the login shell and leaves the row wit
   const row = await ended(h.registry, runId);
   assert.equal(row.shell, undefined);
 });
+
+posixTest("the live view says whether the run can take typing", async () => {
+  const h = harness({ terminal: "off" });
+  const runId = await run(h.registry, "sleep 1");
+  const reply = await h.registry.tail(runId, 10, null, 0);
+  assert.equal(reply.state, "view");
+  if (reply.state === "view") assert.equal(reply.view.terminal, false);
+  await ended(h.registry, runId);
+});

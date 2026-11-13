@@ -104,6 +104,8 @@ export const liveView = z.object({
   lastOutputAt: z.number().nullable(),
   // The daemon's clock when the reply was built; the row corrects its timers by it.
   serverNow: z.number(),
+  // The command runs in a real terminal, so it can take typing. Missing from older daemons: no typing.
+  terminal: z.boolean().optional(),
 });
 export type LiveView = z.infer<typeof liveView>;
 

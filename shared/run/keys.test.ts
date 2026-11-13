@@ -19,9 +19,8 @@ test("Ctrl+letter is a control key, but Ctrl+V still pastes and Cmd stays with t
   assert.equal(terminalKeys({ key: "Enter", metaKey: true }), null);
 });
 
-test("letters, Tab and Escape are left to the box", () => {
+test("letters and Escape are left to the box", () => {
   assert.equal(terminalKeys({ key: "y" }), null);
-  assert.equal(terminalKeys({ key: "Tab" }), null);
   assert.equal(terminalKeys({ key: "Escape" }), null);
 });
 
@@ -31,4 +30,10 @@ test("a paste can't press keys: line breaks and control characters go, tabs and 
   assert.equal(pastedKeys("a\x03b\x1b[2~c\x9bd\x7f"), "ab[2~cd", "Ctrl+C, ESC, CSI and DEL go");
   assert.equal(pastedKeys("name\tvalue é 🔑"), "name\tvalue é 🔑");
   assert.equal(pastedKeys("\n\x1b"), null);
+});
+
+test("Tab and Shift+Tab go to the command, so the page's focus doesn't move onto another button", () => {
+  assert.equal(terminalKeys({ key: "Tab" }), "\t");
+  assert.equal(terminalKeys({ key: "Tab", shiftKey: true }), "\x1b[Z");
+  assert.equal(terminalKeys({ key: "Tab", metaKey: true }), null);
 });

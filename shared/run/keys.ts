@@ -4,6 +4,7 @@ export interface KeyPress {
   ctrlKey?: boolean;
   altKey?: boolean;
   metaKey?: boolean;
+  shiftKey?: boolean;
 }
 
 // What a terminal sends for the keys a text box doesn't type: xterm's sequences, which
@@ -23,9 +24,12 @@ const SPECIAL: Record<string, string> = {
 };
 
 // The bytes for a key press, or null when the text box should handle it: letters arrive as
-// typed text, Cmd shortcuts stay with the app, and Ctrl+V pastes. Ctrl+C is the interrupt.
+// typed text, Cmd shortcuts stay with the app, and Ctrl+V pastes. Ctrl+C is the interrupt; Tab goes
+// to the command.
 export function terminalKeys(press: KeyPress): string | null {
   if (press.metaKey) return null;
+  // Tab completes in the shell instead of moving the page's focus (onto another Run button, say).
+  if (press.key === "Tab" && !press.ctrlKey && !press.altKey) return press.shiftKey ? "\x1b[Z" : "\t";
   if (press.ctrlKey && !press.altKey && /^[a-z]$/i.test(press.key)) {
     return press.key.toLowerCase() === "v" ? null : String.fromCharCode(press.key.toUpperCase().charCodeAt(0) - 64);
   }

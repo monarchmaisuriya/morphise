@@ -69,6 +69,8 @@ export function installRunButtons(client: PluginClientContext): () => void {
   // not); and the panels open now.
   const runOfBlock = new Map<string, string>();
   const panels = new Map<string, RunPanel>();
+  // Blocks whose panel M was typing into when Paseo took it off the page: the next panel resumes typing.
+  const typingKeys = new Set<string>();
   const keyOf = (block: DomElement): string | null => {
     const command = commandOf(block);
     const message = block.closest("[data-message-id]")?.getAttribute("data-message-id");
@@ -80,6 +82,7 @@ export function installRunButtons(client: PluginClientContext): () => void {
   const showPanel = (key: string, runId: string, pressed: DomElement) => {
     // "In the chat card" opens no panel, whichever way one would open.
     if (!underBlock()) return;
+    const resumeTyping = (panels.get(key)?.isTyping() ?? false) || typingKeys.delete(key);
     panels.get(key)?.detach();
     panels.get(key)?.element.remove();
     panels.delete(key);
@@ -89,10 +92,17 @@ export function installRunButtons(client: PluginClientContext): () => void {
     if (!block) return;
     panels.set(
       key,
-      openPanel(client, block, runId, currentPrefs(), () => {
-        panels.delete(key);
-        runOfBlock.delete(key);
-      }),
+      openPanel(
+        client,
+        block,
+        runId,
+        currentPrefs(),
+        () => {
+          panels.delete(key);
+          runOfBlock.delete(key);
+        },
+        resumeTyping,
+      ),
     );
   };
   const later = (button: DomElement, ms: number, then: () => void) => {
@@ -154,7 +164,9 @@ export function installRunButtons(client: PluginClientContext): () => void {
     // A block that showed a run before Paseo redrew it shows it again.
     const key = keyOf(block);
     const runId = key ? runOfBlock.get(key) : undefined;
-    if (key && runId && !panels.has(key)) showPanel(key, runId, block);
+    // A panel still listed but off the page belongs to the block Paseo just replaced (its "removed" news
+    // can come after this one): the new block takes the run over.
+    if (key && runId && !panels.get(key)?.element.isConnected) showPanel(key, runId, block);
   }
 
   const buttons = () => Array.from(document.querySelectorAll(`[${RUN}]`));
@@ -165,6 +177,7 @@ export function installRunButtons(client: PluginClientContext): () => void {
     for (const panel of panels.values()) (panel.detach(), panel.element.remove());
     panels.clear();
     runOfBlock.clear();
+    typingKeys.clear();
     for (const button of buttons()) button.remove();
   };
   const enabled = () => currentPrefs().runButtons;
@@ -179,7 +192,12 @@ export function installRunButtons(client: PluginClientContext): () => void {
       added: addWithin,
       // Its block left the page: the panel stops reading until the block comes back.
       removed: () => {
-        for (const [key, panel] of panels) if (!panel.element.isConnected) (panel.detach(), panels.delete(key));
+        for (const [key, panel] of panels) {
+          if (panel.element.isConnected) continue;
+          if (panel.isTyping()) typingKeys.add(key);
+          panel.detach();
+          panels.delete(key);
+        }
       },
       // A block streams in: an untagged one is only known to be a command once its text has arrived.
       settled: (textRoots) => addWithin(textRoots.map((root) => root.closest(CODE_BLOCK) ?? root)),

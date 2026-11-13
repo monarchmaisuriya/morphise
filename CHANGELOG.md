@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.27.0 - 2026-11-13
+
+- **Type into a command under its code block:** when a command asks for input (`read -p`, a password, a confirm prompt), click its output in the panel under the block, or the keyboard button, and type; Enter sends Return, Ctrl+C interrupts, Esc stops typing. Typed keys no longer have to go through the chat card, and they never reach the message box. A password the command hides stays hidden. The panel offers typing only while the command runs in a terminal; the daemon's live view now says whether it does. Tab now goes to the command (in the card too) instead of moving the page's focus, words from an input method or a dead key arrive whole, and typing carries on when Paseo redraws the block. Paseo's own shortcuts still come first, so on Windows and Linux keys such as Ctrl+W reach Paseo.
+
 ## 0.26.0 - 2026-11-13
 
 - **A code block runs in the shell it names:** Run on a ```bash block uses bash, ```sh uses sh and ```zsh uses zsh, whatever your login shell is, so bash-only commands such as `read -p` no longer fail in zsh. Other blocks and `/run` keep your login shell, and Rerun uses the first run's shell. The daemon looks for the shell only in /opt/homebrew/bin, /usr/local/bin, /bin and /usr/bin (a newer Homebrew bash first), never on PATH, so a tool that ships its own `bash` into a user folder can't receive your commands; when it isn't installed, the card says so. Settings, Messages, Commands, "Shell for code blocks" can switch back to the login shell. Windows keeps PowerShell.
