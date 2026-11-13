@@ -243,7 +243,8 @@ function lineRects(range: DomRange): Pick<Snapshot, "first" | "last"> | null {
 
 function readSource(selection: DomSelection, range: DomRange, start: DomElement): QuoteSource {
   const common = elementOf(range.commonAncestorContainer);
-  const block = common?.closest(CODE_BLOCK) ?? null;
+  // Text Morphise adds inside a code block (a run's output panel) is not the block's code.
+  const block = common?.closest('[data-paseo-markdown-ignore="true"]') ? null : common?.closest(CODE_BLOCK) ?? null;
   const inCode = Boolean(block || common?.closest(CODE_SPAN) || common?.closest(CODE_SURFACE));
   const code = inCode ? { language: block?.getAttribute(CODE_LANGUAGE_ATTRIBUTE) ?? null } : null;
   return { text: hostMarkdown(start) ?? selection.toString(), code };

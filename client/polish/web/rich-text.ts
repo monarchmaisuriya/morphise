@@ -114,6 +114,7 @@ ${RT("code", "b")} button[aria-label="Copy code"] { opacity: 0.35; transition: o
 ${RT("code", "b")} ${md("pre")}:hover button[aria-label="Copy code"] { opacity: 1; }
 ${RT("code", "b")} ${md("pre")}${LANG}::before { content: attr(data-paseo-markdown-language); position: absolute; top: 11px; right: 38px; font-family: var(--cp-mono); font-size: 11px; line-height: 16px; color: var(--cp-muted); opacity: 0.6; transition: opacity 120ms; }
 ${RT("code", "b")} ${md("pre")}${LANG}:hover::before { opacity: 1; }
+${RT("code", "b")} ${md("pre")}${LANG}:has(> [data-morphise-run])::before { right: 62px; }
 ${RT("code", "c")} ${md("pre")} { background: transparent !important; }
 ${RT("code", "c")} ${md("pre")} > div:first-child { position: relative !important; padding-left: 32px !important; }
 ${RT("code", "c")} ${md("pre")} > div:first-child::before { content: attr(data-cp-lines); position: absolute; left: 0; top: 0; width: 18px; text-align: right; white-space: pre; font-family: var(--cp-mono); font-size: var(--cp-code); line-height: 1.5; color: var(--cp-muted); opacity: 0.6; }

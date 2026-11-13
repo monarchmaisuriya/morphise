@@ -1,7 +1,7 @@
 // Ported from Shell Yeah (stevecastaneda/paseo-plugins, MIT, see NOTICE.md): shell-yeah/client/run-row.tsx
 import { useAgent, useRpc, type PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { copyText, useToast } from "@getpaseo/plugin/client/ui";
-import React, { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { forwardRef, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Animated, Easing, Platform, Pressable, Text, TextInput, View, type LayoutChangeEvent } from "react-native";
 import { pastedKeys, terminalKeys, type KeyPress } from "../../shared/run/keys";
 import { errorMessage } from "../../shared/run/text";
@@ -23,6 +23,7 @@ import {
 } from "../../shared/run/view";
 import { Icon } from "../ui/kit";
 import { useResolvedRun, useRunUi } from "./live";
+import { inlineRuns } from "./web/panel-model";
 import { OutputWell } from "./output";
 import { PasteButton } from "./paste";
 import { makePalette, withAlpha, type ThemeColors } from "./palette";
@@ -68,6 +69,8 @@ export function RunRowView({ agentId, item, theme, layout, timestamp }: PluginTi
   // Set by Rerun. Not on a phone, where focusing opens the keyboard over the chat.
   const focusWhenListening = useRef(false);
   const ui = useRunUi(row.runId);
+  // This window shows the run under its code block (web): the card keeps one line.
+  const shownUnderBlock = useSyncExternalStore(inlineRuns.subscribe, () => inlineRuns.has(row.runId), () => false);
   const running = run.phase.kind === "running" && run.lostAt === null;
   const latestRunning = latest.phase.kind === "running" && latest.lostAt === null;
   const newerRunning = past !== null && latestRunning;
@@ -158,6 +161,19 @@ export function RunRowView({ agentId, item, theme, layout, timestamp }: PluginTi
         ))}
     </View>
   );
+
+  if (shownUnderBlock) {
+    return (
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: colors.border }}>
+        <Text style={{ flex: 1, minWidth: 0, color: colors.foregroundMuted, fontSize: 12 }} numberOfLines={1}>
+          {`$ ${row.command.split("\n")[0]} · ${statusText(pres) || "Running"} · output shown under the command`}
+        </Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="Show the output here instead" onPress={() => inlineRuns.release(row.runId)}>
+          <Text style={{ color: colors.accent, fontSize: 12 }}>Show here</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <Enter timestamp={timestamp} reduced={reduced} entered={ui.entered} markEntered={ui.markEntered}>

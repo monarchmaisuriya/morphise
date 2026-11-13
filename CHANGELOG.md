@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.24.0 - 2026-11-13
+
+- **Run output under the code block, as in Claude Desktop:** on desktop and web, pressing Run opens the command's live output under that code block, with its status and time, Stop, Copy, In chat (the card, to type into the command, rerun or send it) and Close. Text selected in it copies with its line breaks. The Run button is always shown, not only on hover. The run's card in the chat stays its record (Rerun, Send to agent, typing into it, and phones and other windows), shrunk to one line while the output shows under the block; Show here brings it back.
+- **`/run` in a new chat:** Paseo hands a plugin's command no chat until the chat exists, so `/run` as a new chat's first message reaches the agent as a normal message. This is now said in Settings and the overview; use `/run` once the chat has replied, or a Run button.
+
 ## 0.23.0 - 2026-11-13
 
 - **Run commands from a chat:** `/run` followed by a command runs it as you, in that chat's folder, on every platform. On desktop and web, a Run button beside Paseo's Copy code does the same for a reply's shell code blocks (on by default; Settings, Messages, Commands). Each run is a card in the chat with live output, Stop and typing into it (2FA codes, passwords), then the exit code, Copy, Rerun and Send to agent. Commands that need administrator rights, delete files, discard changes, force-push, run a script from the internet or contain hidden characters ask first, and the confirm covers only the text it showed. Commands run only when you press Run or send `/run`, always in the chat's own folder; archiving a chat stops its commands and deletes their output (kept a week, at most 100 MB). The runner is ported from Shell Yeah by Steve Castaneda (MIT); Shell Yeah can be installed beside Morphise.

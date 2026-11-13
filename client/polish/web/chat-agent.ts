@@ -22,7 +22,9 @@ export interface ChatElement {
 /** The agent whose chat holds `element`, or null when it is not in a chat or the pane names none. */
 export function chatAgentOf(element: ChatElement): string | null {
   const transcript = element.closest(CHAT_SCROLL);
-  return transcript ? agentIdOf(nearestUnique(transcript, ACTIVE_AGENT_TAB)) : null;
+  // A background tab keeps its transcript mounted but hidden; the pane's selected tab names another chat.
+  if (!transcript || transcript.getClientRects().length === 0) return null;
+  return agentIdOf(nearestUnique(transcript, ACTIVE_AGENT_TAB));
 }
 
 /**
