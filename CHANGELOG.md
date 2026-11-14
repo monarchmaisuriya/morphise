@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.29.0 - 2026-11-14
+
+- **Theme presets: JetBrains Dark and Cursor Dark**, from JetBrains' New UI Dark theme file and Cursor 3.24's bundled Cursor Dark.
+- **Fix: VS Code Dark 2026 now matches VS Code.** Paseo paints its whole window with the theme's background, and the preset used VS Code's near-black editor colour there. It now uses the colour of VS Code's sidebar, chat view and title bar (#191a1b), as do the new presets with their IDE's panel colour. A theme already started from the old preset keeps its colours; pick the preset again to update it.
+
 ## 0.28.0 - 2026-11-14
 
 - **Theme preset: VS Code Dark 2026.** Settings, Theme, Start from now offers VS Code's "2026 Dark": its editor, widget, border, blue accent, text and sidebar colours, read from VS Code 1.146. For matching code colours, pick GitHub Dark under Code colours (2026 Dark uses that set).

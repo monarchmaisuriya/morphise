@@ -1007,11 +1007,22 @@ const THEME_PRESETS: Record<string, Theme> = {
   forest: { name: "Forest", appearance: "dark", colors: { background: "#121814", foreground: "#d6e2d6", raised: "#18211b", control: "#212c24", border: "#2c3a30", accent: "#5fbf8a", mutedForeground: "#8ea493", ring: "#3f6b50" } },
   dusk: { name: "Dusk", appearance: "dark", colors: { background: "#17141f", foreground: "#e2dcef", raised: "#1f1b2a", control: "#2a2438", border: "#362f48", accent: "#b48cf2", mutedForeground: "#978fab", ring: "#5a4a82" } },
   paper: { name: "Paper", appearance: "light", colors: { background: "#faf8f3", foreground: "#2b2a27", raised: "#ffffff", control: "#efece4", border: "#e0dbcf", accent: "#c0622f", mutedForeground: "#7a766c", ring: "#d9a07f" } },
-  // VS Code's "2026 Dark" (theme-defaults/themes/2026-dark.json, VS Code 1.146): editor.background, foreground,
-  // editorWidget.background, checkbox.background, sideBar.border, panelTitle.activeBorder (the lighter blue: background text on
-  // it is 5.4:1, where button.background #297AA0 would be 3.9:1), descriptionForeground, editorLineNumber.foreground, and
-  // sideBar.background for the sidebar. Its code colours are the GitHub Dark set (Code colours, GitHub Dark).
-  "vscode-dark-2026": { name: "VS Code Dark 2026", appearance: "dark", colors: { background: "#121314", foreground: "#bfbfbf", raised: "#202122", control: "#242526", border: "#2a2b2c", accent: "#3994bc", mutedForeground: "#8c8c8c", ring: "#858889" }, sidebar: "#191a1b" },
+  // IDE presets. Paseo paints its whole window (chat and sidebar) with `background`, so it takes the colour of the IDE's
+  // panels, where its chat lives (sidebar, chat view, title bar), not the editor's; cards and hovered rows take the IDE's
+  // widget or hover colour. Accents use the IDE's lighter link blue where its button blue under page-coloured text is below 4.5:1.
+  // VS Code "2026 Dark" (theme-defaults/themes/2026-dark.json, VS Code 1.146): sideBar/panel/titleBar.background,
+  // foreground, editorWidget/menu.background, textCodeBlock/checkbox.background, panel.border, panelTitle.activeBorder,
+  // descriptionForeground, editorLineNumber.foreground.
+  "vscode-dark-2026": { name: "VS Code Dark 2026", appearance: "dark", colors: { background: "#191a1b", foreground: "#bfbfbf", raised: "#202122", control: "#242526", border: "#2a2b2c", accent: "#3994bc", mutedForeground: "#8c8c8c", ring: "#858889" } },
+  // JetBrains New UI "Dark" (intellij-community, platform-resources/src/themes/expUI/expUI_dark.theme.json): *.background
+  // (tool windows) Gray2, *.foreground Gray12, *.hoverBackground and ComboBox.nonEditableBackground Gray3, Menu/ToolBar
+  // separatorColor Gray4, Link.activeForeground Blue9 (Blue6 #3574F0 is 3.2:1 here), List.Tag.foreground Gray8 (its
+  // *.infoForeground Gray7 is 2.9:1), *.infoForeground Gray7 for faint text.
+  "jetbrains-dark": { name: "JetBrains Dark", appearance: "dark", colors: { background: "#2b2d30", foreground: "#dfe1e5", raised: "#393b40", control: "#393b40", border: "#43454a", accent: "#6b9bfa", mutedForeground: "#868a91", ring: "#6f737a" } },
+  // Cursor "Cursor Dark" (Cursor 3.24, extensions/theme-cursor/themes/cursor-dark-color-theme.json): sideBar/panel/titleBar
+  // .background, foreground, button.background; its translucent whites blended onto the panel colour: list.hoverBackground,
+  // input.background, panel.border, input.placeholderForeground, tab.inactiveForeground.
+  "cursor-dark": { name: "Cursor Dark", appearance: "dark", colors: { background: "#141414", foreground: "#f0f0f0", raised: "#232323", control: "#1d1d1d", border: "#242424", accent: "#81a1c1", mutedForeground: "#989898", ring: "#636363" } },
   // Chat Polish's four (see NOTICE.md), with their sidebar colours.
   ...Object.fromEntries(POLISH_PRESETS.map((preset) => [`polish-${preset.id}`, { name: preset.id === "dusk" ? "Dusk (Chat Polish)" : preset.name === "One Dark Darker Mariana" ? "Mariana" : preset.name, appearance: preset.appearance, colors: { ...preset.colors }, ...(preset.sidebar ? { sidebar: preset.sidebar } : {}) }])),
 };
