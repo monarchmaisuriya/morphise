@@ -56,11 +56,14 @@ export function createDraftStore() {
     ...store,
     working,
     dirty: () => store.get().draft !== null,
-    edit(saved: Saved, change: (document: ProfileDocument) => void) {
+    // `rewritesInputs`: the edit changes values that text inputs show without being typed there (a preset that fills a
+    // form), so the generation goes up and those inputs show the new values. A typed edit leaves them mounted and focused.
+    edit(saved: Saved, change: (document: ProfileDocument) => void, { rewritesInputs = false }: { rewritesInputs?: boolean } = {}) {
       const base = store.get().draft ?? { document: copy(saved.document), revision: saved.revision };
       const document = copy(base.document);
       change(document);
-      store.set({ ...store.get(), draft: { document, revision: base.revision } });
+      const generation = store.get().generation + (rewritesInputs ? 1 : 0);
+      store.set({ ...store.get(), draft: { document, revision: base.revision }, generation });
     },
     // Replaces the whole draft, for the JSON editor.
     replace(saved: Saved, document: ProfileDocument) {

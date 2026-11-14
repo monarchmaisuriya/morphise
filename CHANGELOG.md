@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.28.0 - 2026-11-14
+
+- **Theme preset: VS Code Dark 2026.** Settings, Theme, Start from now offers VS Code's "2026 Dark": its editor, widget, border, blue accent, text and sidebar colours, read from VS Code 1.146. For matching code colours, pick GitHub Dark under Code colours (2026 Dark uses that set).
+- **Fix: picking a theme preset updates the colour fields at once.** They kept showing the old colours until the page reloaded, so editing one could overwrite the preset with a stale value.
+
 ## 0.27.1 - 2026-11-13
 
 - **Selection bar:** the greyed "Copy" label is gone; Text and Markdown each show the copy icon instead. With icons only, the two keep their own icons.

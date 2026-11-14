@@ -22,12 +22,14 @@ export interface Form {
   profile: Profile;
   updateDocument(change: (document: ProfileDocument) => void): void;
   updateProfile(change: (profile: Profile) => void): void;
+  // An edit that fills fields the user did not type in (a preset): text inputs re-read their value.
+  replaceInProfile(change: (profile: Profile) => void): void;
   // The error for a path inside the edited profile, such as "sidebar.view.rowLimit.rows".
   profileError(path: string): string | null;
   documentError(path: string): string | null;
   // How many problems sit under a path; profile paths unless `inDocument`.
   errorCount(path: string, inDocument?: boolean): number;
-  // Changes when inputs must re-read their value (discard, reload, another layout).
+  // Changes when inputs must re-read their value (discard, reload, another layout, a preset).
   inputKey: string;
 }
 
@@ -300,6 +302,7 @@ export function createFormScreen(
       profile: document.layouts[layoutIndex].profile,
       updateDocument: (change) => drafts.edit(saved, change),
       updateProfile: (change) => drafts.edit(saved, (next) => change(next.layouts[layoutIndex].profile)),
+      replaceInProfile: (change) => drafts.edit(saved, (next) => change(next.layouts[layoutIndex].profile), { rewritesInputs: true }),
       profileError: (path) => issues.get(profilePrefix + path) ?? null,
       documentError: (path) => issues.get(path) ?? null,
       errorCount: (path, inDocument) => {

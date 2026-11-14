@@ -1007,6 +1007,11 @@ const THEME_PRESETS: Record<string, Theme> = {
   forest: { name: "Forest", appearance: "dark", colors: { background: "#121814", foreground: "#d6e2d6", raised: "#18211b", control: "#212c24", border: "#2c3a30", accent: "#5fbf8a", mutedForeground: "#8ea493", ring: "#3f6b50" } },
   dusk: { name: "Dusk", appearance: "dark", colors: { background: "#17141f", foreground: "#e2dcef", raised: "#1f1b2a", control: "#2a2438", border: "#362f48", accent: "#b48cf2", mutedForeground: "#978fab", ring: "#5a4a82" } },
   paper: { name: "Paper", appearance: "light", colors: { background: "#faf8f3", foreground: "#2b2a27", raised: "#ffffff", control: "#efece4", border: "#e0dbcf", accent: "#c0622f", mutedForeground: "#7a766c", ring: "#d9a07f" } },
+  // VS Code's "2026 Dark" (theme-defaults/themes/2026-dark.json, VS Code 1.146): editor.background, foreground,
+  // editorWidget.background, checkbox.background, sideBar.border, panelTitle.activeBorder (the lighter blue: background text on
+  // it is 5.4:1, where button.background #297AA0 would be 3.9:1), descriptionForeground, editorLineNumber.foreground, and
+  // sideBar.background for the sidebar. Its code colours are the GitHub Dark set (Code colours, GitHub Dark).
+  "vscode-dark-2026": { name: "VS Code Dark 2026", appearance: "dark", colors: { background: "#121314", foreground: "#bfbfbf", raised: "#202122", control: "#242526", border: "#2a2b2c", accent: "#3994bc", mutedForeground: "#8c8c8c", ring: "#858889" }, sidebar: "#191a1b" },
   // Chat Polish's four (see NOTICE.md), with their sidebar colours.
   ...Object.fromEntries(POLISH_PRESETS.map((preset) => [`polish-${preset.id}`, { name: preset.id === "dusk" ? "Dusk (Chat Polish)" : preset.name === "One Dark Darker Mariana" ? "Mariana" : preset.name, appearance: preset.appearance, colors: { ...preset.colors }, ...(preset.sidebar ? { sidebar: preset.sidebar } : {}) }])),
 };
@@ -1072,7 +1077,7 @@ export function LookTab(form: Form): ReactNode {
                 options={[{ value: "custom", label: "Your colours" }, ...Object.entries(THEME_PRESETS).map(([value, preset]) => ({ value, label: `${preset.name} (${preset.appearance})` }))]}
                 onChange={(value) => {
                   const preset = THEME_PRESETS[value];
-                  if (preset) form.updateProfile((profile) => void (profile.theme = { ...copy(preset), name: profile.theme?.name && profile.theme.name !== DEFAULT_THEME.name ? profile.theme.name : preset.name }));
+                  if (preset) form.replaceInProfile((profile) => void (profile.theme = { ...copy(preset), name: profile.theme?.name && profile.theme.name !== DEFAULT_THEME.name ? profile.theme.name : preset.name }));
                 }}
               />
               <TextField form={form} label="Name" value={theme.name} onChange={(name) => form.updateProfile((profile) => void (profile.theme && (profile.theme.name = name)))} error={form.profileError("theme.name")} />

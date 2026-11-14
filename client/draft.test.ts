@@ -32,6 +32,16 @@ describe("draft store", () => {
     expect(store.get().generation).toBe(generation + 1);
   });
 
+  it("keeps inputs mounted for a typed edit, and remounts them for an edit that rewrites what they show", () => {
+    const store = createDraftStore();
+    const generation = store.get().generation;
+    store.edit(saved, (document) => void (document.prompts = []));
+    expect(store.get().generation).toBe(generation);
+    store.edit(saved, (document) => void (document.layouts[0].profile.sidebar.view.counts = false), { rewritesInputs: true });
+    expect(store.get().generation).toBe(generation + 1);
+    expect(store.working(saved).layouts[0].profile.sidebar.view.counts).toBe(false);
+  });
+
   it("lists each problem by its path in the document", () => {
     const store = createDraftStore();
     store.edit(saved, (document) => {
