@@ -30,14 +30,16 @@ const RESULT_MS = 2500;
 const PLAY = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"/></svg>';
 const CHECK = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
 
-// Paseo's Copy code sits 8px in from the block's top right and is 22px wide; Run sits just left of it,
-// always shown (as Claude Desktop shows its Run), brighter on hover. Colours are the theme's, which Paseo
+// Run takes the block's top-right corner, 8px in, where Paseo puts its Copy code (22px wide), and Copy code moves just left
+// of it on blocks that have Run; Run is always shown (as Claude Desktop shows its Run), brighter on hover. Colours are the theme's, which Paseo
 // keeps on :root as --colors-* (see client/polish/web/restyle.ts).
 const CSS = `
-[${RUN}] { position: absolute; top: 8px; right: 34px; display: flex; align-items: center; gap: 4px; padding: 4px; border: 0; border-radius: 4px; background: transparent; color: var(--colors-foreground-muted); cursor: pointer; opacity: 0.7; transition: opacity 120ms; font: 600 11px system-ui, sans-serif; user-select: none; }
+[${RUN}] { position: absolute; top: 8px; right: 8px; display: flex; align-items: center; gap: 4px; padding: 4px; border: 0; border-radius: 4px; background: transparent; color: var(--colors-foreground-muted); cursor: pointer; opacity: 0.7; transition: opacity 120ms; font: 600 11px system-ui, sans-serif; user-select: none; }
 [${RUN}]:hover { color: var(--colors-foreground); }
+${CODE_BLOCK}:has(> [${RUN}]) > button[aria-label="Copy code"] { right: 34px !important; left: auto !important; }
 ${CODE_BLOCK}:hover > [${RUN}], [${RUN}]:focus-visible, [${RUN}][data-state="confirm"], [${RUN}][data-state="error"] { opacity: 1; }
-[${RUN}][data-state="confirm"] { color: var(--colors-status-warning); }
+/* The confirm grows leftward over Copy code: it gets a surface and sits above it while it asks. */
+[${RUN}][data-state="confirm"] { color: var(--colors-status-warning); background: var(--colors-surface2); z-index: 1; }
 [${RUN}][data-state="error"] { color: var(--colors-status-danger); }
 [${RUN}]:disabled { cursor: progress; }
 @media (hover: none) { [${RUN}] { opacity: 1; } }

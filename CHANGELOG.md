@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.29.1 - 2026-11-14
+
+- **Run and Copy swap places on shell code blocks:** Run sits in the top-right corner and Paseo's Copy code just left of it. A risky command's "Run anyway?" covers Copy while it asks.
+
 ## 0.29.0 - 2026-11-14
 
 - **Theme presets: JetBrains Dark and Cursor Dark**, from JetBrains' New UI Dark theme file and Cursor 3.24's bundled Cursor Dark.
