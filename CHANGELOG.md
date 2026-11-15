@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.31.1 - 2026-11-15
+
+- **Fix: pictures inside a merged steps row open again.** With Paseo's Collapse turns on, an image an agent made mid-turn showed inside the "N steps" row only as "Image", which could not be clicked, and the pictures appeared nowhere else. That row now opens like a Thought row to the thumbnails; click one for the full-size viewer.
+
 ## 0.31.0 - 2026-11-15
 
 - **Show in Paseo: leave the id out to mean "your own".** An agent can now call `show_in_paseo` without `agentId` to open or draft into its own chat, and without `workspaceId` to open or pin its own workspace, so it no longer has to guess its ids from titles. Every answer after such a call ends with the id used, for example "(your own chat: 6f255b1e…)", and the daemon log shows it. Agents without a workspace (including older ones whose workspace was never recorded) are asked to give a `workspaceId`. Calls that name ids work exactly as before.

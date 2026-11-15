@@ -1,5 +1,5 @@
 // Ported from Chat Polish (lthieu96/paseo-chat-polish, MIT, see NOTICE.md): client/views.tsx (StepsItem, MergedSteps)
-// An image-only reply inside a run is named, not drawn: the media part owns image rows.
+// An image-only reply inside a run opens to its pictures, drawn by the media part (the run hides that reply's own image row).
 import type { PluginTheme } from "@getpaseo/plugin";
 import { useAgent, type PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
@@ -7,8 +7,10 @@ import { View } from "react-native";
 import type { z } from "zod";
 import type { AgentTimelineItem } from "../agent-types";
 import { useLanguage, useT } from "../i18n";
+import type { ImagesRow } from "../media/image-rows";
+import { ImagesItem } from "../media/views";
 import { imageOnly, toolData, type stepsSchema, type ToolData } from "./model";
-import { alpha, Expand, Prose, Row, useDisclosure, useIndent, useSpacing, useSteady } from "./row";
+import { alpha, Expand, FadeIn, Prose, Row, useDisclosure, useIndent, useSpacing, useSteady } from "./row";
 import { changesOfTodo, noteShownAgent, runOf, runVersion, stepKey, stepSummary, subscribeRun } from "./steps";
 import { ThoughtItem } from "./thought-row";
 import { changeWords, TodoSteps } from "./todo-row";
@@ -40,6 +42,23 @@ const ReplyStep = ({ theme, text }: { theme: PluginTheme; text: string }) => (
   </View>
 );
 
+/** An image-only reply folded into a run: named while folded, its thumbnails (and the viewer) once opened. */
+function ImageStep(props: PluginTimelineItemProps<unknown> & { images: ImagesRow["images"] }) {
+  const { item, theme, layout, images } = props;
+  const [open, toggle] = useDisclosure(false);
+  const t = useT();
+  return (
+    <View>
+      <Row theme={theme} compact={layout.compact} kind="tool" icon="Image" verb={t("chat.image")} target={images.map((i) => i.alt || i.url.split("/").pop()).join(", ")} open={open} onToggle={toggle} />
+      {open ? (
+        <FadeIn>
+          <ImagesItem {...props} item={{ ...item, data: { images: images.map((i) => ({ alt: i.alt || t("chat.image"), url: i.url })) } }} />
+        </FadeIn>
+      ) : null}
+    </View>
+  );
+}
+
 /** The merged row. Done, it says what the run did and how long it took; working, it names the step in progress; a failed step turns
  * the icon red. Open, it lists the steps as their own rows. A lone step renders as itself. The settings preview draws it from samples. */
 export function MergedSteps(props: PluginTimelineItemProps<unknown> & { steps: StepEntry[]; ms?: number; growing: boolean; defaultOpen?: boolean }) {
@@ -57,7 +76,7 @@ export function MergedSteps(props: PluginTimelineItemProps<unknown> & { steps: S
     if (step.type !== "assistant_message") return null;
     const images = imageOnly(step.text);
     return images ? (
-      <Row key={stepKey(step)} theme={theme} compact={layout.compact} kind="tool" icon="Image" verb={t("chat.image")} target={images.map((i) => i.alt || i.url.split("/").pop()).join(", ")} />
+      <ImageStep key={stepKey(step)} {...props} images={images} />
     ) : (
       <ReplyStep key={stepKey(step)} theme={theme} text={step.text} />
     );
