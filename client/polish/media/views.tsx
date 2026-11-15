@@ -60,7 +60,8 @@ function Thumbnail({ alt, label, url, theme, onOpen, edge, focusable = true }: {
   }
   return (
     <Pressable accessibilityRole="imagebutton" accessibilityLabel={label ?? t("chat.openImage", { alt })} onPress={onOpen} focusable={focusable} style={frame}>
-      <Image source={{ uri }} style={size} resizeMode="cover" />
+      {/* The whole picture, letterboxed on the frame's colour: a wide sheet or a tall screenshot cropped to the tile hid what it shows. */}
+      <Image source={{ uri }} style={size} resizeMode="contain" />
     </Pressable>
   );
 }

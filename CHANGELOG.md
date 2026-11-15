@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.32.1 - 2026-11-15
+
+- **Picture tiles show the whole picture.** Thumbnails and image-stack cards used to fill their frame and crop the rest, so a wide contact sheet or a tall screenshot showed only part of itself; they now fit the whole picture, with the frame's colour around it. Click a tile for the full-size viewer, as before.
+
 ## 0.32.0 - 2026-11-15
 
 From a review of the whole codebase. Settings move to format version 3: a custom slash command named `task`, `bookmark` or `run` is renamed with `-custom` added, as `remind` already was. An older Morphise can't read version-3 settings, so going back below 0.32.0 breaks them until you update again.
