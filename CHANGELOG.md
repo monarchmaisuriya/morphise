@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.31.0 - 2026-11-15
+
+- **Show in Paseo: leave the id out to mean "your own".** An agent can now call `show_in_paseo` without `agentId` to open or draft into its own chat, and without `workspaceId` to open or pin its own workspace, so it no longer has to guess its ids from titles. Every answer after such a call ends with the id used, for example "(your own chat: 6f255b1e…)", and the daemon log shows it. Agents without a workspace (including older ones whose workspace was never recorded) are asked to give a `workspaceId`. Calls that name ids work exactly as before.
+
 ## 0.30.0 - 2026-11-15
 
 - **Show in Paseo: agents can open things for you.** A new `show_in_paseo` agent tool brings a chat, terminal, workspace, the Workbench or Dispatch to the front of the Paseo window you used last; puts text in a chat's empty message box for you to read and send (never sent, never a slash command, never text with hidden characters); and pins or unpins a workspace. Only your own chats can use it, not sub-agents or background helpers, at most ten times a minute each, and every call is logged on the daemon. While you are typing in a window (on a phone, while its keyboard is up) it changes nothing there, so your keys never land in another chat, and a draft goes in only once its chat is on screen. On by default; Settings, Chat, "Show in Paseo" turns it off at once. Terminals and workspaces need Morphise's sidebar view selected in Paseo.

@@ -283,3 +283,77 @@ describe("reading the setting", () => {
     expect(log).toHaveBeenCalledWith("[morphise] show_in_paseo setting is invalid, treated as off (reset it in Settings, Chat): enabled: expected boolean");
   });
 });
+
+describe("leaving the id out to mean the caller's own", () => {
+  const caller = { id: "a1", parentAgentId: null, workspaceId: "w7" } as never;
+  const pinning = () => {
+    const setPinned = vi.fn(async () => ({}));
+    return { paseo: { workspaces: { ref: vi.fn(() => ({ setPinned })) } }, setPinned };
+  };
+
+  it("opens the caller's own chat and says which one", async () => {
+    const { windows } = windowsWithClock();
+    const desk = openWindow(windows, "desk");
+    const { tool, log } = toolWith({ windows });
+    const result = run(tool, { action: "chat" }, caller);
+    await flush();
+    expect(desk.asked[0]!.input).toEqual({ action: "chat", agentId: "a1" });
+    windows.answer(desk.asked[0]!.requestId, true, "Opened the chat.");
+    await expect(result).resolves.toEqual({ text: "Opened the chat. (your own chat: a1)" });
+    expect(log).toHaveBeenCalledWith("[morphise] show_in_paseo a1 chat a1: Opened the chat. (your own chat: a1)");
+  });
+
+  it("drafts into the caller's own chat", async () => {
+    const { windows } = windowsWithClock();
+    const desk = openWindow(windows, "desk");
+    const { tool } = toolWith({ windows });
+    void run(tool, { action: "draft", text: "Commit message: fix the chime." }, caller);
+    await flush();
+    expect(desk.asked[0]!.input).toEqual({ action: "draft", agentId: "a1", text: "Commit message: fix the chime." });
+  });
+
+  it("opens and pins the caller's workspace", async () => {
+    const { windows } = windowsWithClock();
+    const desk = openWindow(windows, "desk");
+    const { tool } = toolWith({ windows });
+    void run(tool, { action: "workspace" }, caller);
+    await flush();
+    expect(desk.asked[0]!.input).toEqual({ action: "workspace", workspaceId: "w7" });
+    const { paseo, setPinned } = pinning();
+    await expect(run(toolWith().tool, { action: "pin", pinned: true }, caller, paseo)).resolves.toEqual({ text: "Pinned the workspace. (your workspace: w7)" });
+    expect(paseo.workspaces.ref).toHaveBeenCalledWith("w7");
+    expect(setPinned).toHaveBeenCalledWith(true);
+  });
+
+  it("refuses when the caller has no workspace, and pins nothing", async () => {
+    const { paseo, setPinned } = pinning();
+    const noWorkspace = { id: "a1", parentAgentId: null, workspaceId: null } as never;
+    await expect(run(toolWith().tool, { action: "pin", pinned: true }, noWorkspace, paseo)).resolves.toEqual({ text: "This chat has no workspace; give a workspaceId.", isError: true });
+    expect(setPinned).not.toHaveBeenCalled();
+  });
+
+  it("refuses a sub-agent before filling anything", async () => {
+    const { windows } = windowsWithClock();
+    const desk = openWindow(windows, "desk");
+    const { tool } = toolWith({ windows });
+    const refused = { text: "Only the user's own chats can show things in Paseo, not sub-agents or background helpers.", isError: true };
+    await expect(run(tool, { action: "chat" }, { id: "a5", parentAgentId: "a1", workspaceId: "w7" })).resolves.toEqual(refused);
+    // With no workspace, filling first would answer "no workspace" instead of refusing the sub-agent.
+    await expect(run(tool, { action: "pin", pinned: true }, { id: "a5", parentAgentId: "a1", workspaceId: null })).resolves.toEqual(refused);
+    await expect(run(tool, { action: "pin", pinned: true }, { id: "a6", parentAgentId: null, background: true, workspaceId: null })).resolves.toEqual(refused);
+    expect(desk.asked).toHaveLength(0);
+  });
+
+  it("leaves explicit ids alone, with no suffix", async () => {
+    const { paseo } = pinning();
+    await expect(run(toolWith().tool, { action: "pin", workspaceId: "w2", pinned: true }, caller, paseo)).resolves.toEqual({ text: "Pinned the workspace." });
+    expect(paseo.workspaces.ref).toHaveBeenCalledWith("w2");
+  });
+
+  it("names the filled id even when the action fails", async () => {
+    await expect(run(toolWith().tool, { action: "workspace" }, caller)).resolves.toEqual({
+      text: "No Paseo window is open, so nothing could be shown. (your workspace: w7)",
+      isError: true,
+    });
+  });
+});

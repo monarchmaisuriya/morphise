@@ -123,6 +123,7 @@ export function createRateLimit({ perMinute = 10, now = Date.now }: { perMinute?
 
 interface ToolAgent {
   id: string;
+  workspaceId: string | null;
   parentAgentId: string | null;
   // Sent by Paseo 0.16.0-beta.2 and later; absent from the installed SDK's type.
   background?: boolean;
@@ -143,6 +144,21 @@ const SUBJECT: Record<ShowInput["action"], (input: ShowInput) => string | undefi
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
+/**
+ * An agent may leave out its own chat or workspace id. Fills it from the caller Paseo describes,
+ * never from the input, so "your own" cannot point anywhere else. `filled` names what was used.
+ */
+function fillOwnIds(input: ShowInput, caller: ToolAgent): { input: ShowInput; filled: string | null } | { refusal: string } {
+  if ((input.action === "chat" || input.action === "draft") && input.agentId === undefined) {
+    return { input: { ...input, agentId: caller.id }, filled: `your own chat: ${caller.id}` };
+  }
+  if ((input.action === "workspace" || input.action === "pin") && input.workspaceId === undefined) {
+    if (!caller.workspaceId) return { refusal: "This chat has no workspace; give a workspaceId." };
+    return { input: { ...input, workspaceId: caller.workspaceId }, filled: `your workspace: ${caller.workspaceId}` };
+  }
+  return { input, filled: null };
+}
+
 export function createShowTool({
   windows,
   enabled,
@@ -160,12 +176,19 @@ export function createShowTool({
       log(`[morphise] show_in_paseo setting unreadable, treated as off: ${errorText(error)}`);
       return false;
     });
-  async function run(caller: ToolAgent, input: ShowInput, paseo: Pinning, signal: AbortSignal): Promise<ShowAnswer> {
-    if (!(await isOn())) return { ok: false, message: "Show in Paseo is turned off in Morphise's settings." };
-    if (caller.parentAgentId || caller.background === true) {
-      return { ok: false, message: "Only the user's own chats can show things in Paseo, not sub-agents or background helpers." };
-    }
-    if (!rate.allow(caller.id)) return { ok: false, message: `Too many requests from this agent; at most ${rate.perMinute} a minute.` };
+  // The guards run first; then the caller's own ids are filled in, and the action gets complete ids.
+  async function run(caller: ToolAgent, given: ShowInput, paseo: Pinning, signal: AbortSignal): Promise<{ input: ShowInput; answer: ShowAnswer }> {
+    const refuse = (message: string) => ({ input: given, answer: { ok: false, message } });
+    if (!(await isOn())) return refuse("Show in Paseo is turned off in Morphise's settings.");
+    if (caller.parentAgentId || caller.background === true) return refuse("Only the user's own chats can show things in Paseo, not sub-agents or background helpers.");
+    if (!rate.allow(caller.id)) return refuse(`Too many requests from this agent; at most ${rate.perMinute} a minute.`);
+    const own = fillOwnIds(given, caller);
+    if ("refusal" in own) return refuse(own.refusal);
+    const answer = await act(caller, own.input, paseo, signal);
+    // Every answer after a fill names the id used, so the agent learns it even when the action failed.
+    return { input: own.input, answer: own.filled ? { ...answer, message: `${answer.message} (${own.filled})` } : answer };
+  }
+  function act(caller: ToolAgent, input: ShowInput, paseo: Pinning, signal: AbortSignal): Promise<ShowAnswer> {
     if (input.action !== "pin") return windows.request(caller.id, input, signal);
     const done = input.pinned ? "Pinned the workspace." : "Unpinned the workspace.";
     return paseo.workspaces
@@ -180,13 +203,13 @@ export function createShowTool({
     name: SHOW_TOOL,
     title: "Show in Paseo",
     description:
-      "Bring something to the front of the user's Paseo app, only when the user asks to see or open it: a chat, a terminal, a workspace or a Morphise screen; put text in an agent's empty message box for the user to read and send; or pin a workspace. Nothing is sent or pressed for the user.",
+      "Bring something to the front of the user's Paseo app, only when the user asks to see or open it: a chat, a terminal, a workspace or a Morphise screen; put text in an agent's empty message box for the user to read and send; or pin a workspace. Leave agentId or workspaceId out to mean your own chat or workspace. Nothing is sent or pressed for the user.",
     input: showInput,
     async execute(input, { agent, paseo, signal }) {
       const caller = agent as unknown as ToolAgent;
-      const answer = await run(caller, input, paseo as unknown as Pinning, signal);
-      // Every call is logged, refusals included.
-      log(`[morphise] show_in_paseo ${caller.id} ${input.action} ${SUBJECT[input.action](input)}: ${answer.message}`);
+      const { input: used, answer } = await run(caller, input, paseo as unknown as Pinning, signal);
+      // Every call is logged, refusals included, with the ids actually used.
+      log(`[morphise] show_in_paseo ${caller.id} ${used.action} ${SUBJECT[used.action](used)}: ${answer.message}`);
       return answer.ok ? { text: answer.message } : { text: answer.message, isError: true };
     },
   });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { showEnabled, showInput } from "./show";
+import { showEnabled, showInput, showRequest } from "./show";
 
 const parse = (input: unknown) => showInput.safeParse(input);
 const message = (input: unknown) => {
@@ -29,11 +29,32 @@ describe("show_in_paseo input", () => {
     }
   });
 
+  it("lets an agent leave out its own chat or workspace id", () => {
+    for (const input of [
+      { action: "chat" },
+      { action: "draft", text: "Commit message: fix the reminder chime." },
+      { action: "workspace" },
+      { action: "pin", pinned: true },
+    ]) {
+      expect(parse(input).success, JSON.stringify(input)).toBe(true);
+    }
+  });
+
+  it("still sends the window only complete requests", () => {
+    const request = (input: unknown) => {
+      const result = showRequest.safeParse({ requestId: "r1", input });
+      return result.success ? null : result.error.issues.map((issue) => issue.message).join("; ");
+    };
+    expect(request({ action: "chat" })).toBe("chat needs agentId");
+    expect(request({ action: "draft", text: "Hi" })).toBe("draft needs agentId");
+    expect(request({ action: "workspace" })).toBe("workspace needs workspaceId");
+    expect(request({ action: "pin", pinned: true })).toBe("pin needs workspaceId");
+    expect(request({ action: "chat", agentId: "a1" })).toBeNull();
+  });
+
   it("names the field an action is missing", () => {
-    expect(message({ action: "chat" })).toBe("chat needs agentId");
     expect(message({ action: "draft", agentId: "a1" })).toBe("draft needs text");
     expect(message({ action: "terminal" })).toBe("terminal needs terminalId");
-    expect(message({ action: "workspace" })).toBe("workspace needs workspaceId");
     expect(message({ action: "screen" })).toBe("screen needs screen");
     expect(message({ action: "pin", workspaceId: "w1" })).toBe("pin needs pinned");
     expect(message({ action: "fly" })).toMatch(/action/);
