@@ -12,11 +12,12 @@ function describe(error: unknown): string {
   return typeof error === "string" ? error : "The daemon closed the profile stream";
 }
 
-// Paseo does not reopen a stream that plugin code opened itself after the daemon restarts.
-// The caller reopens it on each workspace snapshot (sent after every reconnect) and when the
-// user asks. Replacing even an open-looking stream means a close notice that arrives late
-// cannot leave the client without updates. Only the current stream may write to the store: a
-// stream this code released reports "Subscription released", which is not a failure.
+// Paseo re-subscribes a plugin stream after a reconnect, but a stream the daemon closed, or whose
+// re-subscribe failed, ends for good. So the caller reopens it on each workspace snapshot (sent
+// after every reconnect) and when the user asks. Replacing even an open-looking stream means a
+// close notice that arrives late cannot leave the client without updates. Only the current stream
+// may write to the store: a stream this code released reports "Subscription released", which is
+// not a failure.
 export function connectStream<Event>(openStream: OpenStream<Event>, store: StreamStore<Event>) {
   let release: (() => void) | null = null;
 

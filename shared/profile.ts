@@ -43,8 +43,9 @@ const ownId = contributionId.refine((id) => !id.startsWith(RESERVED_COMMAND_PREF
   message: `Ids starting with "${RESERVED_COMMAND_PREFIX}" are reserved for Morphise's own items`,
 });
 
-// Morphise's own slash command.
-export const RESERVED_SLASH_COMMAND = "remind";
+// The slash commands Morphise registers itself; a profile command cannot take these names.
+export const RESERVED_SLASH_COMMANDS = { remind: "remind", task: "task", bookmark: "bookmark", run: "run" } as const;
+const reservedSlashCommandNames: readonly string[] = Object.values(RESERVED_SLASH_COMMANDS);
 
 const rowSchema = z.strictObject({ id: contributionId, label, icon, action: actionSchema });
 
@@ -99,7 +100,7 @@ const themeSchema = z.strictObject({
 });
 
 const slashCommandSchema = z.strictObject({
-  name: contributionId.refine((name) => name !== RESERVED_SLASH_COMMAND, { message: `"/${RESERVED_SLASH_COMMAND}" is Morphise's own reminder command` }),
+  name: contributionId.refine((name) => !reservedSlashCommandNames.includes(name), { error: (issue) => `"/${String(issue.input)}" is one of Morphise's own commands` }),
   description: label,
   argumentHint: z.string().max(80),
   action: actionSchema,

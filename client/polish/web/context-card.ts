@@ -1,7 +1,8 @@
 // Ported from Chat Polish (lthieu96/paseo-chat-polish, MIT, see NOTICE.md): client/web/context-card.ts
 // The context window card: its percent bar, the Compact row, and a remembered height so it doesn't jump.
 import { t } from "../i18n";
-import { nearestUnique, paneAgentId, visible, type DomElement, type WebDocument } from "./dom";
+import { nearestUnique, paneAgentOf } from "./chat-agent";
+import { visible, type DomElement, type WebDocument } from "./dom";
 
 declare const document: WebDocument;
 declare const localStorage: { getItem(key: string): string | null; setItem(key: string, value: string): void };
@@ -17,7 +18,7 @@ export function tagContextCard(card: DomElement) {
   head.style.setProperty("--cp-pct", `${pct}%`);
   head.setAttribute("data-cp-level", Number(pct) >= 80 ? "high" : "normal");
   if (compactHandler) markCompact(card, Number(pct), meter);
-  keepCardHeight(card, (meter && paneAgentId(meter)) ?? "");
+  keepCardHeight(card, (meter && paneAgentOf(meter)) ?? "");
 }
 
 const METER = '[data-testid="context-window-meter"]';
@@ -73,7 +74,7 @@ const FOLD_ICON =
  */
 function markCompact(card: DomElement, pct: number, meter: DomElement | null) {
   let row = card.querySelector("[data-cp-compact]");
-  if (!meter || !paneAgentId(meter)) return void row?.remove();
+  if (!meter || !paneAgentOf(meter)) return void row?.remove();
   if (!row) {
     row = document.createElement("div");
     row.setAttribute("data-cp-compact", "");
@@ -81,7 +82,7 @@ function markCompact(card: DomElement, pct: number, meter: DomElement | null) {
     const button = row.firstElementChild!;
     const label = button.children[1]!;
     button.addEventListener("click", () => {
-      const id = paneAgentId(meter);
+      const id = paneAgentOf(meter);
       if (!id || !compactHandler || button.hasAttribute("disabled")) return;
       button.setAttribute("disabled", "");
       label.textContent = t("web.compacting");

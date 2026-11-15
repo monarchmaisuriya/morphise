@@ -2,10 +2,11 @@
 import { openExternalUrl } from "@getpaseo/plugin/client";
 import { createElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { htmlPage, themeCss, type HtmlColors } from "../../../../shared/polish/page";
+import { seriesFrom } from "../../web/color";
 import { readHostAppearance } from "../../web/host";
 import { showAsPopover } from "../../web/popover";
 import { usePrefs } from "../../prefs";
-import { FRAME_SANDBOX, fitFrame, frameKey, frameLink, frameReport, frameShortcut, heightAt, limitFrameHeight } from "../frame";
+import { FRAME_SANDBOX, fitFrame, frameMessage, heightAt, limitFrameHeight, recentPages } from "../frame";
 
 // Web only (html-item.tsx checks Platform.OS); just the DOM this module touches.
 declare const navigator: { userAgent: string } | undefined;
@@ -20,12 +21,7 @@ declare const window: {
   addEventListener(type: "keydown", listener: (event: KeyListenerEvent) => void): void;
   removeEventListener(type: "keydown", listener: (event: KeyListenerEvent) => void): void;
 };
-interface Canvas2d {
-  fillStyle: string;
-  fillRect(x: number, y: number, w: number, h: number): void;
-  getImageData(x: number, y: number, w: number, h: number): { data: ArrayLike<number> };
-}
-declare const document: { activeElement: unknown; createElement(tag: "canvas"): { getContext(type: "2d", options: object): Canvas2d | null } };
+declare const document: { activeElement: unknown };
 interface HoverTarget {
   addEventListener(type: "mouseenter" | "mouseleave", listener: () => void): void;
   removeEventListener(type: "mouseenter" | "mouseleave", listener: () => void): void;
@@ -38,8 +34,8 @@ interface Frame {
 }
 
 // Each page's frame size in the chat. The chat's list unmounts rows it scrolls past; a row mounted again starts at this size rather than
-// growing from the default under the reader.
-const lastSizes = new Map<string, { height: number; width: number }>();
+// growing from the default under the reader. Only recent pages: the chat shows a few at a time, and a session can render many.
+const lastSizes = recentPages<{ height: number; width: number }>(50);
 const START_HEIGHT = 160;
 
 // The width a page's measured heights are read at before its frame has one: the chat's column on desktop.
@@ -54,25 +50,6 @@ const SHRINK_AFTER_MS = 400;
 
 const SANS = '-apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif';
 const MONO = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
-
-// Ported from Chat Polish's client/web/mermaid.ts (seriesFrom).
-/**
- * Chart series colors: the accent's hue turned in even steps, keeping its lightness so each reads like the theme. The status
- * colors can't serve: themes often share a hue between them (Paseo's light accent and success are both green). A gray
- * accent still gets some chroma. The browser does the color math.
- */
-function seriesFrom(accent: string) {
-  const ctx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
-  return [0, 180, 90, 270, 45, 225, 135, 315].map((turn) => {
-    if (!ctx) return accent;
-    // A browser without relative colors keeps the accent.
-    ctx.fillStyle = accent;
-    ctx.fillStyle = `oklch(from ${accent} l max(c, 0.08) calc(h + ${turn}))`;
-    ctx.fillRect(0, 0, 1, 1);
-    const { data } = ctx.getImageData(0, 0, 1, 1);
-    return `#${[data[0], data[1], data[2]].map((v) => v!.toString(16).padStart(2, "0")).join("")}`;
-  });
-}
 
 /** The CSS variables a page gets from the app's theme and fonts. */
 export function useHtmlTheme(colors: HtmlColors) {
@@ -127,27 +104,20 @@ export function HtmlFrame({
   // The frame's width is known from the commit that inserts it, before it's painted: its measured height there.
   useLayoutEffect(() => {
     const width = ref.current?.clientWidth;
-    if (!fill && heights && width && !lastSizes.has(id)) resize({ height: heightAt(heights, width), width: -1 });
+    if (!fill && heights && width && !lastSizes.get(id)) resize({ height: heightAt(heights, width), width: -1 });
   }, []);
   // Listen from the commit that inserts the frame: a fast page can report its height before a passive effect runs.
   useLayoutEffect(() => {
     const onMessage: MessageListener = ({ source, data }) => {
       const frame = ref.current;
-      if (!frame || source !== frame.contentWindow) return;
-      // The page's script can post whenever it likes; only a page the reader is using (its frame has focus) opens links or passes keys on.
-      const focused = document.activeElement === frame;
-      const link = frameLink(data);
-      if (link) return void (focused && openExternalUrl(link).catch((error: unknown) => console.warn("[morphise] Opening a page's link failed", error)));
-      const key = frameKey(data);
-      if (key) {
-        if (!focused) return;
-        // Esc only leaves full screen; an allowed shortcut replays on the frame element, so the app's listeners get it as if the chat had focus.
-        if (key.key === "Escape") return escape.current?.();
-        const shortcut = frameShortcut(key, isMac());
-        return void (shortcut && frame.dispatchEvent(new KeyboardEvent("keydown", { ...shortcut, bubbles: true, cancelable: true })));
-      }
-      const report = frameReport(data);
-      if (!report) return;
+      if (!frame) return;
+      const message = frameMessage(data, { own: source === frame.contentWindow, focused: document.activeElement === frame, mac: isMac() });
+      if (message?.kind === "link") return void openExternalUrl(message.url).catch((error: unknown) => console.warn("[morphise] Opening a page's link failed", error));
+      // Esc only leaves full screen; an allowed shortcut replays on the frame element, so the app's listeners get it as if the chat had focus.
+      if (message?.kind === "escape") return escape.current?.();
+      if (message?.kind === "shortcut") return void frame.dispatchEvent(new KeyboardEvent("keydown", { ...message.key, bubbles: true, cancelable: true }));
+      if (message?.kind !== "report") return;
+      const report = message.report;
       clearTimeout(shrink.current);
       const next = fitFrame(shown.current, report);
       if (!next) return;

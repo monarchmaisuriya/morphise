@@ -56,6 +56,13 @@ export function atRiskOfArchive(info: HostWorkspace): boolean {
   return info.paseoWorktree === true && !(info.dirty === false && info.ahead === 0);
 }
 
+// The confirm step of archiving one workspace: it names local work at stake, as the bulk bar's does.
+export function archiveConfirm(name: string, info: HostWorkspace): { label: string; accessibilityLabel: string } {
+  return atRiskOfArchive(info)
+    ? { label: "Archive? Has local work", accessibilityLabel: `Press again to archive ${name}; it has uncommitted, unpushed or unknown changes that archiving deletes` }
+    : { label: "Archive?", accessibilityLabel: `Press again to archive ${name}` };
+}
+
 // Done marks skip workspaces that need the user (permission or failed), and ones whose status is
 // not known yet.
 export function markableDone(info: HostWorkspace): info is WorkspaceInfo {

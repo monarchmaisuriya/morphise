@@ -1,4 +1,6 @@
 // Ported from Shell Yeah (stevecastaneda/paseo-plugins, MIT, see NOTICE.md): shell-yeah/shared/keys.ts
+import { LIMITS } from "./limits";
+
 export interface KeyPress {
   key: string;
   ctrlKey?: boolean;
@@ -42,4 +44,12 @@ export function terminalKeys(press: KeyPress): string | null {
 export function pastedKeys(text: string): string | null {
   const keys = text.replace(/[\x00-\x08\x0a-\x1f\x7f\x80-\x9f]/g, "");
   return keys === "" ? null : keys;
+}
+
+// What a paste into a running command sends (pastedKeys), or why it sends nothing: no keys are left, or
+// more than a command's worth. The run card and the panel under a code block both paste through this.
+export function pasteOf(text: string): { keys: string } | { refused: "empty" | "too-long" } {
+  const keys = pastedKeys(text);
+  if (keys === null) return { refused: "empty" };
+  return keys.length > LIMITS.commandChars ? { refused: "too-long" } : { keys };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { runStep, shellCommandOf, shellOf } from "./command";
+import { CONFIRM_GUARD_MS, CONFIRM_MS, nextConfirm, runStep, shellCommandOf, shellOf } from "./command";
 
 describe("shellCommandOf", () => {
   it("runs a shell block as written, without its trailing line breaks", () => {
@@ -57,6 +57,33 @@ describe("runStep", () => {
   it("does nothing without a command, and says so without a chat", () => {
     expect(runStep(null, "a1", [], false)).toEqual({ kind: "skip" });
     expect(runStep("ls", null, [], false)).toEqual({ kind: "no-chat" });
+  });
+});
+
+describe("nextConfirm", () => {
+  const asked = { command: "rm -rf build", at: 1_000 };
+
+  it("confirms only the exact text the confirm showed: changed text asks again", () => {
+    expect(nextConfirm(asked, "rm -rf build", 1_000 + CONFIRM_GUARD_MS)).toBe("confirmed");
+    expect(nextConfirm(asked, "rm -rf build ~", 1_000 + CONFIRM_GUARD_MS)).toBe("unconfirmed");
+    expect(nextConfirm(undefined, "rm -rf build", 1_000)).toBe("unconfirmed");
+  });
+
+  it("ignores a press within the guard after the confirm showed, as a double-click's second press", () => {
+    expect(nextConfirm(asked, "rm -rf build", 1_000)).toBe("ignore");
+    expect(nextConfirm(asked, "rm -rf build", 1_000 + CONFIRM_GUARD_MS - 1)).toBe("ignore");
+  });
+
+  it("lets the confirm expire, so a late press asks again", () => {
+    expect(nextConfirm(asked, "rm -rf build", 1_000 + CONFIRM_MS - 1)).toBe("confirmed");
+    expect(nextConfirm(asked, "rm -rf build", 1_000 + CONFIRM_MS)).toBe("unconfirmed");
+  });
+
+  it("starts exactly the confirmed text after a confirmed press", () => {
+    const confirmed = nextConfirm(asked, "rm -rf build", 1_000 + CONFIRM_GUARD_MS) === "confirmed";
+    expect(runStep("rm -rf build", "a1", ["deletes files"], confirmed)).toEqual({ kind: "start", agentId: "a1", command: "rm -rf build" });
+    const changed = nextConfirm(asked, "rm -rf build ~", 1_000 + CONFIRM_GUARD_MS) === "confirmed";
+    expect(runStep("rm -rf build ~", "a1", ["deletes files"], changed)).toEqual({ kind: "confirm", risks: ["deletes files"] });
   });
 });
 

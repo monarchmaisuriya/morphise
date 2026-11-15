@@ -7,7 +7,7 @@ import { Platform } from "react-native";
 import type { PolishContext } from "../../context";
 import { currentPrefs, subscribePrefs } from "../../prefs";
 import { currentTheme } from "../../theme-registry";
-import { SIDE_CHAT_PANEL_ID, appendToComposer, hasComposer, sendReply, startSideChat, workspaceOf } from "../actions";
+import { SIDE_CHAT_PANEL_ID, appendToComposer, hasComposer, sendReply, startSideChat, workspaceOf, type UnsentReason } from "../actions";
 import { BAR_ICONS, barItems, barTop, type BarItem } from "../bar-layout";
 import { formatQuote, formatReply, sendBehaviorOf, type QuoteSource, type SendBehavior } from "../format";
 import { choosePalette, parseColor, type Rgba } from "../palette";
@@ -191,6 +191,13 @@ function modKey(): string {
 }
 
 const message = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause));
+
+/** What the note says when a queued reply was not sent. */
+function unsentText(reason: UnsentReason, detail: string | null) {
+  if (reason === "permission") return say("unsentPermission");
+  if (reason === "timeout") return say("unsentTimeout");
+  return say(reason === "error" ? "unsentError" : "unsentFailed", { detail: detail ?? "" });
+}
 
 // ---------------------------------------------------------------------------
 // Reading a selection
@@ -387,7 +394,15 @@ function barMarkup(item: BarItem): string {
   return `<button data-action="${item.action}" data-title="${item.title}"${iconOnly}>${icon}${word}</button>`;
 }
 
-type Mode = "hidden" | "bar" | "note" | "reply" | "side";
+export type Mode = "hidden" | "bar" | "note" | "reply" | "side";
+
+/**
+ * Whether a report that arrives late (a queued reply not sent, up to hours after its card closed) may take over the bar now:
+ * only when it is idle, so it never replaces a bar, note or card in use, nor erases a reply being typed.
+ */
+export function mayTakeOverBar(mode: Mode, busy: boolean): boolean {
+  return mode === "hidden" && !busy;
+}
 
 const GAP = 8;
 /** How long a success note ("Copied", "Bookmarked") stays before the bar closes. */
@@ -465,6 +480,8 @@ export function installSelectionBar({ client, bookmarkPassage }: BarDeps): () =>
   let busy = false;
   let pending = 0;
   let noteTimer = 0;
+  /** Late reports waiting for the bar to be idle. */
+  const lateNotes: string[] = [];
 
   const relabel = () => {
     for (const element of all("[data-word]")) element.textContent = say(element.getAttribute("data-word") as Parameters<typeof say>[0]);
@@ -506,6 +523,7 @@ export function installSelectionBar({ client, bookmarkPassage }: BarDeps): () =>
     setError("");
     panel.setAttribute("data-mode", "bar");
     host.style.setProperty("display", "none", "important");
+    if (lateNotes.length > 0) showLateNote();
   };
 
   // The bar's markup as last written (reading innerHTML back gives the browser's own serialisation).
@@ -532,19 +550,34 @@ export function installSelectionBar({ client, bookmarkPassage }: BarDeps): () =>
     placeBar(next);
   };
 
-  /** Shows a short result where the bar was: a success closes by itself, an error stays until dismissed. */
-  const showNote = (at: Snapshot, text: string, tone: "ok" | "error") => {
+  const drawNote = (text: string, tone: "ok" | "error", anchor: DomElement) => {
     window.clearTimeout(noteTimer);
-    snapshot = at;
     mode = "note";
     panel.setAttribute("data-mode", "note");
     note.setAttribute("data-tone", tone);
     note.querySelector(".note-icon")!.innerHTML = svg(tone === "ok" ? BAR_ICONS.check : BAR_ICONS.alert);
     note.querySelector(".note-text")!.textContent = text;
-    applyPalette(host, at.anchor);
+    applyPalette(host, anchor);
     host.style.setProperty("display", "block", "important");
+  };
+
+  /** Shows a short result where the bar was: a success closes by itself, an error stays until dismissed. */
+  const showNote = (at: Snapshot, text: string, tone: "ok" | "error") => {
+    snapshot = at;
+    drawNote(text, tone, at.anchor);
     placeBar(at);
     if (tone === "ok") noteTimer = window.setTimeout(hide, NOTE_MS);
+  };
+
+  /** Shows the oldest late report at the foot of the window: the passage it came from may have scrolled away or gone. */
+  const showLateNote = () => {
+    snapshot = null;
+    drawNote(lateNotes.shift()!, "error", document.body);
+    place({ left: 0, top: window.innerHeight, right: window.innerWidth, bottom: window.innerHeight, width: window.innerWidth, height: 0 }, "above");
+  };
+  const reportLate = (text: string) => {
+    lateNotes.push(text);
+    if (mayTakeOverBar(mode, busy)) showLateNote();
   };
 
   const openCard = (kind: "reply" | "side") => {
@@ -640,7 +673,9 @@ export function installSelectionBar({ client, bookmarkPassage }: BarDeps): () =>
     if (!current?.agentId || !field.value.trim()) return;
     const agentId = current.agentId;
     const text = formatReply(current.source, field.value);
-    void runCard(async () => ((await sendReply(client.paseo, agentId, text, readSendBehavior())) === "queued" ? say("queued") : undefined));
+    // A queued reply's outcome arrives after the card closed, possibly hours later.
+    const unsent = (reason: UnsentReason, detail: string | null) => reportLate(unsentText(reason, detail));
+    void runCard(async () => ((await sendReply(client.paseo, agentId, text, readSendBehavior(), unsent)) === "queued" ? say("queued") : undefined));
   };
 
   const askSide = () => {
@@ -701,7 +736,8 @@ export function installSelectionBar({ client, bookmarkPassage }: BarDeps): () =>
 
   const sync = () => {
     pending = 0;
-    if (mode === "reply" || mode === "side" || busy) return;
+    // A late report stays until dismissed; a new selection's bar would replace it unread.
+    if (mode === "reply" || mode === "side" || busy || (mode === "note" && !snapshot)) return;
     const items = barItems(currentPrefs());
     const next = items.length > 0 ? readSnapshot(host) : null;
     if (next) showBar(next, items);

@@ -42,11 +42,11 @@ export interface Spawner {
 
 // The part of node-pty this file uses. Typed here, not imported: Paseo compiles the plugin
 // where node-pty may not be installed, and a type import it can't resolve fails the build.
-interface PtyModule {
+export interface PtyModule {
   spawn(file: string, args: string[], options: { name: string; cols: number; rows: number; cwd: string; env: NodeJS.ProcessEnv }): Pty;
 }
 
-interface Pty {
+export interface Pty {
   readonly pid: number;
   // The terminal's device on macOS and Linux, like /dev/pts/3. node-pty sets it but leaves it out of its types.
   readonly _pty?: unknown;
@@ -61,7 +61,8 @@ interface Pty {
 // plugin's packages from Paseo's own folder, not the plugin's (getpaseo/paseo#6257). Inside
 // Paseo, the bundle's `require` is Paseo's, so this loads the node-pty Paseo ships for its own
 // terminals. Plugins aren't promised that: if it stops working, commands run on pipes.
-// Outside Paseo (tests), `require` doesn't exist and the devDependency loads instead.
+// Outside Paseo (tests), `require` doesn't exist and a node-pty installed next to the plugin
+// loads, if any; this repo does not install it, so tests pass pickSpawner a stand-in instead.
 export function loadPty(): PtyModule | null {
   try {
     const load = typeof require === "function" ? require : createRequire(import.meta.url);
@@ -72,8 +73,8 @@ export function loadPty(): PtyModule | null {
 }
 
 // A terminal when node-pty loads and can start a process here; otherwise pipes, with no typing.
-export function pickSpawner(env: NodeJS.ProcessEnv, mode: "auto" | "off", timeoutMs = 3_000): Promise<Spawner> {
-  const pty = mode === "off" ? null : loadPty();
+export function pickSpawner(env: NodeJS.ProcessEnv, mode: "auto" | "off", load: () => PtyModule | null = loadPty, timeoutMs = 3_000): Promise<Spawner> {
+  const pty = mode === "off" ? null : load();
   if (!pty) return Promise.resolve(pipeSpawner);
   const spawner = ptySpawner(pty);
   return new Promise((resolve) => {
@@ -126,6 +127,7 @@ function ptySpawner(pty: PtyModule): Spawner {
 // On macOS and Linux, `/bin/sh -c 'exec "$0" "$@" 2>&1' <shell> <args>`: one pipe for both
 // streams so their interleaving is the kernel's, and the command text is never rewritten.
 // detached = its own session and process group, no controlling terminal.
+// Once the shell has exited and its output is in, jobs it left behind get a hangup, as in a terminal (see ptySpawner).
 // Windows has no process groups; Stop ends the process tree with taskkill instead.
 const pipeSpawner: Spawner = {
   terminal: false,
@@ -142,6 +144,9 @@ const pipeSpawner: Spawner = {
       if (done) return;
       done = true;
       if (flush) clearTimeout(flush);
+      // Only now, with the output in: a job the shell started just before it exited may still be
+      // the shell's own copy (forked, not yet the job), which catches a hangup and loses it.
+      if (!WINDOWS && group !== null) signalGroup(group, "SIGHUP");
       on.exit(code, signal);
     };
     child.stdout?.on("data", (chunk: Buffer) => on.data(out.write(chunk)));

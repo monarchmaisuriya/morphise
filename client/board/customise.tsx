@@ -1,6 +1,6 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { Modal, useToast } from "@getpaseo/plugin/client/ui";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Pressable, Switch, Text, View } from "react-native";
 import { STATUS_TITLES } from "../../shared/arrange";
 import { slug, type TaskOperation } from "../../shared/task-ops";
@@ -72,6 +72,31 @@ function Row({ t, children, last }: { t: Tokens; children: ReactNode; last?: boo
   return <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 10, padding: 10, borderBottomWidth: last ? 0 : 1, borderBottomColor: t.c.border, backgroundColor: t.c.surface1 }}>{children}</View>;
 }
 
+// A delete cannot be undone, so it asks for a second press within four seconds, as a card's Delete and an agent's Stop do.
+function DeleteButton({ t, label, confirmLabel, disabled, onDelete }: { t: Tokens; label: string; confirmLabel: string; disabled?: boolean; onDelete(): void }) {
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const timer = setTimeout(() => setArmed(false), 4000);
+    return () => clearTimeout(timer);
+  }, [armed]);
+  return (
+    <IconButton
+      t={t}
+      size="sm"
+      icon="Trash2"
+      tone={armed ? t.c.statusDanger : undefined}
+      label={armed ? confirmLabel : label}
+      disabled={disabled}
+      onPress={() => {
+        if (!armed) return setArmed(true);
+        setArmed(false);
+        onDelete();
+      }}
+    />
+  );
+}
+
 // Columns, labels, automation rules and auto-archiving, each change saved at once.
 export function CustomiseBoard({ deps, theme, compact, onClose }: { deps: BoardDeps; theme: PluginTheme; compact: boolean; onClose(): void }) {
   const document = tasksOf(useValue(deps.tasks));
@@ -124,7 +149,7 @@ export function CustomiseBoard({ deps, theme, compact, onClose }: { deps: BoardD
                 <Button t={t} variant={column.done ? "secondary" : "ghost"} icon={column.done ? "CircleCheck" : "Circle"} label="Done" checked={column.done} accessibilityLabel={`${column.name} is the Done column`} onPress={() => void run({ kind: "setDoneColumn", id: column.id })} />
                 <IconButton t={t} size="sm" icon="ChevronLeft" label={`Move ${column.name} left`} disabled={index === 0} onPress={() => void run({ kind: "moveColumn", id: column.id, index: index - 1 })} />
                 <IconButton t={t} size="sm" icon="ChevronRight" label={`Move ${column.name} right`} disabled={index === document.columns.length - 1} onPress={() => void run({ kind: "moveColumn", id: column.id, index: index + 1 })} />
-                <IconButton t={t} size="sm" icon="Trash2" label={column.done ? "The Done column cannot be deleted" : `Delete ${column.name}; its cards move to the first column`} disabled={column.done} onPress={() => void run({ kind: "deleteColumn", id: column.id })} />
+                <DeleteButton t={t} label={column.done ? "The Done column cannot be deleted" : `Delete ${column.name}; its cards move to the first column`} confirmLabel={`Press again to delete ${column.name}; its cards move to the first column`} disabled={column.done} onDelete={() => void run({ kind: "deleteColumn", id: column.id })} />
               </View>
             </Row>
           ))}
@@ -142,7 +167,7 @@ export function CustomiseBoard({ deps, theme, compact, onClose }: { deps: BoardD
               <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: label.color }} />
               <CommitField key={`${label.id}:${label.name}`} t={t} label={`Name of label ${label.name}`} value={label.name} onCommit={(name) => !!name && run({ kind: "saveLabel", label: { ...label, name } })} />
               <ColorDots t={t} current={label.color} onPick={(color) => void run({ kind: "saveLabel", label: { ...label, color } })} />
-              <IconButton t={t} size="sm" icon="Trash2" label={`Delete label ${label.name}`} onPress={() => void run({ kind: "deleteLabel", id: label.id })} />
+              <DeleteButton t={t} label={`Delete label ${label.name}`} confirmLabel={`Press again to delete label ${label.name}; it is removed from every card`} onDelete={() => void run({ kind: "deleteLabel", id: label.id })} />
             </Row>
           ))}
           <Row t={t} last>

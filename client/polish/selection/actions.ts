@@ -51,25 +51,37 @@ export async function appendToComposer(composers: Composers, agentId: string, sn
 }
 
 /**
+ * Why a queued reply was not sent: the turn stopped to ask for a permission, outlasted the wait, or
+ * ended in an error ("permission", "timeout", "error", with the agent's error text), or the wait or
+ * the send itself failed ("failed", with the cause).
+ */
+export type UnsentReason = "permission" | "timeout" | "error" | "failed";
+
+/**
  * Sends the text as an ordinary user message, the way the composer's Enter would: steer or
  * interrupt a running turn, or hold it until the turn ends.
  *
  * Paseo's own queue lives inside the composer, out of a plugin's reach, so a queued reply waits
- * here instead and is not shown in the composer's queue.
+ * here instead and is not shown in the composer's queue. It is sent only when the turn finishes
+ * normally; otherwise `onUnsent` hears why it was not.
  */
-export async function sendReply(paseo: PaseoApi, agentId: string, text: string, behavior: SendBehavior): Promise<"sent" | "queued"> {
+export async function sendReply(paseo: PaseoApi, agentId: string, text: string, behavior: SendBehavior, onUnsent: (reason: UnsentReason, detail: string | null) => void): Promise<"sent" | "queued"> {
   const agent = paseo.agents.ref(agentId);
   if (behavior === "queue") {
     const status = (await agent.refresh())?.agent.status;
     if (status === "running" || status === "initializing") {
-      // A turn that stops for a permission ends the wait; the composer interrupts in that case too.
+      // A turn that stops for a permission ends the wait too; sending then would interrupt the request the reader still has to answer.
       let dropped = false;
       const drop = () => void (dropped = true);
       queuedReplies.add(drop);
       void agent
         .waitForFinish(QUEUE_WAIT_MS)
-        .then(() => (dropped ? undefined : agent.send(text, { activeTurnBehavior: "interrupt" })))
-        .catch((cause: unknown) => console.error("[morphise] Queued reply was not sent", cause))
+        .then(async (finished) => {
+          if (dropped) return;
+          if (finished.status !== "idle") return onUnsent(finished.status, finished.error);
+          await agent.send(text, { activeTurnBehavior: "interrupt" });
+        })
+        .catch((cause: unknown) => dropped || onUnsent("failed", cause instanceof Error ? cause.message : String(cause)))
         .finally(() => queuedReplies.delete(drop));
       return "queued";
     }

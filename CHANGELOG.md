@@ -2,6 +2,20 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.32.0 - 2026-11-15
+
+From a review of the whole codebase. Settings move to format version 3: a custom slash command named `task`, `bookmark` or `run` is renamed with `-custom` added, as `remind` already was. An older Morphise can't read version-3 settings, so going back below 0.32.0 breaks them until you update again.
+
+- **Fix: chat reminder rows stopped when one of two open apps closed.** With desktop and phone (or two windows) open, closing one stopped due reminder rows from being written into chats until an app reconnected. They now keep coming while any app is open. A reminder set from a device whose clock runs far ahead no longer spins a timer on the daemon.
+- **Pages: pictures only from the agent's own folder.** A page, its preview and its publish check now read local images only inside the working folder of the agent that made it, and refuse pipes and hard-linked files with one message that never says whether an outside path exists. Each agent created while Pages is on gets its own key for the page tools (the daemon keeps only a hash of it). Chats created before 0.32.0 keep working, but their previews skip local images and say so. Going back to 0.31.1 leaves agents created since without the page tools until you update again.
+- **Fix: moving an item in a settings list could write another item's text into it.** The open editor now follows its item when you move one past it.
+- **Run buttons: the confirm covers exactly what it showed**, ignores a second press within 0.4 s and expires after 5 s. It also asks first for a block with a line over 200 characters, a long run of any kind of space, or more than 40 lines. Paste and multi-character typing into a running command go through one filter with an 8,000-character limit, and a huge paste no longer fails. The run card and panel say "Can't reach the daemon, retrying" after three failed tries. A command run without a terminal now stops the background jobs it left when it exits. Command output sent to an agent can no longer close its own wrapper.
+- **Agents board: one-press Allow sends the allow the agent marks as its main choice**, or Paseo's default when it marks none, instead of the first one listed; cards show what the agent waits on, and the buttons name the request.
+- **Auto-archive checks each workspace again just before archiving it**, with one fresh read per sweep. Archiving a Paseo worktree deletes files git ignores there (a local `.env`); OVERVIEW now says so.
+- **Merged steps:** a group with pictures now says so ("Thought 9 times and showed 2 images").
+- **Messages: a reply queued while the agent works is sent only if the turn ends normally.** If it stops for permission, fails or runs too long, you see why it wasn't sent, without losing a reply you are typing.
+- **Smaller fixes:** Update installs exactly the version the check showed; Show in Paseo matches terminals and workspaces by host as well as id; deleting a board column or label takes two presses; single-row Archive says when a workspace has local work; picture tiles load a thumbnail instead of the full file (up to 12 MB; BMP is no longer shown); Title settings save your last edit when you leave the tab; page frame sizes are cached within a limit; one owner for "which chat is this element in".
+
 ## 0.31.1 - 2026-11-15
 
 - **Fix: pictures inside a merged steps row open again.** With Paseo's Collapse turns on, an image an agent made mid-turn showed inside the "N steps" row only as "Image", which could not be clicked, and the pictures appeared nowhere else. That row now opens like a Thought row to the thumbnails; click one for the full-size viewer.

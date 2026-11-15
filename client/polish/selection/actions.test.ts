@@ -19,14 +19,17 @@ const composersOf = (byAgent: Record<string, ReturnType<typeof fakeComposer>>): 
   ((selector: { agentId?: string }) => (selector.agentId && byAgent[selector.agentId] ? [byAgent[selector.agentId]] : [])) as unknown as Composers;
 
 function fakeAgent(options: { status?: string; workspaceId?: string | null; entries?: Array<{ item: { type: string; text?: string } }> } = {}) {
-  let finish: () => void = () => {};
+  type WaitResult = { status: "idle" | "error" | "permission" | "timeout"; final: null; error: string | null; lastMessage: null };
+  let finish: (result: WaitResult) => void = () => {};
+  let fail: (cause: unknown) => void = () => {};
   const snapshot = { status: options.status ?? "idle", workspaceId: options.workspaceId === undefined ? "w1" : options.workspaceId, provider: "claude", model: "opus", currentModeId: "plan", thinkingOptionId: "high", runtimeInfo: null };
   return {
     send: vi.fn(async (_text: string, _options?: { activeTurnBehavior?: string }) => {}),
     refresh: vi.fn(async () => ({ agent: snapshot })),
     current: vi.fn(() => null as typeof snapshot | null),
-    waitForFinish: vi.fn(() => new Promise<void>((resolve) => (finish = resolve))),
-    finish: () => finish(),
+    waitForFinish: vi.fn(() => new Promise<WaitResult>((resolve, reject) => ((finish = resolve), (fail = reject)))),
+    finish: (status: WaitResult["status"] = "idle", error: string | null = null) => finish({ status, final: null, error, lastMessage: null }),
+    fail: (cause: unknown) => fail(cause),
     timeline: { refetch: vi.fn(async () => ({ entries: options.entries ?? [] })) },
   };
 }
@@ -66,36 +69,69 @@ describe("appendToComposer", () => {
 });
 
 describe("sendReply", () => {
+  const unsent = () => vi.fn((_reason: string, _detail: string | null) => {});
+
   it("steers or interrupts a running turn as Default send says", async () => {
     const agent = fakeAgent({ status: "running" });
     const { paseo } = fakePaseo(agent);
-    expect(await sendReply(paseo, "a1", "hi", "steer")).toBe("sent");
+    expect(await sendReply(paseo, "a1", "hi", "steer", unsent())).toBe("sent");
     expect(agent.send).toHaveBeenLastCalledWith("hi", { activeTurnBehavior: "steer" });
-    await sendReply(paseo, "a1", "hi", "interrupt");
+    await sendReply(paseo, "a1", "hi", "interrupt", unsent());
     expect(agent.send).toHaveBeenLastCalledWith("hi", { activeTurnBehavior: "interrupt" });
   });
 
   it("holds a queued reply until the running turn ends", async () => {
     const agent = fakeAgent({ status: "running" });
     const { paseo } = fakePaseo(agent);
-    expect(await sendReply(paseo, "a1", "later", "queue")).toBe("queued");
+    const onUnsent = unsent();
+    expect(await sendReply(paseo, "a1", "later", "queue", onUnsent)).toBe("queued");
     expect(agent.send).not.toHaveBeenCalled();
-    agent.finish();
+    agent.finish("idle");
     await vi.waitFor(() => expect(agent.send).toHaveBeenCalledWith("later", { activeTurnBehavior: "interrupt" }));
+    expect(onUnsent).not.toHaveBeenCalled();
+  });
+
+  it.each(["permission", "timeout", "error"] as const)("does not send a queued reply when the wait ends with %s, and says why", async (status) => {
+    const agent = fakeAgent({ status: "running" });
+    const onUnsent = unsent();
+    expect(await sendReply(fakePaseo(agent).paseo, "a1", "later", "queue", onUnsent)).toBe("queued");
+    agent.finish(status, status === "error" ? "model overloaded" : null);
+    await vi.waitFor(() => expect(onUnsent).toHaveBeenCalledWith(status, status === "error" ? "model overloaded" : null));
+    expect(agent.send).not.toHaveBeenCalled();
+  });
+
+  it("says a queued reply was not sent when the wait fails", async () => {
+    const agent = fakeAgent({ status: "running" });
+    const onUnsent = unsent();
+    expect(await sendReply(fakePaseo(agent).paseo, "a1", "later", "queue", onUnsent)).toBe("queued");
+    agent.fail(new Error("connection lost"));
+    await vi.waitFor(() => expect(onUnsent).toHaveBeenCalledWith("failed", "connection lost"));
+    expect(agent.send).not.toHaveBeenCalled();
+  });
+
+  it("says a queued reply was not sent when sending it fails", async () => {
+    const agent = fakeAgent({ status: "running" });
+    agent.send.mockRejectedValueOnce(new Error("agent closed"));
+    const onUnsent = unsent();
+    expect(await sendReply(fakePaseo(agent).paseo, "a1", "later", "queue", onUnsent)).toBe("queued");
+    agent.finish("idle");
+    await vi.waitFor(() => expect(onUnsent).toHaveBeenCalledWith("failed", "agent closed"));
   });
 
   it("drops a queued reply cancelled before the turn ends (the plugin unloaded)", async () => {
     const agent = fakeAgent({ status: "running" });
-    expect(await sendReply(fakePaseo(agent).paseo, "a1", "later", "queue")).toBe("queued");
+    const onUnsent = unsent();
+    expect(await sendReply(fakePaseo(agent).paseo, "a1", "later", "queue", onUnsent)).toBe("queued");
     cancelQueuedReplies();
-    agent.finish();
+    agent.finish("idle");
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(agent.send).not.toHaveBeenCalled();
+    expect(onUnsent).not.toHaveBeenCalled();
   });
 
   it("sends a queued reply at once when the agent is idle", async () => {
     const agent = fakeAgent({ status: "idle" });
-    expect(await sendReply(fakePaseo(agent).paseo, "a1", "now", "queue")).toBe("sent");
+    expect(await sendReply(fakePaseo(agent).paseo, "a1", "now", "queue", unsent())).toBe("sent");
     expect(agent.send).toHaveBeenCalledWith("now", { activeTurnBehavior: "interrupt" });
   });
 });

@@ -1,7 +1,7 @@
 import type { PluginButton, PluginClientContext } from "@getpaseo/plugin/client";
 import { SidebarRow, useToast } from "@getpaseo/plugin/client/ui";
 import type { Prompt } from "../shared/document";
-import type { Profile } from "../shared/profile";
+import { type Profile, RESERVED_SLASH_COMMANDS } from "../shared/profile";
 import { buildChatWebCss, buildStyleSheet } from "../shared/style-sheet";
 import { createComposerControl, createPresetField } from "./composer-surfaces";
 import type { Directory } from "./directory";
@@ -403,7 +403,7 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
       register({ profile }, track) {
         track(
           client.addSlashCommand({
-            name: "remind",
+            name: RESERVED_SLASH_COMMANDS.remind,
             description: "Remind me about this chat later",
             argumentHint: "45m, 17:30, tomorrow 9am or clear",
             context: "agent",
@@ -412,7 +412,7 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
         );
         track(
           client.addSlashCommand({
-            name: "bookmark",
+            name: RESERVED_SLASH_COMMANDS.bookmark,
             description: "Bookmark this chat's last answer",
             argumentHint: "an optional note",
             context: "agent",
@@ -457,7 +457,7 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
         );
         track(
           client.addSlashCommand({
-            name: "task",
+            name: RESERVED_SLASH_COMMANDS.task,
             description: "Add a task linked to this chat",
             argumentHint: "Fix login p1 @bug #review due:fri tomorrow 9am",
             context: "agent",

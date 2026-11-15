@@ -23,8 +23,14 @@ export function commandFromArgs(args: string): string {
 // Things worth a second look before pressing Run, in plain words. Pattern checks, not a
 // shell parser: they catch the common forms, not every disguise.
 const AT_COMMAND = String.raw`(?:^|[;&|(\x60]|\bsudo\s+(?:-\S+\s+)*|\bxargs\s+(?:-\S+\s+)*)\s*`;
+export const LONG_OR_PADDED = "is long or padded; read all of it";
 // PowerShell names are case-insensitive, so its patterns are too.
 const RISKS: Array<[RegExp, string]> = [
+  // Text past the edge of the box, after a wide gap, or far below can hide a second command: a line over 200
+  // characters, 20 or more spaces of any kind (no-break, em, ideographic) or tabs between words (indentation is
+  // fine), or more than 40 lines. First, as the button shows only the first risk, and the others may sit in the
+  // part that does not show.
+  [/^[^\n]{201}|\S[\t\p{Zs}]{20,}\S|(?:\n[^\n]*){40}/mu, LONG_OR_PADDED],
   [new RegExp(String.raw`(?:^|[;&|(\x60])\s*sudo\b`, "m"), "runs as administrator (sudo)"],
   [/\bStart-Process\b[^\n]*\s-Verb\s+['"]?RunAs\b|(?:^|[;&|(])\s*runas(\.exe)?\s/im, "runs as administrator"],
   [new RegExp(String.raw`${AT_COMMAND}rm\s|\bfind\b[^\n]*\s-delete\b|\bgit\s+clean\s+-\w*f`, "m"), "deletes files"],
@@ -48,6 +54,14 @@ const RISKS: Array<[RegExp, string]> = [
 
 export function risksOf(script: string): string[] {
   return [...new Set(RISKS.filter(([pattern]) => pattern.test(script)).map(([, risk]) => risk))];
+}
+
+// A risk as the confirm words it: a long or padded command also gives its size, a number that shows
+// even when the text past the edge does not.
+export function describeRisk(risk: string, command: string): string {
+  if (risk !== LONG_OR_PADDED) return risk;
+  const lines = command.split("\n").length;
+  return `${risk} (${lines} ${lines === 1 ? "line" : "lines"}, ${command.length.toLocaleString("en-US")} characters)`;
 }
 
 // A command's first line, cut to fit one line of a message or toast.

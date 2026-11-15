@@ -1,6 +1,6 @@
 // Ported from Chat Polish (lthieu96/paseo-chat-polish, MIT, see NOTICE.md): test/html.test.mjs
 import { describe, expect, it } from "vitest";
-import { FRAME_SANDBOX, fitFrame, frameKey, frameLink, frameReport, frameShortcut, heightAt, limitFrameHeight } from "./frame";
+import { FRAME_SANDBOX, fitFrame, frameKey, frameLink, frameMessage, frameReport, frameShortcut, heightAt, limitFrameHeight, recentPages } from "./frame";
 
 describe("the page frame", () => {
   it("never gets the app's origin", () => {
@@ -68,5 +68,47 @@ describe("the page frame", () => {
     expect(limitFrameHeight(640, 800)).toBe(640);
     expect(limitFrameHeight(1200, 500)).toBe(500);
     expect(limitFrameHeight(5000, 0)).toBe(5000);
+  });
+
+  it("hears only its own frame, and opens links or passes keys on only while the frame has focus", () => {
+    const link = { type: "cp-html-link", url: "https://paseo.sh" };
+    const commandCenter = { type: "cp-html-key", key: "k", code: "KeyK", metaKey: true };
+    const escape = { type: "cp-html-key", key: "Escape", code: "Escape" };
+    const height = { type: "cp-html-height", height: 300, width: 700 };
+    const focused = { own: true, focused: true, mac: true };
+    expect(frameMessage(link, focused)).toEqual({ kind: "link", url: "https://paseo.sh" });
+    expect(frameMessage(commandCenter, focused)).toEqual({ kind: "shortcut", key: { key: "k", code: "KeyK", metaKey: true, ctrlKey: false, shiftKey: false, altKey: false } });
+    expect(frameMessage(escape, focused)).toEqual({ kind: "escape" });
+    expect(frameMessage(height, focused)).toEqual({ kind: "report", report: { height: 300, width: 700 } });
+    // Another window (another frame, or the app itself) is never heard, focused or not.
+    for (const data of [link, commandCenter, escape, height]) expect(frameMessage(data, { ...focused, own: false })).toBeUndefined();
+    // A page's script can post at any time: unfocused, links and keys go nowhere, while its height still counts.
+    const unfocused = { ...focused, focused: false };
+    expect(frameMessage(link, unfocused)).toBeUndefined();
+    expect(frameMessage(commandCenter, unfocused)).toBeUndefined();
+    expect(frameMessage(escape, unfocused)).toBeUndefined();
+    expect(frameMessage(height, unfocused)).toEqual({ kind: "report", report: { height: 300, width: 700 } });
+    // A key that is no allowed shortcut goes nowhere even when focused.
+    expect(frameMessage({ type: "cp-html-key", key: "w", code: "KeyW", metaKey: true }, focused)).toBeUndefined();
+  });
+
+  it("remembers values for the most recently used pages only, by a short key rather than the page itself", () => {
+    const pages = recentPages<number>(3);
+    pages.set("<p>one</p>", 1);
+    pages.set("<p>two</p>", 2);
+    pages.set("<p>three</p>", 3);
+    // Reading a page makes it recent, so the next one in drops "two", the least recently used.
+    expect(pages.get("<p>one</p>")).toBe(1);
+    pages.set("<p>four</p>", 4);
+    expect(pages.get("<p>two</p>")).toBeUndefined();
+    expect([pages.get("<p>one</p>"), pages.get("<p>three</p>"), pages.get("<p>four</p>")]).toEqual([1, 3, 4]);
+    // Setting a page again replaces its value instead of adding a second entry.
+    pages.set("<p>four</p>", 40);
+    pages.set("<p>five</p>", 5);
+    expect(pages.get("<p>one</p>")).toBeUndefined();
+    expect([pages.get("<p>three</p>"), pages.get("<p>four</p>"), pages.get("<p>five</p>")]).toEqual([3, 40, 5]);
+    // Pages of the same length but different text are different pages.
+    pages.set("<p>abc</p>", 7);
+    expect(pages.get("<p>abd</p>")).toBeUndefined();
   });
 });

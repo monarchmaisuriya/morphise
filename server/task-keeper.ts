@@ -40,8 +40,13 @@ function remindable(document: TaskDocument): Task[] {
   return document.tasks.filter((task) => task.reminder !== null && task.links.agentId && task.archivedAt === null && task.column !== done);
 }
 
+// Node runs a timer with a longer delay after 1 ms, so a reminder further ahead waits in steps of this.
+const MAX_TIMER_DELAY = 2_147_483_647;
+
 export function createTaskKeeper(settings: WatchableSettings<TaskDocument>, clock: Clock = SYSTEM_CLOCK) {
-  const connections = new Set<KeeperPaseo>();
+  // One entry per open subscription: Paseo hands every subscription the same connection object,
+  // so the subscription's own signal tells two connected apps apart.
+  const connections = new Map<AbortSignal, KeeperPaseo>();
   const timers = new Map<string, { setAt: string; id: unknown }>();
   let stopped = false;
   // Row writes run one at a time: each reads and rewrites the chat's marker map, and two at once
@@ -65,9 +70,10 @@ export function createTaskKeeper(settings: WatchableSettings<TaskDocument>, cloc
       const reminder = task.reminder!;
       if (timers.get(task.id)?.setAt === reminder.setAt) continue;
       cancel(task.id);
-      const delay = Math.max(0, Date.parse(reminder.at) - clock.now().getTime());
+      const delay = Math.min(MAX_TIMER_DELAY, Math.max(0, Date.parse(reminder.at) - clock.now().getTime()));
       const id = clock.setTimer(() => {
         timers.delete(task.id);
+        if (!isDue(reminder, clock.now())) return resync();
         writes = writes.then(() => fire(task.id, reminder.setAt).catch(report(`Reminder row for task ${task.id} failed`)));
       }, delay);
       timers.set(task.id, { setAt: reminder.setAt, id });
@@ -80,7 +86,7 @@ export function createTaskKeeper(settings: WatchableSettings<TaskDocument>, cloc
   }
 
   async function fire(taskId: string, armedSetAt: string) {
-    const [paseo] = connections;
+    const paseo = [...connections.values()].at(-1);
     if (!paseo) return; // The next app to connect re-syncs, and this fires then.
     const document = await latest();
     if (!document) return;
@@ -118,8 +124,8 @@ export function createTaskKeeper(settings: WatchableSettings<TaskDocument>, cloc
   return {
     // The `reminders.keeper` subscription: open while an app is connected.
     watch(_input: unknown, { paseo, signal }: { paseo: KeeperPaseo; signal: AbortSignal }) {
-      connections.add(paseo);
-      signal.addEventListener("abort", () => connections.delete(paseo), { once: true });
+      connections.set(signal, paseo);
+      signal.addEventListener("abort", () => connections.delete(signal), { once: true });
       // Rows that came due while no app was connected fire now.
       for (const taskId of [...timers.keys()]) cancel(taskId);
       resync();

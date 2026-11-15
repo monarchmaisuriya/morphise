@@ -8,6 +8,8 @@ import { AgentRow } from "../agents-board/list";
 import { tokens } from "../ui/kit";
 import { ChipRow, type Form, SelectField, SwitchField, TextField } from "./fields";
 import { DEFAULT_TITLE_PROMPT, type TitleSettings, titleSettings } from "../../shared/agent-titles";
+import { AUTOSAVE_DELAY_MS } from "./autosave";
+import { createPendingSave } from "./pending-save";
 
 // Settings, Agents: the Workbench's Agents view and what its cards show. A separate host record
 // ("agents-board"), so it saves on its own and older Morphise versions never read it.
@@ -164,23 +166,28 @@ function AgentsBoardSettingsForm({ form }: { form: Form }) {
 }
 
 // "Generate a title" on an agent: which provider and model write it, and what they are asked.
-// Saved 600 ms after the last keystroke, against the revision it was read at.
+// Saved 600 ms after the last keystroke, or at once on leaving the tab, against the revision it
+// was read at.
 function TitleSettingsForm({ form }: { form: Form }) {
   const stored = useSettings(titleSettings);
   const [draft, setDraft] = useState<TitleSettings | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
+  const [pending] = useState(() => createPendingSave(AUTOSAVE_DELAY_MS));
   const t = tokens(form.theme, false);
+  // Declared first: React runs a component's cleanups in order, so leaving saves the waiting
+  // edit before the effect below cancels it.
+  useEffect(() => () => pending.flush(), [pending]);
   useEffect(() => {
     if (!draft || stored.status !== "ready" || stored.saving) return;
-    const timer = setTimeout(() => {
+    pending.schedule(() => {
       const saving = draft;
       void stored.save(saving, stored.revision).then((ok) => {
         // Typing that arrived during the save stays as the next draft and is saved in turn.
         setDraft((current) => (current === saving ? null : current));
         if (!ok) setFailed(stored.saveError ?? "Another app saved these settings at the same moment; try again");
       });
-    }, 600);
-    return () => clearTimeout(timer);
+    });
+    return () => pending.cancel();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft, stored.status, stored.saving]);
   if (stored.status !== "ready") return null;

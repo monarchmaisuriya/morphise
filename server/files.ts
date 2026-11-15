@@ -1,22 +1,21 @@
 import { execFile } from "node:child_process";
-import { open, readFile, stat } from "node:fs/promises";
+import { open, stat } from "node:fs/promises";
 import { dirname } from "node:path";
-import { IMAGE_MAX_BYTES, imageType, TEXT_MAX_BYTES } from "../shared/files";
+import { TEXT_MAX_BYTES } from "../shared/files";
+import { readImageFile as readCheckedImage } from "./polish/media/image";
 
 // The daemon's side of chat rows' file actions. Only absolute paths reach here (the contracts
 // check); files are read, never written, and size limits keep a huge file from being sent.
 
 const reasonOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
+// A picture an agent read with its own Read tool, which may be outside its folder, so no folder
+// limit here; the checks (image name and bytes, size) are the chat image reader's own. Its tile is
+// at most 520 × 260, so the reader's preview (fits 960 × 600) is sent, never a 12 MB original.
 export async function readImageFile({ path }: { path: string }) {
-  const type = imageType(path);
-  if (!type) return { ok: false as const, reason: "Not an image Morphise shows (png, jpg, gif, webp, bmp)" };
   try {
-    const info = await stat(path);
-    if (!info.isFile()) return { ok: false as const, reason: "Not a file" };
-    if (info.size > IMAGE_MAX_BYTES) return { ok: false as const, reason: `The image is ${Math.round(info.size / 1024 / 1024)} MB; Morphise shows images up to 3 MB` };
-    const bytes = await readFile(path);
-    return { ok: true as const, dataUri: `data:${type};base64,${bytes.toString("base64")}` };
+    const { dataUrl } = await readCheckedImage({ path, variant: "thumbnail" });
+    return { ok: true as const, dataUri: dataUrl };
   } catch (error) {
     return { ok: false as const, reason: reasonOf(error) };
   }

@@ -55,6 +55,20 @@ function promptCommands(lines: readonly string[]): string | null {
 // command not yet confirmed, otherwise start it.
 export type RunStep = { kind: "skip" } | { kind: "no-chat" } | { kind: "confirm"; risks: string[] } | { kind: "start"; agentId: string; command: string };
 
+// A Run button's confirm: the command it asked about, and when it started asking.
+export type Confirm = { command: string; at: number };
+export const CONFIRM_MS = 5000;
+// A double-click's second press lands within this; it must not confirm a risky command.
+export const CONFIRM_GUARD_MS = 400;
+
+// What a press does to a confirm: a press too soon after it showed does nothing; otherwise it confirms
+// only the text the confirm showed (a block still streaming can change after it), and only until it expires.
+export function nextConfirm(asking: Confirm | undefined, command: string | null, now: number): "ignore" | "confirmed" | "unconfirmed" {
+  if (!asking) return "unconfirmed";
+  if (now - asking.at < CONFIRM_GUARD_MS) return "ignore";
+  return asking.command === command && now - asking.at < CONFIRM_MS ? "confirmed" : "unconfirmed";
+}
+
 export function runStep(command: string | null, agentId: string | null, risks: readonly string[], confirmed: boolean): RunStep {
   if (!command) return { kind: "skip" };
   if (!agentId) return { kind: "no-chat" };

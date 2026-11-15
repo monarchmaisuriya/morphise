@@ -38,6 +38,10 @@ const EN = {
   followUp: "Ask a follow-up…",
   sendFollowUp: "Send to the side chat",
   sideFailed: "The side chat stopped with an error.",
+  unsentPermission: "Reply not sent: the agent stopped to ask for permission.",
+  unsentTimeout: "Reply not sent: the turn ran too long to wait for.",
+  unsentError: "Reply not sent: the turn ended with an error. {detail}",
+  unsentFailed: "Reply not sent: {detail}",
 } as const;
 
 type Key = keyof typeof EN;
@@ -78,6 +82,10 @@ const ZH: Record<Key, string> = {
   followUp: "继续提问…",
   sendFollowUp: "发送到侧边对话",
   sideFailed: "侧边对话因错误而停止。",
+  unsentPermission: "回复未发送：智能体停下来请求权限。",
+  unsentTimeout: "回复未发送：当前回合运行太久，无法继续等待。",
+  unsentError: "回复未发送：当前回合因错误结束。{detail}",
+  unsentFailed: "回复未发送：{detail}",
 };
 
 export const WORDS: Record<Language, Record<Key, string>> = { en: EN, zh: ZH };

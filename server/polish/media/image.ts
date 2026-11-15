@@ -1,7 +1,7 @@
 // Ported from Chat Polish (lthieu96/paseo-chat-polish, MIT, see NOTICE.md): server/image.ts
 import type { RpcInput } from "@getpaseo/plugin";
-import { open, stat } from "node:fs/promises";
-import { extname, isAbsolute } from "node:path";
+import { open, realpath, stat } from "node:fs/promises";
+import { extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { readImage } from "../../../shared/polish/image";
 import { optionalDependency } from "./plugin-require";
@@ -38,30 +38,44 @@ export function sniffImage(bytes: Uint8Array): string | undefined {
   return undefined;
 }
 
-async function readWhole(file: string, size: number) {
-  const handle = await open(file, "r");
-  try {
-    const bytes = Buffer.alloc(size);
-    const { bytesRead } = await handle.read(bytes, 0, size, 0);
-    return bytes.subarray(0, bytesRead);
-  } finally {
-    await handle.close();
-  }
+function absoluteFile(path: string) {
+  const file = path.startsWith("file://") ? fileURLToPath(path) : path;
+  if (!isAbsolute(file)) throw new Error(`Not an absolute path: ${file}`);
+  return file;
 }
+
+type Variant = RpcInput<typeof readImage>["variant"];
 
 // Only image files are served: this RPC must not become a general file reader for the client. The
 // path must be absolute, name an image, be a regular file within the size limit, and start with
 // that image type's bytes (a renamed or linked other file is refused).
-export async function readImageFile({ path, variant = "original" }: RpcInput<typeof readImage>) {
-  const file = path.startsWith("file://") ? fileURLToPath(path) : path;
-  if (!isAbsolute(file)) throw new Error(`Not an absolute path: ${file}`);
+export async function readImageFile({ path, variant }: RpcInput<typeof readImage>) {
+  return readImageAt(absoluteFile(path), variant);
+}
+
+// The file is opened once and every check holds for the open file, whatever the path names by then.
+async function readImageAt(file: string, variant: Variant = "original") {
   if (!MIME[extname(file).toLowerCase()]) throw new Error(`Not an image: ${file}`);
-  const info = await stat(file);
-  if (!info.isFile()) throw new Error(`Not a file: ${file}`);
-  if (info.size > MAX_BYTES) throw new Error(`Image larger than ${MAX_BYTES / 1024 / 1024} MB: ${file}`);
-  const bytes = await readWhole(file, info.size);
+  // Checked before opening too, so a pipe or device is never opened.
+  if (!(await stat(file)).isFile()) throw new Error(`Not a file: ${file}`);
+  const handle = await open(file, "r");
+  let bytes: Buffer;
+  try {
+    const info = await handle.stat();
+    if (!info.isFile()) throw new Error(`Not a file: ${file}`);
+    if (info.size > MAX_BYTES) throw new Error(`Image larger than ${MAX_BYTES / 1024 / 1024} MB: ${file}`);
+    const buffer = Buffer.alloc(info.size);
+    const { bytesRead } = await handle.read(buffer, 0, info.size, 0);
+    bytes = buffer.subarray(0, bytesRead);
+  } finally {
+    await handle.close();
+  }
   const mime = sniffImage(bytes);
   if (!mime) throw new Error(`Not an image: ${file}`);
+  return dataUrlOf(bytes, mime, variant);
+}
+
+async function dataUrlOf(bytes: Buffer, mime: string, variant: Variant = "original") {
   const sharp = variant === "thumbnail" ? await loadSharp() : null;
   if (sharp) {
     // Twice the largest tile size (Extra large, 480 × 300), without decoding unbounded pixel counts or sending the original.
@@ -73,4 +87,72 @@ export async function readImageFile({ path, variant = "original" }: RpcInput<typ
     return { dataUrl: `data:image/webp;base64,${preview.toString("base64")}` };
   }
   return { dataUrl: `data:${mime};base64,${bytes.toString("base64")}` };
+}
+
+export class ImageTooLarge extends Error {
+  constructor(path: string) {
+    super(`Image larger than ${MAX_BYTES / 1024 / 1024} MB: ${path}`);
+  }
+}
+
+/** Every image a page names that is not read inside the agent's folder gets this one answer, whatever the reason, so the answer never tells whether a path outside the folder exists. */
+export class OutsideOrUnreadable extends Error {
+  constructor(path: string) {
+    super(`Image could not be read inside your working folder: ${path}`);
+  }
+}
+
+const isInside = (root: string, file: string) => {
+  const inside = relative(root, file);
+  return Boolean(inside) && inside !== ".." && !inside.startsWith(`..${sep}`) && !isAbsolute(inside);
+};
+
+/**
+ * An image an agent-written page names, opened only when it is inside `folder`, the working folder of the agent that made the page: a page
+ * must not show anyone other pictures on this machine. The path is judged as text first, so nothing outside the folder is ever looked up; then
+ * by its real path (`..` and links out are refused), as a regular image file with one link (a hard link could name a file outside), opened
+ * once, and still the file at a real path inside the folder once open (a link swapped in after the checks is refused). Every refusal is an
+ * OutsideOrUnreadable; ImageTooLarge comes only for a file that passed them.
+ */
+export async function openInFolder(path: string, folder: string): Promise<{ bytes: Buffer; size: number; type: string }> {
+  try {
+    return await openContained(path, folder);
+  } catch (error) {
+    if (error instanceof ImageTooLarge) throw error;
+    throw new OutsideOrUnreadable(path);
+  }
+}
+
+async function openContained(path: string, folder: string) {
+  const requested = resolve(absoluteFile(path));
+  const root = await realpath(folder);
+  // `/tmp/proj` and `/private/tmp/proj` name the same folder: either spelling is inside.
+  if (!isInside(resolve(folder), requested) && !isInside(root, requested)) throw new Error("outside by its text");
+  const file = await realpath(requested);
+  if (!isInside(root, file)) throw new Error("outside by its real path");
+  // Checked before opening, so a pipe or device is never opened.
+  const info = await stat(file);
+  if (!info.isFile() || info.nlink !== 1 || !MIME[extname(file).toLowerCase()]) throw new Error("not a single-linked image file");
+  const handle = await open(file, "r");
+  try {
+    const opened = await handle.stat();
+    const now = await realpath(file);
+    const current = await stat(now);
+    if (!opened.isFile() || opened.nlink !== 1 || !isInside(root, now) || current.dev !== opened.dev || current.ino !== opened.ino) throw new Error("changed while opened");
+    if (opened.size > MAX_BYTES) throw new ImageTooLarge(path);
+    const buffer = Buffer.alloc(opened.size);
+    const { bytesRead } = await handle.read(buffer, 0, opened.size, 0);
+    const bytes = buffer.subarray(0, bytesRead);
+    const type = sniffImage(bytes);
+    if (!type) throw new Error("not an image by its bytes");
+    return { bytes, size: opened.size, type };
+  } finally {
+    await handle.close();
+  }
+}
+
+/** An image a page names, as a data URL, read through openInFolder. */
+export async function readImageInFolder({ path, variant }: RpcInput<typeof readImage>, folder: string) {
+  const { bytes, type } = await openInFolder(path, folder);
+  return dataUrlOf(bytes, type, variant);
 }

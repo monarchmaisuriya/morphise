@@ -6,7 +6,17 @@ vi.mock("../../prefs", () => ({ currentPrefs: () => ({ barPosition: "above" }), 
 vi.mock("../../theme-registry", () => ({ currentTheme: () => undefined }));
 vi.mock("../palette", () => ({ choosePalette: () => [], parseColor: () => null }));
 vi.mock("../strings", () => ({ say: (key: string) => key }));
-vi.mock("../actions", () => ({ SIDE_CHAT_PANEL_ID: "side-chat" }));
+// A queued reply's outcome is handed back through the callback the bar gives sendReply.
+const sent = vi.hoisted(() => ({ unsent: null as null | ((reason: string, detail: string | null) => void) }));
+vi.mock("../actions", () => ({
+  SIDE_CHAT_PANEL_ID: "side-chat",
+  hasComposer: () => false,
+  sendReply: async (_paseo: unknown, _agentId: string, _text: string, _behavior: string, onUnsent: (reason: string, detail: string | null) => void) => {
+    sent.unsent = onUnsent;
+    return "queued";
+  },
+}));
+vi.mock("../../web/chat-agent", () => ({ CHAT_SCROLL: '[data-testid="agent-chat-scroll"]', chatAgentOf: () => "agent-1" }));
 // The bar's top edge is the selection line's top, so a test can read where it was placed.
 vi.mock("../bar-layout", () => ({
   BAR_ICONS: {},
@@ -14,7 +24,7 @@ vi.mock("../bar-layout", () => ({
   barTop: (anchor: { top: number }) => anchor.top,
 }));
 
-import { installSelectionBar } from "./bar";
+import { installSelectionBar, mayTakeOverBar } from "./bar";
 
 type Listener = (event: unknown) => void;
 
@@ -23,7 +33,7 @@ function fakeElement(extra: Record<string, unknown> = {}) {
   const listeners = new Map<string, Listener>();
   const styles = new Map<string, string>();
   const children = new Map<string, unknown>();
-  const element: Record<string, unknown> & { styles: Map<string, string> } = {
+  const element: Record<string, unknown> & { styles: Map<string, string>; listeners: Map<string, Listener> } = {
     nodeType: 1,
     parentElement: null,
     isConnected: true,
@@ -136,5 +146,62 @@ it("follows a scrolling selection without asking the host to copy it again", () 
   }
   expect(copies).toBe(1);
   expect(barHost.styles.get("top")).toBe("70px");
+  stop();
+});
+
+it("lets a late report take over the bar only when the bar is idle", () => {
+  expect(mayTakeOverBar("hidden", false)).toBe(true);
+  expect(mayTakeOverBar("hidden", true)).toBe(false);
+  for (const mode of ["bar", "note", "reply", "side"] as const) expect(mayTakeOverBar(mode, false)).toBe(false);
+});
+
+it("keeps a reply being typed when an earlier queued reply is reported not sent, and reports it at the foot of the window", async () => {
+  const created: Array<ReturnType<typeof fakeElement>> = [];
+  let shadow: { querySelector(selector: string): ReturnType<typeof fakeElement> } | null = null;
+  vi.stubGlobal("document", {
+    body: fakeElement(),
+    createElement: () => {
+      const element = fakeElement();
+      const attach = element.attachShadow as () => NonNullable<typeof shadow>;
+      element.attachShadow = () => (shadow = attach());
+      created.push(element);
+      return element;
+    },
+    addEventListener: (type: string, listener: Listener) => documentListeners.set(type, listener),
+    removeEventListener: () => {},
+  });
+  const stop = installSelectionBar({ client: { paseo: {}, composers: () => [] } as never, bookmarkPassage: vi.fn() });
+  const barHost = created[0]!;
+  const field = created[1]! as ReturnType<typeof fakeElement> & { value: string };
+  const panel = shadow!.querySelector(".panel");
+  shadow!.querySelector(".note").querySelector = () => fakeElement();
+  const replyButton: ReturnType<typeof fakeElement> = fakeElement({ closest: () => replyButton, getAttribute: (name: string) => (name === "data-action" ? "reply" : null), disabled: false });
+  const openReply = () => {
+    documentListeners.get("pointerup")!({ target: null });
+    vi.runAllTimers();
+    panel.listeners.get("click")!({ target: replyButton });
+  };
+  const key = (name: string) => field.listeners.get("keydown")!({ key: name, shiftKey: false, altKey: false, ctrlKey: false, metaKey: false, isComposing: false, preventDefault: () => {} });
+
+  // A reply is queued behind the running turn; its card closes.
+  openReply();
+  field.value = "first reply";
+  key("Enter");
+  await vi.runAllTimersAsync();
+  expect(barHost.styles.get("display")).toBe("none");
+
+  // While a second reply is being typed, the first is reported not sent.
+  openReply();
+  field.value = "draft in progress";
+  sent.unsent!("timeout", null);
+  // A stray click elsewhere leaves a card with text alone, so the draft survives.
+  documentListeners.get("pointerdown")!({ target: null });
+  expect(field.value).toBe("draft in progress");
+
+  // Once the card is closed the report shows, anchored at the foot of the 800px window (this file's barTop places at the
+  // anchor's top) rather than at the old passage's line at 100px.
+  key("Escape");
+  expect(barHost.styles.get("display")).toBe("block");
+  expect(barHost.styles.get("top")).toBe("800px");
   stop();
 });

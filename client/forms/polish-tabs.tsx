@@ -4,7 +4,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { Text } from "react-native";
 import type { ChatSettings } from "../../shared/chat-view";
 import { ICON_KINDS, type IconKind, LOADERS, POLISH_DEFAULTS, type PolishSettings, polishPrefs, RICH_TEXT, type RichText, SELECTION_ACTIONS, type SelectionAction } from "../../shared/polish/prefs";
-import { applyUpdate, checkUpdate, type UpdateStatus } from "../../shared/polish/update";
+import { applyUpdate, checkUpdate, type Revision, type UpdateStatus } from "../../shared/polish/update";
 import { t, type MessageKey } from "../polish/i18n";
 import { BrowserControl } from "../polish/pages/browser-control";
 import { PLAIN_SYNTAX, SYNTAX_THEMES } from "../polish/rows/highlight";
@@ -265,9 +265,9 @@ export function UpdateSection({ form }: { form: Form }): ReactNode {
       .finally(() => setBusy(false));
   };
   useEffect(run, []);
-  const install = () => {
+  const install = (target: Revision) => {
     setBusy(true);
-    apply({})
+    apply({ target })
       // The update runs on the daemon and restarts Morphise when it is done; this screen reloads then.
       .then((result) => (result.error ? (setError(result.error), setBusy(false)) : setStarted(true)), (reason: unknown) => (setError(String(reason)), setBusy(false)));
   };
@@ -275,7 +275,7 @@ export function UpdateSection({ form }: { form: Form }): ReactNode {
   return (
     <SettingsSection title="Updates">
       <SettingsCard>
-        {status?.state === "update" ? <SettingsAction label="Update available" hint={hint} actionLabel={started || busy ? "Updating" : "Update"} disabled={started || busy} onPress={install} /> : <SettingsAction label="Morphise" hint={hint} actionLabel={busy ? "Checking" : "Check again"} disabled={busy} onPress={run} />}
+        {status?.state === "update" && status.revision ? <SettingsAction label="Update available" hint={hint} actionLabel={started || busy ? "Updating" : "Update"} disabled={started || busy} onPress={() => install(status.revision!)} /> : <SettingsAction label="Morphise" hint={hint} actionLabel={busy ? "Checking" : "Check again"} disabled={busy} onPress={run} />}
         {status?.state === "update" && status.links[0] ? <Text selectable style={{ paddingHorizontal: 16, paddingBottom: 12, fontSize: 12, color: form.theme.colors.foregroundMuted }}>{status.links[0]}</Text> : null}
       </SettingsCard>
     </SettingsSection>

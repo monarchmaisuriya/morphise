@@ -1,5 +1,6 @@
 // Ported from Shell Yeah (stevecastaneda/paseo-plugins, MIT, see NOTICE.md): shell-yeah/index.client.tsx (the slash command and renderer)
 import type { PluginClientContext } from "@getpaseo/plugin/client";
+import { RESERVED_SLASH_COMMANDS } from "../../shared/profile";
 import { RUN_KIND, RUN_VERSION, runRow } from "../../shared/run/row";
 import { start } from "../../shared/run/rpc";
 import { commandFromArgs, errorMessage, shortCommand } from "../../shared/run/text";
@@ -11,7 +12,7 @@ import { RunRowView } from "./run-row";
 export function registerRun(client: PluginClientContext): () => void {
   const stops = [
     client.addSlashCommand({
-      name: "run",
+      name: RESERVED_SLASH_COMMANDS.run,
       description: "Run a shell command in this chat's folder. The agent sees the output only if you send it.",
       argumentHint: "<command>",
       context: "agent",

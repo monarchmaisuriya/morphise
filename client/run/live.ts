@@ -35,6 +35,17 @@ export interface LiveEntry {
   entered: boolean;
   // The connection to the host the card's chat is on; until a card sets it, the store's own.
   rpc: TailRpc | null;
+  // Polls that failed in a row (unreachableNote); the next answer clears it.
+  failedPolls: number;
+}
+
+// After this many failed polls in a row, a running command's card and panel stop showing it as merely
+// running: its time keeps counting while nothing is known about it.
+const UNREACHABLE_AFTER_POLLS = 3;
+
+/** What a card or panel shows in place of the running status, or null while the daemon answers. */
+export function unreachableNote(failedPolls: number): string | null {
+  return failedPolls >= UNREACHABLE_AFTER_POLLS ? "Can't reach the daemon, retrying" : null;
 }
 
 export interface LiveStoreDeps {
@@ -87,6 +98,7 @@ export function createLiveStore(deps: LiveStoreDeps): LiveStore {
         version: 0,
         entered: false,
         rpc: null,
+        failedPolls: 0,
       };
       entries.set(runId, e);
     }
@@ -135,7 +147,6 @@ export function createLiveStore(deps: LiveStoreDeps): LiveStore {
   async function poll(e: LiveEntry) {
     if (e.polling) return;
     e.polling = true;
-    let failures = 0;
     try {
       while (shouldPoll(e)) {
         e.seenLive = true;
@@ -144,7 +155,10 @@ export function createLiveStore(deps: LiveStoreDeps): LiveStore {
         e.refresh = false;
         try {
           const result = await (e.rpc ?? deps.rpc)({ runId: e.row.runId, lines: limits.scrollbackLines, since, waitMs: limits.tailWaitMs });
-          failures = 0;
+          if (e.failedPolls > 0) {
+            e.failedPolls = 0;
+            notify(e);
+          }
           if (token !== e.token) continue;
           if (result.state === "view") {
             if (result.view.rev >= (e.view?.rev ?? -1)) {
@@ -157,7 +171,9 @@ export function createLiveStore(deps: LiveStoreDeps): LiveStore {
             notify(e);
           }
         } catch {
-          await sleep(limits.pollBackoffMs[Math.min(failures++, limits.pollBackoffMs.length - 1)]);
+          e.failedPolls++;
+          notify(e);
+          await sleep(limits.pollBackoffMs[Math.min(e.failedPolls - 1, limits.pollBackoffMs.length - 1)]);
         }
       }
     } finally {
@@ -263,18 +279,20 @@ export function useRunUi(runId: string): {
   seenLive: boolean;
   entered: boolean;
   markEntered(): void;
+  unreachable: string | null;
 } {
   const store = appStore();
   useSyncExternalStore(
     (listener) => store.subscribe(runId, listener),
     () => store.entry(runId).version,
   );
-  const { expanded, following, seenLive, entered } = store.entry(runId);
+  const { expanded, following, seenLive, entered, failedPolls } = store.entry(runId);
   return {
     expanded,
     following,
     seenLive,
     entered,
+    unreachable: unreachableNote(failedPolls),
     markEntered: () => store.markEntered(runId),
     setExpanded: (v) => store.setExpanded(runId, v),
     setFollowing: (v) => store.setFollowing(runId, v),

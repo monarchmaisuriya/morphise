@@ -6,12 +6,12 @@
 import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { Platform } from "react-native";
 import { start } from "../../../shared/run/rpc";
-import { risksOf } from "../../../shared/run/text";
+import { describeRisk, risksOf } from "../../../shared/run/text";
 import { currentPrefs, subscribePrefs } from "../../polish/prefs";
 import { chatAgentOf } from "../../polish/web/chat-agent";
 import { type DomElement, watchDom, within } from "../../polish/web/dom";
 import { applyStyleSheet } from "../../web";
-import { runStep, shellCommandOf, shellOf } from "./command";
+import { CONFIRM_MS, type Confirm, nextConfirm, runStep, shellCommandOf, shellOf } from "./command";
 import { applyPanelLook, openPanel, PANEL_CSS, type RunPanel } from "./panel";
 
 declare function setTimeout(callback: () => void, ms: number): number;
@@ -22,9 +22,6 @@ const CODE_BLOCK = '[data-paseo-markdown-tag="pre"]';
 const LANGUAGE = "data-paseo-markdown-language";
 const CODE_TEXT = ':scope > [data-paseo-markdown-tag="code"]';
 const RUN = "data-morphise-run";
-const CONFIRM_MS = 5000;
-// A double-click's second press lands within this; it must not confirm a risky command.
-const CONFIRM_GUARD_MS = 400;
 const RESULT_MS = 2500;
 
 const PLAY = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"/></svg>';
@@ -52,7 +49,7 @@ const underBlock = () => currentPrefs().runOutput === "block";
 
 function show(button: DomElement, state: State, detail = "") {
   button.setAttribute("data-state", state);
-  // `detail` on screen is only ever a risk from risksOf's fixed list, never text from the chat.
+  // `detail` on screen is only ever a risk from risksOf's fixed list (describeRisk adds only numbers), never text from the chat.
   button.innerHTML = state === "started" ? CHECK : state === "confirm" ? `${PLAY}<span>Run anyway? It ${detail}</span>` : PLAY;
   const label = state === "confirm" ? `Run anyway? It ${detail}` : state === "error" ? `Couldn't run: ${detail}` : state === "started" ? (underBlock() ? "Started; the output is under the command" : "Started; the output is in the chat") : "Run this command in this chat's folder";
   button.setAttribute("aria-label", label);
@@ -64,8 +61,8 @@ function show(button: DomElement, state: State, detail = "") {
 export function installRunButtons(client: PluginClientContext): () => void {
   if (Platform.OS !== "web" || typeof document === "undefined") return () => {};
   const timers = new Map<DomElement, number>();
-  // The command a button is asking about, and when it started asking: a confirm covers that text only.
-  const asking = new Map<DomElement, { command: string; at: number }>();
+  // The confirm each button is showing (nextConfirm).
+  const asking = new Map<DomElement, Confirm>();
   // The run each block shows under it, by the reply it is in and its command, so a block Paseo redraws or
   // scrolls back gets its panel again (and only that block: the same command in another reply or chat does
   // not); and the panels open now.
@@ -116,10 +113,9 @@ export function installRunButtons(client: PluginClientContext): () => void {
 
   async function run(block: DomElement, button: DomElement) {
     const command = commandOf(block);
-    const pending = asking.get(button);
-    if (pending && Date.now() - pending.at < CONFIRM_GUARD_MS) return;
-    // A block still streaming can change after the confirm: the confirm only covers the text it showed.
-    const step = runStep(command, chatAgentOf(block), command ? risksOf(command) : [], pending?.command === command);
+    const confirm = nextConfirm(asking.get(button), command, Date.now());
+    if (confirm === "ignore") return;
+    const step = runStep(command, chatAgentOf(block), command ? risksOf(command) : [], confirm === "confirmed");
     asking.delete(button);
     if (step.kind === "skip") return;
     if (step.kind === "no-chat") {
@@ -128,8 +124,9 @@ export function installRunButtons(client: PluginClientContext): () => void {
     }
     if (step.kind === "confirm") {
       asking.set(button, { command: command!, at: Date.now() });
-      show(button, "confirm", step.risks[0]);
-      const every = `Run anyway? It ${step.risks.join("; it ")}`;
+      const risks = step.risks.map((risk) => describeRisk(risk, command!));
+      show(button, "confirm", risks[0]);
+      const every = `Run anyway? It ${risks.join("; it ")}`;
       button.setAttribute("aria-label", every);
       button.setAttribute("title", every);
       return later(button, CONFIRM_MS, () => (asking.delete(button), show(button, "idle")));

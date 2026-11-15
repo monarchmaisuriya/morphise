@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { agentHeadline, type BoardAgent, type CardSettings, contextShare, folderAddsSomething, folderOf, labelLimitCount, modelLabel } from "../../shared/agents-board";
+import { agentHeadline, type BoardAgent, type CardSettings, contextShare, folderAddsSomething, folderOf, labelLimitCount, modelLabel, rowLine } from "../../shared/agents-board";
+import { oneTapLabel, summarizePermission } from "../../shared/inbox";
 import type { Indicator } from "../../shared/profile";
 import { formatElapsed } from "../../shared/time-text";
 import { statusColor, tileColor } from "../ui/hues";
@@ -130,7 +131,7 @@ export function StopButton({ t, title, onStop, disabled }: { t: Tokens; title: s
   );
 }
 
-export function AgentCard({ t, facts, card, now, live, selected, focused, buttons, onPress, onMenu, onScreenRef }: { t: Tokens; facts: CardFacts; card: CardSettings; now: Date; live: CardLive | null; selected: boolean; focused: boolean; buttons: CardButtons; onPress(): void; onMenu: (() => void) | null; onScreenRef?(node: unknown): void }) {
+export function AgentCard({ t, facts, card, preview = true, now, live, selected, focused, buttons, onPress, onMenu, onScreenRef }: { t: Tokens; facts: CardFacts; card: CardSettings; preview?: boolean; now: Date; live: CardLive | null; selected: boolean; focused: boolean; buttons: CardButtons; onPress(): void; onMenu: (() => void) | null; onScreenRef?(node: unknown): void }) {
   const { agent, indicator } = facts;
   const node = useRef<View>(null);
   const [hovered, setHovered] = useState(false);
@@ -139,6 +140,9 @@ export function AgentCard({ t, facts, card, now, live, selected, focused, button
   useEffect(() => (focused ? reveal(node.current) : undefined), [focused]);
   const running = indicator === "running" || !!agent.turnStartedAt;
   const headline = agentHeadline(agent, facts.workspaceShared);
+  const permission = indicator === "needs_input" ? summarizePermission(agent.pendingPermissions[agent.pendingPermissions.length - 1]) : null;
+  // What it waits on (the request or the error), as the list row's line says it; the "What it waits on" setting.
+  const waitsOn = preview && (indicator === "needs_input" || indicator === "failed") ? rowLine({ indicator, permission, error: agent.lastError, step: null, subtitle: null }) : null;
   // The lane says the status; a dot is kept only for what asks for attention.
   const dot = indicator === "needs_input" || indicator === "failed" ? statusColor(t.c, indicator) : null;
   // The context share means something only while the agent works.
@@ -187,6 +191,11 @@ export function AgentCard({ t, facts, card, now, live, selected, focused, button
           {headline.subtitle}
         </Text>
       ) : null}
+      {waitsOn ? (
+        <Text style={{ fontSize: 12, color: indicator === "failed" ? t.c.statusDanger : t.c.statusWarning }} numberOfLines={2}>
+          {waitsOn}
+        </Text>
+      ) : null}
       {project || facts1.length ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6, minWidth: 0 }}>
           {project && card.projectIcon ? <ProjectTile name={project} /> : null}
@@ -211,8 +220,8 @@ export function AgentCard({ t, facts, card, now, live, selected, focused, button
       ) : null}
       {answer ? (
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 2 }}>
-          {buttons.allow ? <IconButton t={t} size="sm" icon="Check" tone={t.c.statusSuccess} label={`Allow: ${headline.title}`} disabled={buttons.busy} onPress={buttons.allow} /> : null}
-          {buttons.deny ? <IconButton t={t} size="sm" icon="X" label={`Deny: ${headline.title}`} disabled={buttons.busy} onPress={buttons.deny} /> : null}
+          {buttons.allow ? <IconButton t={t} size="sm" icon="Check" tone={t.c.statusSuccess} label={permission ? `${oneTapLabel(permission, "allow")}, ${headline.title}` : `Allow: ${headline.title}`} disabled={buttons.busy} onPress={buttons.allow} /> : null}
+          {buttons.deny ? <IconButton t={t} size="sm" icon="X" label={permission ? `${oneTapLabel(permission, "deny")}, ${headline.title}` : `Deny: ${headline.title}`} disabled={buttons.busy} onPress={buttons.deny} /> : null}
           {touch ? otherButtons(t, headline.title, buttons) : null}
         </View>
       ) : touch && others ? (

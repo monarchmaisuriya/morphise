@@ -3,7 +3,7 @@ import { useAgent, useRpc, type PluginTimelineItemProps } from "@getpaseo/plugin
 import { copyText, useToast } from "@getpaseo/plugin/client/ui";
 import React, { forwardRef, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Animated, Easing, Platform, Pressable, Text, TextInput, View, type LayoutChangeEvent } from "react-native";
-import { pastedKeys, terminalKeys, type KeyPress } from "../../shared/run/keys";
+import { pasteOf, terminalKeys, type KeyPress } from "../../shared/run/keys";
 import { errorMessage } from "../../shared/run/text";
 import { LIMITS } from "../../shared/run/limits";
 import { plainText, type RunRow } from "../../shared/run/row";
@@ -80,7 +80,7 @@ export function RunRowView({ agentId, item, theme, layout, timestamp }: PluginTi
   const now = useNow(running ? 1_000 : null);
   const agent = agentName(useAgent(agentId, (a) => a.provider));
   const compact = layout.compact;
-  const pres = describe(run, now, { agent, phone: compact });
+  const pres = withUnreachable(describe(run, now, { agent, phone: compact }), running ? ui.unreachable : null);
   const palette = useMemo(() => makePalette(colors), [colors]);
   const reduced = useReducedMotion();
   const toast = useToast();
@@ -131,15 +131,18 @@ export function RunRowView({ agentId, item, theme, layout, timestamp }: PluginTi
     }
   }
 
+  // A paste's keys go to the command (pasteOf); one with none, or past the limit, says so instead.
+  const sendPaste = (text: string): boolean => {
+    const pasted = pasteOf(text);
+    if ("keys" in pasted) return (sendKeys(pasted.keys), true);
+    if (pasted.refused === "empty") toast.show("The clipboard has no text to paste");
+    else toast.error(`That's too long to paste. The limit is ${LIMITS.commandChars.toLocaleString("en-US")} characters.`);
+    return false;
+  };
   // After a paste, keys go to the command, so Return is the next tap.
   const paste = (text: string) => {
-    const keys = pastedKeys(text);
-    if (keys === null) return toast.show("The clipboard has no text to paste");
-    if (keys.length > LIMITS.commandChars)
-      return toast.error(`That's too long to paste. The limit is ${LIMITS.commandChars.toLocaleString("en-US")} characters.`);
-    sendKeys(keys);
     // Later, so a closing paste box doesn't take the focus back.
-    setTimeout(() => keyInput.current?.focus(), 300);
+    if (sendPaste(text)) setTimeout(() => keyInput.current?.focus(), 300);
   };
   const actions = (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -222,7 +225,7 @@ export function RunRowView({ agentId, item, theme, layout, timestamp }: PluginTi
             listening={listening}
             onPress={pres.keyboard ? () => keyInput.current?.focus() : undefined}
           >
-            {pres.keyboard ? <KeyInput ref={keyInput} send={sendKeys} compact={compact} onTypingChange={setTyping} /> : null}
+            {pres.keyboard ? <KeyInput ref={keyInput} send={sendKeys} paste={sendPaste} compact={compact} onTypingChange={setTyping} /> : null}
           </OutputWell>
         ) : pres.well?.kind === "message" ? (
           <View
@@ -240,6 +243,11 @@ export function RunRowView({ agentId, item, theme, layout, timestamp }: PluginTi
       </Card>
     </Enter>
   );
+}
+
+// The daemon stopped answering: the header says so in place of a running time nothing backs.
+function withUnreachable(pres: Presentation, note: string | null): Presentation {
+  return note === null ? pres : { ...pres, label: note, timerFrom: null, elapsed: null };
 }
 
 function withTypingCue(pres: Presentation, listening: boolean, compact: boolean): Presentation {
@@ -509,8 +517,8 @@ function Switcher({
 // is invisible and stays empty, at the bottom of the output box, so focusing it keeps the card in
 // view and a phone keyboard opens just under the newest output. What the command shows lands in
 // the output, so a password prompt shows nothing. Esc stops typing.
-const KeyInput = forwardRef<TextInput, { send(keys: string): void; compact: boolean; onTypingChange(typing: boolean): void }>(function KeyInput(
-  { send: sendKeys, compact, onTypingChange },
+const KeyInput = forwardRef<TextInput, { send(keys: string): void; paste(text: string): void; compact: boolean; onTypingChange(typing: boolean): void }>(function KeyInput(
+  { send: sendKeys, paste, compact, onTypingChange },
   ref,
 ) {
   const inputRef = useRef<TextInput | null>(null);
@@ -524,7 +532,9 @@ const KeyInput = forwardRef<TextInput, { send(keys: string): void; compact: bool
       ref={setRef}
       value=""
       onChangeText={(text) => {
-        if (text) sendKeys(text);
+        // A paste on web arrives here as one change: more than one character at once takes the paste rule.
+        if (text.length > 1) paste(text);
+        else if (text) sendKeys(text);
       }}
       onKeyPress={(event) => {
         const press = event.nativeEvent as KeyPress;

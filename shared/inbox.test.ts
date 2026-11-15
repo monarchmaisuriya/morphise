@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inboxSettings, previewLine, summarizePermission, waitsOnUser, withCleared } from "./inbox";
+import { inboxSettings, oneTapChoice, oneTapLabel, previewLine, summarizePermission, waitsOnUser, withCleared } from "./inbox";
 
 // Shaped like Paseo's AgentPermissionRequest (protocol agent-types).
 const shell = { id: "p1", provider: "claude", name: "Bash", kind: "tool", title: "Run tests", detail: { type: "shell", command: "npm test -- auth" } };
@@ -44,6 +44,34 @@ describe("summarizePermission", () => {
   it("is null for anything that is not a request", () => {
     expect(summarizePermission(null)).toBeNull();
     expect(summarizePermission({ name: "Bash" })).toBeNull();
+  });
+});
+
+describe("oneTapChoice", () => {
+  // OpenCode 1.x lists Deny, then "Allow always", then "Allow once", and marks once as the primary button.
+  const opencode = summarizePermission({
+    ...shell,
+    actions: [
+      { id: "reject", label: "Deny", behavior: "deny", variant: "danger" },
+      { id: "always", label: "Allow always", behavior: "allow", variant: "secondary" },
+      { id: "once", label: "Allow once", behavior: "allow", variant: "primary" },
+    ],
+  })!;
+
+  it("allows with the provider's primary choice, not the first allow it lists", () => {
+    expect(oneTapChoice(opencode, "allow")?.id).toBe("once");
+    expect(oneTapLabel(opencode, "allow")).toBe("Allow once: Bash: npm test -- auth");
+  });
+
+  it("leaves the choice to Paseo when no allow is primary", () => {
+    const request = summarizePermission({ ...shell, actions: [{ id: "always", label: "Allow always", behavior: "allow" }] })!;
+    expect(oneTapChoice(request, "allow")).toBeUndefined();
+    expect(oneTapLabel(request, "allow")).toBe("Allow: Bash: npm test -- auth");
+  });
+
+  it("denies with the first deny the provider lists", () => {
+    expect(oneTapChoice(opencode, "deny")?.id).toBe("reject");
+    expect(oneTapLabel(opencode, "deny")).toBe("Deny: Bash: npm test -- auth");
   });
 });
 

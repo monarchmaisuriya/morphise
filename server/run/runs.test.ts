@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "vitest";
+import { test, vi } from "vitest";
 import type { Limits } from "../../shared/run/limits";
 import { cardIdOf, lineText, type RunRow } from "../../shared/run/row";
 import { commandEnv, createRunRegistry, type RunRegistry } from "./runs";
 import { jsonBytes } from "./screen";
-import { loadPty } from "./proc";
+import { loadPty, type Pty, type PtyModule } from "./proc";
 
 const AGENT = "agent-1";
 const dir = () => mkdtempSync(join(tmpdir(), "morphise-run-"));
@@ -27,7 +27,9 @@ async function until(check: () => boolean, ms = 10_000): Promise<void> {
   }
 }
 
-function harness(opts: { limits?: Partial<Limits>; publish?: (row: RunRow) => Promise<void> | void; env?: NodeJS.ProcessEnv; terminal?: "auto" | "off" } = {}) {
+function harness(
+  opts: { limits?: Partial<Limits>; publish?: (row: RunRow) => Promise<void> | void; env?: NodeJS.ProcessEnv; terminal?: "auto" | "off"; loadPty?: () => PtyModule | null } = {},
+) {
   const published: RunRow[] = [];
   const registry = createRunRegistry({
     publish: async (_agentId, row) => {
@@ -38,6 +40,7 @@ function harness(opts: { limits?: Partial<Limits>; publish?: (row: RunRow) => Pr
     env: opts.env ?? process.env,
     limits: opts.limits,
     terminal: opts.terminal,
+    loadPty: opts.loadPty,
   });
   const rows = (id: string) => published.filter((row) => row.runId === id);
   const card = (id: string) => published.filter((row) => cardIdOf(row) === id).at(-1)!;
@@ -408,6 +411,61 @@ posixTest("without a terminal, typing is refused", { timeout: 15_000 }, async ()
   h.registry.stop(id, true);
   assert.equal((await ended(h.registry, id)).phase.kind, "stopped", "forcing a stop straight away still reads as stopped");
   await h.registry.shutdown();
+});
+
+posixTest("without a terminal, a background job the command left behind ends when the command exits", { timeout: 15_000 }, async () => {
+  const h = harness({ terminal: "off" });
+  const id = await run(h.registry, "sleep 60 & echo $!");
+  const pid = await printedPid(h, id);
+  assert.equal((await ended(h.registry, id)).phase.kind, "ok");
+  await until(() => pidGone(pid), 2_000);
+  await h.registry.shutdown();
+});
+
+// node-pty is not installed for these tests, so a stand-in terminal shows what the registry and
+// the terminal spawner send to it.
+function fakePty() {
+  const terms: { args: string[]; env: NodeJS.ProcessEnv; pid: number; written: string[]; exit(exitCode: number): void }[] = [];
+  let nextPid = 4_000_000;
+  const module: PtyModule = {
+    spawn(_file, args, options) {
+      let onExit: (event: { exitCode: number }) => void = () => undefined;
+      const term = { args, env: options.env, pid: nextPid++, written: [] as string[], exit: (exitCode: number) => onExit({ exitCode }) };
+      terms.push(term);
+      // The check pickSpawner runs before choosing the terminal.
+      if (args.at(-1) === "exit 0") setImmediate(() => term.exit(0));
+      const pty: Pty = {
+        pid: term.pid,
+        onData: () => undefined,
+        onExit: (listener) => void (onExit = listener),
+        write: (data) => void term.written.push(data),
+        kill: () => undefined,
+      };
+      return pty;
+    },
+  };
+  return { module, terms };
+}
+
+posixTest("in a terminal: typed keys reach it, Stop is Ctrl+C, no pager, and the process group is hung up on exit", async () => {
+  const pty = fakePty();
+  const kill = vi.spyOn(process, "kill").mockImplementation(() => true);
+  try {
+    const h = harness({ loadPty: () => pty.module });
+    const id = await run(h.registry, "make deploy");
+    const term = pty.terms.at(-1)!;
+    assert.equal(h.registry.snapshot(id, 1)!.terminal, true);
+    assert.equal(term.env.PAGER, "cat");
+    h.registry.input(id, "y\r");
+    h.registry.stop(id, false);
+    assert.deepEqual(term.written, ["y\r", "\x03"]);
+    term.exit(130);
+    assert.equal((await ended(h.registry, id)).phase.kind, "stopped");
+    assert.ok(kill.mock.calls.some(([pid, signal]) => pid === -term.pid && signal === "SIGHUP"));
+    await h.registry.shutdown();
+  } finally {
+    kill.mockRestore();
+  }
 });
 
 // ---- Windows: PowerShell in a ConPTY terminal ----

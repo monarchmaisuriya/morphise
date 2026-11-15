@@ -225,26 +225,3 @@ export function subagentPaneShown() {
   if (Platform.OS !== "web") return false;
   return Array.from(document.querySelectorAll('[data-testid="provider-subagent-panel"]')).some(visible);
 }
-
-/** A split-view pane; its tab row names the agent whose chat it shows. */
-const PANE = '[data-testid^="workspace-pane-"]';
-const SELECTED_AGENT_TAB = '[data-testid^="workspace-tab-agent_"][aria-selected="true"]';
-
-/**
- * The first visible match walking up from `from`, stopping at its pane. Two visible matches at one level mean two chats share it:
- * no answer beats a wrong one. (The selection bar finds its chat the same way.)
- */
-export function nearestUnique(from: DomElement, selector: string): DomElement | null {
-  for (let node = from.parentElement; node; node = node.parentElement) {
-    const found = Array.from(node.querySelectorAll(selector)).filter(visible);
-    if (found.length === 1) return found[0]!;
-    if (found.length > 1 || node.matches(PANE)) return null;
-  }
-  return null;
-}
-
-/** The agent whose chat `from`'s pane shows (its selected tab), or undefined when that can't be told. */
-export function paneAgentId(from: DomElement) {
-  if (Platform.OS !== "web") return undefined;
-  return nearestUnique(from, SELECTED_AGENT_TAB)?.getAttribute("data-testid")?.slice("workspace-tab-agent_".length) || undefined;
-}

@@ -4,7 +4,7 @@ import { stat } from "node:fs/promises";
 import { LIMITS, type Limits } from "../../shared/run/limits";
 import { blockShell, cardIdOf, isEnded, runNumberOf, type BlockShell, type LiveView, type PastRun, type Phase, type RunRow } from "../../shared/run/row";
 import { createScreen, fitLines, jsonBytes, looksBinary, type Screen } from "./screen";
-import { pickSpawner, type Proc, type Spawner } from "./proc";
+import { pickSpawner, type Proc, type PtyModule, type Spawner } from "./proc";
 import { blockShellApplies, shellCommand } from "./shells";
 
 export interface RunsDeps {
@@ -15,6 +15,8 @@ export interface RunsDeps {
   limits?: Partial<Limits>;
   // "auto" runs commands in a real terminal when this machine can; "off" never does.
   terminal?: "auto" | "off";
+  // Where node-pty comes from; tests pass a stand-in.
+  loadPty?: () => PtyModule | null;
 }
 
 export interface StartInput {
@@ -62,7 +64,8 @@ interface Run {
   readonly screen: Screen;
   sentAt: number | null;
   lastOutputAt: number | null;
-  // Kept after the command exits, so a Stop can still reach background jobs it left behind.
+  // Kept after the command exits, so Stop's follow-ups (escalation) still reach background jobs
+  // that ignored the hangup they got when it exited (see proc.ts). A Stop sent after the exit does nothing.
   proc: Proc | null;
   // Runs in a real terminal (see proc.ts), so it can take typing.
   readonly terminal: boolean;
@@ -111,7 +114,7 @@ export function createRunRegistry(deps: RunsDeps): RunRegistry {
 
   const sleep = (ms: number) => new Promise<void>((resolve) => after(ms, resolve));
 
-  const spawnerReady = pickSpawner(deps.env, deps.terminal ?? "auto");
+  const spawnerReady = pickSpawner(deps.env, deps.terminal ?? "auto", deps.loadPty);
 
   // ---- the one publish path ----
 

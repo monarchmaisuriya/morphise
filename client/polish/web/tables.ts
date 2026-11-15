@@ -10,7 +10,8 @@ import { BAR_ICONS, barTop } from "../selection/bar-layout";
 import { choosePalette, parseColor, type Rgba } from "../selection/palette";
 import { say } from "../selection/strings";
 import { currentTheme } from "../theme-registry";
-import { paneAgentId, type DomElement } from "./dom";
+import { paneAgentOf } from "./chat-agent";
+import type { DomElement } from "./dom";
 import { alignColumns, cellRange, rangeHas, sameCell, selectionText, tableMarkdown, type CellPos, type CellRange } from "./table-copy";
 
 type PageElement = DomElement & {
@@ -256,7 +257,7 @@ function startTables(composers: PluginClientContext["composers"]): () => void {
     const current = selected;
     if (!current) return;
     const text = selectionText(gridOf(current.table), current.ranges);
-    const agentId = paneAgentId(current.table);
+    const agentId = paneAgentOf(current.table);
     void run(async () => {
       if (!agentId || !hasComposer(composers, agentId)) return (await copyText(text), true);
       await appendToComposer(composers, agentId, `${text}\n\n`);

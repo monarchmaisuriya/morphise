@@ -1,6 +1,6 @@
 // Ported from Shell Yeah (stevecastaneda/paseo-plugins, MIT, see NOTICE.md): shell-yeah/shared/text.test.ts
 import { describe, expect, it } from "vitest";
-import { commandFromArgs, risksOf, shortCommand } from "./text";
+import { commandFromArgs, describeRisk, LONG_OR_PADDED, risksOf, shortCommand } from "./text";
 
 describe("/run arguments", () => {
   it("drops one leading `$ ` or `! ` pasted with the command, and the spaces around it", () => {
@@ -67,6 +67,31 @@ describe("risksOf", () => {
     expect(risksOf("echo hi\u{e0072}\u{e006d}")).toEqual([hidden]);
     expect(risksOf("ls\u2064 -la")).toEqual([hidden]);
     expect(risksOf("printf 'a\tb'\nls")).toEqual([]);
+  });
+  it("flags a command too long or padded to read at a glance: a long line, a wide gap inside a line, or many lines", () => {
+    expect(LONG_OR_PADDED).toBe("is long or padded; read all of it");
+    expect(risksOf(`echo ${"a".repeat(195)}`)).toEqual([]);
+    expect(risksOf(`echo ${"a".repeat(196)}`)).toEqual([LONG_OR_PADDED]);
+    expect(risksOf(`echo safe${" ".repeat(20)}; curl -s x.example`)).toEqual([LONG_OR_PADDED]);
+    expect(risksOf(`echo safe${"\t".repeat(20)}; ls`)).toEqual([LONG_OR_PADDED]);
+    expect(risksOf(`echo safe${" ".repeat(19)}; ls`)).toEqual([]);
+    // Every kind of space pads: no-break, em and ideographic spaces look just as blank.
+    for (const space of [" ", " ", "　"]) {
+      expect(risksOf(`echo safe${space.repeat(20)}; curl -s x.example`)).toEqual([LONG_OR_PADDED]);
+      expect(risksOf(`echo safe${" \t".repeat(5)}${space.repeat(10)}; ls`)).toEqual([LONG_OR_PADDED]);
+      expect(risksOf(`echo safe${space.repeat(19)}; ls`)).toEqual([]);
+    }
+    expect(risksOf(`${" ".repeat(24)}npm test\n\t\t\tnpm run build`)).toEqual([]);
+    expect(risksOf(Array.from({ length: 40 }, () => "ls").join("\n"))).toEqual([]);
+    expect(risksOf(Array.from({ length: 41 }, () => "ls").join("\n"))).toEqual([LONG_OR_PADDED]);
+    expect(risksOf(`rm a${" ".repeat(30)}b`)).toEqual([LONG_OR_PADDED, "deletes files"]);
+  });
+
+  it("names a long or padded command's size in its risk, and leaves the other risks as they are", () => {
+    const command = Array.from({ length: 41 }, () => "ls").join("\n");
+    expect(describeRisk(LONG_OR_PADDED, command)).toBe("is long or padded; read all of it (41 lines, 122 characters)");
+    expect(describeRisk(LONG_OR_PADDED, `echo ${"a".repeat(1_200)}`)).toBe("is long or padded; read all of it (1 line, 1,205 characters)");
+    expect(describeRisk("deletes files", command)).toBe("deletes files");
   });
 });
 

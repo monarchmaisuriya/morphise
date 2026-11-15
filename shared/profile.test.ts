@@ -184,8 +184,17 @@ describe("profileSchema", () => {
     const pill = { id: "morphise-remind", title: "R", icon: "Box", action: { kind: "open-editor" } };
     expect(issues({ composer: { pills: [pill] } })).toHaveLength(1);
     expect(issues({ slashCommands: [{ name: "remind", description: "d", argumentHint: "", action: { kind: "open-editor" } }] })).toEqual([
-      'slashCommands.0.name: "/remind" is Morphise\'s own reminder command',
+      'slashCommands.0.name: "/remind" is one of Morphise\'s own commands',
     ]);
+  });
+
+  it("reserves every slash command Morphise registers itself", () => {
+    for (const name of ["remind", "task", "bookmark", "run"]) {
+      expect(issues({ slashCommands: [{ name, description: "d", argumentHint: "", action: { kind: "open-editor" } }] })).toEqual([
+        `slashCommands.0.name: "/${name}" is one of Morphise's own commands`,
+      ]);
+    }
+    expect(issues({ slashCommands: [{ name: "task-custom", description: "d", argumentHint: "", action: { kind: "open-editor" } }] })).toEqual([]);
   });
 
   it("refuses an id that Paseo would reject", () => {

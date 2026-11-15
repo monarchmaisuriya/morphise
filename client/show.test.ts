@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { showResult, showUsed } from "../shared/show";
-import { createTypingCheck, createUseReporter, registerShowNavigator, runShow, startShow, type ShowDeps, type ShowNavigator } from "./show";
+import { createTypingCheck, createUseReporter, refOn, registerShowNavigator, runShow, startShow, type ShowDeps, type ShowNavigator } from "./show";
 
 const web = vi.hoisted(() => ({ typed: () => {} }));
 vi.mock("./web", () => ({
@@ -15,7 +15,7 @@ function composer(prompt = "") {
 }
 
 function deps(overrides: Partial<ShowDeps> = {}): ShowDeps {
-  return { composers: () => [], openScreen: vi.fn(), navigator: () => null, typing: () => false, ...overrides };
+  return { composers: () => [], openScreen: vi.fn(), navigator: () => null, host: async () => "h1", typing: () => false, ...overrides };
 }
 
 describe("running a request in this window", () => {
@@ -81,12 +81,15 @@ describe("running a request in this window", () => {
   });
 
   it("opens terminals and workspaces through the sidebar helper, and explains how when it is missing", async () => {
-    const navigator = { openTerminal: vi.fn((id: string) => id === "t1"), openWorkspace: vi.fn((id: string) => id === "w1") };
+    const navigator = { openTerminal: vi.fn((_host: string, id: string) => id === "t1"), openWorkspace: vi.fn((_host: string, id: string) => id === "w1") };
     const withSidebar = deps({ navigator: () => navigator });
     await expect(runShow({ action: "terminal", terminalId: "t1" }, withSidebar)).resolves.toEqual({ ok: true, message: "Opened the terminal." });
     await expect(runShow({ action: "terminal", terminalId: "t9" }, withSidebar)).resolves.toEqual({ ok: false, message: "Terminal t9 was not found in this window." });
     await expect(runShow({ action: "workspace", workspaceId: "w1" }, withSidebar)).resolves.toEqual({ ok: true, message: "Opened the workspace." });
     await expect(runShow({ action: "workspace", workspaceId: "w9" }, withSidebar)).resolves.toEqual({ ok: false, message: "Workspace w9 was not found in this window." });
+    // The id is looked up on the host the request came from.
+    expect(navigator.openTerminal).toHaveBeenCalledWith("h1", "t1");
+    expect(navigator.openWorkspace).toHaveBeenCalledWith("h1", "w1");
     const needs = "Turn on Morphise's sidebar view (Settings, Morphise, Sidebar) and select it in Paseo (Settings, Sidebar) so agents can open terminals and workspaces.";
     await expect(runShow({ action: "terminal", terminalId: "t1" }, deps())).resolves.toEqual({ ok: false, message: needs });
   });
@@ -110,6 +113,17 @@ describe("running a request in this window", () => {
 
   it("does not pin here: pinning runs on the daemon", async () => {
     await expect(runShow({ action: "pin", workspaceId: "w1", pinned: true }, deps())).resolves.toEqual({ ok: false, message: "Pinning runs on the daemon, not in a window." });
+  });
+});
+
+describe("finding a terminal or workspace by id", () => {
+  it("matches the host as well as the id, since two hosts can share an id", () => {
+    const refs = [
+      { hostId: "h1", id: "w1", name: "on h1" },
+      { hostId: "h2", id: "w1", name: "on h2" },
+    ];
+    expect(refOn(refs, "h2", "w1")?.name).toBe("on h2");
+    expect(refOn(refs, "h3", "w1")).toBeUndefined();
   });
 });
 
@@ -152,6 +166,7 @@ describe("this window's side, wired up", () => {
       rpc: vi.fn(async (_contract: unknown, _input: unknown) => ({ ok: true })),
       composers: () => [],
       openScreen: vi.fn(),
+      paseo: { hosts: { list: async () => ({ self: { serverId: "host-a" } }) } },
       subscribe: (_contract: unknown, _input: unknown, onEvent: (request: unknown) => void) => {
         delivered.deliver = onEvent;
         return Object.assign(() => {}, { ready: Promise.resolve() });
@@ -190,6 +205,20 @@ describe("this window's side, wired up", () => {
     finishFirst();
     await flush();
     expect(order).toEqual(["focus a1", "screen"]);
+    show.stop();
+  });
+
+  it("looks terminals up on this client's own host", async () => {
+    const { client, delivered } = fakeClient();
+    const openTerminal = vi.fn(() => true);
+    const forget = registerShowNavigator({ openTerminal, openWorkspace: () => false });
+    const show = startShow(client as never);
+    show.reopen();
+    delivered.deliver!({ requestId: "r1", input: { action: "terminal", terminalId: "t1" } });
+    await flush();
+    expect(openTerminal).toHaveBeenCalledWith("host-a", "t1");
+    expect(client.rpc).toHaveBeenCalledWith(showResult, { requestId: "r1", ok: true, message: "Opened the terminal." });
+    forget();
     show.stop();
   });
 

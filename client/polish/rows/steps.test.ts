@@ -126,6 +126,10 @@ describe("merged steps", () => {
     expect(stepKey(shot(1))).not.toBe(stepKey(shot(2)));
     expect(stepSummary([reply("x")])).toBe("Wrote 1 message");
     expect(stepSummary([tool({ type: "shell", command: "ls" }), reply("x")])).toBe("Ran 1 command");
+    // Pictures a step made are named, not counted as replies (which only name a run that did nothing else).
+    const thinking = { type: "reasoning", text: "Checking the shots." } as AgentTimelineItem;
+    expect(stepSummary([thinking, shot(1), thinking, reply("![a](file:///a.png)![b](file:///b.png)")])).toBe("Thought 2 times and showed 3 images");
+    expect(stepSummary([shot(1)])).toBe("Showed 1 image");
   });
 
   it("Claude's task tools are passed over, todo-list calls and agent messages end a run", () => {

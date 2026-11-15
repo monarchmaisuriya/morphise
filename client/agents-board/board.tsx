@@ -36,7 +36,7 @@ import {
   statusGroups,
   laneStatus,
 } from "../../shared/agents-board";
-import { inboxSettings, withCleared } from "../../shared/inbox";
+import { inboxSettings, oneTapChoice, withCleared } from "../../shared/inbox";
 import { summarizePermission } from "../../shared/inbox";
 import { type ValueStore, useValue } from "../profile-store";
 import { Dropdown, Icon, IconButton, MenuItem, PopoverHost, type Tokens, useTokens } from "../ui/kit";
@@ -148,7 +148,7 @@ function SortMenu({ t, sort, onChange }: { t: Tokens; sort: SortKey; onChange(so
 }
 
 // An agent on the view, as a card or a list row: reads its usage and plan while it is on screen, and owns its menu.
-function BoardCard({ as, t, client, facts, card, now, selected, focused, buttons, onPress, onOpen }: { as: ViewLayout; t: Tokens; client: PluginClientContext; facts: CardFacts; card: ReturnType<typeof effectiveCard>; now: Date; selected: boolean; focused: boolean; buttons: CardButtons; onPress(): void; onOpen: (() => void) | null }) {
+function BoardCard({ as, t, client, facts, card, preview, now, selected, focused, buttons, onPress, onOpen }: { as: ViewLayout; t: Tokens; client: PluginClientContext; facts: CardFacts; card: ReturnType<typeof effectiveCard>; preview: boolean; now: Date; selected: boolean; focused: boolean; buttons: CardButtons; onPress(): void; onOpen: (() => void) | null }) {
   const toast = useToast();
   const { agent, indicator } = facts;
   const [onScreen, setOnScreen] = useState(false);
@@ -171,7 +171,7 @@ function BoardCard({ as, t, client, facts, card, now, selected, focused, buttons
       {as === "list" ? (
         <AgentRow t={t} facts={facts} card={card} now={now} live={live} selected={selected} focused={focused} buttons={buttons} onPress={onPress} onMenu={openMenu} onScreenRef={onScreenRef} />
       ) : (
-        <AgentCard t={t} facts={facts} card={card} now={now} live={live} selected={selected} focused={focused} buttons={buttons} onPress={onPress} onMenu={openMenu} onScreenRef={onScreenRef} />
+        <AgentCard t={t} facts={facts} card={card} preview={preview} now={now} live={live} selected={selected} focused={focused} buttons={buttons} onPress={onPress} onMenu={openMenu} onScreenRef={onScreenRef} />
       )}
       <Dropdown t={t} open={menuOpen} onClose={() => setMenuOpen(false)} anchor={anchor} width={240}>
         {onOpen ? <MenuItem t={t} icon="MessageSquare" label="Open chat" onPress={() => (setMenuOpen(false), onOpen())} /> : null}
@@ -285,7 +285,7 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
   const answer = (agent: BoardAgent, behavior: "allow" | "deny") => {
     const request = summarizePermission(agent.pendingPermissions[agent.pendingPermissions.length - 1]);
     if (!request) return;
-    const choice = request.choices.find((item) => item.behavior === behavior);
+    const choice = oneTapChoice(request, behavior);
     run(agent.id, `answer ${agent.title}`, () =>
       client.paseo.agents
         .ref(agent.id)
@@ -456,6 +456,7 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
       client={client}
       facts={factsOf(agent)}
       card={card}
+      preview={inbox.status === "ready" ? inbox.values.cardPreview : true}
       now={now}
       selected={agent.id === selected}
       focused={agent.id === focused}

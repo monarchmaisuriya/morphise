@@ -9,6 +9,7 @@ import type { Profile } from "../../shared/profile";
 import type { DraftStore, Saved } from "../draft";
 import { useValue } from "../profile-store";
 import { useAutoSave } from "./autosave";
+import { openAfterSwap } from "./list-move";
 
 type Theme = PluginSurfaceProps["theme"];
 
@@ -129,7 +130,7 @@ export function ListEditor<Item>({
     const next = [...items];
     [next[index], next[target]] = [next[target], next[index]];
     onChange(next);
-    setOpen(open === index ? target : open);
+    setOpen(openAfterSwap(open, index, target));
   };
   return (
     <SettingsSection title={title} info={info}>

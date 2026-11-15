@@ -1,7 +1,8 @@
 // Ported from Shell Yeah (stevecastaneda/paseo-plugins, MIT, see NOTICE.md): shell-yeah/shared/keys.test.ts
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { pastedKeys, terminalKeys } from "./keys";
+import { LIMITS } from "./limits";
+import { pastedKeys, pasteOf, terminalKeys } from "./keys";
 
 test("keys a text box can't type become what a terminal sends", () => {
   assert.equal(terminalKeys({ key: "Enter" }), "\r");
@@ -30,6 +31,14 @@ test("a paste can't press keys: line breaks and control characters go, tabs and 
   assert.equal(pastedKeys("a\x03b\x1b[2~c\x9bd\x7f"), "ab[2~cd", "Ctrl+C, ESC, CSI and DEL go");
   assert.equal(pastedKeys("name\tvalue é 🔑"), "name\tvalue é 🔑");
   assert.equal(pastedKeys("\n\x1b"), null);
+});
+
+test("a paste goes as its keys up to the limit; nothing goes when it is empty or too long", () => {
+  assert.deepEqual(pasteOf("y\r\nrm -rf ~\r\n"), { keys: "yrm -rf ~" });
+  assert.deepEqual(pasteOf("\n\x1b"), { refused: "empty" });
+  assert.deepEqual(pasteOf("a".repeat(LIMITS.commandChars)), { keys: "a".repeat(LIMITS.commandChars) });
+  assert.deepEqual(pasteOf("a".repeat(LIMITS.commandChars + 1)), { refused: "too-long" });
+  assert.deepEqual(pasteOf(`${"a".repeat(LIMITS.commandChars)}\n`), { keys: "a".repeat(LIMITS.commandChars) }, "the limit counts what is sent");
 });
 
 test("Tab and Shift+Tab go to the command, so the page's focus doesn't move onto another button", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { atRiskOfArchive, attentionOn, createHostAttention, createHostWorkspaces, type HostListSource, lookupWorkspace, markableDone } from "./host-workspaces";
+import { archiveConfirm, atRiskOfArchive, attentionOn, createHostAttention, createHostWorkspaces, type HostListSource, lookupWorkspace, markableDone } from "./host-workspaces";
 import { reduceWorkspaceInfo } from "./workspaces";
 
 type Observer = { snapshot(snapshot: { entries: readonly unknown[] }): void; update(message: { type: string; payload?: unknown }): void };
@@ -138,6 +138,12 @@ describe("bulk bar rules for workspaces whose data is not known yet", () => {
     expect(atRiskOfArchive(info({ gitRuntime: { isPaseoOwnedWorktree: true, isDirty: true, aheadOfOrigin: 0 } }))).toBe(true);
     expect(atRiskOfArchive(info({ gitRuntime: { isPaseoOwnedWorktree: true, isDirty: false } }))).toBe(true);
     expect(atRiskOfArchive(info({ gitRuntime: { isPaseoOwnedWorktree: false, isDirty: true } }))).toBe(false);
+  });
+
+  it("names local work in a single workspace's confirm step, by the same rule as the bulk bar", () => {
+    expect(archiveConfirm("api", info({ gitRuntime: { isPaseoOwnedWorktree: true, isDirty: true, aheadOfOrigin: 0 } }))).toEqual({ label: "Archive? Has local work", accessibilityLabel: "Press again to archive api; it has uncommitted, unpushed or unknown changes that archiving deletes" });
+    expect(archiveConfirm("api", "loading").label).toBe("Archive? Has local work");
+    expect(archiveConfirm("api", info({ gitRuntime: { isPaseoOwnedWorktree: true, isDirty: false, aheadOfOrigin: 0 } }))).toEqual({ label: "Archive?", accessibilityLabel: "Press again to archive api" });
   });
 
   it("marks done only workspaces known not to need the user", () => {

@@ -5,7 +5,7 @@ import { copyText, useToast } from "@getpaseo/plugin/client/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Modal, Platform, Pressable, Text, View } from "react-native";
 import { inlineImages, localImages, openHtml, storedPage } from "../../../shared/polish/html";
-import { readImage } from "../../../shared/polish/image";
+import { readPageImage } from "../../../shared/polish/image";
 import { htmlPage } from "../../../shared/polish/page";
 import { Icon } from "../../ui/kit";
 import { useT } from "../i18n";
@@ -15,14 +15,14 @@ import type { HtmlData } from "./html-rows";
 import { HtmlFrame, lastFrameHeight, useEscapeKey, useHovered, useHtmlTheme, usePopoverRef, windowButtonsInset } from "./web/html-frame";
 
 /** A page an agent published with html_render. Native apps can't run its scripts in a frame, so they name it instead. */
-export function HtmlItem({ item, theme }: PluginTimelineItemProps<HtmlData>) {
+export function HtmlItem({ item, theme, agentId }: PluginTimelineItemProps<HtmlData>) {
   const t = useT();
-  if (Platform.OS === "web") return item.data.stored === undefined ? <HtmlPage {...item.data} theme={theme} /> : <StoredHtmlPage {...item.data} theme={theme} />;
+  if (Platform.OS === "web") return item.data.stored === undefined ? <HtmlPage {...item.data} agentId={agentId} theme={theme} /> : <StoredHtmlPage {...item.data} agentId={agentId} theme={theme} />;
   return <Text style={{ color: theme.colors.foregroundMuted, fontSize: 13, paddingVertical: 4 }}>{t("chat.htmlNative", { title: item.data.title })}</Text>;
 }
 
 /** A page Paseo cut to fit the timeline, loaded whole from where html_render stored it. */
-function StoredHtmlPage({ stored, theme, ...data }: HtmlData & { theme: PluginTheme }) {
+function StoredHtmlPage({ stored, theme, ...data }: HtmlData & { agentId: string; theme: PluginTheme }) {
   const t = useT();
   const load = useRpc(storedPage);
   const [html, setHtml] = useState<string | null>();
@@ -45,28 +45,31 @@ function StoredHtmlPage({ stored, theme, ...data }: HtmlData & { theme: PluginTh
   return <HtmlPage {...data} html={html} theme={theme} />;
 }
 
-/** The page with the local images it names inlined, undefined while they're read; an image that can't be read keeps its path. */
-function useInlinedImages(html: string) {
-  const read = useRpc(readImage);
+/**
+ * The page with the local images it names inlined, undefined while they're read; an image that can't be read keeps its path.
+ * The daemon serves only images inside the folder of the agent that made the page.
+ */
+function useInlinedImages(html: string, agentId: string) {
+  const read = useRpc(readPageImage);
   const paths = useMemo(() => [...new Set(localImages(html).map((image) => image.path))], [html]);
   const [done, setDone] = useState<{ source: string; html: string }>();
   useEffect(() => {
     if (!paths.length) return;
     let alive = true;
-    void Promise.all(paths.map((path) => read({ path, variant: "original" }).then(({ dataUrl }) => [path, dataUrl] as const, () => undefined))).then((entries) => {
+    void Promise.all(paths.map((path) => read({ path, agentId }).then(({ dataUrl }) => [path, dataUrl] as const, () => undefined))).then((entries) => {
       if (alive) setDone({ source: html, html: inlineImages(html, new Map(entries.filter((entry) => entry !== undefined))) });
     });
     return () => {
       alive = false;
     };
-  }, [html, paths, read]);
+  }, [html, paths, read, agentId]);
   if (!paths.length) return html;
   return done?.source === html ? done.html : undefined;
 }
 
 /** The page in the chat, with full screen, open in browser and copy on hover. Full screen is a second frame, so the page starts over there. */
-function HtmlPage({ html, title, heights, theme }: HtmlData & { theme: PluginTheme }) {
-  const page = useInlinedImages(html);
+function HtmlPage({ html, title, heights, agentId, theme }: HtmlData & { agentId: string; theme: PluginTheme }) {
+  const page = useInlinedImages(html, agentId);
   const c = theme.colors;
   const t = useT();
   const css = useHtmlTheme(c);

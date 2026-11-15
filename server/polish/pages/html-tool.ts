@@ -1,13 +1,14 @@
 // Ported from Chat Polish (lthieu96/paseo-chat-polish, MIT, see NOTICE.md): server/html.ts
 import type { PluginHookRequests } from "@getpaseo/plugin/server";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { chmod, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { Script } from "node:vm";
 import { HTML_PREVIEW_TOOL, HTML_SERVER, HTML_TOOL, heightsLine, localImages, pageIdLine } from "../../../shared/polish/html";
 import { PAGE_POLICY } from "../../../shared/polish/page";
+import { ImageTooLarge, openInFolder } from "../media/image";
+import { folderOfToken } from "./agent-folders";
 import { headlessShell } from "./headless-shell";
 import { pagesCacheDir } from "./cache";
 import { checkPage, type PageCheck } from "./page-check";
@@ -20,7 +21,7 @@ const DESCRIPTION = `Show a finished HTML page inline in this chat, above your r
 
 Page
 - One self-contained HTML document with inline <style> and <script>. Prefer inline SVG or canvas; load a library from an https CDN only when it saves real work.
-- Local images (screenshots, generated images): write their absolute paths, as in src="/abs/shot.png" or CSS url(/abs/bg.webp). PNG, JPEG, GIF or WebP up to 12 MB; the chat inlines them.
+- Local images (screenshots, generated images): write their absolute paths, as in src="/abs/shot.png" or CSS url(/abs/bg.webp). PNG, JPEG, GIF or WebP up to 12 MB, inside your working folder; the chat inlines them and shows no image from anywhere else.
 - The page sits on the chat background, as wide as the reply column (about 700px on desktop, 360px on phones) and aligned with your text. No page background, no outer card, border or title banner, and no horizontal padding on the outermost element. Use fluid widths.
 - Content sets the height. Never use vh units or height:100% on html or body; give charts and canvases fixed pixel heights.
 
@@ -115,15 +116,21 @@ function scriptError(html: string) {
   return undefined;
 }
 
-// Same limit as the image.read RPC the chat loads them with.
-const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
-async function imageError(html: string) {
+// Opened with the same folder check the chat loads them with; without a folder (a chat created before per-agent tokens), none is opened or
+// looked up. Every image it may not read gets the same words, so the answer never tells whether a path outside the folder exists.
+async function imageError(html: string, folder: string | undefined) {
+  if (!folder) return undefined;
   const paths = [...new Set(localImages(html).map((image) => image.path))];
-  const sizes = await Promise.all(paths.map((path) => stat(path.startsWith("file://") ? fileURLToPath(path) : path).then((info) => (info.isFile() ? info.size : -1), () => -1)));
-  const missing = paths.filter((_, i) => sizes[i]! < 0);
-  if (missing.length) return `These local images could not be read: ${missing.join(", ")}. Use absolute paths to existing image files, or remove them.`;
-  const large = paths.find((_, i) => sizes[i]! > MAX_IMAGE_BYTES);
+  const opened = await Promise.all(paths.map((path) => openInFolder(path, folder).then(() => "read" as const, (error: unknown) => (error instanceof ImageTooLarge ? ("large" as const) : ("refused" as const)))));
+  const refused = paths.filter((_, i) => opened[i] === "refused");
+  if (refused.length) return `These local images could not be read inside your working folder: ${refused.join(", ")}. Use absolute paths to image files inside it, or remove them.`;
+  const large = paths.find((_, i) => opened[i] === "large");
   return large ? `${large} is over 12 MB; use a smaller image.` : undefined;
+}
+
+/** Who is calling the tools: the working folder its token was issued for, or none for a chat holding the shared token (created before per-agent tokens). */
+interface Caller {
+  folder: string | undefined;
 }
 
 interface RpcMessage {
@@ -136,7 +143,7 @@ interface RpcMessage {
  * The MCP server's answer to one JSON-RPC message, undefined for a notification. It checks the page, and stores a published one: the chat
  * reads the page from the call's input, which the provider's transcript keeps, and loads the stored copy only when Paseo cut that input.
  */
-export async function mcpAnswer(m: RpcMessage) {
+export async function mcpAnswer(m: RpcMessage, caller: Caller) {
   if (m.id === undefined) return undefined;
   const result = (value: unknown) => ({ jsonrpc: "2.0", id: m.id, result: value });
   const text = (value: string, isError = false) => result({ content: [{ type: "text", text: value }], isError });
@@ -145,15 +152,18 @@ export async function mcpAnswer(m: RpcMessage) {
   // html_preview while the headless shell is installed; without it pages go out unchecked and there's nothing to preview them in.
   if (m.method === "tools/list") return result({ tools: headlessShell() ? [TOOL, PREVIEW] : [TOOL] });
   if (m.method !== "tools/call") return { jsonrpc: "2.0", id: m.id, error: { code: -32601, message: "Method not found" } };
+  console.info(`[morphise] html tools: ${String(m.params?.name)} called for ${caller.folder ?? "legacy"}`);
   const html = m.params?.arguments?.html;
   const preview = m.params?.name === PREVIEW.name;
   if ((m.params?.name !== TOOL.name && !preview) || typeof html !== "string" || !html.trim()) return text(preview ? "Pass a complete HTML document." : "Pass a title and a complete HTML document.", true);
   if (html.length > 200000) return text("The page is over 200,000 characters; make it smaller.", true);
   const vh = viewportUnit(html);
-  const problem = (vh && `The page uses a viewport height unit (${vh}). Let content set the height, or use fixed pixel heights.`) || scriptError(html) || (await imageError(html));
-  if (preview) return result(previewAnswer(problem, await checkPage(html)));
+  const problem = (vh && `The page uses a viewport height unit (${vh}). Let content set the height, or use fixed pixel heights.`) || scriptError(html) || (await imageError(html, caller.folder));
+  // The chat still shows the page's images inside its folder; the agent should know nothing here looked at them.
+  const unread = !caller.folder && localImages(html).length > 0 && "Local images were not checked for this chat; a new chat can preview them.";
+  if (preview) return result(previewAnswer(problem, await checkPage(html, caller.folder), unread || undefined));
   if (problem) return text(problem, true);
-  const check = m.params?.arguments?.force === true ? undefined : await checkPage(html);
+  const check = m.params?.arguments?.force === true ? undefined : await checkPage(html, caller.folder);
   if (check?.problems.length) {
     return text(`The page was laid out as the chat shows it, and a reader would see these problems. Fix them and call ${HTML_TOOL} again; pass force: true only if every one is on purpose.\n- ${check.problems.join("\n- ")}`, true);
   }
@@ -161,14 +171,14 @@ export async function mcpAnswer(m: RpcMessage) {
   // The browser is there but the check didn't run (it couldn't start, or failed): the agent should know nothing vouched for the page.
   const unchecked = !check && m.params?.arguments?.force !== true && headlessShell();
   const stored = await savePage(html).then(pageIdLine, (error: unknown) => console.warn("[morphise] couldn't store the page", error));
-  return text([unchecked ? `${shown} The layout check couldn't run, so it went out unchecked.` : shown, check && heightsLine(check.heights), stored].filter(Boolean).join("\n\n"));
+  return text([unchecked ? `${shown} The layout check couldn't run, so it went out unchecked.` : shown, unread, check && heightsLine(check.heights), stored].filter(Boolean).join("\n\n"));
 }
 
 /**
  * What html_preview tells the agent: everything html_render would, as notes rather than a rejection. The screenshot comes only once the
  * checks pass: until then the problems say what to fix, and Paseo shows every image a tool returns in the chat.
  */
-function previewAnswer(problem: string | undefined, check: PageCheck | undefined) {
+function previewAnswer(problem: string | undefined, check: PageCheck | undefined, unread?: string) {
   const problems = [problem, ...(check?.problems ?? [])].filter(Boolean);
   const height = (width: number) => check?.heights.find(([w]) => w === width)?.[1];
   const heights = height(700) && height(360) ? [`Height: ${height(700)}px at 700px wide, ${height(360)}px at 360px.`] : [];
@@ -177,6 +187,7 @@ function previewAnswer(problem: string | undefined, check: PageCheck | undefined
       ? `Laid out as the chat would show it, at 700px and 360px wide. The page wasn't published.${problems.length ? " The screenshot comes once these are fixed." : " The screenshot is at 700px."}`
       : `The page couldn't be laid out (${headlessShell() ? "the check failed" : "the headless browser isn't installed"}), so only its source was checked. The page wasn't published.`,
     problems.length ? `${HTML_TOOL} would reject it for:\n- ${problems.join("\n- ")}` : `${HTML_TOOL}'s checks pass.`,
+    ...(unread ? [unread] : []),
     ...(check ? [check.console.length ? `Console:\n${check.console.join("\n")}` : "Console: nothing logged.", ...heights] : []),
     `When it looks right, publish it with ${HTML_TOOL}.`,
   ].join("\n\n");
@@ -199,15 +210,21 @@ export function baseProvider(provider: string, providers: unknown = {}): string 
   }
 }
 
-/** A new agent's config with the tools added, preapproved where its base provider allows it so calling them never asks for permission, loaded up front on Claude, and its rules appended to the system prompt. */
+/**
+ * A new agent's config with the tools added, preapproved where its base provider allows it so calling them never asks for permission, loaded up
+ * front on Claude, and its rules appended to the system prompt. A config that has them already (Paseo re-creating a stored agent hands the hook
+ * its saved config) only gets the new address and token.
+ */
 export function withHtmlTool(config: AgentConfig, { url, token }: { url: string; token: string }, base = config.provider): AgentConfig {
+  const added = Boolean(config.mcpServers?.[HTML_SERVER]);
+  const others = (config.toolPolicy?.preapproved ?? []).filter((entry) => entry.server !== HTML_SERVER);
   return {
     ...config,
     mcpServers: { ...config.mcpServers, [HTML_SERVER]: { type: "http", url, headers: { Authorization: `Bearer ${token}` }, alwaysLoad: true } },
     ...(PREAPPROVES.has(base) && {
-      toolPolicy: { ...config.toolPolicy, preapproved: [...(config.toolPolicy?.preapproved ?? []), ...[HTML_TOOL, HTML_PREVIEW_TOOL].map((tool) => ({ kind: "mcp" as const, server: HTML_SERVER, tool }))] },
+      toolPolicy: { ...config.toolPolicy, preapproved: [...others, ...[HTML_TOOL, HTML_PREVIEW_TOOL].map((tool) => ({ kind: "mcp" as const, server: HTML_SERVER, tool }))] },
     }),
-    systemPrompt: [config.systemPrompt, headlessShell() ? SYSTEM_PROMPT.replace("\n\nYour reply", `\n${PREVIEW_RULE}\n\nYour reply`) : SYSTEM_PROMPT].filter(Boolean).join("\n\n"),
+    systemPrompt: added ? config.systemPrompt : [config.systemPrompt, headlessShell() ? SYSTEM_PROMPT.replace("\n\nYour reply", `\n${PREVIEW_RULE}\n\nYour reply`) : SYSTEM_PROMPT].filter(Boolean).join("\n\n"),
   };
 }
 
@@ -226,10 +243,23 @@ const pagesDir = () => join(pagesCacheDir(), "published");
 const addressFile = () => join(pagesCacheDir(), "server.json");
 let listening: Promise<{ server: Server; port: number; token: string }> | undefined;
 
+// The caller its bearer token names: the shared token (held by agents created before per-agent tokens) gives no folder, a per-agent token
+// the folder it was issued for, anything else nobody. Refusals are logged with their reason, never with the token.
+async function callerOf(authorization: string | undefined, shared: string): Promise<Caller | undefined> {
+  const bearer = authorization?.startsWith("Bearer ") ? authorization.slice("Bearer ".length) : "";
+  const refuse = (reason: string) => void console.warn(`[morphise] html tools: refused a call (${reason})`);
+  if (!bearer) return refuse("no bearer token");
+  const sameLength = Buffer.byteLength(bearer) === Buffer.byteLength(shared);
+  if (sameLength && timingSafeEqual(Buffer.from(bearer), Buffer.from(shared))) return { folder: undefined };
+  const folder = await folderOfToken(bearer);
+  return folder ? { folder } : refuse(sameLength ? "unknown token" : "wrong length");
+}
+
 // Stateless Streamable HTTP: one JSON answer per POST, no event stream and no sessions, so a plugin restart between calls goes unnoticed.
 async function serveMcp(req: IncomingMessage, res: ServerResponse, token: string) {
   if (req.method !== "POST") return void res.writeHead(405, { Allow: "POST" }).end();
-  if (req.headers.authorization !== `Bearer ${token}`) return void res.writeHead(403).end();
+  const caller = await callerOf(req.headers.authorization, token);
+  if (!caller) return void res.writeHead(403).end();
   const chunks: Buffer[] = [];
   for await (const chunk of req) chunks.push(chunk as Buffer);
   let message: unknown;
@@ -238,7 +268,7 @@ async function serveMcp(req: IncomingMessage, res: ServerResponse, token: string
   } catch {
     return void res.writeHead(400).end();
   }
-  const answer = message && typeof message === "object" ? await mcpAnswer(message as RpcMessage) : undefined;
+  const answer = message && typeof message === "object" ? await mcpAnswer(message as RpcMessage, caller) : undefined;
   if (!answer) return void res.writeHead(202).end();
   res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(answer));
 }

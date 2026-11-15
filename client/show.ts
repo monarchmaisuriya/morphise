@@ -8,9 +8,14 @@ import { showChannel, showResult, showUsed, type ShowInput } from "../shared/sho
 import { watchWindowUse, windowInFront } from "./web";
 
 export interface ShowNavigator {
-  /** False when the id is not in this window's lists. */
-  openTerminal(terminalId: string): boolean;
-  openWorkspace(workspaceId: string): boolean;
+  /** False when the id is not on that host in this window's lists. */
+  openTerminal(hostId: string, terminalId: string): boolean;
+  openWorkspace(hostId: string, workspaceId: string): boolean;
+}
+
+/** The terminal or workspace with this id on this host: a window lists every host's, and two hosts can share an id. */
+export function refOn<Ref extends { hostId: string; id: string }>(refs: readonly Ref[], hostId: string, id: string): Ref | undefined {
+  return refs.find((ref) => ref.hostId === hostId && ref.id === id);
 }
 
 let current: ShowNavigator | null = null;
@@ -36,6 +41,8 @@ export interface ShowDeps {
   composers(agentId: string): readonly Composer[];
   openScreen(screenId: string, params?: Record<string, string>): void;
   navigator(): ShowNavigator | null;
+  /** The host the requests come from: this client's own, whose daemon sent them. */
+  host(): Promise<string>;
   /** M pressed a key in this window within the last few seconds. */
   typing(): boolean;
 }
@@ -95,12 +102,12 @@ async function perform(input: ShowInput, deps: ShowDeps): Promise<ShowAnswer> {
     case "terminal": {
       const navigator = deps.navigator();
       if (!navigator) return { ok: false, message: NEEDS_SIDEBAR };
-      return navigator.openTerminal(input.terminalId!) ? { ok: true, message: "Opened the terminal." } : { ok: false, message: `Terminal ${input.terminalId} was not found in this window.` };
+      return navigator.openTerminal(await deps.host(), input.terminalId!) ? { ok: true, message: "Opened the terminal." } : { ok: false, message: `Terminal ${input.terminalId} was not found in this window.` };
     }
     case "workspace": {
       const navigator = deps.navigator();
       if (!navigator) return { ok: false, message: NEEDS_SIDEBAR };
-      return navigator.openWorkspace(input.workspaceId!) ? { ok: true, message: "Opened the workspace." } : { ok: false, message: `Workspace ${input.workspaceId} was not found in this window.` };
+      return navigator.openWorkspace(await deps.host(), input.workspaceId!) ? { ok: true, message: "Opened the workspace." } : { ok: false, message: `Workspace ${input.workspaceId} was not found in this window.` };
     }
     case "pin":
       return { ok: false, message: "Pinning runs on the daemon, not in a window." };
@@ -143,10 +150,20 @@ export function startShow(client: PluginClientContext): { reopen(): void; stop()
   const windowId = newWindowId();
   const report = createUseReporter((inFront) => void client.rpc(showUsed, { windowId, inFront }).catch(() => {}));
   const keys = createTypingCheck({ web: Platform.OS === "web", keyboardUp: () => Keyboard.isVisible() });
+  // Read once it is first needed; a failed read is not kept, so the next request reads again.
+  let host: Promise<string> | null = null;
   const deps: ShowDeps = {
     composers: (agentId) => client.composers({ agentId }),
     openScreen: (screenId, params) => client.openScreen({ screenId, params }),
     navigator: () => current,
+    host: () =>
+      (host ??= client.paseo.hosts.list().then(
+        (directory) => directory.self.serverId,
+        (error: unknown) => {
+          host = null;
+          throw error;
+        },
+      )),
     typing: keys.typing,
   };
   const answer = (requestId: string, result: ShowAnswer) =>

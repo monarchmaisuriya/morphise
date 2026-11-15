@@ -6,13 +6,14 @@
 import type { RpcOutput } from "@getpaseo/plugin";
 import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { copyText } from "@getpaseo/plugin/client/ui";
-import { pastedKeys, terminalKeys } from "../../../shared/run/keys";
+import { pasteOf, terminalKeys } from "../../../shared/run/keys";
 import { LIMITS } from "../../../shared/run/limits";
 import type { Phase } from "../../../shared/run/row";
 import { fullOutput, input, stop, tail } from "../../../shared/run/rpc";
 import { errorMessage } from "../../../shared/run/text";
 import type { DomElement } from "../../polish/web/dom";
 import { createKeySender } from "../key-sender";
+import { unreachableNote } from "../live";
 import { inlineRuns, panelOutput, panelStatus } from "./panel-model";
 
 declare function setTimeout(callback: () => void, ms: number): number;
@@ -181,9 +182,12 @@ export function openPanel(client: PluginClientContext, block: DomElement, runId:
   let closed = false;
   let stopAsked = false;
   let ticker = 0;
+  // Tail polls that failed in a row (unreachableNote); the next answer clears it.
+  let failedPolls = 0;
   const render = () => {
-    if (phase === undefined) return void (status.textContent = "Starting…");
-    const shown = panelStatus(phase, Date.now() + clockOffset);
+    const unreachable = unreachableNote(failedPolls);
+    if (phase === undefined && unreachable === null) return void (status.textContent = "Starting…");
+    const shown = unreachable === null ? panelStatus(phase ?? null, Date.now() + clockOffset) : { text: unreachable, tone: "muted" };
     if (canType()) {
       typeButton.removeAttribute("hidden");
       element.setAttribute("data-can-type", "");
@@ -207,11 +211,10 @@ export function openPanel(client: PluginClientContext, block: DomElement, runId:
 
   async function follow() {
     let since: number | null = null;
-    let failures = 0;
     while (!closed) {
       try {
         const reply: RpcOutput<typeof tail> = await client.rpc(tail, { runId, lines: PANEL_LINES, since, waitMs: LIMITS.tailWaitMs });
-        failures = 0;
+        failedPolls = 0;
         if (closed) return;
         if (reply.state === "unknown") phase = null;
         if (reply.state === "view") {
@@ -228,7 +231,9 @@ export function openPanel(client: PluginClientContext, block: DomElement, runId:
         if (wantsTyping && canType() && !focused()) box.focus();
         if (phase === null || (phase && phase.kind !== "running")) return;
       } catch {
-        await new Promise<void>((wake) => setTimeout(wake, LIMITS.pollBackoffMs[Math.min(failures++, LIMITS.pollBackoffMs.length - 1)]));
+        failedPolls++;
+        if (!closed) render();
+        await new Promise<void>((wake) => setTimeout(wake, LIMITS.pollBackoffMs[Math.min(failedPolls - 1, LIMITS.pollBackoffMs.length - 1)]));
       }
     }
   }
@@ -319,10 +324,19 @@ export function openPanel(client: PluginClientContext, block: DomElement, runId:
   box.addEventListener("keyup", (event) => event.stopPropagation());
   // Letters arrive as typed text; the box stays empty. A word an input method (or a dead key such as
   // Option+E) is still putting together goes when it is finished.
+  // Typed text goes through the paste rule too: a drop or an input method's word arrives as one input event.
+  const sendText = (text: string) => {
+    const pasted = pasteOf(text);
+    if ("keys" in pasted) return typeKeys(pasted.keys);
+    if (pasted.refused === "too-long") {
+      typeError = `Couldn't paste: the limit is ${LIMITS.commandChars.toLocaleString("en-US")} characters`;
+      render();
+    }
+  };
   const sendTyped = () => {
     const text = box.value;
     box.value = "";
-    if (text) typeKeys(text.replace(/\n/g, ""));
+    if (text) sendText(text);
   };
   box.addEventListener("compositionstart", () => (composing = true));
   box.addEventListener("compositionend", () => {
@@ -336,13 +350,7 @@ export function openPanel(client: PluginClientContext, block: DomElement, runId:
   box.addEventListener("paste", (event) => {
     event.preventDefault();
     event.stopPropagation();
-    const keys = pastedKeys(event.clipboardData?.getData("text") ?? "");
-    if (keys === null) return;
-    if (keys.length > LIMITS.commandChars) {
-      typeError = `Couldn't paste: the limit is ${LIMITS.commandChars.toLocaleString("en-US")} characters`;
-      return render();
-    }
-    typeKeys(keys);
+    sendText(event.clipboardData?.getData("text") ?? "");
   });
   clicked(chatButton, close);
   clicked(closeButton, close);

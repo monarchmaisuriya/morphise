@@ -116,6 +116,21 @@ export function previewLine(item: { reason: InboxReason; permission: PermissionS
   return "Finished";
 }
 
+/**
+ * The choice a one-press Allow or Deny sends. Allow takes the provider's primary allow, not the first it lists: OpenCode
+ * lists "Allow always" before its primary "Allow once". With no primary allow it sends no choice and Paseo decides. Deny
+ * takes the first deny.
+ */
+export function oneTapChoice(request: PermissionSummary, behavior: "allow" | "deny"): PermissionChoice | undefined {
+  return request.choices.find((choice) => choice.behavior === behavior && (behavior === "deny" || choice.variant === "primary"));
+}
+
+// What a one-press button is called: the choice it sends and the request, "Allow once: Bash: npm test".
+export function oneTapLabel(request: PermissionSummary, behavior: "allow" | "deny"): string {
+  const choice = oneTapChoice(request, behavior)?.label ?? (behavior === "allow" ? "Allow" : "Deny");
+  return `${choice}: ${previewLine({ reason: "permission", permission: request, error: "" })}`;
+}
+
 // ---------- Clearing ----------
 
 type Clearable = { id: string; reason: InboxReason; attentionAt: string };

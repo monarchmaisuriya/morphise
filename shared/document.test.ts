@@ -132,6 +132,32 @@ describe("migrateDocument", () => {
     expect(profile?.composer.controls[0].id).toBe("custom-morphise-prompts");
   });
 
+  it("renames version 2 slash commands that use names version 3 reserves, in every layout", () => {
+    const action = { kind: "open-editor" };
+    const command = (name: string) => ({ name, description: "Mine", argumentHint: "", action });
+    const savedByVersionTwo = {
+      activeLayout: "default",
+      layouts: [
+        { id: "default", name: "Default", profile: { slashCommands: [command("task"), command("lgtm")] } },
+        { id: "review", name: "Review", profile: { slashCommands: [command("bookmark"), command("run"), command("run-custom")] } },
+      ],
+      prompts: [{ id: "p", title: "P", text: "Text", starred: false }],
+    };
+    const result = documentSchema.safeParse(migrateDocument(savedByVersionTwo, 2));
+    expect(result.success).toBe(true);
+    const document = result.success ? result.data : null;
+    expect(document?.layouts[0].profile.slashCommands.map((item) => item.name)).toEqual(["task-custom", "lgtm"]);
+    expect(document?.layouts[1].profile.slashCommands.map((item) => item.name)).toEqual(["bookmark-custom", "run-custom-2", "run-custom"]);
+    expect(document?.prompts).toEqual(savedByVersionTwo.prompts);
+    expect(document?.activeLayout).toBe("default");
+  });
+
+  it("renames the newly reserved slash commands when upgrading from version 1 too", () => {
+    const action = { kind: "open-editor" };
+    const result = documentSchema.safeParse(migrateDocument({ ...savedByVersionOne, slashCommands: [{ name: "task", description: "Mine", argumentHint: "", action }] }, 1));
+    expect(result.success ? result.data.layouts[0].profile.slashCommands.map((item) => item.name) : null).toEqual(["task-custom"]);
+  });
+
   it("refuses a version it does not know, so the setting shows as invalid instead of guessing", () => {
     expect(() => migrateDocument({}, 7)).toThrow("Morphise cannot upgrade a profile saved as settings version 7");
   });

@@ -191,10 +191,15 @@ export function stepSummary(items: readonly Item[], changesOf: (item: Item) => r
   let other = 0;
   let paseo = 0;
   let replies = 0;
+  let images = 0;
   let completed = 0;
   for (const item of items) {
     if (item.type === "reasoning") thoughts++;
-    if (item.type === "assistant_message") replies++;
+    if (item.type === "assistant_message") {
+      const shown = imageOnly(item.text);
+      if (shown) images += shown.length;
+      else replies++;
+    }
     if (item.type === "todo") completed += changesOf(item).filter((c) => c.type === "completed").length;
     if (item.type !== "tool_call") continue;
     const d = item.detail;
@@ -211,6 +216,7 @@ export function stepSummary(items: readonly Item[], changesOf: (item: Item) => r
     commands && translate(lang, "summary.commands", { n: commands }),
     read.size && translate(lang, "summary.readFiles", { n: read.size }),
     searches && translate(lang, "summary.searches", { n: searches }),
+    images && translate(lang, "summary.images", { n: images }),
     other && translate(lang, "summary.otherTools", { n: other }),
     completed && translate(lang, "summary.tasks", { n: completed }),
     paseo && translate(lang, "summary.paseo", { n: paseo }),

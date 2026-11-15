@@ -14,7 +14,8 @@ export function createKeySender(
   let pending: string[] = [];
   let sending = false;
   return (keys) => {
-    pending.push(...keys);
+    // One push per character, as a spread of a long paste overflows the call stack.
+    for (const key of keys) pending.push(key);
     if (sending) return;
     sending = true;
     void (async () => {

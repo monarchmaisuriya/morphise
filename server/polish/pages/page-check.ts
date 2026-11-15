@@ -6,7 +6,7 @@ import { join } from "node:path";
 import type { Readable, Writable } from "node:stream";
 import { inlineImages, localImages } from "../../../shared/polish/html";
 import { htmlPage, themeCss } from "../../../shared/polish/page";
-import { readImageFile } from "../media/image";
+import { openInFolder } from "../media/image";
 import { headlessShell } from "./headless-shell";
 
 // The chat's column on desktop and on a phone. The theme only has to lay the page out as the chat does: same fonts, kit and boot script.
@@ -153,11 +153,12 @@ function launch(executable: string, profile: string) {
   return { child, send, listeners };
 }
 
-// The page's local images as data URIs; one that is not a readable image keeps its path (and does
-// not load in the blank tab, as it would not in the chat).
-async function inlineLocalImages(html: string) {
+// The page's local images inside the calling agent's folder as data URIs; any other keeps its path (and does not load in the blank tab, as it
+// would not in the chat). A chat without a folder (created before per-agent tokens) gets none, and nothing is looked up. Exported for its test.
+export async function inlineLocalImages(html: string, folder: string | undefined) {
+  if (!folder) return html;
   const paths = [...new Set(localImages(html).map((image) => image.path))];
-  const read = await Promise.all(paths.map((path) => readImageFile({ path }).then(({ dataUrl }) => [path, dataUrl] as const, () => null)));
+  const read = await Promise.all(paths.map((path) => openInFolder(path, folder).then(({ bytes, type }): readonly [string, string] => [path, `data:${type};base64,${bytes.toString("base64")}`], () => null)));
   return inlineImages(html, new Map(read.filter((entry): entry is readonly [string, string] => entry !== null)));
 }
 
@@ -168,7 +169,7 @@ type StackFrame = { functionName: string; lineNumber: number };
 // check that couldn't run.
 const HUNG = "timed out" as const;
 
-async function inspect(html: string, executable: string) {
+async function inspect(html: string, executable: string, folder: string | undefined) {
   const profile = await mkdtemp(join(tmpdir(), "morphise-page-check-"));
   const { child, send, listeners } = launch(executable, profile);
   // Past a deadline the browser is killed, which fails its pending commands and so the check. The first covers its start (a slow one
@@ -178,8 +179,8 @@ async function inspect(html: string, executable: string) {
   try {
     // The page is laid out in a blank tab, never from a file: a page loaded from file:// could pull
     // any local file into the screenshot the agent gets back. Its own local images are inlined
-    // first, read with the image-only check the chat uses, so they show as they will in the chat.
-    const document = htmlPage(await inlineLocalImages(html), THEME);
+    // first, read with the folder check the chat uses, so they show as they will in the chat.
+    const document = htmlPage(await inlineLocalImages(html, folder), THEME);
     const { targetId } = await send<{ targetId: string }>("Target.createTarget", { url: "about:blank" });
     const { sessionId } = await send<{ sessionId: string }>("Target.attachToTarget", { targetId, flatten: true });
     const page = <T = Record<string, unknown>>(method: string, params: object = {}) => send<T>(method, params, sessionId);
@@ -264,15 +265,16 @@ let queue: Promise<unknown> = Promise.resolve();
  * Lays a page out as the chat does, at desktop and phone widths, and names what a reader would see wrong: script errors, overlapping text,
  * text cut off at its SVG's edge or with an ellipsis, a page wider than the column, a height that moves while it runs, scripts that keep
  * the browser busy. Undefined when it couldn't be checked (the headless shell isn't installed, or the check itself failed): html_render
- * then publishes the page unchecked, and html_preview reports only its source checks.
+ * then publishes the page unchecked, and html_preview reports only its source checks. Its local images load only from inside `folder`, the
+ * calling agent's working folder; with none, no local image loads.
  */
 // ponytail: one browser at a time, launched per check (about 3s); keep one warm if agents publish often.
 // ponytail: a shell that's there but can't start (a Linux box missing its libraries) leaves every page unchecked, with only a log line; say so in Settings if that shows up.
-export function checkPage(html: string): Promise<PageCheck | undefined> {
+export function checkPage(html: string, folder: string | undefined): Promise<PageCheck | undefined> {
   const executable = headlessShell();
   if (!executable) return Promise.resolve(undefined);
   const run = async (): Promise<PageCheck> => {
-    const result = await inspect(html, executable);
+    const result = await inspect(html, executable, folder);
     if (result === HUNG) {
       return { problems: [`The page didn't finish loading within ${TIMEOUT_MS / 1000}s: a script keeps the browser busy (an endless loop, or far too much work up front)`], console: [], heights: [], screenshot: "" };
     }

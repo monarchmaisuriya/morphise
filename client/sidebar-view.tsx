@@ -42,7 +42,7 @@ import { isDue, type Reminder } from "../shared/reminders";
 import { formatDue, formatElapsed } from "../shared/time-text";
 import { type ViewState, viewStateSettings } from "../shared/view-state";
 import { createValueStore, type ValueStore, useValue } from "./profile-store";
-import { registerShowNavigator } from "./show";
+import { refOn, registerShowNavigator } from "./show";
 import { useReminderClock } from "./reminder-clock";
 import { type AlertEntry, remindersOf } from "./reminder-alerts";
 import { type PickerDeps, ReminderPicker, type ReminderTarget } from "./reminder-picker";
@@ -54,7 +54,7 @@ import { usePulse } from "./ui/pulse";
 import { StepsCards } from "./steps-card";
 import { DISPATCH_ICON, DISPATCH_SCREEN_ID, screenOpener } from "./dispatch";
 import type { PullRequestInfo, ServiceInfo, WorkspaceInfo } from "./workspaces";
-import { atRiskOfArchive, type HostWorkspace, markableDone, useHostAttention, useHostWorkspaces } from "./host-workspaces";
+import { archiveConfirm, atRiskOfArchive, type HostWorkspace, markableDone, useHostAttention, useHostWorkspaces } from "./host-workspaces";
 import { viewPresence } from "./view-presence";
 import { createHoverTracker, type HoverTracker, useHovered } from "./hover-tracker";
 import { afterPointerMoves, cannotHover } from "./web";
@@ -914,7 +914,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
             <>
               {config.rowActions.includes("pin") ? <IconButton t={t} size="sm" icon={workspace.pinned ? "PinOff" : "Pin"} tone={workspace.pinned ? c.foreground : undefined} label={workspace.pinned ? `Unpin ${workspace.name}` : `Pin ${workspace.name}`} onPress={togglePin} /> : null}
               {confirmArchive && menu === null ? (
-                <Button t={t} variant="danger" label="Archive?" accessibilityLabel={`Press again to archive ${workspace.name}`} onPress={archive} style={{ height: 24, paddingHorizontal: 6 }} />
+                <Button t={t} variant="danger" {...archiveConfirm(workspace.name, found)} onPress={archive} style={{ height: 24, paddingHorizontal: 6 }} />
               ) : (
                 <IconButton t={t} size="sm" icon="Archive" label={`Archive ${workspace.name}`} onPress={archive} />
               )}
@@ -1368,13 +1368,13 @@ function ShowTargets({ navigation }: { navigation: PluginSidebarViewProps["navig
   useEffect(
     () =>
       registerShowNavigator({
-        openTerminal(terminalId) {
-          const ref = latest.current.terminals.find((terminal) => terminal.id === terminalId);
+        openTerminal(hostId, terminalId) {
+          const ref = refOn(latest.current.terminals, hostId, terminalId);
           if (ref) latest.current.navigation.openTerminal(ref);
           return Boolean(ref);
         },
-        openWorkspace(workspaceId) {
-          const ref = latest.current.workspaces.find((workspace) => workspace.id === workspaceId);
+        openWorkspace(hostId, workspaceId) {
+          const ref = refOn(latest.current.workspaces, hostId, workspaceId);
           if (ref) latest.current.navigation.openWorkspace(ref);
           return Boolean(ref);
         },

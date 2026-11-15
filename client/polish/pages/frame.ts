@@ -68,3 +68,54 @@ export function fitFrame(current: { height: number; width: number }, report: { h
   if (report.width === current.width) return report.height > current.height ? { height: report.height, later: false } : undefined;
   return { height: report.height, later: report.height < current.height };
 }
+
+/** What the chat does with a message posted to it: open a link, leave full screen, replay a shortcut, or resize the frame. */
+export type FrameMessage = { kind: "link"; url: string } | { kind: "escape" } | { kind: "shortcut"; key: FrameKey } | { kind: "report"; report: { height: number; width: number } };
+
+/**
+ * The chat's answer to a message, or undefined to ignore it. Only the page's own frame is heard (`own`). Its script can post whenever
+ * it likes, so only a page the reader is using (its frame has focus) opens links or passes keys on; a height report counts either way.
+ */
+export function frameMessage(data: unknown, from: { own: boolean; focused: boolean; mac: boolean }): FrameMessage | undefined {
+  if (!from.own) return undefined;
+  const url = frameLink(data);
+  if (url) return from.focused ? { kind: "link", url } : undefined;
+  const key = frameKey(data);
+  if (key) {
+    if (!from.focused) return undefined;
+    if (key.key === "Escape") return { kind: "escape" };
+    const shortcut = frameShortcut(key, from.mac);
+    return shortcut && { kind: "shortcut", key: shortcut };
+  }
+  const report = frameReport(data);
+  return report && { kind: "report", report };
+}
+
+/** A page's source as a short key (its length and FNV-1a hash), so a long-lived map holds no copy of the page. */
+function pageKey(html: string) {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < html.length; i++) hash = Math.imul(hash ^ html.charCodeAt(i), 0x01000193);
+  return `${html.length}:${(hash >>> 0).toString(36)}`;
+}
+
+/** A value per page source for the `limit` most recently used pages; older ones are dropped. */
+export function recentPages<V>(limit: number) {
+  const values = new Map<string, V>();
+  return {
+    get(html: string): V | undefined {
+      const key = pageKey(html);
+      const value = values.get(key);
+      if (value !== undefined) {
+        values.delete(key);
+        values.set(key, value);
+      }
+      return value;
+    },
+    set(html: string, value: V) {
+      const key = pageKey(html);
+      values.delete(key);
+      values.set(key, value);
+      if (values.size > limit) values.delete(values.keys().next().value!);
+    },
+  };
+}

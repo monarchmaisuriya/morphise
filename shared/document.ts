@@ -1,6 +1,6 @@
 import { defineSettings } from "@getpaseo/plugin";
 import { z } from "zod";
-import { contributionId, label, type Profile, profileSchema, RESERVED_COMMAND_PREFIX, RESERVED_SLASH_COMMAND, uniqueBy } from "./profile";
+import { contributionId, label, type Profile, profileSchema, RESERVED_COMMAND_PREFIX, RESERVED_SLASH_COMMANDS, uniqueBy } from "./profile";
 
 const MAX_LAYOUTS = 10;
 const MAX_PROMPTS = 200;
@@ -58,8 +58,10 @@ function keepBranchDetail(profile: unknown): unknown {
   return { ...record(profile), sidebar: { ...sidebar, view: { ...view, details: { branch: true } } } };
 }
 
-// Version 2 reserves names that version 1 allowed. Items using them are renamed, not dropped,
-// so the upgrade keeps them.
+const reservedSlashCommandNames: readonly unknown[] = Object.values(RESERVED_SLASH_COMMANDS);
+
+// Version 2 reserves names that version 1 allowed, and version 3 reserves more slash commands.
+// Items using them are renamed, not dropped, so the upgrade keeps them.
 function freeReservedNames(profile: unknown): unknown {
   const root = record(profile);
   if (!root) return profile;
@@ -80,9 +82,9 @@ function freeReservedNames(profile: unknown): unknown {
     const names = root.slashCommands.map((command) => record(command)?.name);
     next.slashCommands = root.slashCommands.map((command) => {
       const entry = record(command);
-      if (entry?.name !== RESERVED_SLASH_COMMAND) return command;
-      let name = `${RESERVED_SLASH_COMMAND}-custom`;
-      for (let index = 2; names.includes(name); index++) name = `${RESERVED_SLASH_COMMAND}-custom-${index}`;
+      if (!entry || !reservedSlashCommandNames.includes(entry.name)) return command;
+      let name = `${entry.name}-custom`;
+      for (let index = 2; names.includes(name); index++) name = `${entry.name}-custom-${index}`;
       names.push(name);
       return { ...entry, name };
     });
@@ -90,17 +92,27 @@ function freeReservedNames(profile: unknown): unknown {
   return next;
 }
 
-// Version 1 stored the profile itself. It becomes the only layout, unchanged; the version 2
-// schema then fills the new fields with their defaults.
+// Version 1 stored the profile itself. It becomes the only layout, unchanged; the schema then
+// fills the new fields with their defaults. Version 2 stored this document; only its layouts'
+// profiles change.
 export function migrateDocument(values: unknown, fromVersion: number): unknown {
-  if (fromVersion !== 1) throw new Error(`Morphise cannot upgrade a profile saved as settings version ${fromVersion}`);
-  return { activeLayout: "default", layouts: [{ id: "default", name: "Default", profile: freeReservedNames(keepBranchDetail(values)) }], prompts: [] };
+  if (fromVersion === 1) return { activeLayout: "default", layouts: [{ id: "default", name: "Default", profile: freeReservedNames(keepBranchDetail(values)) }], prompts: [] };
+  if (fromVersion === 2) {
+    const document = record(values);
+    if (!document || !Array.isArray(document.layouts)) return values;
+    const layouts = document.layouts.map((layout) => {
+      const entry = record(layout);
+      return entry ? { ...entry, profile: freeReservedNames(entry.profile) } : layout;
+    });
+    return { ...document, layouts };
+  }
+  throw new Error(`Morphise cannot upgrade a profile saved as settings version ${fromVersion}`);
 }
 
 export const profileSettings = defineSettings({
   id: "profile",
   scope: "host",
-  version: 2,
+  version: 3,
   schema: documentSchema,
   migrate: migrateDocument,
 });

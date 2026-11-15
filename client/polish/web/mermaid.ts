@@ -1,7 +1,7 @@
 // Ported from Chat Polish (lthieu96/paseo-chat-polish, MIT, see NOTICE.md): client/web/mermaid.ts
 // Mermaid diagrams: Paseo's mermaid themed in the app's colors, Pele drawing in its place, and the redraw button.
 import { t } from "../i18n";
-import { darker, isDark, mix } from "./color";
+import { darker, isDark, mix, seriesFrom } from "./color";
 import type { DomElement, KeyEvent, MessageListener, WebDocument } from "./dom";
 import { showAsPopover } from "./popover";
 
@@ -95,24 +95,6 @@ export function drawDiagram(frame: unknown, source: string, done: (size?: { widt
   // The frame may have loaded before this listener.
   request();
   return () => window.removeEventListener("message", onMessage);
-}
-
-/**
- * Chart series colors: the accent's hue turned in even steps, keeping its lightness so each reads like the theme. The status
- * colors can't serve: themes often share a hue between them (Paseo's light accent and success are both green). A gray
- * accent still gets some chroma. Opaque hex, since mermaid derives shades from them; the browser does the color math.
- */
-export function seriesFrom(accent: string) {
-  const ctx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
-  return [0, 180, 90, 270, 45, 225, 135, 315].map((turn) => {
-    if (!ctx) return accent;
-    // A browser without relative colors keeps the accent.
-    ctx.fillStyle = accent;
-    ctx.fillStyle = `oklch(from ${accent} l max(c, 0.08) calc(h + ${turn}))`;
-    ctx.fillRect(0, 0, 1, 1);
-    const { data } = ctx.getImageData(0, 0, 1, 1);
-    return `#${[data[0], data[1], data[2]].map((v) => v!.toString(16).padStart(2, "0")).join("")}`;
-  });
 }
 
 /** Pele's variables in the app's colors, matching the mermaid theme below. */

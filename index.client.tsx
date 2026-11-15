@@ -1,8 +1,11 @@
 import { settingsRpc } from "@getpaseo/plugin";
+import type { z } from "zod";
 import { type PluginClientContext, openExternalUrl } from "@getpaseo/plugin/client";
+import { createArchiveSweep, listEveryWorkspace } from "./client/auto-archive-sweep";
 import { type Directory, EMPTY_DIRECTORY, reduceAgents, reduceWorkspaces } from "./client/directory";
 import { createProfileEditor } from "./client/editor";
 import { connectStream } from "./client/profile-connection";
+import { changeSavedProfile } from "./client/profile-writer";
 import { createProfileStore, createValueStore, layoutsOf, profileOf, promptsOf } from "./client/profile-store";
 import { type Problem, createReconciler } from "./client/reconciler";
 import { createDraftStore } from "./client/draft";
@@ -30,17 +33,19 @@ import { legacyReminders } from "./client/reminders";
 import { createTaskStore, createTaskWriter, tasksOf } from "./client/task-store";
 import type { Announcement, SurfaceDeps } from "./client/task-surfaces";
 import { isWindowVisible, showNotification } from "./client/web";
-import { profileSettings } from "./shared/document";
+import { type ProfileDocument, profileSettings } from "./shared/document";
 import type { Profile } from "./shared/profile";
 import { remindersKeeper } from "./shared/reminder-contracts";
 import { startShow } from "./client/show";
 import { REMINDER_KEY } from "./shared/reminders";
-import { dueForArchive } from "./shared/auto-archive";
 import { archiveOldDone, rulesForTransitions } from "./shared/rules";
 import type { TaskOperation } from "./shared/task-ops";
 import { bookmarkSettings } from "./shared/bookmarks";
 import { taskSettings } from "./shared/tasks";
 import { bookmarksWatch, profileWatch, tasksWatch } from "./shared/watch";
+
+// The profile's stored values as the settings RPCs carry them: any JSON, checked by the host.
+type SavedValues = z.core.util.JSONType;
 
 interface ListSubscription<Snapshot> {
   subscribe(observer: { snapshot(snapshot: Snapshot): void; update(message: { type: string; payload?: unknown }): void }): () => void;
@@ -85,13 +90,20 @@ export default function contribute(client: PluginClientContext) {
 
   // Switching layout is one save of `activeLayout`, against the revision this app last received.
   async function switchLayout(id: string) {
-    const event = store.get().event;
-    if (event?.status !== "ready") throw new Error("Morphise has not received its profile yet; try again in a moment");
-    if (event.document.activeLayout === id) return;
-    const result = await client.rpc(profileRpc.write, { revision: event.revision, values: { ...event.document, activeLayout: id } });
-    if (result.status === "conflict") throw new Error("Another app saved the profile at the same moment; try again");
-    if (result.status === "invalid") throw new Error(result.error);
+    const lastReceived = {
+      read: async () => {
+        const event = store.get().event;
+        if (event?.status !== "ready") throw new Error("Morphise has not received its profile yet; try again in a moment");
+        return { status: "ready" as const, revision: event.revision, values: event.document };
+      },
+      write: (input: { revision: string; values: ProfileDocument }) => client.rpc(profileRpc.write, input),
+    };
+    await changeSavedProfile(lastReceived, (document) => (document.activeLayout === id ? null : { ...document, activeLayout: id }), 1);
   }
+  const savedProfile = {
+    read: () => client.rpc(profileRpc.read, {}),
+    write: (input: { revision: string; values: SavedValues }) => client.rpc(profileRpc.write, input),
+  };
   // The sidebar view's own options menu changes the active layout's view settings, the same
   // document the settings screen edits. It reads the newest saved document and applies the change
   // to it, again when another app saved first, so quick taps and other apps' saves both survive.
@@ -100,10 +112,8 @@ export default function contribute(client: PluginClientContext) {
   // on the newest saved document, again when another app saved first. A key set to undefined is
   // removed, so defaults are never written (older versions reject keys they do not know).
   async function updateChat(change: (chat: Record<string, unknown>) => void) {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const state = await client.rpc(profileRpc.read, {});
-      if (state.status !== "ready") throw new Error(`The saved profile is invalid: ${state.error}`);
-      const document = state.values as { activeLayout?: string; layouts?: { id: string; profile?: Record<string, unknown> }[] };
+    await changeSavedProfile(savedProfile, (values) => {
+      const document = values as { activeLayout?: string; layouts?: { id: string; profile?: Record<string, unknown> }[] };
       const layouts = (document.layouts ?? []).map((layout) => {
         if (layout.id !== document.activeLayout) return layout;
         const profile = { ...(layout.profile ?? {}) };
@@ -114,17 +124,12 @@ export default function contribute(client: PluginClientContext) {
         else delete profile.chat;
         return { ...layout, profile };
       });
-      const result = await client.rpc(profileRpc.write, { revision: state.revision, values: { ...document, layouts } as typeof state.values });
-      if (result.status === "saved") return;
-      if (result.status === "invalid") throw new Error(result.error);
-    }
-    throw new Error("Other apps kept saving the profile at the same moment; try again");
+      return { ...document, layouts } as SavedValues;
+    }, 3);
   }
   async function updateView(patch: Partial<Profile["sidebar"]["view"]>) {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const state = await client.rpc(profileRpc.read, {});
-      if (state.status !== "ready") throw new Error(`The saved profile is invalid: ${state.error}`);
-      const document = state.values as { activeLayout?: string; layouts?: { id: string; profile?: Record<string, unknown> }[] };
+    await changeSavedProfile(savedProfile, (values) => {
+      const document = values as { activeLayout?: string; layouts?: { id: string; profile?: Record<string, unknown> }[] };
       const layouts = (document.layouts ?? []).map((layout) => {
         if (layout.id !== document.activeLayout) return layout;
         const profile = layout.profile ?? {};
@@ -132,11 +137,8 @@ export default function contribute(client: PluginClientContext) {
         const view = (sidebar.view ?? {}) as Record<string, unknown>;
         return { ...layout, profile: { ...profile, sidebar: { ...sidebar, view: { ...view, ...patch } } } };
       });
-      const result = await client.rpc(profileRpc.write, { revision: state.revision, values: { ...document, layouts } as typeof state.values });
-      if (result.status === "saved") return;
-      if (result.status === "invalid") throw new Error(result.error);
-    }
-    throw new Error("Other apps kept saving the profile at the same moment; try again");
+      return { ...document, layouts } as SavedValues;
+    }, 3);
   }
   const announcements = createValueStore<Announcement>({ seq: 0, entries: [] });
   let directory: Directory = EMPTY_DIRECTORY;
@@ -229,24 +231,17 @@ export default function contribute(client: PluginClientContext) {
       },
     );
   };
-  // Auto-archive, when the view's rule is on: each app tries each due workspace once, and archiving
-  // a workspace twice is harmless, so several open apps agree.
-  const archiveTried = new Set<string>();
+  // Auto-archive, when the view's rule is on (client/auto-archive-sweep.ts).
+  const sweep = createArchiveSweep({
+    workspaces: () => workspaceList.get().values(),
+    fetchWorkspaces: () => listEveryWorkspace((options) => client.paseo.workspaces.list(options)),
+    archive: (id) => client.paseo.workspaces.archive(id),
+    log: console,
+  });
   const sweepWorkspaces = () => {
     const rule = profileOf(store.get()).sidebar.view.autoArchive;
     if (stopped || !rule || !workspacesReady.get()) return;
-    const now = new Date();
-    for (const workspace of workspaceList.get().values()) {
-      if (archiveTried.has(workspace.id) || !dueForArchive(workspace, rule, now)) continue;
-      archiveTried.add(workspace.id);
-      client.paseo.workspaces.archive(workspace.id).then(
-        (result) => {
-          if (result.error) console.error(`[morphise] Could not auto-archive ${workspace.name}: ${result.error}`);
-          else console.info(`[morphise] Auto-archived ${workspace.name}`);
-        },
-        (error: unknown) => console.error(`[morphise] Could not auto-archive ${workspace.name}`, error),
-      );
-    }
+    void sweep(rule, new Date());
   };
   const sweepTimer = setInterval(sweepWorkspaces, 10 * 60_000);
   releases.push(() => clearInterval(sweepTimer));
@@ -343,8 +338,9 @@ export default function contribute(client: PluginClientContext) {
     if (transitions.length) void applyAutomatically("run a task rule", rulesForTransitions(tasksOf(taskStore.get()), transitions));
   };
 
-  // Gives the daemon a connection for writing reminder rows into chats. Like the profile stream,
-  // Paseo does not reopen it after a daemon restart, so it is reopened on each workspace snapshot.
+  // Gives the daemon a connection for writing reminder rows into chats. Reopened on each workspace
+  // snapshot like the profile stream: Paseo re-subscribes after a reconnect, but not a stream the
+  // daemon closed or whose re-subscribe failed (client/profile-connection.ts).
   let releaseKeeper: (() => void) | null = null;
   const openKeeper = () => {
     releaseKeeper?.();

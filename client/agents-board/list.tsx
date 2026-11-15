@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Text, View } from "react-native";
 import { agentHeadline, type CardSettings, contextShare, rowLine } from "../../shared/agents-board";
-import { summarizePermission } from "../../shared/inbox";
+import { oneTapLabel, summarizePermission } from "../../shared/inbox";
 import { formatElapsed } from "../../shared/time-text";
 import type { Indicator } from "../../shared/profile";
 import { Fact, GroupRow } from "../ui/grouped-list";
@@ -91,8 +91,8 @@ export function AgentRow({ t, facts, card, now, live, selected, focused, buttons
       pinned={
         buttons.allow || buttons.deny ? (
           <>
-            {buttons.allow ? <IconButton t={t} size="sm" icon="Check" tone={t.c.statusSuccess} label={`Allow: ${headline.title}`} disabled={buttons.busy} onPress={buttons.allow} /> : null}
-            {buttons.deny ? <IconButton t={t} size="sm" icon="X" label={`Deny: ${headline.title}`} disabled={buttons.busy} onPress={buttons.deny} /> : null}
+            {buttons.allow ? <IconButton t={t} size="sm" icon="Check" tone={t.c.statusSuccess} label={permission ? `${oneTapLabel(permission, "allow")}, ${headline.title}` : `Allow: ${headline.title}`} disabled={buttons.busy} onPress={buttons.allow} /> : null}
+            {buttons.deny ? <IconButton t={t} size="sm" icon="X" label={permission ? `${oneTapLabel(permission, "deny")}, ${headline.title}` : `Deny: ${headline.title}`} disabled={buttons.busy} onPress={buttons.deny} /> : null}
           </>
         ) : undefined
       }

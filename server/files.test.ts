@@ -1,6 +1,7 @@
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { readImage } from "../shared/files";
 import { readImageFile, readTextFile } from "./files";
@@ -8,17 +9,31 @@ import { readImageFile, readTextFile } from "./files";
 const folder = mkdtempSync(join(tmpdir(), "morphise-files-"));
 
 describe("file handlers", () => {
-  it("reads a small image as a data URI, by its extension", async () => {
-    const path = join(folder, "dot.png");
-    writeFileSync(path, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
-    expect(await readImageFile({ path })).toEqual({ ok: true, dataUri: "data:image/png;base64,iVBORw==" });
+  it("reads an image as a data URI of its tile-sized preview, by its extension and its bytes", async () => {
+    // The tile is at most 520 × 260; the preview fits 960 × 600, so a large original is never sent.
+    const path = join(folder, "wide.png");
+    writeFileSync(path, await sharp({ create: { width: 2000, height: 1000, channels: 3, background: "blue" } }).png().toBuffer());
+    const result = await readImageFile({ path });
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.dataUri).toMatch(/^data:image\/webp;base64,/);
+    const preview = await sharp(Buffer.from(result.dataUri.split(",")[1]!, "base64")).metadata();
+    expect([preview.width, preview.height]).toEqual([960, 480]);
     expect(await readImageFile({ path: join(folder, "notes.txt") })).toMatchObject({ ok: false });
   });
 
-  it("refuses images over 3 MB", async () => {
+  it("refuses a file renamed to look like an image, and a bitmap the chat's image reader does not serve", async () => {
+    const renamed = join(folder, "secret.png");
+    writeFileSync(renamed, "not a picture");
+    expect(await readImageFile({ path: renamed })).toMatchObject({ ok: false, reason: expect.stringContaining("Not an image") });
+    const bitmap = join(folder, "old.bmp");
+    writeFileSync(bitmap, Buffer.from("BM\0\0\0\0"));
+    expect(await readImageFile({ path: bitmap })).toMatchObject({ ok: false });
+  });
+
+  it("refuses images over 12 MB", async () => {
     const path = join(folder, "big.jpg");
-    writeFileSync(path, Buffer.alloc(3 * 1024 * 1024 + 1));
-    expect(await readImageFile({ path })).toMatchObject({ ok: false, reason: expect.stringContaining("up to 3 MB") });
+    writeFileSync(path, Buffer.alloc(12 * 1024 * 1024 + 1));
+    expect(await readImageFile({ path })).toMatchObject({ ok: false, reason: expect.stringContaining("larger than 12 MB") });
   });
 
   it("reads text, refuses binary files, and says why when a file is missing", async () => {

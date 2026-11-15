@@ -8,3 +8,10 @@ export const readImage = defineRpc({
   input: z.object({ path: z.string().min(1), variant: z.enum(["thumbnail", "original"]).optional() }),
   output: z.object({ dataUrl: z.string() }),
 });
+
+/** Reads an image an agent-written page names; the daemon serves it only from inside the folder of the agent that made the page. */
+export const readPageImage = defineRpc({
+  name: "polish.page.image",
+  input: z.object({ path: z.string().min(1), agentId: z.string().min(1) }),
+  output: z.object({ dataUrl: z.string() }),
+});

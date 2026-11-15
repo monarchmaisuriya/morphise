@@ -5,7 +5,6 @@ import { z } from "zod";
 // file's text for the Details panel, and showing a file in the system's file manager. Every
 // answer says why it could not be given rather than failing silently.
 
-export const IMAGE_MAX_BYTES = 3 * 1024 * 1024;
 export const TEXT_MAX_BYTES = 1024 * 1024;
 
 export const IMAGE_TYPES: Record<string, string> = {
@@ -14,7 +13,6 @@ export const IMAGE_TYPES: Record<string, string> = {
   jpeg: "image/jpeg",
   gif: "image/gif",
   webp: "image/webp",
-  bmp: "image/bmp",
 };
 
 // The image type of a path, by its extension; null when it is not a picture Morphise shows.

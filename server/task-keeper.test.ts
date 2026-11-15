@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { REMINDER_ROW_KEY, REMINDER_ROWS_KEY } from "../shared/reminders";
 import { applyTaskOperation, type TaskOperation } from "../shared/task-ops";
 import { EMPTY_TASKS, type TaskDocument } from "../shared/tasks";
@@ -81,6 +81,8 @@ function connect(keeper: ReturnType<typeof createTaskKeeper>, paseo: KeeperPaseo
 }
 
 describe("task keeper", () => {
+  afterEach(() => void vi.useRealTimers());
+
   it("writes one chat row when a linked task's reminder comes due, marking that task in the chat's own key", async () => {
     const store = fakeSettings(withTask());
     const daemon = fakeDaemon();
@@ -157,6 +159,38 @@ describe("task keeper", () => {
     await flush();
     await clock.advanceTo("2026-11-11T14:46:00.000Z");
     expect(daemon.appended).toEqual([]);
+  });
+
+  it("keeps writing rows while a second app is still connected after the first closes", async () => {
+    const store = fakeSettings(withTask());
+    const daemon = fakeDaemon();
+    const clock = fakeClock();
+    const keeper = createTaskKeeper(store.settings, clock);
+    // Paseo hands every subscription the same connection object.
+    const leaveFirst = connect(keeper, daemon.paseo);
+    connect(keeper, daemon.paseo);
+    await flush();
+    leaveFirst();
+    await clock.advanceTo("2026-11-11T14:45:00.000Z");
+    expect(daemon.appended).toHaveLength(1);
+  });
+
+  it("waits out a reminder due further ahead than one timer can wait, without firing every millisecond", async () => {
+    vi.useFakeTimers({ now: start, toFake: ["setTimeout", "clearTimeout", "Date"] });
+    // Set from an app whose clock runs 33 days fast.
+    const far = { at: "2026-12-16T14:30:00.000Z", setAt: "2026-12-14T14:30:00.000Z" };
+    const store = fakeSettings(withTask({ reminder: far }));
+    const reads = vi.spyOn(store.settings, "read");
+    const daemon = fakeDaemon();
+    const keeper = createTaskKeeper(store.settings);
+    connect(keeper, daemon.paseo);
+    await vi.advanceTimersByTimeAsync(0);
+    reads.mockClear();
+    await vi.advanceTimersByTimeAsync(50);
+    expect(reads).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(Date.parse(far.at) - Date.now());
+    expect(daemon.appended).toHaveLength(1);
+    keeper.dispose();
   });
 
   it("stops its timers and stops watching when the plugin stops", async () => {

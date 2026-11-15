@@ -31,6 +31,16 @@ describe("createKeySender", () => {
     expect(sent).toEqual(["abcd", "efgh", "ij"]);
   });
 
+  it("takes a 200,000-character input and sends all of it, in order, in pieces", async () => {
+    const sent: string[] = [];
+    const type = createKeySender(async (keys) => void sent.push(keys), { chunkChars: 2_000, onError: () => {} });
+    const text = "0123456789".repeat(20_000);
+    type(text);
+    for (let i = 0; i <= 100; i++) await flush();
+    expect(sent).toHaveLength(100);
+    expect(sent.join("")).toBe(text);
+  });
+
   it("drops what is waiting after a failed send and reports the error once", async () => {
     const onError = vi.fn();
     const send = vi.fn().mockRejectedValueOnce(new Error("no terminal")).mockResolvedValue(undefined);

@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test, vi } from "vitest";
 import type { LiveView, RunRow } from "../../shared/run/row";
-import { createLiveStore, type LiveStore } from "./live";
+import { createLiveStore, type LiveStore, unreachableNote } from "./live";
 
 vi.mock("react-native", () => ({ Platform: { OS: "web" }, AppState: {} }));
 
@@ -181,6 +181,33 @@ test("errors back off 0.5, 1, 2, 4 s and recover; the clock offset corrects a sk
     s.h.pending.some((t) => t.delay === 500),
     "a success resets the backoff",
   );
+});
+
+test("the daemon reads as unreachable after 3 failed polls in a row, and no longer once one answers", () => {
+  assert.equal(unreachableNote(0), null);
+  assert.equal(unreachableNote(2), null);
+  assert.equal(unreachableNote(3), "Can't reach the daemon, retrying");
+  assert.equal(unreachableNote(12), "Can't reach the daemon, retrying");
+});
+
+test("the card's entry counts failed polls in a row, tells its card, and clears the count on the next answer", async () => {
+  const s = setup();
+  const r = row();
+  let told = 0;
+  s.store.subscribe(r.runId, () => told++);
+  s.store.attach(r);
+  for (let failed = 1; failed <= 3; failed++) {
+    s.calls.shift()!.reject(new Error("offline"));
+    await s.h.flush();
+    assert.equal(s.store.entry(r.runId).failedPolls, failed);
+    await s.h.tick(4_000);
+  }
+  assert.ok(told >= 3, "each failed poll tells the card");
+  assert.notEqual(unreachableNote(s.store.entry(r.runId).failedPolls), null);
+  const before = told;
+  await s.answer({ state: "unchanged", rev: 1 });
+  assert.equal(s.store.entry(r.runId).failedPolls, 0);
+  assert.ok(told > before, "the answer that clears it tells the card");
 });
 
 test("toggling the taller box only changes the flag; the poll in flight still lands", async () => {
