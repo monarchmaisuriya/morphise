@@ -8,12 +8,14 @@ import { createTitleJobs, type TitlePaseo } from "./server/titles";
 import { agentsBoardSettings } from "./shared/agents-board";
 import { startTitle, titleSettings, titleStatus } from "./shared/agent-titles";
 import { createTaskKeeper } from "./server/task-keeper";
+import { createShowHook, createShowTool, createShowWindows, readShowSetting } from "./server/show";
 import { registerMedia } from "./server/polish/media.register";
 import { registerPages } from "./server/polish/pages.register";
 import { registerUpdate } from "./server/polish/update.register";
 import { registerRun } from "./server/run/register";
 import { profileSettings } from "./shared/document";
 import { remindersKeeper } from "./shared/reminder-contracts";
+import { showChannel, showResult, showSettings, showUsed } from "./shared/show";
 import { bookmarkSettings } from "./shared/bookmarks";
 import { readImage, readText, revealFile } from "./shared/files";
 import { taskSettings } from "./shared/tasks";
@@ -63,7 +65,18 @@ export default function contribute(server: PluginServerContext) {
   const stopRun = registerRun(server);
   const keeper = createTaskKeeper(tasks);
   server.handle(remindersKeeper, keeper.watch);
+  // "Show in Paseo": agents can bring a chat, terminal, workspace or Morphise screen to the front of
+  // the window M used last (on unless turned off; an unreadable setting counts as off).
+  const showSetting = server.registerSettings(showSettings);
+  const showOn = readShowSetting(() => showSetting.read(), console.log);
+  const windows = createShowWindows();
+  server.handle(showChannel, ({ windowId }, { push, signal }) => windows.serve(windowId, push, signal));
+  server.handle(showUsed, ({ windowId, inFront }) => (windows.used(windowId, inFront), { ok: true as const }));
+  server.handle(showResult, ({ requestId, ok, message }) => (windows.answer(requestId, ok, message), { ok: true as const }));
+  const stopShowTool = server.addHook("agent.open.before", createShowHook({ enabled: showOn, tool: createShowTool({ windows, enabled: showOn, log: console.log }) }));
   return () => {
+    stopShowTool();
+    windows.stop();
     stopRecap();
     stopPlanTools();
     stopPlanInstruction();

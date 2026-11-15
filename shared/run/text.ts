@@ -1,4 +1,5 @@
 // Ported from Shell Yeah (stevecastaneda/paseo-plugins, MIT, see NOTICE.md): shell-yeah/shared/text.ts
+import { HIDDEN_CHARACTERS } from "../hidden-text";
 
 // The last path segment, for either slash style; the client has no node:path.
 export function basename(path: string): string {
@@ -41,9 +42,8 @@ const RISKS: Array<[RegExp, string]> = [
     /\b(irm|iwr|Invoke-RestMethod|Invoke-WebRequest|curl|wget)\b[^\n]*\|\s*(iex|Invoke-Expression)\b|\b(iex|Invoke-Expression)\b[^\n]*\b(irm|iwr|Invoke-RestMethod|Invoke-WebRequest|DownloadString)\b/i,
     "runs a script from the internet",
   ],
-  // Control characters (other than tab and newline), zero-width and direction marks: text a reply can
-  // use to show one command while another runs (the "Trojan Source" trick).
-  [/[\u0000-\u0008\u000b-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/, "contains hidden characters, so what runs may differ from what shows"],
+  // Text a reply can use to show one command while another runs (the "Trojan Source" trick).
+  [HIDDEN_CHARACTERS, "contains hidden characters, so what runs may differ from what shows"],
 ];
 
 export function risksOf(script: string): string[] {

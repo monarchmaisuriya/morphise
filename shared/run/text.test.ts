@@ -64,6 +64,8 @@ describe("risksOf", () => {
     expect(risksOf("echo safe \u202e ;rm -rf ~")).toContain(hidden);
     expect(risksOf("ls\u200b -la")).toEqual([hidden]);
     expect(risksOf("echo \u0007bell")).toEqual([hidden]);
+    expect(risksOf("echo hi\u{e0072}\u{e006d}")).toEqual([hidden]);
+    expect(risksOf("ls\u2064 -la")).toEqual([hidden]);
     expect(risksOf("printf 'a\tb'\nls")).toEqual([]);
   });
 });

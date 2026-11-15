@@ -4,12 +4,14 @@ import {
   openExternalUrl,
   type PluginHostSummary,
   type PluginSidebarViewProps,
+  type TerminalRef,
   type WorkspaceRef,
   useAgent,
   useAgents,
   useHosts,
   usePaseo,
   useSettings,
+  useTerminals,
   useWorkspace,
   useWorkspaces,
 } from "@getpaseo/plugin/client";
@@ -40,6 +42,7 @@ import { isDue, type Reminder } from "../shared/reminders";
 import { formatDue, formatElapsed } from "../shared/time-text";
 import { type ViewState, viewStateSettings } from "../shared/view-state";
 import { createValueStore, type ValueStore, useValue } from "./profile-store";
+import { registerShowNavigator } from "./show";
 import { useReminderClock } from "./reminder-clock";
 import { type AlertEntry, remindersOf } from "./reminder-alerts";
 import { type PickerDeps, ReminderPicker, type ReminderTarget } from "./reminder-picker";
@@ -1357,6 +1360,30 @@ function WorkspaceGroupHeading(props: { chat: AgentRef; count: number; collapsed
   return <GroupHeading title={name ?? "Workspace"} count={props.count} collapsed={props.collapsed} onToggle={props.onToggle} shared={props.shared} />;
 }
 
+// Lets "Show in Paseo" open terminals and workspaces: only a mounted view holds the app's references
+// to them (client/show.ts). Draws nothing.
+function ShowTargets({ navigation }: { navigation: PluginSidebarViewProps["navigation"] }) {
+  const latest = useRef<{ terminals: readonly TerminalRef[]; workspaces: readonly WorkspaceRef[]; navigation: PluginSidebarViewProps["navigation"] }>({ terminals: [], workspaces: [], navigation });
+  latest.current = { terminals: useTerminals(), workspaces: useWorkspaces(), navigation };
+  useEffect(
+    () =>
+      registerShowNavigator({
+        openTerminal(terminalId) {
+          const ref = latest.current.terminals.find((terminal) => terminal.id === terminalId);
+          if (ref) latest.current.navigation.openTerminal(ref);
+          return Boolean(ref);
+        },
+        openWorkspace(workspaceId) {
+          const ref = latest.current.workspaces.find((workspace) => workspace.id === workspaceId);
+          if (ref) latest.current.navigation.openWorkspace(ref);
+          return Boolean(ref);
+        },
+      }),
+    [],
+  );
+  return null;
+}
+
 export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
   // Chosen once per profile, so each view instance always calls the same hooks.
   const useRows = config.list === "chats" ? chatRows(config) : workspaceRows(config);
@@ -1522,6 +1549,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     const stepsCards = config.stepsCard !== false && steps.position !== "chat" ? <StepsCards open={props.active.agent ?? null} chats={workspaceChats} paseo={paseo} t={t} options={steps} /> : null;
     return (
       <View ref={viewRef} style={styles.scroll}>
+        <ShowTargets navigation={props.navigation} />
         <PopoverHost bounds={viewRef}>
         {on ? (
           <Header menu={menu} setMenu={setMenu} searching={searching} setSearching={setSearching} search={search} onSearch={setSearch} filters={filters} onNext={source.onNext} headerRef={headerRef} shared={shared} />

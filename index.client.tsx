@@ -33,6 +33,7 @@ import { isWindowVisible, showNotification } from "./client/web";
 import { profileSettings } from "./shared/document";
 import type { Profile } from "./shared/profile";
 import { remindersKeeper } from "./shared/reminder-contracts";
+import { startShow } from "./client/show";
 import { REMINDER_KEY } from "./shared/reminders";
 import { dueForArchive } from "./shared/auto-archive";
 import { archiveOldDone, rulesForTransitions } from "./shared/rules";
@@ -356,6 +357,9 @@ export default function contribute(client: PluginClientContext) {
     releaseKeeper = handle;
   };
   releases.push(() => releaseKeeper?.());
+  // "Show in Paseo": this window runs the requests agents send it (client/show.ts); reopened with the keeper.
+  const show = startShow(client);
+  releases.push(() => show.stop());
 
   const alertSource = {
     get: (): AlertEntry[] => remindersOf(tasksOf(taskStore.get())),
@@ -395,6 +399,7 @@ export default function contribute(client: PluginClientContext) {
       taskStream.reopen();
       bookmarkStream.reopen();
       openKeeper();
+      show.reopen();
       readTaskHost();
       changeWorkspaceList({ snapshot: snapshot.entries });
       workspacesReady.set(true);

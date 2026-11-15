@@ -20,6 +20,11 @@ declare const document: {
   createElement(tag: "style"): StyleElement;
   head: { appendChild(node: StyleElement): unknown };
   visibilityState: "visible" | "hidden";
+  hasFocus(): boolean;
+  addEventListener(type: "keydown" | "visibilitychange", listener: () => void, capture: boolean): void;
+  removeEventListener(type: "keydown" | "visibilitychange", listener: () => void, capture: boolean): void;
+  addEventListener(type: "wheel", listener: () => void, options: { capture: boolean; passive: boolean }): void;
+  removeEventListener(type: "wheel", listener: () => void, options: { capture: boolean }): void;
   addEventListener(type: "pointerdown", listener: PressListener, capture: boolean): void;
   addEventListener(type: "pointermove" | "pointerout", listener: PointerListener, capture: boolean): void;
   removeEventListener(type: "pointerdown", listener: PressListener, capture: boolean): void;
@@ -63,7 +68,12 @@ interface TipTarget {
   contains?(node: unknown): boolean;
   isConnected?: boolean;
 }
-declare const window: { innerWidth: number; innerHeight: number };
+declare const window: {
+  innerWidth: number;
+  innerHeight: number;
+  addEventListener(type: "focus" | "blur", listener: () => void): void;
+  removeEventListener(type: "focus" | "blur", listener: () => void): void;
+};
 const TIP_GAP = 6;
 let tip: TipElement | null = null;
 let tipOwner: TipTarget | null = null;
@@ -220,6 +230,38 @@ export function applyStyleSheet(css: string): () => void {
   element.textContent = css;
   document.head.appendChild(element);
   return () => element.remove();
+}
+
+// Whether M is using this window now: shown and holding the keyboard focus. Native apps answer with AppState.
+export function windowInFront(): boolean {
+  return Platform.OS !== "web" || (document.visibilityState === "visible" && document.hasFocus());
+}
+
+// Calls `report(true)` when M starts using this window (focus, a press, a key) and `report(false)`
+// when M leaves it (blur, page hidden); `typed` on every key. Web and desktop only.
+export function watchWindowUse(report: (inFront: boolean) => void, typed: () => void = () => {}): () => void {
+  if (Platform.OS !== "web") return () => {};
+  const using = () => report(true);
+  const key = () => {
+    typed();
+    report(true);
+  };
+  const left = () => report(false);
+  const visibility = () => report(windowInFront());
+  window.addEventListener("focus", using);
+  window.addEventListener("blur", left);
+  document.addEventListener("visibilitychange", visibility, false);
+  document.addEventListener("pointerdown", using, true);
+  document.addEventListener("keydown", key, true);
+  document.addEventListener("wheel", using, { capture: true, passive: true });
+  return () => {
+    window.removeEventListener("focus", using);
+    window.removeEventListener("blur", left);
+    document.removeEventListener("visibilitychange", visibility, false);
+    document.removeEventListener("pointerdown", using, true);
+    document.removeEventListener("keydown", key, true);
+    document.removeEventListener("wheel", using, { capture: true });
+  };
 }
 
 // Whether this window is the one the user is looking at; native apps are always "visible".

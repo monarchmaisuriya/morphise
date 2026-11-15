@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.30.0 - 2026-11-15
+
+- **Show in Paseo: agents can open things for you.** A new `show_in_paseo` agent tool brings a chat, terminal, workspace, the Workbench or Dispatch to the front of the Paseo window you used last; puts text in a chat's empty message box for you to read and send (never sent, never a slash command, never text with hidden characters); and pins or unpins a workspace. Only your own chats can use it, not sub-agents or background helpers, at most ten times a minute each, and every call is logged on the daemon. While you are typing in a window (on a phone, while its keyboard is up) it changes nothing there, so your keys never land in another chat, and a draft goes in only once its chat is on screen. On by default; Settings, Chat, "Show in Paseo" turns it off at once. Terminals and workspaces need Morphise's sidebar view selected in Paseo.
+- **Commands: the Run button's hidden-character check is wider.** Run now also asks first for invisible tag characters, variation selectors, other format and C1 control characters, blank-looking letters and line separators, using the same rule as agent drafts.
+
 ## 0.29.1 - 2026-11-14
 
 - **Run and Copy swap places on shell code blocks:** Run sits in the top-right corner and Paseo's Copy code just left of it. A risky command's "Run anyway?" covers Copy while it asks.

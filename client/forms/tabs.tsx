@@ -1,6 +1,7 @@
 import { useSettings } from "@getpaseo/plugin/client";
+import { showEnabled, showSettings } from "../../shared/show";
 import { SettingsAction, SettingsCard, SettingsSection, TextInput } from "@getpaseo/plugin/client/ui";
-import { type ReactNode, useMemo } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { AgentTimelineItem, ToolCallItem } from "../polish/agent-types";
 import { PrefsOverride } from "../polish/prefs";
@@ -801,6 +802,7 @@ export function ChatTab(form: Form): ReactNode {
               <SwitchField label="Add a recap after each turn" hint="Written into the chat by this host's daemon, so every app sees it." value={chat.recap === true} onChange={(value) => setChat("recap", value ? true : undefined)} />
             </SettingsCard>
           </SettingsSection>
+          <ShowInPaseoSetting />
           <SettingsSection title="Phones" info="On iOS and Android.">
             <SettingsCard>
               <SelectField
@@ -895,6 +897,51 @@ function CreditsSection({ form }: { form: Form }) {
             </Text>
           ))}
         </View>
+      </SettingsCard>
+    </SettingsSection>
+  );
+}
+
+// "Show in Paseo": whether agents get the tool. Its own host-wide document (shared/show.ts), not a
+// layout setting; missing means on.
+function ShowInPaseoSetting() {
+  const stored = useSettings(showSettings);
+  const [failed, setFailed] = useState<string | null>(null);
+  if (stored.status === "invalid") {
+    // The daemon treats a document it cannot read as off; offer the way back to the default (on).
+    return (
+      <SettingsSection title="Show in Paseo">
+        <SettingsCard>
+          <SwitchField label="Let agents open things in Paseo" hint={`Off: the saved setting is invalid (${stored.error}). Turn it on to reset it.`} value={false} onChange={() => void stored.reset()} />
+        </SettingsCard>
+      </SettingsSection>
+    );
+  }
+  if (stored.status === "error") {
+    return (
+      <SettingsSection title="Show in Paseo">
+        <SettingsCard>
+          <SwitchField label="Let agents open things in Paseo" hint={`Couldn't load this setting (${stored.error}); agents are refused until it loads. Switch to reload.`} value={false} onChange={() => void stored.reload()} />
+        </SettingsCard>
+      </SettingsSection>
+    );
+  }
+  if (stored.status !== "ready") return null;
+  const set = (on: boolean) => {
+    setFailed(null);
+    void stored.save(on ? {} : { enabled: false }, stored.revision).then((ok) => {
+      if (!ok) setFailed(stored.saveError ?? "Another app saved this setting at the same moment; try again");
+    });
+  };
+  return (
+    <SettingsSection title="Show in Paseo" info="Agents in your chats can bring a chat, terminal, workspace or Morphise screen to the front of the Paseo window you used last, put text in an empty message box for you to read and send, and pin workspaces. They never send or press anything, and sub-agents and background helpers cannot use it.">
+      <SettingsCard>
+        <SwitchField
+          label="Let agents open things in Paseo"
+          hint={failed ?? "Turning it off stops it at once. Turning it on reaches new chats; reopen a chat (or restart the daemon) for one that is already open. Terminals and workspaces need Morphise's sidebar view selected in Paseo."}
+          value={showEnabled(stored.values)}
+          onChange={set}
+        />
       </SettingsCard>
     </SettingsSection>
   );
