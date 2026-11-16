@@ -15,8 +15,9 @@ type Pipeline = {
 };
 type Sharp = (input: Buffer, options: { limitInputPixels: number }) => Pipeline;
 
-// Loaded on first use, so an unloadable sharp only costs thumbnails. In the macOS app it may fail to
-// load its native binary (signed by another team); thumbnails then send the original image.
+// Loaded on first use, so an unloadable sharp only costs thumbnails. Paseo's macOS app loads only code signed by its own
+// team, so it refuses sharp's native binary; sharp then loads its WebAssembly build (`@img/sharp-wasm32`, a dependency
+// for this reason, pinned to sharp's version). Only if that fails too do thumbnails send the original image.
 const loadSharp = optionalDependency<Sharp>("sharp", "thumbnails send the original image");
 
 const MIME: Record<string, string> = {

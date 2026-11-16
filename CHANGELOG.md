@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.33.2 - 2026-11-16
+
+- **Fix: picture thumbnails in Paseo's macOS app.** The app loads only code signed by its own developer, so it refused sharp's native image library and every picture tile was sent as the full image ("sharp unavailable" in the daemon log). Morphise now also installs sharp's WebAssembly build (about 9 MB), which sharp loads on its own when the native one is refused; tiles get small WebP thumbnails again. Other daemons keep the native library.
+
 ## 0.33.1 - 2026-11-16
 
 - **Remind me popover: even spacing.** Paseo's popover already pads its content; each part of the reminder popover added its own padding on top, so the header, note box, times and footer started at different edges. They now share one edge and sit evenly apart. The reminder picker in sidebar rows and the card editor looks the same as before.

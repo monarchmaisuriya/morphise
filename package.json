@@ -1,7 +1,7 @@
 {
   "name": "morphise",
   "private": true,
-  "version": "0.33.1",
+  "version": "0.33.2",
   "files": [
     "paseo-plugin.json",
     "OVERVIEW.md",
@@ -36,6 +36,7 @@
   },
   "description": "Status-sorted sidebar, chat reminders and notes, prompts, layouts, and settings forms for Paseo",
   "dependencies": {
+    "@img/sharp-wasm32": "0.35.5",
     "pele": "1.7.0",
     "sharp": "0.35.5"
   }

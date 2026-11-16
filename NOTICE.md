@@ -89,6 +89,6 @@ SOFTWARE.
 These are not part of Morphise's code; each keeps its own licence.
 
 - [pele](https://www.npmjs.com/package/pele) 1.7.0 (diagrams), MIT. Installed on the daemon by npm.
-- [sharp](https://sharp.pixelplumbing.com) 0.35.5 (thumbnails), Apache-2.0. Installed on the daemon by npm, with its prebuilt [libvips](https://www.libvips.org), LGPL-3.0-or-later.
+- [sharp](https://sharp.pixelplumbing.com) 0.35.5 (thumbnails), Apache-2.0. Installed on the daemon by npm, with its prebuilt [libvips](https://www.libvips.org), LGPL-3.0-or-later, and its WebAssembly build `@img/sharp-wasm32` 0.35.5 (Apache-2.0 AND LGPL-3.0-or-later AND MIT, with `@emnapi/runtime`, MIT), used where the native one cannot load (Paseo's macOS app).
 - [node-pty](https://github.com/microsoft/node-pty), MIT. Morphise loads the copy Paseo ships for running commands in a terminal; it includes no copy of its own.
 - The optional icon sets, downloaded from npm only when picked: Hugeicons (`@iconify-json/hugeicons`, MIT) and Untitled UI (`@untitledui/icons`, under the Untitled UI licence).
