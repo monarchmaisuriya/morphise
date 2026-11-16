@@ -112,9 +112,9 @@ export function createChatPopover(deps: BoardDeps) {
         (error: unknown) => toast.error(`Could not add the task: ${message(error)}`),
       );
     return (
-      <View style={{ width: 340, maxWidth: "100%" }}>
-        {/* 16: the picker's 8 plus a row's 8, so the header lines up with the rows' icons. */}
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingTop: 14 }}>
+      <View style={{ width: 340, maxWidth: "100%", gap: 8 }}>
+        {/* Paseo's popover pads its content; these parts add no padding of their own and sit 8 apart, as Paseo spaces its own. */}
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
           <View style={{ width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: t.c.surface2 }}>
             <Icon name="AlarmClock" size={15} color={t.c.statusWarning} />
           </View>
@@ -126,7 +126,7 @@ export function createChatPopover(deps: BoardDeps) {
           </View>
         </View>
         <ReminderPicker deps={deps} target={{ kind: "chat", agentId: chatId, workspaceId, title }} title={title} theme={theme} compact={layout.compact} embedded onDone={close} />
-        <View style={{ borderTopWidth: 1, borderTopColor: t.c.border, padding: 8 }}>
+        <View style={{ borderTopWidth: 1, borderTopColor: t.c.border, paddingTop: 8 }}>
           <MenuItem t={t} icon="ListPlus" label="Add this chat to your tasks" onPress={addTask} />
         </View>
       </View>

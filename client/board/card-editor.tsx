@@ -226,7 +226,7 @@ export function CardEditor({ deps, target, theme, compact, onClose }: { deps: Bo
               {finished ? (
                 <Text style={t.text.meta}>{task.reminder ? "Paused while the card is in Done or archived." : "Move the card out of Done to set a reminder."}</Text>
               ) : reminderOpen ? (
-                <View style={{ borderWidth: 1, borderColor: t.c.border, borderRadius: t.radius.card, backgroundColor: t.c.surface1 }}>
+                <View style={{ padding: 8, borderWidth: 1, borderColor: t.c.border, borderRadius: t.radius.card, backgroundColor: t.c.surface1 }}>
                   <ReminderPicker deps={deps} target={{ kind: "task", taskId: task.id }} title={task.title} theme={theme} compact={compact} embedded onDone={() => setReminderOpen(false)} />
                 </View>
               ) : (

@@ -294,7 +294,7 @@ function RemindButton({ chat, label, onPress, shared }: { chat: AgentRef; label:
 
 function InlinePicker({ target, title, onDone, shared }: { target: ReminderTarget; title: string; onDone(): void; shared: Shared }) {
   return (
-    <View style={{ marginHorizontal: 8, marginTop: 2, marginBottom: 6, borderWidth: 1, borderRadius: 10, borderColor: shared.t.c.border, backgroundColor: shared.t.c.surface1 }}>
+    <View style={{ marginHorizontal: 8, marginTop: 2, marginBottom: 6, padding: 8, borderWidth: 1, borderRadius: 10, borderColor: shared.t.c.border, backgroundColor: shared.t.c.surface1 }}>
       <ReminderPicker deps={shared.picker} target={target} title={title} theme={shared.props.theme} compact={shared.t.compact} embedded onDone={onDone} />
     </View>
   );

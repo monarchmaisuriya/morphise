@@ -77,7 +77,8 @@ function choices(presets: readonly number[], now: Date): { label: string; at(fro
   return list;
 }
 
-// `embedded` fits the picker inside a card or a sidebar row instead of a popover.
+// `embedded` fits the picker inside something that frames it (a bordered box, Paseo's popover): it adds no padding of its
+// own, so the frame sets the inset and every part starts on the frame's edge.
 export function ReminderPicker({ deps, target, title, theme, onDone, embedded = false, compact = false }: { deps: PickerDeps; target: ReminderTarget; title: string; theme: PluginTheme; onDone(): void; embedded?: boolean; compact?: boolean }) {
   const t = useTokens(theme, compact);
   const document = tasksOf(useValue(deps.tasks));
@@ -119,7 +120,7 @@ export function ReminderPicker({ deps, target, title, theme, onDone, embedded = 
   }
 
   return (
-    <View style={{ gap: 10, padding: embedded ? 8 : 12, width: embedded ? undefined : 320, maxWidth: "100%" }}>
+    <View style={{ gap: embedded ? 8 : 10, padding: embedded ? 0 : 12, width: embedded ? undefined : 320, maxWidth: "100%" }}>
       {embedded ? null : (
         <Text style={t.text.heading} numberOfLines={2}>
           Remind me about {title}

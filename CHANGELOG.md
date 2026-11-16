@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.33.1 - 2026-11-16
+
+- **Remind me popover: even spacing.** Paseo's popover already pads its content; each part of the reminder popover added its own padding on top, so the header, note box, times and footer started at different edges. They now share one edge and sit evenly apart. The reminder picker in sidebar rows and the card editor looks the same as before.
+
 ## 0.33.0 - 2026-11-16
 
 - **Tap a reminder in the sidebar view to open its task.** A row under Reminders opens Workbench, Tasks with that card's editor (on a phone the drawer closes first). A reminder on a chat this app lists also gets a chat button beside snooze and done. A reload, a host switch or going back does not open the editor again, and a card deleted meanwhile says "That task no longer exists". Opening a task this way leaves Tasks as Workbench's last view.
