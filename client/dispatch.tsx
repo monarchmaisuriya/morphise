@@ -22,10 +22,10 @@ export interface DispatchDeps {
 
 type ScreenOpener = (input: PluginOpenScreenInput) => void;
 
-// Morphise's sidebar view cannot open plugin screens itself (Paseo gives it no openScreen); the
-// Workbench row in the sidebar header can, and lends its opener here for the view's Dispatch
-// button. Each shown row (one per host) lends one; the latest still shown is used, and null
-// means no row is shown.
+// The Workbench row in the sidebar header lends its screen opener here for the sidebar view's
+// Dispatch button (it also closes the drawer on phones; the client's own openScreen does not).
+// Each shown row (one per host) lends one; the latest still shown is used, and null means no row
+// is shown.
 export const screenOpener: ValueStore<ScreenOpener | null> = createValueStore<ScreenOpener | null>(null);
 const lent: ScreenOpener[] = [];
 

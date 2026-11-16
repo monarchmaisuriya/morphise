@@ -1,7 +1,7 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { type PluginWorkspacePanelProps, useSettings } from "@getpaseo/plugin/client";
 import { useToast } from "@getpaseo/plugin/client/ui";
-import { Fragment, type ReactNode, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useState } from "react";
 import { Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { type BoardColumn, boardColumns, dropMove, todayGroups } from "../../shared/board";
 import { parseQuickAdd } from "../../shared/quick-add";
@@ -14,6 +14,7 @@ import { useDeviceChoice, workbenchSettings } from "../device-choices";
 import { useValue } from "../profile-store";
 import { useTooltip } from "../web";
 import { useReminderClock } from "../reminder-clock";
+import { initialEditing } from "../task-link";
 import { tasksOf } from "../task-store";
 import { Button, Field, Icon, IconButton, MenuItem, Segmented, Tag, type Tokens, useTokens } from "../ui/kit";
 import { GroupBox, GroupFooter, GroupList, GroupRow } from "../ui/grouped-list";
@@ -49,7 +50,7 @@ function useBoardState(deps: BoardDeps) {
     );
   // Without the stream the board would show an empty default list, which looks like lost data.
   const problem = state.connectionError ? `Tasks are not up to date: ${state.connectionError}` : state.event === null ? "Loading tasks…" : state.event.status === "invalid" ? `The saved task list is invalid: ${state.event.error}` : null;
-  return { document, now, run, problem };
+  return { document, now, run, problem, state };
 }
 
 // "Due today", "Due Fri 13 Nov", "Overdue · 12 Nov".
@@ -720,19 +721,28 @@ interface BoardProps {
   workspaceId: string | null;
   initialTab: Tab;
   openChat: ((agentId: string) => void) | null;
+  // A task whose editor opens with the board (a reminder row's link); null for none.
+  initialTask?: string | null;
 }
 
 export type BoardTab = Tab;
 
-export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, openChat }: BoardProps) {
-  const { document, now, run, problem } = useBoardState(deps);
+export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, openChat, initialTask = null }: BoardProps) {
+  const { document, now, run, problem, state } = useBoardState(deps);
   const t = useTokens(theme, compact);
   const [tab, setTab] = useState<Tab>(initialTab);
   // List or columns, on this device, picked in Settings, General.
   const [shape, , shapeLoading] = useDeviceChoice(useSettings(workbenchSettings), "tasksLayout");
   // Filter and Display choices for this screen.
   const [layout, setLayout] = useState<Layout>(ALL_TASKS);
-  const [editing, setEditing] = useState<EditorTarget | null>(null);
+  // Read once: the board is mounted afresh for each link that asks for a task.
+  const [opening] = useState(() => (initialTask ? initialEditing(state, initialTask) : null));
+  const [editing, setEditing] = useState<EditorTarget | null>(opening?.kind === "open" ? opening.target : null);
+  const toast = useToast();
+  useEffect(() => {
+    if (opening?.kind === "gone") toast.error("That task no longer exists");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [customising, setCustomising] = useState(false);
   const [panel, setPanel] = useState<Panel>(null);
   const togglePanel = (next: Panel) => setPanel(panel === next ? null : next);

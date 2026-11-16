@@ -167,6 +167,8 @@ interface Shared {
   // Clears a task's reminder, or asks again in some minutes.
   done(taskId: string): void;
   later(taskId: string, minutes: number): void;
+  // Opens Workbench, Tasks with the task's editor.
+  openTask(taskId: string): void;
   // The Display "Show" choices.
   shows: RowShows;
   // Pull requests, checks, services and marks, which Paseo's workspace hooks do not carry, by the
@@ -490,12 +492,16 @@ function BulkBar({ shown, shared }: { shown: ReadonlyMap<string, WorkspaceRef>; 
   );
 }
 
-// A task whose reminder is due, listed at the top of the view. Tapping opens its chat when it
-// has one.
+// A task whose reminder is due, listed at the top of the view. Tapping opens the task in Workbench, Tasks; a task with
+// a chat also has a button for the chat.
 function ReminderRow({ entry, chat, shared }: { entry: AlertEntry; chat: AgentRef | null; shared: Shared }) {
   const { props, styles, now } = shared;
   const due = formatDue(entry.reminder, now);
-  const open = chat ? () => props.navigation.openAgent(chat) : null;
+  // Closes the drawer on phones, as Paseo's own navigation from the view does.
+  const openTask = () => {
+    shared.openTask(entry.taskId);
+    props.dismiss();
+  };
   const warning = props.theme.colors.statusWarning;
   // Two lines, as workspace rows: the title gets the row's width, and when it is due (with the reminder's note) goes under it.
   return (
@@ -503,9 +509,8 @@ function ReminderRow({ entry, chat, shared }: { entry: AlertEntry; chat: AgentRe
       selected={false}
       showActions
       twoLine
-      disabled={!open}
-      label={open ? `Open the chat for ${entry.title}, reminder ${due}` : `${entry.title}, reminder ${due}`}
-      onPress={() => open?.()}
+      label={`Open the task ${entry.title}, reminder ${due}`}
+      onPress={openTask}
       main={
         <>
           <View style={[styles.slot, { height: 20 }]}>
@@ -532,6 +537,7 @@ function ReminderRow({ entry, chat, shared }: { entry: AlertEntry; chat: AgentRe
       }
       actions={
         <>
+          {chat ? <RowAction icon="MessageSquare" label={`Open the chat for ${entry.title}`} onPress={() => props.navigation.openAgent(chat)} shared={shared} /> : null}
           <RowAction icon="Clock" label={`Remind me about ${entry.title} again in 15 minutes`} onPress={() => shared.later(entry.taskId, 15)} shared={shared} />
           <RowAction icon="Check" label={`Mark the reminder for ${entry.title} done`} onPress={() => shared.done(entry.taskId)} shared={shared} />
         </>
@@ -1238,6 +1244,8 @@ export interface ViewDeps extends PickerDeps {
   updateView(patch: Partial<ViewConfig>): Promise<void>;
   // Opens Settings, Sidebar on the layout in use (the Display menu's "All sidebar settings").
   openSidebarSettings(): void;
+  // Opens Workbench, Tasks with this task's editor.
+  openTask(taskId: string): void;
   // The id of the host whose task document this app edits; null until known.
   taskHost: ValueStore<string | null>;
   // False until the first workspace list arrives, while the view shows loading placeholders.
@@ -1508,6 +1516,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
       picker: deps,
       done,
       later,
+      openTask: deps.openTask,
       shows: rowShows(config),
       infoOf,
       taskHost,

@@ -2,6 +2,12 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.33.0 - 2026-11-16
+
+- **Tap a reminder in the sidebar view to open its task.** A row under Reminders opens Workbench, Tasks with that card's editor (on a phone the drawer closes first). A reminder on a chat this app lists also gets a chat button beside snooze and done. A reload, a host switch or going back does not open the editor again, and a card deleted meanwhile says "That task no longer exists". Opening a task this way leaves Tasks as Workbench's last view.
+- **Fix: opening the Agents view made finished agents blink into Running.** Reading a card's plan made Paseo start each finished agent on screen again, so it showed as Running for a moment and its session was loaded for nothing. The plan is now read while an agent runs or asks a permission, and once more right after it stops; a finished card shows its plan only if it was seen working since the app loaded. Opening a finished agent's details pane still reads its history, so that agent can still blink once, until a Paseo update stops a history read from starting a closed agent.
+- **Remind me popover, tidier:** the note box sits above the times, so a note typed first is saved with the reminder (a note typed after picking a time was lost); "Remind me" shows once; "Custom time…" opens with a chevron instead of a checkbox; the header lines up with the rows.
+
 ## 0.32.1 - 2026-11-15
 
 - **Picture tiles show the whole picture.** Thumbnails and image-stack cards used to fill their frame and crop the rest, so a wide contact sheet or a tall screenshot showed only part of itself; they now fit the whole picture, with the frame's colour around it. Click a tile for the full-size viewer, as before.

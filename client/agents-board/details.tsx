@@ -151,7 +151,7 @@ export function AgentDetails({
   const { agent, indicator } = facts;
   const toast = useToast();
   const history = useHistory(client, agent.id, agent.updatedAt);
-  const live = useCardLive(client, { id: agent.id, updatedAt: agent.updatedAt, running: indicator === "running", archived: !!agent.archivedAt }, { onScreen: true, usage: true, plan: false });
+  const live = useCardLive(client, { id: agent.id, updatedAt: agent.updatedAt, running: indicator === "running", busy: indicator === "running" || agent.pendingPermissions.length > 0, archived: !!agent.archivedAt }, { onScreen: true, usage: true, plan: false });
   const usage = live?.usage ?? null;
   const context = usage?.context ?? agent.context;
   const share = contextShare(context);

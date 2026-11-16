@@ -510,13 +510,14 @@ export function Select<Value extends string>({ t, value, options, onChange, labe
 
 // A row in a menu or option list: icon or dot, label, an optional right-aligned hint, a check.
 // `role` tells screen readers whether the item is an action, an on/off choice or one of a set.
-export function MenuItem({ t, label, hint, icon, dot, checked, onPress, tone, disabled, role = "menuitem" }: { t: Tokens; label: string; hint?: string; icon?: string; dot?: string; checked?: boolean; onPress(): void; tone?: string; disabled?: boolean; role?: "menuitem" | "checkbox" | "radio" }) {
+// `expanded`: the item opens or closes something below it, shown by a chevron.
+export function MenuItem({ t, label, hint, icon, dot, checked, expanded, onPress, tone, disabled, role = "menuitem" }: { t: Tokens; label: string; hint?: string; icon?: string; dot?: string; checked?: boolean; expanded?: boolean; onPress(): void; tone?: string; disabled?: boolean; role?: "menuitem" | "checkbox" | "radio" }) {
   const hover = useHover();
   return (
     <Pressable
       accessibilityRole={role}
       accessibilityLabel={hint ? `${label}, ${hint}` : label}
-      accessibilityState={role === "menuitem" ? (disabled ? { disabled } : undefined) : { checked: checked === true, disabled }}
+      accessibilityState={role === "menuitem" ? (disabled || expanded !== undefined ? { disabled, expanded } : undefined) : { checked: checked === true, disabled }}
       disabled={disabled}
       onPress={onPress}
       onHoverIn={hover.onHoverIn}
@@ -531,6 +532,7 @@ export function MenuItem({ t, label, hint, icon, dot, checked, onPress, tone, di
       {hint ? <Text style={t.text.meta}>{hint}</Text> : null}
       {/* A checkbox item shows its box ticked or empty, so a menu of them reads as "pick several". */}
       {role === "checkbox" ? <Icon name={checked ? "SquareCheck" : "Square"} size={14} color={checked ? t.c.foreground : t.c.foregroundMuted} /> : checked ? <Icon name="Check" size={14} color={t.c.accent} /> : null}
+      {expanded === undefined ? null : <Icon name={expanded ? "ChevronUp" : "ChevronDown"} size={14} color={t.c.foregroundMuted} />}
     </Pressable>
   );
 }

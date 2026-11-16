@@ -160,7 +160,7 @@ function BoardCard({ as, t, client, facts, card, preview, now, selected, focused
     watch.current();
     watch.current = observeOnScreen(node, setOnScreen);
   }, []);
-  const live = useCardLive(client, { id: agent.id, updatedAt: agent.updatedAt, running: indicator === "running", archived: !!agent.archivedAt }, { onScreen, usage: card.context, plan: card.plan });
+  const live = useCardLive(client, { id: agent.id, updatedAt: agent.updatedAt, running: indicator === "running", busy: indicator === "running" || agent.pendingPermissions.length > 0, archived: !!agent.archivedAt }, { onScreen, usage: card.context, plan: card.plan });
   const copy = (what: string, value: string) => {
     setMenuOpen(false);
     void copyText(value).then(() => toast.show(`Copied the ${what}`), (error: unknown) => toast.error(message(error)));

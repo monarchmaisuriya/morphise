@@ -32,6 +32,8 @@ import { type AlertEntry, remindersOf, startReminderAlerts } from "./client/remi
 import { legacyReminders } from "./client/reminders";
 import { createTaskStore, createTaskWriter, tasksOf } from "./client/task-store";
 import type { Announcement, SurfaceDeps } from "./client/task-surfaces";
+import { nextLinkToken, taskLinkParams } from "./client/task-link";
+import { WORKBENCH_SCREEN_ID } from "./client/workbench";
 import { isWindowVisible, showNotification } from "./client/web";
 import { type ProfileDocument, profileSettings } from "./shared/document";
 import type { Profile } from "./shared/profile";
@@ -180,6 +182,7 @@ export default function contribute(client: PluginClientContext) {
     updateView,
     updateChat,
     openSidebarSettings: () => openSettings(EDITOR_SCREEN_ID),
+    openTask: (taskId) => client.openScreen({ screenId: WORKBENCH_SCREEN_ID, params: taskLinkParams(taskId, nextLinkToken()) }),
     reminderSettings: () => profileOf(store.get()).reminders,
   };
   const reconciler = createReconciler(createSections(client, deps, surfaces, switchLayout), (list) => problems.set(list));

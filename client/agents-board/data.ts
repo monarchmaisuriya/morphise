@@ -5,7 +5,7 @@ import { type AgentActionResult, agentActionsAvailable, renameAgent, stopAgent }
 import { latestPlan } from "../../shared/steps";
 
 // What the Agents view reads from Paseo: every agent on the host, archived ones included, while
-// the view is open; each card's usage and plan while it is on screen; and the daemon's Stop and Rename.
+// the view is open; each card's usage while it is on screen, and its plan while it is also busy; and the daemon's Stop and Rename.
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -90,14 +90,23 @@ export interface CardLive {
 
 // Read at most once a minute per agent, and kept across re-sorts and lane changes. A finished
 // agent is read once per change Paseo reports, since its usage cannot move in between.
-const cache = new Map<string, { at: number; updatedAt: string; live: CardLive }>();
+const cache = new Map<string, { at: number; updatedAt: string; busy: boolean; live: CardLive }>();
 const PLAN_TAIL = 50;
 
-async function readLive(client: PluginClientContext, agentId: string, withPlan: boolean): Promise<CardLive> {
+// The plan is read only while an agent is busy (running, or asking a permission now), and once more on the first read
+// after it stopped, for its last steps: Paseo has it loaded then, as it closes agents only on shutdown or when asked.
+// To serve a closed agent's timeline Paseo resumes it, and it shows as running while it does: the Agents view blinked
+// each finished card on screen into Running. Any other read keeps the plan it had.
+// Temporary: remove this gate once Paseo serves a closed agent's history without resuming it (M's Paseo PR, 2026-11-16).
+export function planReadable(busy: boolean, busyAtLastRead: boolean | undefined): boolean {
+  return busy || busyAtLastRead === true;
+}
+
+export async function readCardLive(client: PluginClientContext, agentId: string, wants: { plan: boolean; busy: boolean }, earlier: CardLive["plan"]): Promise<CardLive> {
   const handle = client.paseo.agents.ref(agentId);
   const refreshed = await handle.refresh();
   const usage = readUsage(refreshed?.agent.lastUsage ?? handle.lastUsage);
-  if (!withPlan) return { usage, plan: null };
+  if (!wants.plan || !wants.busy) return { usage, plan: earlier };
   const page = await handle.timeline.refetch({ direction: "tail", limit: PLAN_TAIL });
   const plan = latestPlan(page.entries);
   if (!plan) return { usage, plan: null };
@@ -105,7 +114,7 @@ async function readLive(client: PluginClientContext, agentId: string, withPlan: 
   return { usage, plan: { done: plan.steps.filter((item) => item.status === "completed").length, total: plan.steps.length, step } };
 }
 
-export function useCardLive(client: PluginClientContext | null, agent: { id: string; updatedAt: string; running: boolean; archived: boolean }, options: { onScreen: boolean; usage: boolean; plan: boolean }): CardLive | null {
+export function useCardLive(client: PluginClientContext | null, agent: { id: string; updatedAt: string; running: boolean; busy: boolean; archived: boolean }, options: { onScreen: boolean; usage: boolean; plan: boolean }): CardLive | null {
   const [live, setLive] = useState<CardLive | null>(() => cache.get(agent.id)?.live ?? null);
   const wanted = client !== null && options.onScreen && !agent.archived && (options.usage || options.plan);
   useEffect(() => {
@@ -113,12 +122,15 @@ export function useCardLive(client: PluginClientContext | null, agent: { id: str
     let alive = true;
     const check = () => {
       const cached = cache.get(agent.id);
-      const changed = !cached || cached.updatedAt !== agent.updatedAt || agent.running;
+      // A plan read still owed after the agent stopped counts as a change, even if the details pane read it since.
+      const changed = !cached || cached.updatedAt !== agent.updatedAt || agent.running || (options.plan && cached.busy && !agent.busy);
       if (!changed || !dueForRefresh(cached?.at, Date.now())) return;
-      cache.set(agent.id, { at: Date.now(), updatedAt: agent.updatedAt, live: cached?.live ?? { usage: null, plan: null } });
-      readLive(client, agent.id, options.plan).then(
+      // Only a read that looks at the plan moves the "busy at the last read" mark (the details pane reads no plan).
+      const busy = options.plan ? agent.busy : (cached?.busy ?? agent.busy);
+      cache.set(agent.id, { at: Date.now(), updatedAt: agent.updatedAt, busy, live: cached?.live ?? { usage: null, plan: null } });
+      readCardLive(client, agent.id, { plan: options.plan, busy: planReadable(agent.busy, cached?.busy) }, cached?.live.plan ?? null).then(
         (next) => {
-          cache.set(agent.id, { at: Date.now(), updatedAt: agent.updatedAt, live: next });
+          cache.set(agent.id, { at: Date.now(), updatedAt: agent.updatedAt, busy, live: next });
           if (alive) setLive(next);
         },
         (error: unknown) => console.warn(`[morphise] Could not read ${agent.id}'s usage for the Agents view`, error),
@@ -130,7 +142,7 @@ export function useCardLive(client: PluginClientContext | null, agent: { id: str
       alive = false;
       clearInterval(timer);
     };
-  }, [client, wanted, agent.id, agent.updatedAt, agent.running, options.plan]);
+  }, [client, wanted, agent.id, agent.updatedAt, agent.running, agent.busy, options.plan]);
   return live;
 }
 
@@ -162,3 +174,4 @@ export function useCliActions(client: PluginClientContext): CliActions {
     rename: (agentId, title) => call(() => client.rpc(renameAgent, { agentId, title })),
   };
 }
+

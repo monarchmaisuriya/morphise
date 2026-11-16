@@ -139,12 +139,14 @@ export function ReminderPicker({ deps, target, title, theme, onDone, embedded = 
           </View>
         </View>
       ) : null}
+      {/* Above the times: a tap on a time sets the reminder at once, with the note typed so far. */}
+      <Field t={t} icon="StickyNote" value={note} onChangeText={setNote} maxLength={MAX_NOTE_LENGTH} placeholder="Note for when you come back (optional)" accessibilityLabel="Note" />
       <View>
-        <Text style={[t.text.label, { paddingHorizontal: 8, paddingBottom: 4 }]}>{current ? "Change to" : "Remind me"}</Text>
+        {current ? <Text style={[t.text.label, { paddingHorizontal: 8, paddingBottom: 4 }]}>Change to</Text> : null}
         {choices(settings.presets, now).map((choice) => (
           <MenuItem key={choice.label} t={t} icon="Clock" label={choice.label} hint={clock(choice.at(now), now)} onPress={() => setAt(choice.at(new Date()))} />
         ))}
-        <MenuItem t={t} icon="PencilLine" label="Custom time…" role="checkbox" checked={custom} onPress={() => setCustom(!custom)} />
+        <MenuItem t={t} icon="PencilLine" label="Custom time…" expanded={custom} onPress={() => setCustom(!custom)} />
       </View>
       {custom ? (
         <View style={{ flexDirection: "row", gap: 8, alignItems: "flex-start" }}>
@@ -164,7 +166,6 @@ export function ReminderPicker({ deps, target, title, theme, onDone, embedded = 
           <Button t={t} variant="primary" label="Set" accessibilityLabel="Set reminder" disabled={busy || !preview?.ok} onPress={() => preview?.ok && setAt(preview.at)} />
         </View>
       ) : null}
-      <Field t={t} icon="StickyNote" value={note} onChangeText={setNote} maxLength={MAX_NOTE_LENGTH} placeholder="Note for when you come back (optional)" accessibilityLabel="Note" />
       {error ? <Text style={t.text.danger}>{error}</Text> : null}
     </View>
   );

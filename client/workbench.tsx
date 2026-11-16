@@ -15,6 +15,7 @@ import { useReminderClock } from "./reminder-clock";
 import type { SurfaceDeps } from "./task-surfaces";
 import { tasksOf } from "./task-store";
 import { lendScreenOpener } from "./dispatch";
+import { claimTaskLink, LINK_INSTANCE } from "./task-link";
 import { Icon, type Tokens, useTokens } from "./ui/kit";
 import { StackViewerHost } from "./polish/media/views";
 import { FOCUS_SCOPE, useTooltip } from "./web";
@@ -37,6 +38,9 @@ const RAIL_FROM = 720;
 const RAIL_WIDTH = 176;
 const RAIL_FOLDED = 52;
 
+
+// Task links this copy of the plugin has already opened (see task-link.ts).
+const usedTaskLinks = new Set<string>();
 
 const askedName = (params: PluginScreenProps["params"]) => (typeof params.view === "string" ? params.view : typeof params.tab === "string" ? params.tab : null);
 
@@ -161,11 +165,14 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
     // Each opening asks again, even for the view it asked for last time; counting openings lets a link start Tasks on its
     // list again after the user switched away from it.
     const [openings, setOpenings] = useState(0);
+    // The task a reminder row's link asked to open, until the user picks another view.
+    const [taskToOpen, setTaskToOpen] = useState<string | null>(null);
     useEffect(() => {
       if (!asked) return;
       setView(asked);
       setTasksStart(startOf(askedName(params)));
       setOpenings((count) => count + 1);
+      setTaskToOpen(claimTaskLink(params, LINK_INSTANCE, usedTaskLinks));
     }, [asked, params]);
     const [width, setWidth] = useState(0);
     const railSettings = useSettings(workbenchSettings);
@@ -195,6 +202,7 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
     const pick = (next: WorkbenchView) => {
       setView(next);
       if (next === "board") setTasksStart("board");
+      setTaskToOpen(null);
     };
     // A view the user reached (a press, a link, an old screen's address) is the one the next opening returns to. One the
     // opening chose for what needs the user is not, so it does not replace the view used last.
@@ -220,7 +228,7 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
       ) : view === "board" ? (
         // Today or Archived shows when a link asked for it, or Today when the Workbench opened for what is due; Filter
         // changes it after.
-        <TasksBoard key={`board:${tasksStart}:${openings}`} deps={deps} theme={theme} compact={layout.compact} workspaceId={null} initialTab={tasksStart} openChat={openChat} />
+        <TasksBoard key={`board:${tasksStart}:${openings}`} deps={deps} theme={theme} compact={layout.compact} workspaceId={null} initialTab={tasksStart} openChat={openChat} initialTask={taskToOpen} />
       ) : null;
 
     return (
