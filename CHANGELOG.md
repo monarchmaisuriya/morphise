@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.36.3 - 2026-11-17
+
+- **Skills and MCP list** in the Stats popover and panel: its rows sit in a card like the tiles above, so names, times and counts line up with the tile text instead of the section's edges.
+
 ## 0.36.2 - 2026-11-17
 
 - **Cache-hit bar:** in the Stats popover and panel it is now a short bar at the end of the Usage title, in line with the tiles below, instead of a full-width line under it. Still green from 80%, amber from 50%, red below.

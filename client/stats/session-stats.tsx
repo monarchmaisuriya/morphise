@@ -124,6 +124,8 @@ function ToolList({ t, tools }: { t: Tokens; tools: ChatTools }) {
   return (
     <View style={{ gap: 6 }}>
       <Segmented t={t} label="Show skills or MCP tools" value={kind} onChange={(next) => (setKind(next), setAll(false))} options={[{ value: "skills", label: `Skills ${tools.skills.length}` }, { value: "mcp", label: `MCP ${tools.mcp.length}` }]} />
+      {/* In a card like the tiles above, so its text lines up with theirs. */}
+      <View style={{ gap: 6, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8, backgroundColor: t.c.surface1 }}>
       {list.length ? (
         (all ? list : list.slice(0, LIST_SHOWN)).map((use) => {
           const ago = formatElapsed(new Date(use.lastAt).toISOString(), now);
@@ -141,12 +143,13 @@ function ToolList({ t, tools }: { t: Tokens; tools: ChatTools }) {
       ) : (
         <Text style={[t.text.small, { color: t.c.foregroundMuted }]}>{kind === "skills" ? "No skills used in this chat." : "No MCP tools used in this chat."}</Text>
       )}
+      </View>
       {list.length > LIST_SHOWN ? <Button t={t} variant="ghost" label={all ? "Show less" : `Show ${list.length - LIST_SHOWN} more`} onPress={() => setAll(!all)} /> : null}
     </View>
   );
 }
 
-// Every reading as tiles under Activity, Tools and Usage, with the cache hit as a bar; or why there is no reading.
+// Every reading as tiles under Activity, Tools and Usage, with the cache hit as a short bar in the Usage title; or why there is no reading.
 export function StatsTiles({ t, result }: { t: Tokens; result: StatsReadResult | null }) {
   if (!result) return <Text style={t.text.small}>Reading the chat's log…</Text>;
   if (result.status === "error") return <Text style={[t.text.small, { color: t.c.statusDanger }]}>This chat's log could not be read: {result.error}</Text>;
