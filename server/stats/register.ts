@@ -52,7 +52,7 @@ export function createStatsHandlers(reader: SessionReader, searchLimits: SearchL
         const log = await findLog(agentId, paseo);
         if (log.kind === "unavailable") return { status: "unavailable", reason: log.reason };
         const read = await reader.read(log.provider, log.sessionId, log.cwd);
-        return read.kind === "ready" ? { status: "ready", provider: read.provider, partial: read.partial, stats: read.stats } : { status: "unavailable", reason: read.reason };
+        return read.kind === "ready" ? { status: "ready", provider: read.provider, partial: read.partial, stats: read.stats, tools: read.tools } : { status: "unavailable", reason: read.reason };
       } catch (error) {
         return { status: "error", error: error instanceof Error ? error.message : String(error) };
       }

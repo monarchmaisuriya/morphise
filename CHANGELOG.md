@@ -2,6 +2,19 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.36.0 - 2026-11-17
+
+The features of the Paseo plugin Activity (koinzhang), rebuilt in Morphise (credit and licence in NOTICE.md). Activity reads Paseo's timelines; Morphise reads each chat's own Claude Code or Codex log instead, so no finished agent is woken.
+
+- **Activity tab** in the Workbench (Settings, General, Activity; on by default): KPI tiles (sessions, prompts, top provider, top model) with the change on the week before, a 52-week heatmap, agents created over 30 days by provider, the last 168 hours, provider and project rankings, eight insights, and the most used skills, MCP tools and models. Filters for provider and workspace. Local days and hours follow your time zone, including half-hour offsets.
+- **Terminals** on the Activity tab when a workspace is picked: its open terminals, the last lines of each, and Close, which asks first because it kills the terminal's process.
+- **Tools in Session stats:** the Stats popover, the Stats panel and the Agents details pane count the chat's prompts, skill calls, MCP calls (and failures), shell calls, file reads and writes, and tools explored, with a Skills and MCP list. Prompts the user did not type (task notifications, history summaries, Paseo's system notes, interruptions) are not counted.
+- **Priority dots:** priorities are now filled dots (Urgent red, High amber, Medium blue), a hollow ring for Low and a dashed ring for none, on cards, list rows and the task editor.
+- **Cache-hit bar** in Stats is thinner and coloured by value: green from 80%, amber from 50%, red below.
+- **Open buttons** for a workspace use a square arrow instead of the tilted one (task editor, Agents cards and rows, Dispatch).
+- **Credits** in Settings, General now list Project Groups, Harness Stats and Activity too.
+- **Going back to 0.35:** a Workbench last left on Activity opens on Agents; the Activity setting and its index file are ignored.
+
 ## 0.35.1 - 2026-11-17
 
 - **Session stats move to the top bar:** the two pills by the message box become one Stats button in each workspace's top bar, beside Remind me. It shows the open chat's total tokens and cache hit, and its popover holds everything: the chat's name, a picker when the workspace has several chats, the activity and usage readings as tiles, a cache-hit bar, and Open panel. The Stats panel uses the same tiles. The button follows the chat open in Morphise's sidebar view, else the workspace's first open chat.

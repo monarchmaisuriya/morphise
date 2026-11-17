@@ -1,3 +1,4 @@
+import type { ChatTools } from "./activity";
 import { cacheHitShare, outputSpeed, type SessionCounters, type StatsReadResult, timeToFirstToken, totalTokens, uncachedInput } from "./stats";
 
 // How the session stats read in the pills, popovers, panel and details pane. A reading the log cannot give is "-".
@@ -51,6 +52,19 @@ export function usageRows(stats: SessionCounters): Row[] {
   ];
 }
 
+// What the chat did with tools (Activity by koinzhang, MIT, see NOTICE.md): counts from its log.
+export function toolsRows(tools: ChatTools): Row[] {
+  return [
+    ["Prompts", String(tools.prompts)],
+    ["Skills", String(tools.skillCalls)],
+    ["MCP", tools.mcpFailures ? `${tools.mcpCalls} (${tools.mcpFailures} failed)` : String(tools.mcpCalls)],
+    ["Shell", String(tools.shellCalls)],
+    ["File reads", String(tools.fileReads)],
+    ["File writes", String(tools.fileWrites)],
+    ["Tools explored", String(tools.toolsExplored)],
+  ];
+}
+
 // What a pill says: the reading at a glance, or why there is none.
 export function pillLabel(kind: "activity" | "usage", result: StatsReadResult | null): string {
   if (!result) return "…";
@@ -77,4 +91,9 @@ export function agentIdFromTab(testId: string | null | undefined): string | null
 export function headerLabel(result: StatsReadResult | null): string {
   if (!result || result.status !== "ready") return "Stats";
   return `${formatTokens(totalTokens(result.stats))} · ${formatShare(cacheHitShare(result.stats))}`;
+}
+
+// How the cache hit reads: most input from the cache is good, half or more is fair, less is poor (paying for new input).
+export function cacheHitTone(share: number): "good" | "fair" | "poor" {
+  return share >= 0.8 ? "good" : share >= 0.5 ? "fair" : "poor";
 }

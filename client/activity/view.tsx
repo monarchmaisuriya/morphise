@@ -1,0 +1,394 @@
+// The Workbench's Activity tab: how agents were used, counted from their own logs on the daemon (`morphise.activity.
+// summary`): KPI tiles with the change on the week before, a daily heatmap, agent creations, the last 168 hours,
+// provider and project rankings, insights, the top skills, MCP tools and models, and a workspace's open terminals.
+// Sections and metrics after Activity by koinzhang (koinzhang/paseo-plugins, activity/, MIT, see NOTICE.md):
+// client/global-surface.tsx, client/ranking-bars.tsx and client/workspace/terminals-section.tsx at 83a1c90.
+import type { PluginTheme } from "@getpaseo/plugin";
+import type { PluginClientContext } from "@getpaseo/plugin/client";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { Pressable, ScrollView, Text, View } from "react-native";
+import { ACTIVITY_METRICS, type ActivityMetric, type ActivitySummary, activitySummary } from "../../shared/activity";
+import { tileColor, withAlpha } from "../ui/hues";
+import { Button, Icon, PopoverHost, Segmented, Select, type Tokens, useTokens } from "../ui/kit";
+import type { WorkspaceList } from "../workspaces";
+import { Terminals } from "./terminals";
+
+const INDEXING_POLL_MS = 3000;
+const POLL_MS = 15_000;
+const WIDE = 900;
+const METRIC_LABELS: Record<ActivityMetric, string> = { sessions: "Sessions", prompts: "Prompts", skills: "Skills", mcp: "MCP" };
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const ALL = "all";
+
+// `stale`: why the last refresh failed, while the summary before it stays on screen.
+type Load = { status: "loading" } | { status: "error"; error: string } | { status: "ready"; summary: ActivitySummary; stale: string | null };
+
+// The summary for the filters, asked for again every 3 s while the daemon is still indexing, then every 15 s.
+function useActivity(client: PluginClientContext, provider: string | null, workspaceId: string | null, attempt: number): Load {
+  const [load, setLoad] = useState<Load>({ status: "loading" });
+  useEffect(() => {
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const ask = () => {
+      client
+        .rpc(activitySummary, { provider, workspaceId, tzOffsetMinutes: -new Date().getTimezoneOffset() })
+        .then(
+          (summary) => {
+            if (!alive) return;
+            setLoad({ status: "ready", summary, stale: null });
+            const indexing = summary.indexing.done + summary.indexing.errors < summary.indexing.total;
+            timer = setTimeout(ask, indexing ? INDEXING_POLL_MS : POLL_MS);
+          },
+          (error: unknown) => {
+            if (!alive) return;
+            const reason = error instanceof Error ? error.message : String(error);
+            setLoad((current) => (current.status === "ready" ? { ...current, stale: reason } : { status: "error", error: reason }));
+            timer = setTimeout(ask, POLL_MS);
+          },
+        );
+    };
+    ask();
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [client, provider, workspaceId, attempt]);
+  return load;
+}
+
+const localParts = (utcMs: number) => new Date(utcMs - new Date(utcMs).getTimezoneOffset() * 60_000);
+const hourLabel = (utcMs: number) => {
+  const local = localParts(utcMs);
+  return `${WEEKDAYS[local.getUTCDay()]} ${String(local.getUTCHours()).padStart(2, "0")}:00`;
+};
+const dayDate = (day: string) => new Date(`${day}T00:00:00Z`);
+
+// `side`: one of two cards side by side, which share the row's width.
+function Card({ t, title, icon, right, side = false, children }: { t: Tokens; title: string; icon: string; right?: ReactNode; side?: boolean; children: ReactNode }) {
+  return (
+    <View style={{ gap: 10, padding: 14, borderRadius: t.radius.card, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface0, ...(side ? { flex: 1, minWidth: 0 } : null) }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, minHeight: 24 }}>
+        <Icon name={icon} size={14} color={t.c.foregroundMuted} />
+        <Text style={[t.text.heading, { flex: 1 }]} numberOfLines={1}>
+          {title}
+        </Text>
+        {right}
+      </View>
+      {children}
+    </View>
+  );
+}
+
+function MetricPicker({ t, value, onChange, label }: { t: Tokens; value: ActivityMetric; onChange(value: ActivityMetric): void; label: string }) {
+  return <Segmented t={t} label={label} value={value} onChange={onChange} options={ACTIVITY_METRICS.map((metric) => ({ value: metric, label: METRIC_LABELS[metric] }))} />;
+}
+
+function Kpis({ t, summary }: { t: Tokens; summary: ActivitySummary }) {
+  return (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+      {summary.kpis.map((kpi) => {
+        const tone = kpi.change === null || kpi.change === 0 ? t.c.foregroundMuted : kpi.change > 0 ? t.c.statusSuccess : t.c.statusDanger;
+        return (
+          <View key={kpi.label} style={{ flexGrow: 1, flexBasis: 150, padding: 12, gap: 4, borderRadius: t.radius.card, backgroundColor: t.c.surface1 }}>
+            <Text style={t.text.meta}>{kpi.label}</Text>
+            <Text style={{ color: t.c.foreground, fontSize: 20, fontWeight: "600", fontVariant: ["tabular-nums"] }} numberOfLines={1}>
+              {kpi.value}
+            </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              {kpi.change !== null ? (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+                  <Icon name={kpi.change > 0 ? "TrendingUp" : kpi.change < 0 ? "TrendingDown" : "Minus"} size={12} color={tone} />
+                  <Text style={[t.text.small, { color: tone, fontVariant: ["tabular-nums"] }]}>{`${kpi.change > 0 ? "+" : ""}${kpi.change}%`}</Text>
+                </View>
+              ) : null}
+              <Text style={t.text.small} numberOfLines={1}>
+                {kpi.detail ?? ""}
+                {kpi.change !== null ? " vs the week before" : ""}
+              </Text>
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+// 52 weeks as columns of 7 days, Sunday on top; four strengths of the accent by the day's share of the busiest day.
+function Heatmap({ t, summary }: { t: Tokens; summary: ActivitySummary }) {
+  const scroll = useRef<ScrollView>(null);
+  const { cells, firstDay } = summary.heatmap;
+  const max = Math.max(1, ...cells);
+  const start = dayDate(firstDay).getTime();
+  const weeks = Math.ceil(cells.length / 7);
+  const cell = 11;
+  const gap = 3;
+  const shade = (value: number) => {
+    if (value <= 0) return t.c.surface2;
+    const level = Math.min(4, Math.max(1, Math.ceil(Math.sqrt(value / max) * 4)));
+    return withAlpha(t.c.accent, [0.3, 0.5, 0.75, 1][level - 1]) ?? t.c.accent;
+  };
+  const months = Array.from({ length: weeks }, (_, week) => {
+    const date = new Date(start + week * 7 * 86_400_000);
+    // The first column is usually mid-month; its label would be cut off by the next one.
+    return week > 0 && date.getUTCDate() <= 7 ? MONTHS[date.getUTCMonth()] : "";
+  });
+  return (
+    <ScrollView ref={scroll} horizontal showsHorizontalScrollIndicator={false} onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: false })}>
+      <View style={{ gap: 4 }}>
+        <View style={{ flexDirection: "row", gap }}>
+          {months.map((month, week) => (
+            <Text key={week} style={[t.text.small, { width: cell, overflow: "visible" }]} numberOfLines={1}>
+              {month}
+            </Text>
+          ))}
+        </View>
+        <View style={{ flexDirection: "row", gap }}>
+          {Array.from({ length: weeks }, (_, week) => (
+            <View key={week} style={{ gap }}>
+              {Array.from({ length: 7 }, (_, weekday) => {
+                const index = week * 7 + weekday;
+                if (index >= cells.length) return <View key={weekday} style={{ width: cell, height: cell }} />;
+                const day = new Date(start + index * 86_400_000).toISOString().slice(0, 10);
+                return <View key={weekday} accessibilityLabel={`${day}: ${cells[index]}`} style={{ width: cell, height: cell, borderRadius: 2, backgroundColor: shade(cells[index]) }} />;
+              })}
+            </View>
+          ))}
+        </View>
+      </View>
+    </ScrollView>
+  );
+}
+
+function Legend({ t, keys }: { t: Tokens; keys: readonly string[] }) {
+  return (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+      {keys.map((key) => (
+        <View key={key} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+          <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: tileColor(key) }} />
+          <Text style={t.text.small}>{key}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+// Agents created per day over 30 days, stacked by provider.
+function Creations({ t, summary }: { t: Tokens; summary: ActivitySummary }) {
+  const providers = [...new Set(summary.creations.flatMap((day) => Object.keys(day.byProvider)))].sort();
+  const max = Math.max(1, ...summary.creations.map((day) => Object.values(day.byProvider).reduce((a, b) => a + b, 0)));
+  const height = 90;
+  return (
+    <View style={{ gap: 8 }}>
+      <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 2, height }}>
+        {summary.creations.map((day) => {
+          const total = Object.values(day.byProvider).reduce((a, b) => a + b, 0);
+          return (
+            <View key={day.day} accessibilityLabel={`${day.day}: ${total} created`} style={{ flex: 1, height: Math.max(2, (total / max) * height), justifyContent: "flex-end", borderRadius: 2, overflow: "hidden", backgroundColor: total ? undefined : t.c.surface2 }}>
+              {providers.map((provider) => (day.byProvider[provider] ? <View key={provider} style={{ height: `${(day.byProvider[provider] / total) * 100}%`, backgroundColor: tileColor(provider) }} /> : null))}
+            </View>
+          );
+        })}
+      </View>
+      <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+        <Text style={t.text.small}>{summary.creations[0]?.day.slice(5)}</Text>
+        <Text style={t.text.small}>Today</Text>
+      </View>
+      {providers.length ? <Legend t={t} keys={providers} /> : <Text style={t.text.small}>No agents created in the last 30 days.</Text>}
+    </View>
+  );
+}
+
+// The last 168 hours as bars of one metric; pressing a bar shows all four for that hour.
+function Hours({ t, summary }: { t: Tokens; summary: ActivitySummary }) {
+  const [metric, setMetric] = useState<ActivityMetric>("prompts");
+  const [picked, setPicked] = useState<number | null>(null);
+  const scroll = useRef<ScrollView>(null);
+  const max = Math.max(1, ...summary.hourly.map((hour) => hour.values[metric]));
+  const shown = summary.hourly[picked ?? summary.hourly.length - 1];
+  const height = 80;
+  return (
+    <View style={{ gap: 8 }}>
+      <MetricPicker t={t} value={metric} onChange={setMetric} label="Metric for the last 168 hours" />
+      {shown ? (
+        <Text style={[t.text.meta, { fontVariant: ["tabular-nums"] }]} numberOfLines={1}>
+          {`${hourLabel(shown.hour)}: ${shown.values.sessions} sessions · ${shown.values.prompts} prompts · ${shown.values.skills} skills · ${shown.values.mcp} MCP`}
+        </Text>
+      ) : null}
+      <ScrollView ref={scroll} horizontal showsHorizontalScrollIndicator={false} onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: false })}>
+        <View style={{ gap: 4 }}>
+          <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 1, height }}>
+            {summary.hourly.map((hour, index) => (
+              <Pressable key={hour.hour} accessibilityRole="button" accessibilityLabel={`${hourLabel(hour.hour)}: ${hour.values[metric]} ${METRIC_LABELS[metric].toLowerCase()}`} onPress={() => setPicked(index)} style={{ width: 4, height, justifyContent: "flex-end" }}>
+                <View style={{ height: Math.max(1, (hour.values[metric] / max) * height), borderRadius: 1, backgroundColor: index === (picked ?? summary.hourly.length - 1) ? t.c.foreground : hour.values[metric] ? t.c.accent : t.c.surface2 }} />
+              </Pressable>
+            ))}
+          </View>
+          {/* Day names at each local midnight, placed over the bars' row so they are not cut to the bar's width. */}
+          <View style={{ height: 14 }}>
+            {summary.hourly.map((hour, index) => {
+              const local = localParts(hour.hour);
+              return local.getUTCHours() === 0 ? (
+                <Text key={hour.hour} style={[t.text.small, { position: "absolute", left: index * 5, width: 40 }]} numberOfLines={1}>
+                  {WEEKDAYS[local.getUTCDay()]}
+                </Text>
+              ) : null;
+            })}
+          </View>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+const SHOWN_ROWS = 5;
+
+function Ranking({ t, title, icon, rows, side }: { t: Tokens; title: string; icon: string; rows: ActivitySummary["rankings"]["providers"]; side: boolean }) {
+  const [metric, setMetric] = useState<ActivityMetric>("sessions");
+  const [all, setAll] = useState(false);
+  const sorted = rows.filter((row) => row.values[metric] > 0).sort((a, b) => b.values[metric] - a.values[metric] || a.label.localeCompare(b.label));
+  const max = Math.max(1, ...sorted.map((row) => row.values[metric]));
+  return (
+    <Card t={t} title={title} icon={icon} side={side}>
+      <MetricPicker t={t} value={metric} onChange={setMetric} label={`Metric for ${title}`} />
+      {sorted.length ? null : <Text style={t.text.small}>Nothing counted yet.</Text>}
+      {(all ? sorted : sorted.slice(0, SHOWN_ROWS)).map((row) => (
+        <View key={row.key} style={{ gap: 3 }}>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <Text style={[t.text.body, { flex: 1 }]} numberOfLines={1}>
+              {row.label}
+            </Text>
+            <Text style={[t.text.body, { fontVariant: ["tabular-nums"] }]}>{row.values[metric]}</Text>
+          </View>
+          <View style={{ height: 4, borderRadius: 2, backgroundColor: t.c.surface2, overflow: "hidden" }}>
+            <View style={{ width: `${(row.values[metric] / max) * 100}%`, height: 4, backgroundColor: tileColor(row.key) }} />
+          </View>
+        </View>
+      ))}
+      {sorted.length > SHOWN_ROWS ? <Button t={t} variant="ghost" label={all ? "Show less" : `Show ${sorted.length - SHOWN_ROWS} more`} onPress={() => setAll(!all)} /> : null}
+    </Card>
+  );
+}
+
+function Insights({ t, summary, side }: { t: Tokens; summary: ActivitySummary; side: boolean }) {
+  return (
+    <Card t={t} title="Insights" icon="Lightbulb" side={side}>
+      {summary.insights.map((row) => (
+        <View key={row.label} style={{ flexDirection: "row", gap: 8 }}>
+          <Text style={[t.text.body, { flex: 1, color: t.c.foregroundMuted }]}>{row.label}</Text>
+          <Text style={[t.text.body, { fontVariant: ["tabular-nums"] }]} numberOfLines={1}>
+            {row.value}
+          </Text>
+        </View>
+      ))}
+    </Card>
+  );
+}
+
+function TopLists({ t, summary, side }: { t: Tokens; summary: ActivitySummary; side: boolean }) {
+  const [kind, setKind] = useState<"skills" | "mcp" | "models">("skills");
+  const rows = summary.top[kind];
+  return (
+    <Card t={t} title="Most used" icon="ListOrdered" side={side}>
+      <Segmented<"skills" | "mcp" | "models"> t={t} label="Show skills, MCP tools or models" value={kind} onChange={setKind} options={[{ value: "skills", label: "Skills" }, { value: "mcp", label: "MCP tools" }, { value: "models", label: "Models" }]} />
+      {rows.length ? null : <Text style={t.text.small}>{kind === "skills" ? "No skills used yet." : kind === "mcp" ? "No MCP tools used yet." : "No prompts counted yet."}</Text>}
+      {rows.map((row, index) => (
+        <View key={row.name} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Text style={[t.text.small, { width: 16, textAlign: "right" }]}>{index + 1}</Text>
+          <Text style={[t.text.body, { flex: 1 }]} numberOfLines={1} ellipsizeMode="middle">
+            {row.name}
+          </Text>
+          {row.detail && row.detail !== "prompts" ? <Text style={[t.text.small, { color: t.c.statusDanger }]}>{row.detail}</Text> : null}
+          <Text style={[t.text.body, { fontVariant: ["tabular-nums"] }]}>{row.count}</Text>
+        </View>
+      ))}
+    </Card>
+  );
+}
+
+export function ActivityView({ client, theme, compact, workspaces }: { client: PluginClientContext; theme: PluginTheme; compact: boolean; workspaces: WorkspaceList }) {
+  const t = useTokens(theme, compact);
+  const [provider, setProvider] = useState<string>(ALL);
+  const [workspaceId, setWorkspaceId] = useState<string>(ALL);
+  const [attempt, setAttempt] = useState(0);
+  const [width, setWidth] = useState(0);
+  const load = useActivity(client, provider === ALL ? null : provider, workspaceId === ALL ? null : workspaceId, attempt);
+  const workspaceOptions = useMemo(
+    () => [
+      { value: ALL, label: "All workspaces" },
+      ...[...workspaces.values()]
+        .filter((workspace) => !workspace.background)
+        .sort((a, b) => a.project.localeCompare(b.project) || a.name.localeCompare(b.name))
+        .map((workspace) => ({ value: workspace.id, label: `${workspace.project} · ${workspace.name}` })),
+    ],
+    [workspaces],
+  );
+  const summary = load.status === "ready" ? load.summary : null;
+  const providerOptions = [{ value: ALL, label: "All providers" }, ...(summary?.providers ?? (provider === ALL ? [] : [provider])).map((name) => ({ value: name, label: name }))];
+  const wide = width >= WIDE;
+  const indexing = summary ? summary.indexing.done + summary.indexing.errors < summary.indexing.total : false;
+
+  return (
+    <PopoverHost>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: compact ? 12 : 20, gap: 12 }} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+          <View style={{ width: compact ? "100%" : 200 }}>
+            <Select t={t} label="Provider" value={provider} options={providerOptions} onChange={setProvider} />
+          </View>
+          <View style={{ width: compact ? "100%" : 280 }}>
+            <Select t={t} label="Workspace" value={workspaceId} options={workspaceOptions} onChange={setWorkspaceId} />
+          </View>
+          <View style={{ flex: 1 }} />
+          {load.status === "ready" && load.stale ? (
+            <Text style={t.text.danger} numberOfLines={2}>
+              Couldn't refresh: {load.stale}
+            </Text>
+          ) : null}
+          {summary && (indexing || summary.indexing.errors) ? (
+            <Text style={t.text.meta}>
+              {indexing ? `Indexing ${summary.indexing.done} of ${summary.indexing.total} chats` : ""}
+              {summary.indexing.errors ? `${indexing ? " · " : ""}${summary.indexing.errors} unreadable` : ""}
+            </Text>
+          ) : null}
+        </View>
+        {load.status === "loading" ? <Text style={t.text.meta}>Reading activity…</Text> : null}
+        {load.status === "error" ? (
+          <View style={{ gap: 8, alignItems: "flex-start" }}>
+            <Text style={t.text.danger}>Activity could not be read: {load.error}</Text>
+            <Button t={t} variant="ghost" icon="RotateCcw" label="Try again" onPress={() => setAttempt((count) => count + 1)} />
+          </View>
+        ) : null}
+        {summary ? (
+          summary.kpis[0].value === "0" && summary.rankings.providers.length === 0 ? (
+            <Text style={t.text.meta}>No activity yet. Activity counts Claude Code and Codex chats from their own logs.</Text>
+          ) : (
+            <>
+              <Kpis t={t} summary={summary} />
+              <Card t={t} title="Daily activity" icon="CalendarDays" right={<Text style={t.text.small}>prompts, skills, MCP and new agents per day</Text>}>
+                <Heatmap t={t} summary={summary} />
+              </Card>
+              <View style={{ flexDirection: wide ? "row" : "column", gap: 12 }}>
+                <Card t={t} title="Agents created" icon="Bot" side={wide} right={<Text style={t.text.small}>last 30 days</Text>}>
+                  <Creations t={t} summary={summary} />
+                </Card>
+                <Card t={t} title="Last 168 hours" icon="Clock" side={wide}>
+                  <Hours t={t} summary={summary} />
+                </Card>
+              </View>
+              <View style={{ flexDirection: wide ? "row" : "column", gap: 12 }}>
+                <Ranking t={t} title="Providers" icon="Cpu" rows={summary.rankings.providers} side={wide} />
+                <Ranking t={t} title="Projects" icon="Folder" rows={summary.rankings.projects} side={wide} />
+              </View>
+              <View style={{ flexDirection: wide ? "row" : "column", gap: 12 }}>
+                <Insights t={t} summary={summary} side={wide} />
+                <TopLists t={t} summary={summary} side={wide} />
+              </View>
+            </>
+          )
+        ) : null}
+        {workspaceId !== ALL ? <Terminals client={client} t={t} workspaceId={workspaceId} /> : null}
+        <Text style={t.text.small}>Counted from Claude Code and Codex logs on the daemon's computer. Other providers' chats count as sessions only. Tool calls inside sub-agents are not counted.</Text>
+      </ScrollView>
+    </PopoverHost>
+  );
+}

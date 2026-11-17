@@ -1,5 +1,6 @@
 import { useSettings } from "@getpaseo/plugin/client";
 import { statsSettings } from "../../shared/stats";
+import { activitySettings } from "../../shared/activity";
 import { showEnabled, showSettings } from "../../shared/show";
 import { SettingsAction, SettingsCard, SettingsSection, TextInput } from "@getpaseo/plugin/client/ui";
 import { type ReactNode, useMemo, useState } from "react";
@@ -875,6 +876,7 @@ export function GeneralTab(form: Form): ReactNode {
         <SettingsCard>{VIEW_SECTIONS.steps.map((key) => view[key])}</SettingsCard>
       </SettingsSection>
       <WorkbenchLayouts />
+      <ActivityTabSetting />
       <UpdateSection form={form} />
       <CreditsSection form={form} />
     </>
@@ -887,6 +889,9 @@ const CREDITS: readonly { name: string; author: string; uses: string }[] = [
   { name: "Shell Yeah", author: "Steve Castaneda", uses: "the command runner behind /run and the Run buttons" },
   { name: "Quote", author: "Chechulin Serhii", uses: "the bar over selected text" },
   { name: "Better Paseo", author: "ABorakati", uses: "the Agents view and generated titles" },
+  { name: "Project Groups", author: "topar12", uses: "your own groups of projects in the sidebar" },
+  { name: "Harness Stats", author: "kogekiplay", uses: "session stats from each chat's log" },
+  { name: "Activity", author: "koinzhang", uses: "the Activity tab and the Tools counts in Stats" },
 ];
 
 function CreditsSection({ form }: { form: Form }) {
@@ -930,10 +935,44 @@ function SessionStatsSetting() {
     });
   };
   return (
-    <SettingsSection title="Session stats" info="Turns, model steps, model and tool time, time to first token, output speed, tokens and cache hit for each Claude Code or Codex chat, read from the chat's own log on the daemon's computer (counts only; nothing is stored or sent). Times come from the log's timestamps, so they are estimates.">
+    <SettingsSection title="Session stats" info="Turns, model steps, model and tool time, time to first token, output speed, tokens, cache hit, and the tools used (prompts, skills, MCP, shell, file reads and writes) for each Claude Code or Codex chat, read from the chat's own log on the daemon's computer (counts only; nothing is stored or sent). Times come from the log's timestamps, so they are estimates.">
       <SettingsCard>
-        <SwitchField label="Show session stats" hint="Two pills by each chat's message box, the Stats panel, and Session in the Agents view's details." value={stored.values.enabled} onChange={(enabled) => set({ enabled })} error={failed} />
+        <SwitchField label="Show session stats" hint="The Stats button in each workspace's top bar, the Stats panel, and Session in the Agents view's details." value={stored.values.enabled} onChange={(enabled) => set({ enabled })} error={failed} />
         <SwitchField label="Strip under the message box (desktop and web)" hint="The same readings in a line under the message box. It reads Paseo's page, so a Paseo update can hide it." value={stored.values.desktopStrip} onChange={(desktopStrip) => set({ desktopStrip })} />
+      </SettingsCard>
+    </SettingsSection>
+  );
+}
+
+// The Activity tab in the Workbench (its own host-wide document, so older Morphise versions ignore it); missing means on.
+function ActivityTabSetting() {
+  const stored = useSettings(activitySettings);
+  const [failed, setFailed] = useState<string | null>(null);
+  if (stored.status === "invalid" || stored.status === "error") {
+    return (
+      <SettingsSection title="Activity">
+        <SettingsCard>
+          <SwitchField label="Show the Activity tab" hint={`Couldn't read this setting (${stored.error}). Switch to reset it.`} value={false} onChange={() => void (stored.status === "invalid" ? stored.reset() : stored.reload())} />
+        </SettingsCard>
+      </SettingsSection>
+    );
+  }
+  if (stored.status !== "ready") return null;
+  return (
+    <SettingsSection title="Activity" info="A Workbench tab with how agents were used: sessions, prompts, skills, MCP tools and models over time, by provider and project. It counts Claude Code and Codex chats from their own logs on the daemon's computer and keeps the counts (numbers and tool names, no conversation text) in Paseo's plugin cache. Tool calls inside sub-agents are not counted.">
+      <SettingsCard>
+        <SwitchField
+          label="Show the Activity tab"
+          hint="In the Workbench, after Bookmarks."
+          value={stored.values.enabled}
+          onChange={(enabled) => {
+            setFailed(null);
+            void stored.save({ ...stored.values, enabled }, stored.revision).then((ok) => {
+              if (!ok) setFailed(stored.saveError ?? "Another app saved this setting at the same moment; try again");
+            });
+          }}
+          error={failed}
+        />
       </SettingsCard>
     </SettingsSection>
   );

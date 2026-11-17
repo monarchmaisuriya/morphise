@@ -104,7 +104,7 @@ function SessionStats({ t, client, agentId }: { t: Tokens; client: PluginClientC
   if (!enabled) return null;
   return (
     <Section t={t} title="Session">
-      <StatsRows t={t} result={result} kinds={["activity", "usage"]} />
+      <StatsRows t={t} result={result} kinds={["activity", "tools", "usage"]} />
     </Section>
   );
 }

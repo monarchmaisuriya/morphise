@@ -246,7 +246,7 @@ function otherButtons(t: Tokens, title: string, buttons: CardButtons) {
       {buttons.stop ? <StopButton t={t} title={title} disabled={buttons.busy} onStop={buttons.stop} /> : null}
       {buttons.clear ? <IconButton t={t} size="sm" icon="CheckCheck" label={`Clear ${title}, to Done`} disabled={buttons.clearing} onPress={buttons.clear} /> : null}
       {buttons.archive ? <IconButton t={t} size="sm" icon="Archive" label={`Archive ${title}`} disabled={buttons.busy} onPress={buttons.archive} /> : null}
-      {buttons.open ? <IconButton t={t} size="sm" icon="ArrowUpRight" label={`Open ${title}`} onPress={buttons.open} /> : null}
+      {buttons.open ? <IconButton t={t} size="sm" icon="SquareArrowRight" label={`Open ${title}`} onPress={buttons.open} /> : null}
     </>
   );
 }

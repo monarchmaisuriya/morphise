@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { chatTools } from "./activity";
+const NO_TOOLS = chatTools({ slots: {}, skills: {}, mcp: {}, coding: false });
 import { cacheHitShare, emptyCounters, outputSpeed, statsRead, statsSettings, timeToFirstToken, totalTokens, uncachedInput } from "./stats";
 
 const counters = (patch: Partial<ReturnType<typeof emptyCounters>> = {}) => ({ ...emptyCounters(), ...patch });
@@ -39,7 +41,7 @@ describe("stats contracts", () => {
   });
 
   it("answer with numbers only: a ready read carries no string beyond the status and provider", () => {
-    const ready = { status: "ready", provider: "claude", partial: false, stats: counters({ turns: 1 }) };
+    const ready = { status: "ready", provider: "claude", partial: false, tools: NO_TOOLS, stats: counters({ turns: 1 }) };
     expect(statsRead.output.parse(ready)).toEqual(ready);
     expect(() => statsRead.output.parse({ ...ready, stats: { ...ready.stats, text: "hello" } })).not.toThrow();
     expect(statsRead.output.parse({ ...ready, stats: { ...ready.stats, text: "hello" } })).toEqual(ready);

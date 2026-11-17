@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { chatTools } from "./activity";
+const NO_TOOLS = chatTools({ slots: {}, skills: {}, mcp: {}, coding: false });
 import { emptyCounters } from "./stats";
-import { activityRows, agentIdFromTab, headerLabel, formatDuration, formatShare, formatSpeed, formatTokens, pillLabel, stripText, usageRows } from "./stats-format";
+import { activityRows, agentIdFromTab, cacheHitTone, headerLabel, formatDuration, formatShare, formatSpeed, formatTokens, pillLabel, stripText, usageRows } from "./stats-format";
 
 describe("stats formatting", () => {
   it("shortens token counts", () => {
@@ -24,8 +26,8 @@ describe("stats readings as shown", () => {
   const stats = { ...emptyCounters(), turns: 3, steps: 12, inputTokens: 10_000, cachedTokens: 8_000, cacheWriteTokens: 0, outputTokens: 2_000, timedOutputTokens: 2_000, modelMs: 40_000, toolMs: 5_000, ttftMs: 1_200, ttftSteps: 2 };
 
   it("labels each pill at a glance, or says why there is no reading", () => {
-    expect(pillLabel("activity", { status: "ready", provider: "claude", partial: false, stats })).toBe("12 steps · 50 t/s");
-    expect(pillLabel("usage", { status: "ready", provider: "claude", partial: false, stats })).toBe("12.0k · 80% cached");
+    expect(pillLabel("activity", { status: "ready", provider: "claude", partial: false, tools: NO_TOOLS, stats })).toBe("12 steps · 50 t/s");
+    expect(pillLabel("usage", { status: "ready", provider: "claude", partial: false, tools: NO_TOOLS, stats })).toBe("12.0k · 80% cached");
     expect([pillLabel("usage", null), pillLabel("usage", { status: "unavailable", reason: "x" }), pillLabel("usage", { status: "error", error: "x" })]).toEqual(["…", "No stats", "Log unreadable"]);
   });
 
@@ -48,7 +50,13 @@ describe("the strip under the message box", () => {
 describe("the stats button in the top bar", () => {
   it("shows the open chat's tokens and cache hit, or just Stats when there is no reading", () => {
     const stats = { ...emptyCounters(), inputTokens: 1_400_000, cachedTokens: 1_289_400, outputTokens: 100_000 };
-    expect(headerLabel({ status: "ready", provider: "claude", partial: false, stats })).toBe("1.5M · 92.1%");
+    expect(headerLabel({ status: "ready", provider: "claude", partial: false, tools: NO_TOOLS, stats })).toBe("1.5M · 92.1%");
     expect([headerLabel(null), headerLabel({ status: "unavailable", reason: "x" }), headerLabel({ status: "error", error: "x" })]).toEqual(["Stats", "Stats", "Stats"]);
+  });
+});
+
+describe("the cache-hit bar's colour", () => {
+  it("is good from 80%, fair from 50%, and poor below", () => {
+    expect([0.992, 0.8, 0.79, 0.5, 0.49, 0].map(cacheHitTone)).toEqual(["good", "good", "fair", "fair", "poor", "poor"]);
   });
 });

@@ -17,6 +17,7 @@ import { profileSettings } from "./shared/document";
 import { projectGroupsSettings } from "./shared/project-groups";
 import { registerProjectActions } from "./server/project-actions";
 import { registerStats } from "./server/stats/register";
+import { registerActivity } from "./server/activity/register";
 import { remindersKeeper } from "./shared/reminder-contracts";
 import { showChannel, showResult, showSettings, showUsed } from "./shared/show";
 import { bookmarkSettings } from "./shared/bookmarks";
@@ -40,6 +41,7 @@ export default function contribute(server: PluginServerContext) {
   // Session stats and conversation search, read from the Claude Code and Codex log files (never from Paseo's
   // timeline, which would resume a finished agent). Registers its own "stats" settings.
   const stopStats = registerStats(server);
+  registerActivity(server);
   const agentActions = registerAgentActions(server);
   // "Generate a title" on an agent card: a hidden helper agent writes it, the CLI applies it.
   const titlesSettings = server.registerSettings(titleSettings);

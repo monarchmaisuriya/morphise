@@ -102,7 +102,7 @@ export function AgentRow({ t, facts, card, now, live, selected, focused, buttons
           {!t.compact && buttons.stop ? <StopButton t={t} title={headline.title} disabled={buttons.busy} onStop={buttons.stop} /> : null}
           {buttons.clear ? <IconButton t={t} size="sm" icon="CheckCheck" label={`Clear ${headline.title}, to Done`} disabled={buttons.clearing} onPress={buttons.clear} /> : null}
           {!t.compact && buttons.archive ? <IconButton t={t} size="sm" icon="Archive" label={`Archive ${headline.title}`} disabled={buttons.busy} onPress={buttons.archive} /> : null}
-          {!t.compact && buttons.open ? <IconButton t={t} size="sm" icon="ArrowUpRight" label={`Open ${headline.title}`} onPress={buttons.open} /> : null}
+          {!t.compact && buttons.open ? <IconButton t={t} size="sm" icon="SquareArrowRight" label={`Open ${headline.title}`} onPress={buttons.open} /> : null}
           {onMenu ? <IconButton t={t} size="sm" icon="Ellipsis" label={`More for ${headline.title}`} onPress={onMenu} /> : null}
         </>
         )

@@ -24,6 +24,7 @@ import { CARD_GAP, DragGhost, DragProvider, useBoardDrag, useCardDragHandlers, u
 import type { BoardDeps } from "./deps";
 import { useWorkspaceName } from "./workspace-picker";
 import { PRIORITY, priorityColor, priorityOf } from "./styles";
+import { PriorityMark } from "./priority-mark";
 
 type Layout = Pick<TaskView, "filter" | "sort" | "swimlanes" | "density">;
 type Tab = "board" | "today" | "archived";
@@ -115,7 +116,7 @@ function CardView({ t, task, document, now, compact, workspaces, onOpen, run, li
     >
       <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
         <View style={{ paddingTop: 2 }} accessibilityLabel={task.priority ? `Priority ${priority.name}` : priority.name}>
-          <Icon name={priority.icon} size={13} color={priorityColor(t.c, task.priority)} />
+          <PriorityMark kind={priority.mark} color={priorityColor(t.c, task.priority)} />
         </View>
         <Text style={[t.text.body, { flex: 1, fontWeight: "500", textDecorationLine: inDone ? "line-through" : "none" }]} numberOfLines={compact ? 2 : 4}>
           {task.title}
@@ -574,7 +575,7 @@ function TaskRow({ t, task, document, now, workspaces, onOpen, run, onLongPress,
   return (
     <GroupRow
       t={t}
-      leading={<View accessibilityLabel={task.priority ? `Priority ${priority.name}` : priority.name}><Icon name={priority.icon} size={14} color={priorityColor(t.c, task.priority)} /></View>}
+      leading={<View accessibilityLabel={task.priority ? `Priority ${priority.name}` : priority.name}><PriorityMark kind={priority.mark} color={priorityColor(t.c, task.priority)} size={14} /></View>}
       title={task.title}
       struck={inDone}
       dim={inDone}

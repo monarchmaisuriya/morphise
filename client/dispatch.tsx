@@ -94,7 +94,7 @@ function PromptRow({ t, row, index, count, running, onChange, onRemove, onSplit,
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingTop: 4 }}>
           <StatusChip t={t} status={row.status} />
-          {row.status === "started" && onOpen ? <Button t={t} variant="ghost" icon="ArrowUpRight" label="Open" accessibilityLabel={`Open the workspace for prompt ${index + 1}`} onPress={onOpen} /> : null}
+          {row.status === "started" && onOpen ? <Button t={t} variant="ghost" icon="SquareArrowRight" label="Open" accessibilityLabel={`Open the workspace for prompt ${index + 1}`} onPress={onOpen} /> : null}
           {row.status === "failed" ? <Button t={t} variant="ghost" icon="RotateCcw" label="Retry" accessibilityLabel={`Retry prompt ${index + 1}`} disabled={running} onPress={onRetry} /> : null}
           {editable && count > 1 ? <IconButton t={t} size="sm" icon="X" label={`Remove prompt ${index + 1}`} disabled={running} onPress={onRemove} /> : null}
         </View>

@@ -3,6 +3,7 @@
 // MIT, see NOTICE.md): shared/stats.ts at 4e8fae9.
 import { defineRpc, defineSettings } from "@getpaseo/plugin";
 import { z } from "zod";
+import { chatToolsSchema } from "./activity";
 
 export const statsSettings = defineSettings({
   id: "stats",
@@ -40,7 +41,7 @@ export function emptyCounters(): SessionCounters {
 
 export const statsReadResultSchema = z.discriminatedUnion("status", [
   // `partial`: the log was longer than one read takes; the next read continues where this one stopped.
-  z.object({ status: z.literal("ready"), provider: z.enum(STATS_PROVIDERS), partial: z.boolean(), stats: sessionCountersSchema }),
+  z.object({ status: z.literal("ready"), provider: z.enum(STATS_PROVIDERS), partial: z.boolean(), stats: sessionCountersSchema, tools: chatToolsSchema }),
   // No log to read: no session id yet, no file yet, or a provider without a log Morphise reads.
   z.object({ status: z.literal("unavailable"), reason: z.string() }),
   // A log that exists but cannot be read or understood.

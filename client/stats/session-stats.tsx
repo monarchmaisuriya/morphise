@@ -6,11 +6,13 @@ import type { PluginAgentPanelProps, PluginButtonContentProps, PluginButtonIconP
 import { useEffect, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { cacheHitShare, type StatsReadResult, statsRead } from "../../shared/stats";
-import { activityRows, headerLabel, type Row, usageRows } from "../../shared/stats-format";
+import type { ChatTools } from "../../shared/activity";
+import { activityRows, cacheHitTone, headerLabel, type Row, toolsRows, usageRows } from "../../shared/stats-format";
+import { formatElapsed } from "../../shared/time-text";
 import { type Chats, chatForWorkspace } from "../chats";
 import { createValueStore, type ValueStore, useValue } from "../profile-store";
 import { createStatsCache } from "./cache";
-import { Button, Icon, Tag, type Tokens, useTokens } from "../ui/kit";
+import { Button, Icon, Segmented, Tag, type Tokens, useTokens } from "../ui/kit";
 
 export const STATS_PANEL_ID = "stats";
 const REFRESH_MS = 2000;
@@ -46,11 +48,11 @@ export function useSessionStats(read: StatsReader, agentId: string | null): Stat
   return result;
 }
 
-export function StatsRows({ t, result, kinds }: { t: Tokens; result: StatsReadResult | null; kinds: readonly ("activity" | "usage")[] }) {
+export function StatsRows({ t, result, kinds }: { t: Tokens; result: StatsReadResult | null; kinds: readonly ("activity" | "tools" | "usage")[] }) {
   if (!result) return <Text style={t.text.small}>Reading the chat's log…</Text>;
   if (result.status === "error") return <Text style={[t.text.small, { color: t.c.statusDanger }]}>This chat's log could not be read: {result.error}</Text>;
   if (result.status === "unavailable") return <Text style={t.text.small}>{result.reason}</Text>;
-  const rows = kinds.flatMap((kind) => (kind === "activity" ? activityRows(result.stats) : usageRows(result.stats)));
+  const rows = kinds.flatMap((kind) => (kind === "activity" ? activityRows(result.stats) : kind === "tools" ? toolsRows(result.tools) : usageRows(result.stats)));
   return (
     <View style={{ gap: 4 }}>
       {rows.map(([label, value]) => (
@@ -69,12 +71,12 @@ export function StatsRows({ t, result, kinds }: { t: Tokens; result: StatsReadRe
 // that view is not in use, and the stats button then shows the workspace's first open chat.
 export const openChat = createValueStore<string | null>(null);
 
-// A reading as tiles, two to a row: the label small, the value large.
-function Tiles({ t, rows }: { t: Tokens; rows: readonly Row[] }) {
+// A reading as tiles, two (or three) to a row: the label small, the value large.
+function Tiles({ t, rows, columns = 2 }: { t: Tokens; rows: readonly Row[]; columns?: 2 | 3 }) {
   return (
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
       {rows.map(([label, value]) => (
-        <View key={label} style={{ flexBasis: "47%", flexGrow: 1, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8, backgroundColor: t.c.surface1, gap: 2 }}>
+        <View key={label} style={{ flexBasis: columns === 3 ? "30%" : "47%", flexGrow: 1, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8, backgroundColor: t.c.surface1, gap: 2 }}>
           <Text style={[t.text.small, { color: t.c.foregroundMuted }]} numberOfLines={1}>
             {label}
           </Text>
@@ -96,7 +98,41 @@ function SectionTitle({ t, icon, title }: { t: Tokens; icon: string; title: stri
   );
 }
 
-// Every reading as tiles under Activity and Usage, with the cache hit as a bar; or why there is no reading.
+const LIST_SHOWN = 5;
+
+// The skills or MCP tools the chat used, most used first, with when each was last used.
+function ToolList({ t, tools }: { t: Tokens; tools: ChatTools }) {
+  const [kind, setKind] = useState<"skills" | "mcp">(tools.skills.length || !tools.mcp.length ? "skills" : "mcp");
+  const [all, setAll] = useState(false);
+  const list = kind === "skills" ? tools.skills : tools.mcp;
+  const now = new Date();
+  if (!tools.skills.length && !tools.mcp.length) return <Text style={[t.text.small, { color: t.c.foregroundMuted }]}>No skills or MCP tools used in this chat.</Text>;
+  return (
+    <View style={{ gap: 6 }}>
+      <Segmented t={t} label="Show skills or MCP tools" value={kind} onChange={(next) => (setKind(next), setAll(false))} options={[{ value: "skills", label: `Skills ${tools.skills.length}` }, { value: "mcp", label: `MCP ${tools.mcp.length}` }]} />
+      {list.length ? (
+        (all ? list : list.slice(0, LIST_SHOWN)).map((use) => {
+          const ago = formatElapsed(new Date(use.lastAt).toISOString(), now);
+          return (
+            <View key={use.name} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Text style={[t.text.small, { flex: 1, color: t.c.foreground }]} numberOfLines={1} ellipsizeMode="middle">
+                {use.name}
+              </Text>
+              {use.failures ? <Text style={[t.text.small, { color: t.c.statusDanger }]}>{use.failures} failed</Text> : null}
+              <Text style={[t.text.small, { color: t.c.foregroundMuted, fontVariant: ["tabular-nums"] }]}>{ago ? (ago === "now" ? "just now" : `${ago} ago`) : ""}</Text>
+              <Text style={[t.text.body, { minWidth: 28, textAlign: "right", fontVariant: ["tabular-nums"] }]}>{use.count}</Text>
+            </View>
+          );
+        })
+      ) : (
+        <Text style={[t.text.small, { color: t.c.foregroundMuted }]}>{kind === "skills" ? "No skills used in this chat." : "No MCP tools used in this chat."}</Text>
+      )}
+      {list.length > LIST_SHOWN ? <Button t={t} variant="ghost" label={all ? "Show less" : `Show ${list.length - LIST_SHOWN} more`} onPress={() => setAll(!all)} /> : null}
+    </View>
+  );
+}
+
+// Every reading as tiles under Activity, Tools and Usage, with the cache hit as a bar; or why there is no reading.
 export function StatsTiles({ t, result }: { t: Tokens; result: StatsReadResult | null }) {
   if (!result) return <Text style={t.text.small}>Reading the chat's log…</Text>;
   if (result.status === "error") return <Text style={[t.text.small, { color: t.c.statusDanger }]}>This chat's log could not be read: {result.error}</Text>;
@@ -109,10 +145,15 @@ export function StatsTiles({ t, result }: { t: Tokens; result: StatsReadResult |
         <Tiles t={t} rows={activityRows(result.stats)} />
       </View>
       <View style={{ gap: 6 }}>
+        <SectionTitle t={t} icon="Wrench" title="Tools" />
+        <Tiles t={t} rows={toolsRows(result.tools)} columns={3} />
+        <ToolList t={t} tools={result.tools} />
+      </View>
+      <View style={{ gap: 6 }}>
         <SectionTitle t={t} icon="Database" title="Usage" />
         {hit !== null ? (
-          <View accessibilityLabel={`Cache hit ${Math.round(hit * 100)}%`} style={{ height: 4, borderRadius: 2, backgroundColor: t.c.surface2, overflow: "hidden" }}>
-            <View style={{ width: `${Math.min(100, hit * 100)}%`, height: 4, backgroundColor: t.c.statusSuccess }} />
+          <View accessibilityLabel={`Cache hit ${Math.round(hit * 100)}%`} style={{ height: 3, borderRadius: 1.5, backgroundColor: t.c.surface2, overflow: "hidden" }}>
+            <View style={{ width: `${Math.min(100, hit * 100)}%`, height: 3, backgroundColor: { good: t.c.statusSuccess, fair: t.c.statusWarning, poor: t.c.statusDanger }[cacheHitTone(hit)] }} />
           </View>
         ) : null}
         <Tiles t={t} rows={usageRows(result.stats)} />

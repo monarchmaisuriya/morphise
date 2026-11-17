@@ -5,6 +5,8 @@ import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import type { SessionCounters, StatsProvider } from "../../shared/stats";
+import { chatTools, type ChatTools } from "../../shared/activity";
+import { ActivityFold } from "./fold-activity";
 import { SessionFold } from "./fold";
 
 export interface SessionRoots {
@@ -24,10 +26,11 @@ export interface ReadLimits {
 }
 export const DEFAULT_READ_LIMITS: ReadLimits = { maxBytes: 64 * 1024 * 1024, maxMs: 15_000 };
 
-export type SessionRead = { kind: "ready"; provider: StatsProvider; stats: SessionCounters; partial: boolean } | { kind: "unavailable"; reason: string };
+export type SessionRead = { kind: "ready"; provider: StatsProvider; stats: SessionCounters; tools: ChatTools; partial: boolean } | { kind: "unavailable"; reason: string };
 
 interface CachedSession {
   fold: SessionFold;
+  activity: ActivityFold;
   offset: number;
   ino: number;
   tail: string;
@@ -120,7 +123,7 @@ export class SessionReader {
     const { provider, path } = log;
     let cached = this.cache.get(path);
     if (!cached) {
-      cached = { fold: new SessionFold(provider), offset: 0, ino: 0, tail: "", decoder: new StringDecoder("utf8"), busy: null };
+      cached = { fold: new SessionFold(provider), activity: new ActivityFold(provider), offset: 0, ino: 0, tail: "", decoder: new StringDecoder("utf8"), busy: null };
       this.cache.set(path, cached);
     }
     // Concurrent windows share one read, including the initial full-log fold.
@@ -140,6 +143,7 @@ export class SessionReader {
       const info = await stat(path);
       if (entry.ino !== info.ino || info.size < entry.offset) {
         entry.fold = new SessionFold(provider);
+        entry.activity = new ActivityFold(provider);
         entry.offset = 0;
         entry.tail = "";
         entry.decoder = new StringDecoder("utf8");
@@ -162,12 +166,13 @@ export class SessionReader {
               throw new Error("Session log contains an invalid JSON line");
             }
             entry.fold.apply(row);
+            entry.activity.apply(row);
           }
           entry.offset += buffer.length;
           if (Date.now() > deadline) break;
         }
       }
-      return { kind: "ready", provider, stats: { ...entry.fold.stats }, partial: entry.offset < info.size };
+      return { kind: "ready", provider, stats: { ...entry.fold.stats }, tools: chatTools(entry.activity.activity), partial: entry.offset < info.size };
     })();
     try {
       return await entry.busy;

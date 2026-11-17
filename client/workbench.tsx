@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { dueCount, dueOrDueTodayCount } from "../shared/board";
 import { agentsBoardSettings } from "../shared/agents-board";
+import { activitySettings } from "../shared/activity";
+import { ActivityView } from "./activity/view";
 import { inboxSettings } from "../shared/inbox";
 import { AgentsBoardView } from "./agents-board/board";
 import { TasksBoard } from "./board/board";
@@ -29,8 +31,8 @@ export const WORKBENCH_SCREEN_ID = "workbench";
 export const LEGACY_SCREENS = { tasks: "board", inbox: "waiting" } as const;
 
 // "board" is the Tasks view: its id from before 0.20, so links to it keep working.
-export type WorkbenchView = "agents" | "board" | "bookmarks";
-const VIEWS: readonly WorkbenchView[] = ["agents", "board", "bookmarks"];
+export type WorkbenchView = "agents" | "board" | "bookmarks" | "activity";
+const VIEWS: readonly WorkbenchView[] = ["agents", "board", "bookmarks", "activity"];
 // What Tasks shows when it opens: its columns, or the Today or Archived list (views of their own before 0.20.2).
 type TasksStart = "board" | "today" | "archived";
 // Below this width the views sit in a row of tabs instead of a list.
@@ -84,6 +86,7 @@ const ENTRIES: readonly { view: WorkbenchView; label: string; icon: string }[] =
   { view: "agents", label: "Agents", icon: "Bot" },
   { view: "board", label: "Tasks", icon: "SquareKanban" },
   { view: "bookmarks", label: "Bookmarks", icon: "Bookmark" },
+  { view: "activity", label: "Activity", icon: "Activity" },
 ];
 
 // One view as a tab along the top, drawn as Paseo draws its chat tabs: a 28 pt chip with a 14 pt icon and a muted
@@ -157,6 +160,9 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
     // a link asks for it, since it is the only place to answer those agents.
     const boardSettings = useSettings(agentsBoardSettings);
     const agentsShown = boardSettings.status !== "ready" || boardSettings.values.enabled;
+    // The Activity tab is listed unless Settings, General turns it off (and still opens when a link asks for it).
+    const activitySetting = useSettings(activitySettings);
+    const activityShown = activitySetting.status !== "ready" || activitySetting.values.enabled;
     const asked = viewParam(params);
     // Which list Tasks starts on: the one a link asked for ("today", "archived"), the columns once the user picks Tasks;
     // null until either happens.
@@ -184,7 +190,7 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
     const [lastBoard, saveLastBoard] = useDeviceChoice(railSettings, "boardTab");
     // Picked in Settings, General.
     const [agentsLayout] = useDeviceChoice(railSettings, "agentsLayout");
-    const lastOpened: WorkbenchView = lastBoard === "bookmarks" ? "bookmarks" : lastBoard === "agents" && agentsShown ? "agents" : "board";
+    const lastOpened: WorkbenchView = lastBoard === "bookmarks" ? "bookmarks" : lastBoard === "activity" && activityShown ? "activity" : lastBoard === "agents" && agentsShown ? "agents" : "board";
     const countsReady = counts.waiting !== null && counts.tasksLoaded && railSettings.status !== "loading" && boardSettings.status !== "loading";
     const opening = useRef<WorkbenchView | null>(null);
     const [openOn] = useDeviceChoice(railSettings, "openOn");
@@ -198,7 +204,7 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
     const view: WorkbenchView = picked ?? asked ?? fallbackView ?? opening.current ?? lastOpened;
     // No entry looks chosen until the view is known, so the selection does not jump once the counts load.
     const decided = picked !== null || asked !== null || fallbackView !== null || opening.current !== null;
-    const entries = agentsShown || (counts.waiting ?? 0) > 0 || view === "agents" ? ENTRIES : ENTRIES.filter((entry) => entry.view !== "agents");
+    const entries = ENTRIES.filter((entry) => (entry.view === "agents" ? agentsShown || (counts.waiting ?? 0) > 0 || view === "agents" : entry.view === "activity" ? activityShown || view === "activity" : true));
     const pick = (next: WorkbenchView) => {
       setView(next);
       if (next === "board") setTasksStart("board");
@@ -223,6 +229,8 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
     const content =
       view === "bookmarks" ? (
         <Bookmarks t={t} deps={deps} workspaces={workspaces} open={openChat} />
+      ) : view === "activity" ? (
+        <ActivityView client={deps.client} theme={theme} compact={layout.compact} workspaces={workspaces} />
       ) : (view === "agents" || view === "board") && !ready ? null : view === "agents" ? (
         <AgentsBoardView client={deps.client} workspaces={deps.workspaces} theme={theme} compact={layout.compact} navigation={navigation} layout={agentsLayout} bookmarkLastAnswer={deps.bookmarkLastAnswer} />
       ) : view === "board" ? (

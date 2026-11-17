@@ -256,7 +256,8 @@ export function Field({
 }
 
 // A row of mutually exclusive choices drawn as one control.
-export function Segmented<Value extends string | number>({ t, options, value, onChange, label }: { t: Tokens; options: readonly { value: Value; label: string; icon?: string; tone?: string }[]; value: Value; onChange(value: Value): void; label: string }) {
+// `leading` draws a mark of its own before an option's label, in place of an icon.
+export function Segmented<Value extends string | number>({ t, options, value, onChange, label }: { t: Tokens; options: readonly { value: Value; label: string; icon?: string; tone?: string; leading?: ReactNode }[]; value: Value; onChange(value: Value): void; label: string }) {
   return (
     <View accessibilityRole="radiogroup" accessibilityLabel={label} style={{ flexDirection: "row", flexWrap: "wrap", alignSelf: "flex-start", flexShrink: 1, maxWidth: "100%", padding: 2, gap: 2, borderRadius: t.radius.control + 2, backgroundColor: t.c.surface1, borderWidth: 1, borderColor: t.c.border }}>
       {options.map((option) => {
@@ -270,7 +271,7 @@ export function Segmented<Value extends string | number>({ t, options, value, on
             onPress={() => onChange(option.value)}
             style={{ height: t.control - 6, paddingHorizontal: 7, flexDirection: "row", alignItems: "center", gap: 4, borderRadius: t.radius.control, backgroundColor: on ? t.c.surface2 : "transparent" }}
           >
-            {option.icon ? <Icon name={option.icon} size={13} color={option.tone ?? (on ? t.c.foreground : t.c.foregroundMuted)} /> : null}
+            {option.leading ?? (option.icon ? <Icon name={option.icon} size={13} color={option.tone ?? (on ? t.c.foreground : t.c.foregroundMuted)} /> : null)}
             <Text style={{ color: on ? t.c.foreground : t.c.foregroundMuted, fontSize: 12, fontWeight: on ? "600" : "400" }}>{option.label}</Text>
           </Pressable>
         );
