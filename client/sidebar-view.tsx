@@ -1477,7 +1477,7 @@ function Header({ menu, setMenu, search, onSearch, searchLabel, filters, onNext,
     <View ref={headerRef} style={styles.header}>
       {/* The box takes the space the buttons leave, down to nothing (Field's own `grow` keeps 140). */}
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Field t={t} plain bare icon="Search" value={search} onChangeText={onSearch} placeholder="Search" accessibilityLabel={searchLabel} />
+        <Field t={t} plain quiet icon="Search" value={search} onChangeText={onSearch} placeholder="Search" accessibilityLabel={searchLabel} />
       </View>
       {search !== "" ? <IconButton t={t} size="sm" icon="X" label="Clear search" onPress={() => onSearch("")} /> : null}
       {openScreen ? <IconButton t={t} size="sm" icon={DISPATCH_ICON} label="Dispatch: start several agents in new workspaces" onPress={() => openScreen({ screenId: DISPATCH_SCREEN_ID })} /> : null}

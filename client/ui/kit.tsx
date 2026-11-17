@@ -173,6 +173,7 @@ export function Field({
   autoFocus,
   numeric,
   bare,
+  quiet,
   textStyle,
   accessibilityLabel,
   maxLength,
@@ -195,6 +196,8 @@ export function Field({
   numeric?: boolean;
   // No box: for the editor's title and description, which read as text until edited.
   bare?: boolean;
+  // Never a box, focused or not: for a search set into a toolbar, where a box would crowd the row.
+  quiet?: boolean;
   textStyle?: StyleProp<TextStyle>;
   accessibilityLabel?: string;
   maxLength?: number;
@@ -205,14 +208,17 @@ export function Field({
 }) {
   const [focused, setFocused] = useState(false);
   const { c } = t;
-  const box: ViewStyle = bare
+  const box: ViewStyle = quiet
+    ? { borderWidth: 1, borderColor: "transparent", backgroundColor: "transparent" }
+    : bare
     ? { borderRadius: t.radius.control, borderWidth: 1, borderColor: focused ? c.border : "transparent", backgroundColor: focused ? c.surface1 : "transparent" }
     : { borderRadius: t.radius.control, borderWidth: 1, borderColor: error ? c.statusDanger : focused ? c.accent : c.border, backgroundColor: c.surface1 };
   return (
     <View style={[{ gap: 4 }, grow ? { flex: 1, minWidth: 140 } : null]}>
       {label ? <Text style={t.text.label}>{label}</Text> : null}
-      <View style={[box, { flexDirection: "row", alignItems: multiline ? "flex-start" : "center", minHeight: multiline ? (bare ? 52 : 88) : t.control, paddingHorizontal: bare ? 6 : 10, gap: 8 }]}>
-        {icon ? <Icon name={icon} size={14} color={c.foregroundMuted} /> : null}
+      <View style={[box, { flexDirection: "row", alignItems: multiline ? "flex-start" : "center", minHeight: multiline ? (bare ? 52 : 88) : t.control, paddingHorizontal: bare || quiet ? 6 : 10, gap: 8 }]}>
+        {/* A quiet field has no box, so its icon brightens to show focus. */}
+        {icon ? <Icon name={icon} size={14} color={quiet && focused ? c.foreground : c.foregroundMuted} /> : null}
         <TextInput
           accessibilityLabel={accessibilityLabel ?? label ?? placeholder}
           value={value}

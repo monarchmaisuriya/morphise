@@ -5,9 +5,9 @@ import { Platform, Pressable, Text, View } from "react-native";
 import { type Decoration, DECOR_COLORS, DECOR_ICONS, parseHexColor } from "../shared/project-groups";
 import { Field, Icon, IconButton, type Tokens } from "./ui/kit";
 
-// A stored icon drawn: "lucide:Name" as that icon, "emoji:x" as text.
+// A stored icon drawn: "lucide:Name" as that icon, "emoji:x" as text in the same colour (letters take it; emoji keep their own).
 export function DecorIcon({ icon, color, size }: { icon: string; color: string; size: number }) {
-  if (icon.startsWith("emoji:")) return <Text style={{ fontSize: size - 1, lineHeight: size + 2 }}>{icon.slice("emoji:".length)}</Text>;
+  if (icon.startsWith("emoji:")) return <Text style={{ fontSize: size - 1, lineHeight: size + 2, color }}>{icon.slice("emoji:".length)}</Text>;
   return <Icon name={icon.slice("lucide:".length)} size={size} color={color} />;
 }
 
@@ -111,15 +111,35 @@ export function DecorPicker({ t, value, onChange, withIcon }: { t: Tokens; value
           <Text style={t.text.label}>Icon</Text>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 2 }}>
             <IconButton t={t} size="sm" icon="Slash" label="No icon" tone={value.icon === null ? t.c.foreground : undefined} onPress={() => onChange({ ...value, icon: null })} />
-            {DECOR_ICONS.map((name) => (
-              <IconButton key={name} t={t} size="sm" icon={name} label={`Icon: ${name}`} tone={value.icon === `lucide:${name}` ? value.color ?? t.c.foreground : undefined} onPress={() => onChange({ ...value, icon: `lucide:${name}` })} />
-            ))}
+            {DECOR_ICONS.map((name) => {
+              const icon = `lucide:${name}`;
+              const on = value.icon === icon;
+              // Pressing the chosen icon again takes it off; choosing one replaces any typed text.
+              return (
+                <IconButton
+                  key={name}
+                  t={t}
+                  size="sm"
+                  icon={name}
+                  label={on ? `Icon: ${name}, chosen. Press to remove` : `Icon: ${name}`}
+                  tone={on ? value.color ?? t.c.foreground : undefined}
+                  onPress={() => {
+                    setEmoji("");
+                    onChange({ ...value, icon: on ? null : icon });
+                  }}
+                />
+              );
+            })}
           </View>
           <Field
             t={t}
             plain
             value={emoji}
-            onChangeText={setEmoji}
+            onChangeText={(text) => {
+              setEmoji(text);
+              // Emptying the field takes off the typed icon it set.
+              if (text.trim() === "" && value.icon?.startsWith("emoji:")) onChange({ ...value, icon: null });
+            }}
             onSubmit={() => {
               const typed = emoji.trim();
               if (typed) onChange({ ...value, icon: `emoji:${typed}` });

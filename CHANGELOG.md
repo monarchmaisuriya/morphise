@@ -2,6 +2,12 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.38.8 - 2026-11-17
+
+- **Typed icons take the colour:** text typed as a group's or project's icon (such as "BP") is drawn in the chosen colour, like the built-in icons. Emoji keep their own colours.
+- **Taking an icon off:** press the chosen icon again to remove it, or empty the typed text. "No icon" still works too.
+- **Search stays minimal when focused:** the sidebar header's search no longer draws a box while you type; its magnifier brightens instead.
+
 ## 0.38.7 - 2026-11-17
 
 - **Pages more often:** agents now draw a page without being asked whenever it is clearer than text, like Claude Code's own visuals: options to choose between side by side, numbers as a chart or table, plans and architecture as a diagram, UI changes as a mock-up (before and after), and reviews, reports and test runs as a page with the key facts first. Short answers, facts, code and commands stay text. The guidance is in the page tool's description, which existing chats read too, and in new chats' instructions. Pages cost more tokens than text; turn them off in Settings, Chat, HTML pages.
