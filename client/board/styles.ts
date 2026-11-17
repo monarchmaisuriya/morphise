@@ -1,15 +1,15 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 
-// How each priority reads and looks; P1 is the most urgent.
+// How each priority reads and looks; P1 is the most urgent. One family of signal bars, from none to full.
 export const PRIORITY = {
-  1: { name: "Urgent", icon: "CircleAlert" },
+  1: { name: "Urgent", icon: "Signal" },
   2: { name: "High", icon: "SignalHigh" },
   3: { name: "Medium", icon: "SignalMedium" },
   4: { name: "Low", icon: "SignalLow" },
 } as const;
 
 // A task with no priority still gets a mark, so every card and row has one in the same place.
-export const NO_PRIORITY = { name: "No priority", icon: "Minus" } as const;
+export const NO_PRIORITY = { name: "No priority", icon: "SignalZero" } as const;
 
 export function priorityOf(priority: number | null): { name: string; icon: string } {
   return priority === 1 || priority === 2 || priority === 3 || priority === 4 ? PRIORITY[priority] : NO_PRIORITY;

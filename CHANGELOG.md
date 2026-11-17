@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.34.2 - 2026-11-17
+
+- **Priority icons from one family:** every priority is now a set of signal bars, from empty bars for no priority through Low, Medium and High to full red bars for Urgent (which was a circle with "!"; no priority was a dash). Cards, list rows and the task editor all use them.
+
 ## 0.34.1 - 2026-11-17
 
 - **A mark for "no priority":** tasks without a priority show a muted dash where the priority icon goes, on cards and in list rows, and "None" in the task editor has the same dash, so every row lines up.
