@@ -66,6 +66,11 @@ describe("the html_render MCP server", () => {
       { kind: "mcp", server: "chat_polish", tool: "html_preview" },
     ]);
     expect(config.systemPrompt).toMatch(/^Base\n\n# HTML pages\nYou have an html_render tool/);
+    // Proactive: agents draw without being asked when a page is clearer, for each kind of content, and keep text for short answers.
+    expect(config.systemPrompt).toMatch(/When to use it\nDraw a page without being asked whenever it would be clearer than text/);
+    for (const kind of ["Choices:", "Numbers:", "Structure:", "Interfaces:", "Results:"]) expect(config.systemPrompt).toContain(`- ${kind}`);
+    expect(config.systemPrompt).toMatch(/Keep text for a direct fact/);
+    expect(config.systemPrompt).not.toMatch(/clearly helps/);
     // No headless browser in this cache: nothing to preview pages in.
     expect(config.systemPrompt).not.toMatch(/html_preview/);
     // Paseo refuses to create an agent on a provider without exact-tool preapprovals that has a toolPolicy.
@@ -100,6 +105,9 @@ describe("the html_render MCP server", () => {
     const tools = (await ask(2, "tools/list")).result.tools;
     expect(tools.map((listed) => listed.name)).toEqual(["html_render", "html_guide"]);
     expect(tools[0]!.description).toMatch(/call html_guide with the kind of page/);
+    // The same guidance reaches chats created before a change, since this description is read live from the tool server.
+    expect(tools[0]!.description).toMatch(/When to use it\nDraw a page without being asked whenever it would be clearer than text/);
+    expect(tools[0]!.description).toContain("- Choices:");
     const chartsGuide = (await ask(20, "tools/call", { name: "html_guide", arguments: { topic: "charts" } })).result;
     expect(chartsGuide.isError).toBe(false);
     expect(chartsGuide.content[0].text).toMatch(/Morphise\.chart/);

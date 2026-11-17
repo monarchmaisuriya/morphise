@@ -17,9 +17,24 @@ import { checkPage, type PageCheck } from "./page-check";
 // A new agent's config as the agent.create.before hook receives it (Paseo's AgentSessionConfig).
 export type AgentConfig = PluginHookRequests["agent.create.before"]["config"];
 
+// When an agent should draw a page, in one place for both the system prompt (new chats) and the tool description (which
+// Morphise's tool server sends live, so chats created before a change read it too). Proactive on purpose, like Claude
+// Code's own guidance: draw without being asked whenever a page is clearer than text, keep text for short answers.
+const WHEN_TO_DRAW = `Draw a page without being asked whenever it would be clearer than text:
+- Choices: two or more options, designs or approaches to pick between. Show them side by side as mock-ups or a comparison.
+- Numbers: anything compared, ranked, over time or broken down. A chart or a table.
+- Structure: a plan, architecture, dependency map or timeline. A diagram on a page; a plain flowchart, sequence, state, class or ER diagram goes in a \`\`\`mermaid block in your reply instead, which the chat draws.
+- Interfaces: a UI or layout to show or change. A mock-up, before and after when something changes.
+- Results: a review, report, audit, test run or summary of many items. A page with the key facts first.
+- Always when the user asks to draw, chart, plot, visualize, illustrate, simulate, animate or mock up something, in any language.
+Keep text for a direct fact, a yes or no, a short explanation, code or a command; never add a page only to decorate an answer.`;
+
 // The tool's description is the contract and the short style guide: the model reads it when it builds a page, on every
 // provider. The rules for each kind of page come from html_guide (./guide.ts), read only when the agent draws one.
 const DESCRIPTION = `Show a finished HTML page inline in this chat, above your reply: a chart, table, comparison, dashboard, diagram, interactive explainer or UI mock-up. Call it once per page, when the page is complete. To change a page you showed earlier, pass its id as replaces: the old one then shows "Updated below".
+
+When to use it
+${WHEN_TO_DRAW}
 
 Before building one, call ${HTML_GUIDE_TOOL} with the kind of page (charts, tables, diagrams, images, interactive, mockups) for its helpers and rules.
 
@@ -42,10 +57,8 @@ const SYSTEM_PROMPT = `# HTML pages
 You have an ${HTML_TOOL} tool that shows an HTML page inline in this chat.
 
 When to use it
-- When a visual clearly helps the user understand: numbers to compare, a trend over time, data in a table, a structure or process, steps, an interactive explainer, a mock-up. And always when the user asks to draw, chart, plot, visualize, illustrate, simulate, animate or mock up something, in any language.
-- Answer everything else in text. A short answer stays text; don't add a page to decorate it.
-- Flowcharts, sequence, state, class and ER diagrams: write a \`\`\`mermaid block in your reply instead. The chat draws and lays it out.
-- Call ${HTML_GUIDE_TOOL} for the kind of page first.
+${WHEN_TO_DRAW}
+Call ${HTML_GUIDE_TOOL} for the kind of page first.
 
 Layout rules
 You never see the page you publish, so build it so nothing can overlap, get cut off or move the chat:
