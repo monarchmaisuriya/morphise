@@ -25,25 +25,32 @@ export interface PageActions {
   bookmarkPage: PolishContext["bookmarkPage"];
 }
 
+// The actions with the chat's workspace, for Save. Looked up only by the chat's own row (ChatHtmlItem): plugin state hooks
+// (useAgent) run only inside a plugin host, and Settings' preview draws the same row outside one.
+interface ChatPageActions extends PageActions {
+  workspaceId: string | null;
+}
+
 // A file name from a page's title.
 const fileName = (title: string, extension: string) => `${title.replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "page"}.${extension}`;
 
 /** The chat's page row, with what a page can do in a chat (ask, save). */
 export function createHtmlItem(actions: PageActions) {
   return function ChatHtmlItem(props: PluginTimelineItemProps<HtmlData>) {
-    return <HtmlItem {...props} actions={actions} />;
+    const workspaceId = useAgent(props.agentId, (agent) => agent.workspaceId ?? null) ?? null;
+    return <HtmlItem {...props} actions={{ ...actions, workspaceId }} />;
   };
 }
 
 /** A page an agent published with html_render. Native apps can't run its scripts in a frame, so they name it instead. */
-export function HtmlItem({ item, theme, agentId, actions = null }: PluginTimelineItemProps<HtmlData> & { actions?: PageActions | null }) {
+export function HtmlItem({ item, theme, agentId, actions = null }: PluginTimelineItemProps<HtmlData> & { actions?: ChatPageActions | null }) {
   const t = useT();
   if (Platform.OS === "web") return item.data.stored === undefined ? <HtmlPage {...item.data} agentId={agentId} theme={theme} actions={actions} /> : <StoredHtmlPage {...item.data} agentId={agentId} theme={theme} actions={actions} />;
   return <Text style={{ color: theme.colors.foregroundMuted, fontSize: 13, paddingVertical: 4 }}>{t("chat.htmlNative", { title: item.data.title })}</Text>;
 }
 
 /** A page Paseo cut to fit the timeline, loaded whole from where html_render stored it. */
-function StoredHtmlPage({ stored, theme, actions, ...data }: HtmlData & { agentId: string; theme: PluginTheme; actions: PageActions | null }) {
+function StoredHtmlPage({ stored, theme, actions, ...data }: HtmlData & { agentId: string; theme: PluginTheme; actions: ChatPageActions | null }) {
   const t = useT();
   const load = useRpc(storedPage);
   const [html, setHtml] = useState<string | null>();
@@ -89,7 +96,7 @@ function useInlinedImages(html: string, agentId: string) {
 }
 
 /** The page in the chat, with full screen, open in browser and copy on hover. Full screen is a second frame, so the page starts over there. */
-function HtmlPage({ html, title, heights, agentId, theme, id, actions }: HtmlData & { agentId: string; theme: PluginTheme; actions: PageActions | null }) {
+function HtmlPage({ html, title, heights, agentId, theme, id, actions }: HtmlData & { agentId: string; theme: PluginTheme; actions: ChatPageActions | null }) {
   const page = useInlinedImages(html, agentId);
   const c = theme.colors;
   const t = useT();
@@ -112,7 +119,6 @@ function HtmlPage({ html, title, heights, agentId, theme, id, actions }: HtmlDat
       });
   const copy = () => copyText(html).then(() => toast.show(t("chat.toast.copiedHtml"), { variant: "success" }), () => toast.error(t("chat.toast.copyHtmlFailed")));
   const replaced = useReplaced(id);
-  const workspaceId = useAgent(agentId, (agent) => agent.workspaceId ?? null) ?? null;
   const keep = useRpc(keepPage);
   const exporter = useRef<SvgExporter["current"]>(null);
   const downloadHtml = () => {
@@ -124,7 +130,7 @@ function HtmlPage({ html, title, heights, agentId, theme, id, actions }: HtmlDat
       if (!downloadFile(fileName(title, "svg"), svg, "image/svg+xml")) toast.error(t("chat.toast.downloadFailed"));
     });
   // Keeps the page on the daemon first, so the bookmark never points at a page the 30-day cleanup removes.
-  const savePage = (pageId: string, bookmark: PageActions["bookmarkPage"]) =>
+  const savePage = (pageId: string, { bookmarkPage: bookmark, workspaceId }: ChatPageActions) =>
     void keep({ id: pageId, keep: true })
       .then(({ kept }) => {
         if (!kept) throw new Error("the page is no longer stored");
@@ -150,7 +156,7 @@ function HtmlPage({ html, title, heights, agentId, theme, id, actions }: HtmlDat
     </Pressable>
   );
   const shared = [
-    ...(actions && id ? [button("BookmarkPlus", t("chat.savePage"), () => savePage(id, actions.bookmarkPage))] : []),
+    ...(actions && id ? [button("BookmarkPlus", t("chat.savePage"), () => savePage(id, actions))] : []),
     button("Download", t("chat.downloadHtml"), downloadHtml),
     button("FileImage", t("chat.downloadSvg"), downloadSvg),
     button("ExternalLink", t("chat.openInBrowser"), () => void openInBrowser()),

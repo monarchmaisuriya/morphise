@@ -32,6 +32,7 @@ import { EMPTY_PROFILE, type Profile, TIMELINE_ITEM_TYPES } from "../../shared/p
 import { presetTitle } from "../../shared/reminders";
 import { useValue } from "../profile-store";
 import { viewPresence } from "../view-presence";
+import { viewStateSettings } from "../../shared/view-state";
 import { ActionFields, ChipRow, type Form, ListEditor, NumberField, SelectField, SwitchField, TextField } from "./fields";
 import { parseMetadataText, uniqueId } from "./form-values";
 import { contrast, PRESETS as POLISH_PRESETS } from "../../shared/polish/theme";
@@ -513,7 +514,10 @@ function reminderFields(form: Form): { [Key in keyof Profile["reminders"]]: Reac
 // Paseo shows one sidebar view at a time and plugins cannot pick it, so say plainly when the
 // Morphise view is on but not the one Paseo is showing.
 function ViewCallout({ form }: { form: Form }) {
-  const shown = useValue(viewPresence);
+  const shownNow = useValue(viewPresence);
+  const device = useSettings(viewStateSettings);
+  // Shown this session, or ever on this device; while the device setting loads, no note (rather than a false one).
+  const shown = shownNow || device.status !== "ready" || device.values.viewShown;
   if (!form.profile.sidebar.view.enabled || shown) return null;
   const { theme } = form;
   return (

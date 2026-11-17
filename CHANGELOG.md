@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.37.1 - 2026-11-17
+
+- **Fix:** Settings, Pages failed with "Plugin state hooks must run inside a plugin host". The page preview there drew the chat's page row, which since 0.37.0 looked up the chat's workspace with a hook Settings can't run; only the chat's own row looks it up now.
+- **Fix:** Settings, Sidebar said "Paseo is still showing its own sidebar" after a Morphise update even with Morphise picked as the sidebar view. The view now remembers on each device that it has been shown, so a plugin reload no longer brings the note back.
+
 ## 0.37.0 - 2026-11-17
 
 Claude-style visuals in chats: Morphise's HTML pages are on by default and much more capable.

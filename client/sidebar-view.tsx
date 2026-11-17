@@ -1813,13 +1813,18 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
       void paseo.workspaces.ref(openWorkspace).setMetadata({ [MARK_KEY]: null }).catch(report(toast, "mark the workspace read"));
     }, [openWorkspace, openMark, paseo, toast]);
     const viewRef = useRef<View>(null);
-    // Tells the settings screen that Paseo is showing this view.
-    useEffect(() => viewPresence.set(true), []);
-
     const saveState = (next: Partial<ViewState>) => {
       if (viewState.status !== "ready") return;
       setUnsaved((current) => ({ ...(current ?? viewState.values), ...next }));
     };
+    // Tells the settings screen that Paseo is showing this view: for this session, and saved for this device, so a plugin
+    // reload (an update) doesn't bring back the "still showing its own sidebar" note while Settings hides the sidebar.
+    useEffect(() => viewPresence.set(true), []);
+    const shownSaved = viewState.status === "ready" && viewState.values.viewShown;
+    useEffect(() => {
+      if (viewState.status === "ready" && !shownSaved) saveState({ viewShown: true });
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [viewState.status, shownSaved]);
     useEffect(() => {
       if (!unsaved || viewState.status !== "ready" || viewSaving.current) return;
       viewSaving.current = true;

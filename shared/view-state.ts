@@ -24,6 +24,9 @@ export const viewStateSettings = defineSettings({
     indent: z.enum(["narrow", "normal", "wide"]).default("normal"),
     boldGroupNames: z.boolean().default(false),
     showProjectIcons: z.boolean().default(true),
+    // Morphise's sidebar view has been on screen on this device. Paseo tells plugins nothing about which sidebar view it
+    // shows, and a plugin reload forgets what this session saw, so Settings' "still showing its own sidebar" note reads this.
+    viewShown: z.boolean().default(false),
   }),
 });
 
