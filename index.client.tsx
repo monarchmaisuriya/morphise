@@ -6,6 +6,8 @@ import { type Directory, EMPTY_DIRECTORY, reduceAgents, reduceWorkspaces } from 
 import { createProfileEditor } from "./client/editor";
 import { connectStream } from "./client/profile-connection";
 import { changeSavedProfile } from "./client/profile-writer";
+import { onSaved, type ProjectGroups, projectGroupsSettings } from "./shared/project-groups";
+import { removeProject as removeProjectRpc } from "./shared/project-actions";
 import { createProfileStore, createValueStore, layoutsOf, profileOf, promptsOf } from "./client/profile-store";
 import { type Problem, createReconciler } from "./client/reconciler";
 import { createDraftStore } from "./client/draft";
@@ -44,7 +46,7 @@ import { archiveOldDone, rulesForTransitions } from "./shared/rules";
 import type { TaskOperation } from "./shared/task-ops";
 import { bookmarkSettings } from "./shared/bookmarks";
 import { taskSettings } from "./shared/tasks";
-import { bookmarksWatch, profileWatch, tasksWatch } from "./shared/watch";
+import { bookmarksWatch, profileWatch, type StatsEvent, statsWatch, tasksWatch } from "./shared/watch";
 
 // The profile's stored values as the settings RPCs carry them: any JSON, checked by the host.
 type SavedValues = z.core.util.JSONType;
@@ -57,6 +59,9 @@ interface ListSubscription<Snapshot> {
 export default function contribute(client: PluginClientContext) {
   const store = createProfileStore();
   const problems = createValueStore<Problem[]>([]);
+  // The session stats settings; on (and the strip off) until the daemon says otherwise.
+  const statsStore = createValueStore<{ event: StatsEvent | null; connectionError: string | null }>({ event: null, connectionError: null });
+  const statsOf = (event: StatsEvent | null) => (event?.status === "ready" ? event.document : { enabled: true, desktopStrip: false });
   const taskStore = createTaskStore();
   const chats = createValueStore<Chats>(new Map());
   const attention = createValueStore<AttentionList>(new Map());
@@ -129,6 +134,15 @@ export default function contribute(client: PluginClientContext) {
       return { ...document, layouts } as SavedValues;
     }, 3);
   }
+  // "Your groups": every change is applied to the newest saved groups, again when another app saved first.
+  const groupsRpc = settingsRpc(projectGroupsSettings.id);
+  const savedGroups = {
+    read: () => client.rpc(groupsRpc.read, {}),
+    write: (input: { revision: string; values: unknown }) => client.rpc(groupsRpc.write, input as never),
+  };
+  async function changeGroups(operation: (doc: ProjectGroups) => ProjectGroups) {
+    await changeSavedProfile<unknown>(savedGroups, onSaved(operation), 3, "project groups");
+  }
   async function updateView(patch: Partial<Profile["sidebar"]["view"]>) {
     await changeSavedProfile(savedProfile, (values) => {
       const document = values as { activeLayout?: string; layouts?: { id: string; profile?: Record<string, unknown> }[] };
@@ -180,6 +194,8 @@ export default function contribute(client: PluginClientContext) {
     bookmarkLastAnswer: (agentId, workspaceId, note) => bookmarkLastAnswer(bookmarkCapture, agentId, workspaceId, note),
     announcements,
     updateView,
+    changeGroups,
+    removeProject: (projectId) => client.rpc(removeProjectRpc, { projectId }),
     updateChat,
     openSidebarSettings: () => openSettings(EDITOR_SCREEN_ID),
     openTask: (taskId) => client.openScreen({ screenId: WORKBENCH_SCREEN_ID, params: taskLinkParams(taskId, nextLinkToken()) }),
@@ -205,9 +221,11 @@ export default function contribute(client: PluginClientContext) {
       prompts: promptsOf(store.get()),
       layouts: layoutsOf(store.get()),
       directory,
+      stats: statsOf(statsStore.get().event),
     });
   store.subscribe(apply);
   taskStore.subscribe(apply);
+  statsStore.subscribe(apply);
 
   const profile = connectStream(
     (onEvent, onClosed) => client.subscribe(profileWatch, {}, onEvent, { onClosed: ({ error }) => onClosed(error) }),
@@ -220,6 +238,10 @@ export default function contribute(client: PluginClientContext) {
   const bookmarkStream = connectStream(
     (onEvent, onClosed) => client.subscribe(bookmarksWatch, {}, onEvent, { onClosed: ({ error }) => onClosed(error) }),
     bookmarkStore,
+  );
+  const statsStream = connectStream(
+    (onEvent, onClosed) => client.subscribe(statsWatch, {}, onEvent, { onClosed: ({ error }) => onClosed(error) }),
+    statsStore,
   );
 
   // Automatic changes (rules, archiving, the 0.2 migration) are logged, not toasted: no one
@@ -397,6 +419,7 @@ export default function contribute(client: PluginClientContext) {
       profile.reopen();
       taskStream.reopen();
       bookmarkStream.reopen();
+      statsStream.reopen();
       openKeeper();
       show.reopen();
       readTaskHost();
@@ -435,6 +458,7 @@ export default function contribute(client: PluginClientContext) {
     profile.stop();
     taskStream.stop();
     bookmarkStream.stop();
+    statsStream.stop();
     reconciler.dispose();
     stopPolish.forEach((stop) => stop());
     stopRun();

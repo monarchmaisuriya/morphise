@@ -1,0 +1,9 @@
+{"timestamp":"2026-11-16T12:00:00.000Z","type":"session_meta","payload":{"id":"0199aaaa-bbbb-7ccc-8ddd-eeeeffff0000","cwd":"/repo/app"}}
+{"timestamp":"2026-11-16T12:00:00.100Z","type":"response_item","payload":{"type":"message","role":"developer","content":[{"type":"input_text","text":"developerword instructions"}]}}
+{"timestamp":"2026-11-16T12:00:01.000Z","type":"event_msg","payload":{"type":"task_started","turn_id":"t1"}}
+{"timestamp":"2026-11-16T12:00:01.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Find the parser bug"}]}}
+{"timestamp":"2026-11-16T12:00:02.000Z","type":"response_item","payload":{"type":"reasoning","summary":[{"type":"summary_text","text":"Looking at the tokenizer escapes"}],"encrypted_content":"opaqueword"}}
+{"timestamp":"2026-11-16T12:00:03.000Z","type":"response_item","payload":{"type":"function_call","name":"shell","call_id":"c1","arguments":"{\"command\":[\"rg\",\"toolinputword\"]}"}}
+{"timestamp":"2026-11-16T12:00:04.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"c1","output":"tooloutputword"}}
+{"timestamp":"2026-11-16T12:00:05.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"The parser now handles escapes."}]}}
+{"timestamp":"2026-11-16T12:00:05.000Z","type":"token_usage_record","payload":{"response_id":"r1","turn_id":"t1","usage":{"input_tokens":100,"cached_input_tokens":40,"output_tokens":10}}}

@@ -152,7 +152,8 @@ const viewSchema = z
     // What the view lists: workspaces, or every chat on its own row.
     list: z.enum(["workspaces", "chats"]).default("workspaces"),
     // "activity" groups by when a workspace was last used: Today, Yesterday, This week, Earlier.
-    groupBy: z.enum(["project", "label", "status", "activity", "none"]).default("project"),
+    // "custom" groups projects into the user's own groups (the `project-groups` document).
+    groupBy: z.enum(["project", "label", "status", "activity", "custom", "none"]).default("project"),
     // "created" newest first; "statusChanged" most recent status change first; "changes" most
     // changed lines first.
     orderBy: z.enum(["status", "activity", "name", "created", "statusChanged", "changes"]).default("activity"),
@@ -163,7 +164,7 @@ const viewSchema = z
     counts: z.boolean().default(true),
     // Off by `enabled`, never by a zero row count.
     rowLimit: z.strictObject({ enabled: z.boolean().default(true), rows: z.int().min(3).max(100).default(5) }).prefault({}),
-    density: z.enum(["compact", "comfortable"]).default("compact"),
+    density: z.enum(["compact", "comfortable", "spacious"]).default("compact"),
     details: z
       .strictObject({
         branch: z.boolean().default(false),

@@ -37,6 +37,7 @@ import {
   laneStatus,
 } from "../../shared/agents-board";
 import { inboxSettings, oneTapChoice, withCleared } from "../../shared/inbox";
+import { useConversationHits } from "./conversation-hits";
 import { summarizePermission } from "../../shared/inbox";
 import { type ValueStore, useValue } from "../profile-store";
 import { Dropdown, Icon, IconButton, MenuItem, PopoverHost, type Tokens, useTokens } from "../ui/kit";
@@ -148,7 +149,8 @@ function SortMenu({ t, sort, onChange }: { t: Tokens; sort: SortKey; onChange(so
 }
 
 // An agent on the view, as a card or a list row: reads its usage and plan while it is on screen, and owns its menu.
-function BoardCard({ as, t, client, facts, card, preview, now, selected, focused, buttons, onPress, onOpen }: { as: ViewLayout; t: Tokens; client: PluginClientContext; facts: CardFacts; card: ReturnType<typeof effectiveCard>; preview: boolean; now: Date; selected: boolean; focused: boolean; buttons: CardButtons; onPress(): void; onOpen: (() => void) | null }) {
+// `hit`: the conversation excerpt "Search conversations" found for this search.
+function BoardCard({ as, t, client, facts, card, preview, now, selected, focused, buttons, onPress, onOpen, hit }: { as: ViewLayout; t: Tokens; client: PluginClientContext; facts: CardFacts; card: ReturnType<typeof effectiveCard>; preview: boolean; now: Date; selected: boolean; focused: boolean; buttons: CardButtons; onPress(): void; onOpen: (() => void) | null; hit: string | null }) {
   const toast = useToast();
   const { agent, indicator } = facts;
   const [onScreen, setOnScreen] = useState(false);
@@ -173,6 +175,14 @@ function BoardCard({ as, t, client, facts, card, preview, now, selected, focused
       ) : (
         <AgentCard t={t} facts={facts} card={card} preview={preview} now={now} live={live} selected={selected} focused={focused} buttons={buttons} onPress={onPress} onMenu={openMenu} onScreenRef={onScreenRef} />
       )}
+      {hit ? (
+        <View accessibilityLabel={`Found in the conversation: ${hit}`} style={{ flexDirection: "row", gap: 6, paddingHorizontal: 10, paddingVertical: 4 }}>
+          <Icon name="MessagesSquare" size={12} color={t.c.foregroundMuted} />
+          <Text style={[t.text.small, { flex: 1, fontStyle: "italic" }]} numberOfLines={2}>
+            {hit}
+          </Text>
+        </View>
+      ) : null}
       <Dropdown t={t} open={menuOpen} onClose={() => setMenuOpen(false)} anchor={anchor} width={240}>
         {onOpen ? <MenuItem t={t} icon="MessageSquare" label="Open chat" onPress={() => (setMenuOpen(false), onOpen())} /> : null}
         {buttons.archive ? <MenuItem t={t} icon="Archive" label="Archive" onPress={() => (setMenuOpen(false), buttons.archive?.())} /> : null}
@@ -236,10 +246,13 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
   const allLanes = useMemo(() => assignLanes(agents, { now: now.getTime(), doneWindow: settings.board.doneWindow, showArchived: settings.board.showArchived, showSubtasks: settings.board.showSubtasks, cleared }), [agents, now, settings.board, cleared]);
   const onBoard = useMemo(() => LANES.flatMap((lane) => allLanes[lane]), [allLanes]);
   const laneById = useMemo(() => new Map(LANES.flatMap((lane) => allLanes[lane].map((agent) => [agent.id, lane] as const))), [allLanes]);
+  // "Search conversations" (this device): agents whose fields miss a search word are searched in their own logs.
+  const searchConversations = inbox.status === "ready" && inbox.values.searchConversations;
+  const hits = useConversationHits(client, onBoard, filter.search, searchConversations, (agent) => matchesFilter(agent, { ...NO_FILTER, search: filter.search }, now.getTime()));
   const lanes = useMemo(() => {
     const order = compareAgents(sort, now.getTime());
-    return Object.fromEntries(LANES.map((lane) => [lane, allLanes[lane].filter((agent) => matchesFilter(agent, filter, now.getTime(), { activeNow: lane === "waiting" || lane === "running", status: laneStatus(lane, agent, cleared) })).sort(order)])) as Record<Lane, BoardAgent[]>;
-  }, [allLanes, filter, sort, now, cleared]);
+    return Object.fromEntries(LANES.map((lane) => [lane, allLanes[lane].filter((agent) => matchesFilter(agent, filter, now.getTime(), { activeNow: lane === "waiting" || lane === "running", status: laneStatus(lane, agent, cleared), conversation: hits.get(agent.id) ?? null })).sort(order)])) as Record<Lane, BoardAgent[]>;
+  }, [allLanes, filter, sort, now, cleared, hits]);
   const laneList = LANES.filter((lane) => lane !== "archived" || settings.board.showArchived);
   // The lane a phone shows: the one picked, or the first listed once the picked one is gone (Show archived turned off).
   const phoneLane = laneList.includes(pickedPhoneLane) ? pickedPhoneLane : laneList[0];
@@ -419,6 +432,14 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
             style={[{ flex: 1, minWidth: 0, color: t.c.foreground, fontSize: t.compact ? 15 : 13, height: t.control - 2 }, Platform.OS === "web" ? (WEB_NO_OUTLINE as TextStyle) : null]}
           />
         </View>
+        <IconButton
+          t={t}
+          icon="MessagesSquare"
+          tone={searchConversations ? t.c.accent : undefined}
+          label={searchConversations ? "Searching conversations too (Claude Code and Codex). Turn off" : "Also search inside conversations (Claude Code and Codex)"}
+          disabled={inbox.status !== "ready"}
+          onPress={() => inbox.status === "ready" && void inbox.save({ ...inbox.values, searchConversations: !searchConversations }, inbox.revision)}
+        />
         <IconButton t={t} icon="Settings2" label="Agents tab settings" onPress={() => client.openSettings(AGENTS_SETTINGS_TAB)} />
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, alignItems: "center" }}>
@@ -466,6 +487,7 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
         setSelected(agent.id);
       }}
       onOpen={openChat ? () => openChat(agent.id) : null}
+      hit={hits.get(agent.id) ?? null}
     />
   );
 

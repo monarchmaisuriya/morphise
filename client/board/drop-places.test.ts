@@ -44,3 +44,11 @@ describe("boardDropTarget", () => {
     expect(boardDropTarget(columns, places, "x", { x: 50, y: 10 }, options(true))).toEqual({ column: "todo", before: "z", lane: laneA.key });
   });
 });
+
+describe("boardDropTarget with plain columns", () => {
+  it("needs only each column's id and its cards' ids, so the sidebar's groups can use it", () => {
+    const plain = [{ column: { id: "gwork" }, lanes: [{ key: "", tasks: [{ id: "p1" }, { id: "p2" }] }] }];
+    const at = { columns: new Map([["gwork", { x: 0, y: 0, width: 300, height: 200 }]]), cards: new Map([[copyKey("", "p1"), frame(0)], [copyKey("", "p2"), frame(48)]]) };
+    expect(boardDropTarget(plain, at, "p9", { x: 50, y: 10 }, { ...options(false), stack: "vertical" })).toEqual({ column: "gwork", before: "p1", lane: "" });
+  });
+});

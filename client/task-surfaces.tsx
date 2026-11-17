@@ -1,4 +1,6 @@
 import type { PluginButtonContentProps, PluginTimelineItemProps } from "@getpaseo/plugin/client";
+import type { ProjectGroups } from "../shared/project-groups";
+import type { RemoveProjectResult } from "../shared/project-actions";
 import { useToast } from "@getpaseo/plugin/client/ui";
 import { Text, View } from "react-native";
 import type { z } from "zod";
@@ -29,6 +31,10 @@ export interface Announcement {
 export interface SurfaceDeps extends BoardDeps {
   announcements: ValueStore<Announcement>;
   updateView(patch: Partial<Profile["sidebar"]["view"]>): Promise<void>;
+  // Changes the user's project groups ("Your groups"), on the newest saved document (see index.client.tsx).
+  changeGroups(operation: (doc: ProjectGroups) => ProjectGroups): Promise<void>;
+  // Removes a project and its workspaces through Paseo's CLI on the daemon.
+  removeProject(projectId: string): Promise<RemoveProjectResult>;
   // Changes the active layout's chat settings in place (see index.client.tsx).
   updateChat(change: (chat: Record<string, unknown>) => void): Promise<void>;
   // False until the first workspace list arrives.

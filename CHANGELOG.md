@@ -2,6 +2,19 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.35.0 - 2026-11-17
+
+Every feature of the Paseo plugins Project Groups (topar12) and Harness Stats (kogekiplay), and Better Paseo's search inside conversations, rebuilt in Morphise (credits and licences in NOTICE.md).
+
+- **Your groups** (sidebar view, Group by): sort projects into groups you name, shared by every app on the daemon. New group in the header; drag projects into, between and within groups and groups up and down (long press on a phone); a group's menu renames, moves or deletes it (its projects go to Ungrouped); a project's menu moves it, starts a workspace, copies its path or removes it. Projects with no workspace are listed too. In the chat list, each workspace's chats sit under its project's group.
+- **Colours and icons:** 11 colours and 36 icons, or any emoji, for groups and projects, and a colour for workspaces, in Morphise's view.
+- **Look on this device** (Display menu): text size, space between groups, indent, bold group names, folder icons; and a Spacious row height.
+- **Remove project:** runs `paseo project delete` on the daemon after checking that daemon lists the project and after a confirm. It deletes the project and archives its workspaces; worktrees Paseo made go with their ignored files; the folder stays. It cannot be undone.
+- **Session stats** for Claude Code and Codex chats, from their own logs: turns, steps, model and tool time, time to first token, speed, tokens and cache hit. Two pills by the message box, a Stats panel, Session in the Agents details pane, and an optional strip under the message box (off by default). On by default; Settings, Chat, Session stats.
+- **Search conversations** on the Agents view (off by default, per device): words not in a card's fields are looked for in its chat's log, one message holding them all; matching cards show the excerpt. It never reads Paseo's timeline, so finished agents are not woken.
+- **Fix:** in the chat list grouped by Last used, group headings showed a workspace name instead of Today, Yesterday and so on.
+- **Going back to 0.34:** set Group by back to something other than Your groups and Row height to Compact or Comfortable first; 0.34 cannot read those two values and would treat the whole profile as invalid. The new groups and stats documents are left untouched and ignored.
+
 ## 0.34.3 - 2026-11-17
 
 - **Priority flags:** every priority is now the same flag, told apart by its colour (Urgent red, High amber, Medium blue, Low gray), and a task with no priority shows a struck-out gray flag. They replace the signal bars of 0.34.2, on cards, in list rows and in the task editor, whose Priority label is a flag too.

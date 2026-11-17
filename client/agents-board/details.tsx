@@ -1,4 +1,4 @@
-import type { PluginClientContext } from "@getpaseo/plugin/client";
+import { type PluginClientContext, useSettings } from "@getpaseo/plugin/client";
 import { Markdown, useToast } from "@getpaseo/plugin/client/ui";
 import { type ReactNode, useEffect, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
@@ -10,6 +10,8 @@ import type { Indicator } from "../../shared/profile";
 import { latestPlan, type Step } from "../../shared/steps";
 import { formatElapsed } from "../../shared/time-text";
 import { statusColor } from "../ui/hues";
+import { statsSettings } from "../../shared/stats";
+import { StatsRows, statsReader, useSessionStats } from "../stats/session-stats";
 import { Button, Field, Icon, IconButton, PropertyRow, type Tokens } from "../ui/kit";
 import { type CardFacts, StopButton } from "./card";
 import { type CliActions, useCardLive } from "./data";
@@ -91,6 +93,19 @@ function Reply({ t, client, agent, onSent }: { t: Tokens; client: PluginClientCo
         <Button t={t} variant="primary" icon="SendHorizontal" label={state.busy ? "Sending" : "Send"} disabled={!text.trim() || state.busy} onPress={send} />
       </View>
     </View>
+  );
+}
+
+// The chat's session stats from its log (never from Paseo's timeline), while stats are on.
+function SessionStats({ t, client, agentId }: { t: Tokens; client: PluginClientContext; agentId: string }) {
+  const settings = useSettings(statsSettings);
+  const enabled = settings.status !== "ready" || settings.values.enabled;
+  const result = useSessionStats(statsReader(client), enabled ? agentId : null);
+  if (!enabled) return null;
+  return (
+    <Section t={t} title="Session">
+      <StatsRows t={t} result={result} kinds={["activity", "usage"]} />
+    </Section>
   );
 }
 
@@ -352,6 +367,8 @@ export function AgentDetails({
           {usage?.costUsd !== null && usage?.costUsd !== undefined ? <Text style={t.text.body}>{`$${usage.costUsd.toFixed(2)}`}</Text> : null}
         </Section>
       ) : null}
+
+      <SessionStats t={t} client={client} agentId={agent.id} />
 
       {activity.length ? (
         <Section t={t} title="Activity">

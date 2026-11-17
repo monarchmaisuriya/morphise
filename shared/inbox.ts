@@ -176,6 +176,8 @@ export const inboxSettings = defineSettings({
     cardWorkspace: z.boolean().default(true),
     // What it waits on: the request or the error.
     cardPreview: z.boolean().default(true),
+    // "Search conversations" in the Agents view: the search also reads Claude Code and Codex chats' own logs.
+    searchConversations: z.boolean().default(false),
   }),
 });
 

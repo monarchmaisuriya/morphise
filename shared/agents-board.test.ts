@@ -280,6 +280,11 @@ describe("filters", () => {
     expect(matchesFilter(card, NOW_FILTER({ search: "billing" }), NOW)).toBe(false);
   });
 
+  it("also finds words in the conversation excerpt found for the agent, the rest still in its fields", () => {
+    expect(matchesFilter(card, NOW_FILTER({ search: "login refund" }), NOW, { conversation: "…the refund flow failed…" })).toBe(true);
+    expect(matchesFilter(card, NOW_FILTER({ search: "refund" }), NOW, { conversation: null })).toBe(false);
+  });
+
   it("lists groups on the board with counts, and Paseo's other groups at 0 only when empty groups show", () => {
     const known = { labels: ["urgent", "later"], projects: ["App", "Docs"], workspaces: [{ id: "w1", name: "feature" }, { id: "w2", name: "main" }] };
     const shown = filterGroups([card, agent("b", { provider: "claude", project: "App", workspaceId: "w1" })], known, true);

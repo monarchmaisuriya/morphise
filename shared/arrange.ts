@@ -129,7 +129,14 @@ export function activityGroup(lastUsed: string | null, now: Date): number {
   return days <= 0 ? 0 : days === 1 ? 1 : days < 7 ? 2 : days < 30 ? 3 : 4;
 }
 
-export function groupKeys(config: View, workspace: ArrangeWorkspace, now: Date = new Date()): GroupDescriptor | GroupDescriptor[] {
+// `groups` maps a project key to the user's group for "custom"; before it has loaded, every project is ungrouped.
+export const UNGROUPED: GroupDescriptor = { key: "group:", title: "Ungrouped" };
+
+export function groupKeys(config: View, workspace: ArrangeWorkspace, now: Date = new Date(), groups?: ReadonlyMap<string, { id: string; name: string }>): GroupDescriptor | GroupDescriptor[] {
+  if (config.groupBy === "custom") {
+    const group = groups?.get(workspace.project.key);
+    return group ? { key: `group:${group.id}`, title: group.name } : UNGROUPED;
+  }
   if (config.groupBy === "activity") {
     // A workspace never prompted counts from when it was created, as its row time does.
     const index = activityGroup(workspace.lastPromptAt ?? workspace.createdAt, now);
@@ -145,12 +152,70 @@ export function groupKeys(config: View, workspace: ArrangeWorkspace, now: Date =
 }
 
 // Paseo returns groups in the order their first workspace appears; status groups instead follow
-// the configured status order.
-export function orderGroups<Group extends { key: string }>(groups: readonly Group[], config: View): Group[] {
+// the configured status order, and the user's own groups their saved order (`groupOrder`, group ids), Ungrouped last.
+export function orderGroups<Group extends { key: string }>(groups: readonly Group[], config: View, groupOrder: readonly string[] = []): Group[] {
   if (config.groupBy === "activity") return [...groups].sort((left, right) => left.key.localeCompare(right.key));
+  if (config.groupBy === "custom") {
+    const rank = new Map(groupOrder.map((id, index) => [`group:${id}`, index]));
+    const place = (key: string) => rank.get(key) ?? groupOrder.length;
+    return [...groups].sort((left, right) => place(left.key) - place(right.key));
+  }
   if (config.groupBy !== "status") return [...groups];
   const rank = new Map(config.statusOrder.map((indicator, index) => [`status:${indicator}`, index]));
   return [...groups].sort((left, right) => (rank.get(left.key) ?? 0) - (rank.get(right.key) ?? 0));
+}
+
+// Which heading a group draws, from its key: a chat group from one workspace looks up that workspace's name, a
+// project group draws the project's tile, the user's groups their own heading; any other group shows its title.
+export type HeadingKind = "workspace" | "project" | "group" | "plain";
+
+export function headingKind(key: string): HeadingKind {
+  if (key.startsWith("workspace:")) return "workspace";
+  if (key.startsWith("project:")) return "project";
+  if (key.startsWith("group:")) return "group";
+  return "plain";
+}
+
+// A section inside one of the user's groups: one project's workspaces, or one workspace's chats, tagged with its
+// project key.
+export interface InnerSection<Ref> {
+  key: string;
+  title: string;
+  items: readonly Ref[];
+  project: string;
+}
+
+export interface NestedGroup<Ref> {
+  key: string;
+  // Null for Ungrouped.
+  groupId: string | null;
+  title: string;
+  sections: InnerSection<Ref>[];
+}
+
+// "Your groups": the view's sections (in its own order) placed under the user's groups, in their saved order, with
+// Ungrouped last and left out when empty. Unknown project keys are skipped here and kept in the document.
+// `emptyProjects` are projects with no workspace to show; they are listed too (the caller passes none while a filter
+// is on), the ungrouped ones after the rest, by name.
+export function nestInGroups<Ref>(
+  inner: readonly InnerSection<Ref>[],
+  groups: readonly { id: string; name: string; projects: readonly string[] }[],
+  emptyProjects: readonly { key: string; title: string }[],
+): NestedGroup<Ref>[] {
+  const empty = emptyProjects.map((project): InnerSection<Ref> => ({ key: `project:${project.key}`, title: project.title, items: [], project: project.key }));
+  const grouped = new Set(groups.flatMap((group) => group.projects));
+  const nested: NestedGroup<Ref>[] = groups.map((group) => ({
+    key: `group:${group.id}`,
+    groupId: group.id,
+    title: group.name,
+    sections: group.projects.flatMap((project) => [...inner, ...empty].filter((section) => section.project === project)),
+  }));
+  const ungrouped = [
+    ...inner.filter((section) => !grouped.has(section.project)),
+    ...empty.filter((section) => !grouped.has(section.project)).sort((left, right) => left.title.localeCompare(right.title)),
+  ];
+  if (ungrouped.length) nested.push({ key: UNGROUPED.key, groupId: null, title: UNGROUPED.title, sections: ungrouped });
+  return nested;
 }
 
 export function capRows<Ref extends { key: string }>(

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { documentSchema } from "./document";
 import { bookmarkDocumentSchema } from "./bookmarks";
 import { taskDocumentSchema } from "./tasks";
+import { statsSettings } from "./stats";
 
 export const profileEventSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("ready"), revision: z.string(), document: documentSchema }),
@@ -44,4 +45,18 @@ export const bookmarksWatch = defineSubscription({
   name: "bookmarks.watch",
   input: z.object({}),
   event: bookmarksEventSchema,
+});
+
+export const statsEventSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("ready"), revision: z.string(), document: statsSettings.schema }),
+  z.object({ status: z.literal("invalid"), revision: z.string(), error: z.string() }),
+]);
+
+export type StatsEvent = z.infer<typeof statsEventSchema>;
+
+// The session stats settings (on or off, the desktop strip), streamed like the profile so every app follows a change.
+export const statsWatch = defineSubscription({
+  name: "stats.watch",
+  input: z.object({}),
+  event: statsEventSchema,
 });

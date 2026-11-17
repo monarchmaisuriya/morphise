@@ -4,9 +4,11 @@ import {
   capRows,
   compareWorkspaces,
   groupKeys,
+  headingKind,
   isProtected,
   isVisible,
   matchesFilter,
+  nestInGroups,
   orderGroups,
 } from "./arrange";
 import { profileSchema } from "./profile";
@@ -182,6 +184,19 @@ describe("groupKeys", () => {
   });
 });
 
+describe("groupKeys with the user's own groups", () => {
+  const groups = new Map([["project:app", { id: "gwork", name: "Work" }]]);
+
+  it("puts a grouped project's workspaces in its group, and the rest under Ungrouped", () => {
+    expect(groupKeys(view({ groupBy: "custom" }), workspace({ id: "w" }), new Date(), groups)).toEqual({ key: "group:gwork", title: "Work" });
+    expect(groupKeys(view({ groupBy: "custom" }), workspace({ id: "x", project: { key: "project:other" } }), new Date(), groups)).toEqual({ key: "group:", title: "Ungrouped" });
+  });
+
+  it("puts everything under Ungrouped until the groups have loaded", () => {
+    expect(groupKeys(view({ groupBy: "custom" }), workspace({ id: "w" }))).toEqual({ key: "group:", title: "Ungrouped" });
+  });
+});
+
 describe("activity groups", () => {
   const now = new Date("2026-11-11T15:00:00");
   const at = (iso: string | null) => workspace({ id: iso ?? "never", lastPromptAt: iso });
@@ -216,6 +231,11 @@ describe("orderGroups", () => {
     ]);
   });
 
+  it("orders the user's groups as saved, with Ungrouped last", () => {
+    const groups = [group("group:"), group("group:gside"), group("group:gwork")];
+    expect(orderGroups(groups, view({ groupBy: "custom" }), ["gwork", "gside"]).map((item) => item.key)).toEqual(["group:gwork", "group:gside", "group:"]);
+  });
+
   it("keeps project and label groups in the order they arrived", () => {
     const groups = [group("project:b"), group("project:a")];
     expect(orderGroups(groups, view({ groupBy: "project" })).map((item) => item.key)).toEqual(["project:b", "project:a"]);
@@ -247,5 +267,63 @@ describe("capRows", () => {
     const result = capRows(refs, new Set(["r2", "r4", "r6", "r8", "r9", "r1"]), limit, false);
     expect(result.rows.map((ref) => ref.key)).toEqual(["r1", "r2", "r4", "r6", "r8", "r9"]);
     expect(result.hidden).toBe(3);
+  });
+});
+
+describe("nestInGroups", () => {
+  const section = (project: string, items: string[] = [project + "-w"], key = `project:${project}`) => ({ key, title: project.toUpperCase(), items, project });
+  const groups = [
+    { id: "gwork", name: "Work", projects: ["a", "gone", "b"] },
+    { id: "gside", name: "Side", projects: [] },
+  ];
+  const shape = (nested: ReturnType<typeof nestInGroups<string>>) => nested.map((group) => [group.key, group.title, group.sections.map((item) => [item.key, item.items])]);
+
+  it("puts each project under its group in the saved order, skipping unknown keys, with Ungrouped last", () => {
+    expect(shape(nestInGroups([section("c"), section("b"), section("a")], groups, []))).toEqual([
+      ["group:gwork", "Work", [["project:a", ["a-w"]], ["project:b", ["b-w"]]]],
+      ["group:gside", "Side", []],
+      ["group:", "Ungrouped", [["project:c", ["c-w"]]]],
+    ]);
+  });
+
+  it("shows a project with no workspace in its group, and ungrouped ones after the rest, by name", () => {
+    const nested = nestInGroups([section("c")], groups, [
+      { key: "z", title: "Zed" },
+      { key: "a", title: "Alpha" },
+      { key: "y", title: "Yak" },
+    ]);
+    expect(shape(nested)).toEqual([
+      ["group:gwork", "Work", [["project:a", []]]],
+      ["group:gside", "Side", []],
+      ["group:", "Ungrouped", [["project:c", ["c-w"]], ["project:y", []], ["project:z", []]]],
+    ]);
+  });
+
+  it("leaves out Ungrouped when every project is in a group", () => {
+    expect(nestInGroups([section("a")], groups, []).map((group) => group.key)).toEqual(["group:gwork", "group:gside"]);
+  });
+
+  it("groups chats by their workspace's project, keeping each workspace as its own section", () => {
+    const chats = [section("a", ["c1"], "workspace:w1"), section("x", ["c2"], "workspace:w2"), section("a", ["c3"], "workspace:w3")];
+    expect(shape(nestInGroups(chats, groups, []))).toEqual([
+      ["group:gwork", "Work", [["workspace:w1", ["c1"]], ["workspace:w3", ["c3"]]]],
+      ["group:gside", "Side", []],
+      ["group:", "Ungrouped", [["workspace:w2", ["c2"]]]],
+    ]);
+  });
+});
+
+describe("headingKind", () => {
+  it("picks each heading from its group's key, so a Last used group of chats gets its own title", () => {
+    expect(["workspace:w", "project:p", "group:g1", "group:", "activity:0", "status:done", "label:bug", "pinned"].map(headingKind)).toEqual([
+      "workspace",
+      "project",
+      "group",
+      "group",
+      "plain",
+      "plain",
+      "plain",
+      "plain",
+    ]);
   });
 });

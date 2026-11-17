@@ -66,7 +66,7 @@ export function createAgentActions({ run, cli, home }: { run: CliRunner; cli: ()
   };
 }
 
-const spawnCli: CliRunner = (cli, args, timeoutMs) =>
+export const spawnCli: CliRunner = (cli, args, timeoutMs) =>
   new Promise((resolve, reject) => {
     const child = spawn(cli, [...args], { stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
@@ -88,7 +88,7 @@ const spawnCli: CliRunner = (cli, args, timeoutMs) =>
     });
   });
 
-function isExecutable(path: string): boolean {
+export function isExecutable(path: string): boolean {
   try {
     accessSync(path, constants.X_OK);
     return true;

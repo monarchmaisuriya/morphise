@@ -3,8 +3,8 @@
 // lands is worked out by drop-places.ts (boardDropTarget) from the cards' places measured when it was lifted.
 import { createContext, type ReactNode, type RefObject, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, type GestureResponderHandlers, type NativeScrollEvent, type NativeSyntheticEvent, PanResponder, Platform, type ScrollView, View, type ViewProps } from "react-native";
-import type { BoardColumn, DropTarget, Frame } from "../../shared/board";
-import { boardDropTarget, copyKey, type CopyTarget } from "./drop-places";
+import type { DropTarget, Frame } from "../../shared/board";
+import { boardDropTarget, copyKey, type CopyTarget, type DragColumn } from "./drop-places";
 
 // Within this distance of the board's sides (or a column's top and bottom), a held card scrolls it.
 const EDGE = 56;
@@ -27,7 +27,7 @@ interface Scroller {
   size: number;
 }
 
-interface DragApi {
+export interface DragApi {
   state: DragState | null;
   // Phones: the card a long press picked up, which the next finger movement drags.
   armed: string | null;
@@ -65,7 +65,7 @@ function measure(view: View | null | undefined): Promise<Frame | null> {
  * a scroller that scrolls down ("vertical", the list); the outer scroller is registered as "board" either way. Wrap the
  * board in `DragProvider` with `value` and give `root` to its outer view.
  */
-export function useBoardDrag(columns: BoardColumn[], drop: (taskId: string, target: DropTarget) => void, closes: boolean, stack: "horizontal" | "vertical" = "horizontal", gap = CARD_GAP) {
+export function useBoardDrag(columns: readonly DragColumn[], drop: (taskId: string, target: DropTarget) => void, closes: boolean, stack: "horizontal" | "vertical" = "horizontal", gap = CARD_GAP) {
   const [state, setState] = useState<DragState | null>(null);
   const [armed, setArmed] = useState<string | null>(null);
   // `gap`: the space between two cards (rows in a list have none), which a closed slot also gives back.
@@ -259,31 +259,43 @@ export function useDrag(): DragApi {
   return api;
 }
 
-/** The pan handlers that drag one drawn copy of a card; spread them on a view around the card. */
-export function useCardDragHandlers(laneKey: string, taskId: string): GestureResponderHandlers & Pick<ViewProps, "onTouchEnd" | "onTouchCancel"> {
-  const api = useDrag();
+/**
+ * The pan handlers that drag one drawn copy of a card; spread them on a view around the card. The drag comes from the
+ * nearest provider, or is passed in (`drag`) where one surface holds two drags; `null` turns dragging off.
+ */
+export function useCardDragHandlers(laneKey: string, taskId: string, drag?: DragApi | null): GestureResponderHandlers & Pick<ViewProps, "onTouchEnd" | "onTouchCancel"> {
+  const provided = useContext(DragContext);
+  const api = drag === undefined ? provided : drag;
+  if (drag === undefined && !api) throw new Error("useDrag needs a board drag provider");
   const latest = useRef({ api, laneKey, taskId });
   latest.current = { api, laneKey, taskId };
   const responder = useRef(
     PanResponder.create({
       // The web lifts a card once the mouse has moved; a phone only after a long press picked it up, so a swipe still scrolls.
-      onMoveShouldSetPanResponderCapture: (_event, gesture) => (Platform.OS === "web" ? Math.abs(gesture.dx) + Math.abs(gesture.dy) > 6 : latest.current.api.isArmed(latest.current.taskId)),
-      onPanResponderGrant: () => latest.current.api.start(latest.current.laneKey, latest.current.taskId),
-      onPanResponderMove: (_event, gesture) => latest.current.api.move(gesture.moveX, gesture.moveY, gesture.dx, gesture.dy),
-      onPanResponderRelease: () => latest.current.api.end(true),
-      onPanResponderTerminate: () => latest.current.api.end(false),
+      onMoveShouldSetPanResponderCapture: (_event, gesture) => {
+        const { api: current, taskId: id } = latest.current;
+        if (!current) return false;
+        return Platform.OS === "web" ? Math.abs(gesture.dx) + Math.abs(gesture.dy) > 6 : current.isArmed(id);
+      },
+      onPanResponderGrant: () => latest.current.api?.start(latest.current.laneKey, latest.current.taskId),
+      onPanResponderMove: (_event, gesture) => latest.current.api?.move(gesture.moveX, gesture.moveY, gesture.dx, gesture.dy),
+      onPanResponderRelease: () => latest.current.api?.end(true),
+      onPanResponderTerminate: () => latest.current.api?.end(false),
       onPanResponderTerminationRequest: () => false,
     }),
   ).current;
   // A long press arms the card, but the pan responder (and its end) only runs once the finger moves; lifting it without
   // a drag must disarm it, or the armed card keeps the board from scrolling. Touch ends bubble up from the card.
-  const disarm = useRef({ onTouchEnd: () => latest.current.api.arm(null), onTouchCancel: () => latest.current.api.arm(null) }).current;
+  const disarm = useRef({ onTouchEnd: () => latest.current.api?.arm(null), onTouchCancel: () => latest.current.api?.arm(null) }).current;
   return { ...responder.panHandlers, ...disarm };
 }
 
 /** The lifted copy of the dragged card, drawn above the board and following the pointer. */
-export function DragGhost({ children }: { children: (taskId: string) => ReactNode }) {
-  const { state, offset } = useDrag();
+export function DragGhost({ children, drag }: { children: (taskId: string) => ReactNode; drag?: DragApi }) {
+  const provided = useContext(DragContext);
+  const api = drag ?? provided;
+  if (!api) throw new Error("DragGhost needs a board drag provider or a drag");
+  const { state, offset } = api;
   if (!state?.origin) return null;
   const { x, y, width } = state.origin;
   return (

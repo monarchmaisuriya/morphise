@@ -4,12 +4,15 @@ import {
   openExternalUrl,
   type PluginHostSummary,
   type PluginSidebarViewProps,
+  type ProjectRef,
   type TerminalRef,
   type WorkspaceRef,
   useAgent,
   useAgents,
   useHosts,
   usePaseo,
+  useProject,
+  useProjects,
   useSettings,
   useTerminals,
   useWorkspace,
@@ -17,20 +20,27 @@ import {
 } from "@getpaseo/plugin/client";
 import type { PluginAgentSnapshot, PluginWorkspaceSnapshot } from "@getpaseo/plugin";
 import { copyText, useToast } from "@getpaseo/plugin/client/ui";
-import { type ReactNode, type RefObject, useEffect, useId, useMemo, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Animated, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import {
   capRows,
   compareWorkspaces,
   type Filter,
   groupKeys,
+  headingKind,
   isProtected,
   isVisible,
   matchesFilter,
+  type NestedGroup,
+  nestInGroups,
   orderGroups,
   STATUS_TITLES,
   workspaceName,
 } from "../shared/arrange";
+import { createGroup, type Decoration, deleteGroup, dropGroup, dropProject, EMPTY_PROJECT_GROUPS, moveGroup, moveProject, newGroupId, type ProjectGroups, projectGroupsSettings, renameGroup, setDecoration } from "../shared/project-groups";
+import { DecorIcon, DecorPicker } from "./decor-picker";
+import type { RemoveProjectResult } from "../shared/project-actions";
+import { type DragApi, DragGhost, useBoardDrag, useCardDragHandlers } from "./board/drag";
 import { attentionOrder, NEEDS_ME, needsAttention, needsMeOn, nextAttention } from "../shared/attention";
 import { chatGroupKey, chatIndicator, chatMatches, chatName, compareChats, isSidebarChat } from "../shared/chat-status";
 import { INDICATORS, type Indicator, type Profile } from "../shared/profile";
@@ -40,7 +50,7 @@ import { type ChatListing, chatTree, DEFAULT_CHAT_ROWS, DEFAULT_REMINDER_ROWS, e
 import { newTaskId } from "./board/card-editor";
 import { isDue, type Reminder } from "../shared/reminders";
 import { formatDue, formatElapsed } from "../shared/time-text";
-import { type ViewState, viewStateSettings } from "../shared/view-state";
+import { sidebarLook, type ViewState, viewStateSettings } from "../shared/view-state";
 import { createValueStore, type ValueStore, useValue } from "./profile-store";
 import { refOn, registerShowNavigator } from "./show";
 import { useReminderClock } from "./reminder-clock";
@@ -64,7 +74,7 @@ type Theme = PluginSidebarViewProps["theme"];
 
 
 
-const DEFAULT_VIEW_STATE: ViewState = { collapsed: [], statusFilter: [], projectFilter: [], hideDone: false, changedOnly: false, pinnedOnly: false, showBackground: false };
+const DEFAULT_VIEW_STATE: ViewState = viewStateSettings.schema.parse({});
 // Touch screens get finger-sized rows and always-visible row buttons. Paseo reports its sidebar as
 // "compact" on desktop too, so the input decides this (no hover), not the layout.
 const TOUCH = cannotHover();
@@ -95,26 +105,30 @@ const toggleSelected = (workspaceKey: string) => {
 // Sizes match Paseo's own sidebar (measured on 0.16.0-beta.1): 36px rows inset 8px with an 8px
 // radius, 14px titles, 12px muted section labels and dimmer 12px times; the selected row uses
 // surface2. "Comfortable" density adds 4px to each row.
-function viewStyles(theme: Theme, config: ViewConfig) {
+function viewStyles(theme: Theme, config: ViewConfig, look: ReturnType<typeof sidebarLook>) {
   const c = theme.colors;
   // "Compact" is Paseo's own 36px row; "comfortable" adds air.
-  const height = TOUCH ? 44 : config.density === "compact" ? 36 : 40;
+  const { height, textSize, groupGap, rowPad } = look;
+  // Rows and their chat lines move in by the indent beyond the usual 8.
+  const shift = rowPad - 8;
   return {
     scroll: { flex: 1 },
     header: { flexDirection: "row" as const, alignItems: "center" as const, minHeight: 36, paddingLeft: 16, paddingRight: 8, gap: 2 },
     headerText: { color: c.foregroundMuted, fontSize: 12, flex: 1 },
     tools: { paddingHorizontal: 8, paddingBottom: 6, gap: 6 },
     // More space above a heading than below it: the heading belongs to the rows that follow.
-    heading: { flexDirection: "row" as const, alignItems: "center" as const, gap: 6, minHeight: 28, paddingLeft: 16, paddingRight: 12, marginTop: 14 },
-    headingText: { color: c.foregroundMuted, fontSize: 12, flexShrink: 1 },
+    heading: { flexDirection: "row" as const, alignItems: "center" as const, gap: 6, minHeight: 28, paddingLeft: 16, paddingRight: 12, marginTop: groupGap },
+    headingText: { color: c.foregroundMuted, fontSize: 12, flexShrink: 1, fontWeight: look.boldGroups ? ("600" as const) : ("400" as const) },
     count: { color: c.foregroundMuted, fontSize: 12, opacity: 0.6 },
     // Paseo's measured columns: tiles and status dots share a 16px slot at x=16; text starts at x=40.
-    project: { flexDirection: "row" as const, alignItems: "center" as const, minHeight: TOUCH ? 44 : 40, marginHorizontal: 8, marginTop: 10, paddingLeft: 8, paddingRight: 4, borderRadius: 8, gap: 2 },
+    project: { flexDirection: "row" as const, alignItems: "center" as const, minHeight: TOUCH ? 44 : 40, marginHorizontal: 8, marginTop: 10, paddingLeft: rowPad, paddingRight: 4, borderRadius: 8, gap: 2 },
     projectMain: { flex: 1, minWidth: 0, flexDirection: "row" as const, alignItems: "center" as const, gap: 8, minHeight: TOUCH ? 44 : 40 },
     tile: { width: 16, height: 16, borderRadius: 4, alignItems: "center" as const, justifyContent: "center" as const },
+    // This device's "Folder icons": off leaves a project's tile slot empty (its fold chevron still shows on hover).
+    projectIcons: look.projectIcons,
     tileText: { color: "#ffffff", fontSize: 10, fontWeight: "600" as const },
     projectText: { color: c.foregroundMuted, fontSize: 14, flexShrink: 1 },
-    row: { minHeight: height, marginHorizontal: 8, paddingLeft: 8, paddingRight: 6, borderRadius: 8, flexDirection: "row" as const, alignItems: "center" as const, gap: 2 },
+    row: { minHeight: height, marginHorizontal: 8, paddingLeft: rowPad, paddingRight: 6, borderRadius: 8, flexDirection: "row" as const, alignItems: "center" as const, gap: 2 },
     rowMain: { flex: 1, minWidth: 0, minHeight: height, flexDirection: "row" as const, alignItems: "center" as const, gap: 8 },
     // Two-line rows: the status mark and time line up with the title line.
     twoLine: { alignItems: "flex-start" as const, paddingVertical: 6 },
@@ -131,18 +145,18 @@ function viewStyles(theme: Theme, config: ViewConfig) {
     // Where each kind of row's line sits: x of the line, x where the row's status slot starts, and the row's middle
     // (every chat and sub-agent row is at least `height` tall, set by `rowMain`).
     branch: {
-      chat: { x: 23, to: 32, middle: height / 2 },
-      sub: { x: 39, to: 52, middle: height / 2 },
+      chat: { x: 23 + shift, to: 32 + shift, middle: height / 2 },
+      sub: { x: 39 + shift, to: 52 + shift, middle: height / 2 },
       more: 14,
     },
     slot: { width: 16, alignItems: "center" as const, justifyContent: "center" as const },
-    child: { paddingLeft: 24, minHeight: TOUCH ? 40 : 30 },
+    child: { paddingLeft: 24 + shift, minHeight: TOUCH ? 40 : 30 },
     // A sub-agent sits one step further in, under its parent chat.
-    grandchild: { paddingLeft: 44 },
+    grandchild: { paddingLeft: 44 + shift },
     // The open row: the theme's second surface, softened so it does not weigh more than the rows around it.
     selected: { backgroundColor: withAlpha(c.surface2, 0.7) ?? c.surface2 },
     hovered: { backgroundColor: c.surface1 },
-    label: { color: c.foreground, fontSize: config.density === "compact" ? 13 : 14, flexShrink: 1 },
+    label: { color: c.foreground, fontSize: textSize, flexShrink: 1 },
     childLabel: { color: c.foregroundMuted, fontSize: 13, flexShrink: 1 },
     secondary: { color: c.foregroundMuted, fontSize: 12, flexShrink: 1, opacity: 0.75 },
     time: { color: c.foregroundMuted, fontSize: 12, opacity: 0.7, marginLeft: "auto" as const },
@@ -196,7 +210,35 @@ interface Shared {
   listing: ChatListing;
   // The one row or heading the pointer is over (see hover-tracker.ts).
   hover: HoverTracker;
+  // "Your groups": the saved groups, a change to them, and every project by key (for projects with no workspace).
+  groups: { doc: ProjectGroups; change(operation: (doc: ProjectGroups) => ProjectGroups): void; projectRefs: ReadonlyMap<string, ProjectRef> };
+  // "Your groups" in the workspace list: dragging projects between groups, and groups up and down; null otherwise.
+  drag: { projects: DragApi; groups: DragApi } | null;
+  removeProject(projectId: string): Promise<RemoveProjectResult>;
 }
+
+// The drag column for Ungrouped, which has no group id.
+const UNGROUPED_DROP = "~ungrouped";
+
+// Where a dragged project or group will land: a thin accent line.
+function DropLine({ shared }: { shared: Shared }) {
+  return <View pointerEvents="none" style={{ height: 2, marginHorizontal: 12, marginVertical: 1, borderRadius: 1, backgroundColor: shared.t.c.accent }} />;
+}
+
+// The copy that follows the pointer while a project or group is dragged.
+function DragPill({ title, shared }: { title: string; shared: Shared }) {
+  const { t } = shared;
+  return (
+    <View style={{ marginHorizontal: 8, paddingHorizontal: 10, minHeight: 32, justifyContent: "center", borderRadius: 8, backgroundColor: t.c.surface2, borderWidth: 1, borderColor: t.c.border }}>
+      <Text style={{ color: t.c.foreground, fontSize: 13 }} numberOfLines={1}>
+        {title}
+      </Text>
+    </View>
+  );
+}
+
+// The group whose name is being edited in its heading (a new group starts so); null for none.
+const renamingGroup = createValueStore<string | null>(null);
 
 function report(toast: ReturnType<typeof useToast>, what: string) {
   return (error: unknown) => toast.error(`Could not ${what}: ${error instanceof Error ? error.message : String(error)}`);
@@ -725,7 +767,8 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   const rowRef = useRef<View>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [confirmArchive, setConfirmArchive] = useState(false);
-  const [menu, setMenu] = useState<"actions" | "labels" | null>(null);
+  const [menu, setMenu] = useState<"actions" | "labels" | "colour" | null>(null);
+  const workspaceDecor: Decoration = shared.groups.doc.decorations.workspaces[reference.key] ?? { color: null, icon: null };
   const [newLabel, setNewLabel] = useState("");
   const [reminding, setReminding] = useState(false);
   const [card, setCard] = useState(false);
@@ -896,7 +939,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   // Pinned rows in their own Pinned section need no icon; elsewhere the icon shows it.
   const pinIcon = workspace.pinned && !(config.pinnedFirst && config.groupBy !== "none") ? <Icon name="Pin" size={11} color={c.foregroundMuted} /> : null;
   const titleText = (
-    <Text style={[styles.label, indicator === "attention" ? { fontWeight: "600" } : null]} numberOfLines={1}>
+    <Text style={[styles.label, indicator === "attention" ? { fontWeight: "600" } : null, workspaceDecor.color ? { color: workspaceDecor.color } : null]} numberOfLines={1}>
       {workspace.title}
     </Text>
   );
@@ -970,8 +1013,13 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
       <Dropdown t={t} open={card && menu === null && renaming === null} onClose={() => setCard(false)} anchor={rowRef} passive width={280}>
         <WorkspaceCard title={workspace.title} workspace={workspace} info={info} host={host} shared={shared} />
       </Dropdown>
-      <Dropdown t={t} open={menu !== null} onClose={closeMenu} anchor={rowRef} width={250}>
-        {menu === "labels" ? (
+      <Dropdown t={t} open={menu !== null} onClose={closeMenu} anchor={rowRef} width={menu === "colour" ? 300 : 250}>
+        {menu === "colour" ? (
+          <>
+            <MenuItem t={t} icon="ChevronLeft" label="Set colour" onPress={() => setMenu("actions")} />
+            <DecorPicker t={t} value={workspaceDecor} withIcon={false} onChange={(next) => shared.groups.change((doc) => setDecoration(doc, "workspaces", reference.key, next))} />
+          </>
+        ) : menu === "labels" ? (
           <>
             <MenuItem t={t} icon="ChevronLeft" label="Labels" onPress={() => setMenu("actions")} />
             {[...new Set([...shared.labels, ...workspace.labels])].sort().map((label) => (
@@ -986,6 +1034,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
             <MenuItem t={t} icon="Copy" label="Copy path" onPress={() => copy(workspace.directory, "path")} />
             {workspace.branch ? <MenuItem t={t} icon="GitBranch" label="Copy branch name" onPress={() => copy(workspace.branch ?? "", "branch name")} /> : null}
             <MenuItem t={t} icon="Pencil" label="Rename workspace" onPress={startRename} />
+            <MenuItem t={t} icon="Palette" label="Set colour" hint={workspaceDecor.color ? "Set" : undefined} onPress={() => setMenu("colour")} />
             {/* Pin and Archive are buttons on the row; Pin is here only when its row button is turned off. */}
             {config.rowActions.includes("pin") ? null : <MenuItem t={t} icon={workspace.pinned ? "PinOff" : "Pin"} label={workspace.pinned ? "Unpin" : "Pin to top"} onPress={togglePin} />}
             <MenuItem t={t} icon="Tag" label="Labels" hint={workspace.labels.length ? String(workspace.labels.length) : undefined} onPress={() => setMenu("labels")} />
@@ -1116,34 +1165,242 @@ function GroupHeading({ title, count, collapsed, onToggle, shared }: { title: st
   );
 }
 
+// One of the user's groups ("Your groups"): its name, count and fold chevron, and a menu to rename it, move it up
+// or down, or delete it (its projects then show under Ungrouped; a group with projects asks for a second press).
+// Ungrouped has no menu.
+function UserGroupHeading({ group, index, count, collapsed, onToggle, shared }: { group: NestedGroup<{ key: string }>; index: number; count: number; collapsed: boolean; onToggle(): void; shared: Shared }) {
+  const { styles, config, props, t } = shared;
+  const key = useId();
+  const hovered = useHovered(shared.hover, key);
+  const anchor = useRef<View>(null);
+  const [menu, setMenu] = useState<"actions" | "decor" | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const id = group.groupId;
+  const renamingId = useValue(renamingGroup);
+  const renaming = id !== null && renamingId === id;
+  const [name, setName] = useState(group.title);
+  useEffect(() => {
+    if (renaming) setName(group.title);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [renaming]);
+  const saved = shared.groups.doc.groups;
+  const projects = saved.find((item) => item.id === id)?.projects.length ?? 0;
+  // Ungrouped stays last, so it cannot be dragged.
+  const groupDrag = id !== null && !renaming ? shared.drag?.groups ?? null : null;
+  const dragHandlers = useCardDragHandlers("", id ?? "", groupDrag);
+  const close = () => {
+    setMenu(null);
+    setConfirmDelete(false);
+  };
+  const decor: Decoration = (id ? shared.groups.doc.decorations.groups[id] : undefined) ?? { color: null, icon: null };
+  const finishRename = () => {
+    if (renamingGroup.get() !== id) return;
+    renamingGroup.set(null);
+    if (id && name.trim() && name.trim() !== group.title) shared.groups.change((doc) => renameGroup(doc, id, name));
+  };
+  const remove = () => {
+    if (!id) return;
+    if (projects > 0 && !confirmDelete) return setConfirmDelete(true);
+    close();
+    shared.groups.change((doc) => deleteGroup(doc, id));
+  };
+  const move = (to: number) => {
+    close();
+    if (id) shared.groups.change((doc) => moveGroup(doc, id, to));
+  };
+  return (
+    <View ref={anchor} onPointerMove={() => shared.hover.mark(key)} style={[styles.heading, { paddingRight: 8 }]} {...dragHandlers}>
+      {renaming ? (
+        <View style={{ flex: 1 }}>
+          <Field t={t} plain autoFocus value={name} onChangeText={setName} onSubmit={finishRename} onBlur={finishRename} maxLength={60} accessibilityLabel={`Name of the group ${group.title}`} />
+        </View>
+      ) : (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${collapsed ? "Expand" : "Collapse"} ${group.title}, ${count} ${count === 1 ? "item" : "items"}`}
+          accessibilityHint={groupDrag ? "Drag to move the group" : undefined}
+          onPress={onToggle}
+          onLongPress={groupDrag && TOUCH && id ? () => groupDrag.arm(id) : undefined}
+          style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6, minHeight: 28 }}
+        >
+          {decor.icon ? <DecorIcon icon={decor.icon} color={decor.color ?? props.theme.colors.foregroundMuted} size={12} /> : null}
+          <Text style={[styles.headingText, decor.color ? { color: decor.color } : null]} numberOfLines={1}>
+            {group.title}
+          </Text>
+          {config.counts ? <Text style={styles.count}>{count}</Text> : null}
+          <View style={{ flex: 1 }} />
+          <Icon name={collapsed ? "ChevronRight" : "ChevronDown"} size={12} color={props.theme.colors.foregroundMuted} />
+        </Pressable>
+      )}
+      {id !== null && !renaming && (hovered || TOUCH || menu) ? <IconButton t={t} size="sm" icon="Ellipsis" label={`Actions for the group ${group.title}`} onPress={() => (menu ? close() : setMenu("actions"))} /> : null}
+      {id !== null ? (
+        <Dropdown t={t} open={menu !== null} onClose={close} anchor={anchor} width={menu === "decor" ? 300 : 260}>
+          {menu === "decor" ? (
+            <>
+              <MenuItem t={t} icon="ChevronLeft" label="Colour and icon" onPress={() => setMenu("actions")} />
+              <DecorPicker t={t} value={decor} withIcon onChange={(next) => shared.groups.change((doc) => setDecoration(doc, "groups", id, next))} />
+            </>
+          ) : (
+          <>
+          <MenuItem
+            t={t}
+            icon="Pencil"
+            label="Rename group"
+            onPress={() => {
+              close();
+              renamingGroup.set(id);
+            }}
+          />
+          <MenuItem t={t} icon="ArrowUp" label="Move up" disabled={index === 0} onPress={() => move(index - 1)} />
+          <MenuItem t={t} icon="ArrowDown" label="Move down" disabled={index >= saved.length - 1} onPress={() => move(index + 1)} />
+          <MenuItem t={t} icon="Palette" label="Colour and icon" onPress={() => setMenu("decor")} />
+          <MenuItem t={t} icon="Trash2" tone={t.c.statusDanger} label={confirmDelete ? `Delete: its ${projects} ${projects === 1 ? "project moves" : "projects move"} to Ungrouped` : "Delete group"} onPress={remove} />
+          </>
+          )}
+        </Dropdown>
+      ) : null}
+    </View>
+  );
+}
+
 // A project group's heading, as in Paseo's own sidebar: a letter tile and the project's name. On
 // hover the tile turns into the fold chevron and a plus opens Paseo's New workspace screen for the
 // project (what Paseo's openProject navigation shows). The count shows on hover, as a detail.
-function ProjectHeading({ title, first, count, collapsed, onToggle, shared }: { title: string; first: WorkspaceRef | null; count: number; collapsed: boolean; onToggle(): void; shared: Shared }) {
+// "Copy path" for a project: its own component, as the path is read from the project, which exists only here.
+function CopyPathItem({ project, onDone, t }: { project: ProjectRef; onDone(): void; t: Tokens }) {
+  const rootPath = useProject(project, (item) => item.rootPath);
+  const toast = useToast();
+  if (!rootPath) return null;
+  return (
+    <MenuItem
+      t={t}
+      icon="Copy"
+      label="Copy path"
+      onPress={() => {
+        onDone();
+        void copyText(rootPath).then(() => toast.show("Copied the path"), report(toast, "copy the path"));
+      }}
+    />
+  );
+}
+
+// Under "Your groups" a project with no workspace is listed too, by `projectRef`, and the heading gets a menu: Move to
+// group, New workspace and Copy path.
+function ProjectHeading({ title, first, projectRef = null, count, collapsed, onToggle, shared }: { title: string; first: WorkspaceRef | null; projectRef?: ProjectRef | null; count: number; collapsed: boolean; onToggle(): void; shared: Shared }) {
   const { styles, config, props, t } = shared;
-  const project = useWorkspace(first ?? "", (workspace) => workspace.project) ?? null;
+  const project = useWorkspace(first ?? "", (workspace) => workspace.project) ?? projectRef;
   const key = useId();
   const hovered = useHovered(shared.hover, key);
   const chevron = collapsed || hovered;
+  const anchor = useRef<View>(null);
+  const [menu, setMenu] = useState<"actions" | "move" | "decor" | "remove" | null>(null);
+  const toast = useToast();
+  const [removing, setRemoving] = useState(false);
+  // Only after the confirm: Paseo deletes the project and its workspaces, and the worktrees it made with their ignored files.
+  const remove = () => {
+    if (!project || removing) return;
+    setRemoving(true);
+    void shared.removeProject(project.id).then(
+      (result) => {
+        setRemoving(false);
+        if (!result.ok) return void toast.error(`Could not remove ${title}: ${result.error}`);
+        setMenu(null);
+        toast.show(`Removed ${title}${result.removedWorkspaceIds.length ? ` and ${result.removedWorkspaceIds.length} workspaces` : ""}`);
+        shared.groups.change((doc) => setDecoration(moveProject(doc, project.key, null, 0), "projects", project.key, { color: null, icon: null }));
+      },
+      (error: unknown) => {
+        setRemoving(false);
+        report(toast, "remove the project")(error);
+      },
+    );
+  };
+  const decor: Decoration = (project ? shared.groups.doc.decorations.projects[project.key] : undefined) ?? { color: null, icon: null };
+  const custom = config.groupBy === "custom" && project !== null;
+  const projectDrag = custom ? shared.drag?.projects ?? null : null;
+  const dragHandlers = useCardDragHandlers("", project?.key ?? "", projectDrag);
+  const currentGroup = project ? shared.groups.doc.groups.find((group) => group.projects.includes(project.key))?.id ?? null : null;
+  const moveTo = (groupId: string | null) => {
+    setMenu(null);
+    if (project) shared.groups.change((doc) => moveProject(doc, project.key, groupId, Number.MAX_SAFE_INTEGER));
+  };
   return (
-    <View onPointerMove={() => shared.hover.mark(key)} style={[styles.project, hovered ? styles.hovered : null]}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`${collapsed ? "Expand" : "Collapse"} ${title}, ${count} ${count === 1 ? "workspace" : "workspaces"}`} onPress={onToggle} style={styles.projectMain}>
+    <View ref={anchor} onPointerMove={() => shared.hover.mark(key)} style={[styles.project, hovered ? styles.hovered : null]} {...dragHandlers}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${collapsed ? "Expand" : "Collapse"} ${title}, ${count} ${count === 1 ? "workspace" : "workspaces"}`}
+        accessibilityHint={projectDrag ? "Drag to move it to another group" : undefined}
+        onPress={onToggle}
+        onLongPress={projectDrag && TOUCH && project ? () => projectDrag.arm(project.key) : undefined}
+        style={styles.projectMain}
+      >
         {chevron ? (
           <View style={styles.tile}>
             <Icon name={collapsed ? "ChevronRight" : "ChevronDown"} size={13} color={props.theme.colors.foregroundMuted} />
           </View>
         ) : (
-          <View style={[styles.tile, { backgroundColor: tileColor(title) }]}>
-            <Text style={styles.tileText}>{title.trim().charAt(0).toUpperCase() || "?"}</Text>
-          </View>
+          !styles.projectIcons ? (
+            <View style={styles.tile} />
+          ) : decor.icon ? (
+            <View style={styles.tile}>
+              <DecorIcon icon={decor.icon} color={decor.color ?? props.theme.colors.foreground} size={14} />
+            </View>
+          ) : (
+            <View style={[styles.tile, { backgroundColor: decor.color ?? tileColor(title) }]}>
+              <Text style={styles.tileText}>{title.trim().charAt(0).toUpperCase() || "?"}</Text>
+            </View>
+          )
         )}
-        <Text style={styles.projectText} numberOfLines={1}>
+        <Text style={[styles.projectText, decor.color ? { color: decor.color } : null]} numberOfLines={1}>
           {title}
         </Text>
         {config.counts && (hovered || collapsed || TOUCH) ? <Text style={styles.count}>{count}</Text> : null}
         <View style={{ flex: 1 }} />
       </Pressable>
       {project && (hovered || TOUCH) ? <IconButton t={t} size="sm" icon="Plus" label={`New workspace in ${title}`} onPress={() => props.navigation.openProject(project)} /> : null}
+      {custom && (hovered || TOUCH || menu) ? <IconButton t={t} size="sm" icon="Ellipsis" label={`Actions for the project ${title}`} onPress={() => setMenu(menu ? null : "actions")} /> : null}
+      {custom ? (
+        <Dropdown t={t} open={menu !== null} onClose={() => setMenu(null)} anchor={anchor} width={menu === "decor" ? 300 : 260}>
+          {menu === "remove" && project ? (
+            <View style={{ padding: 8, gap: 8 }}>
+              <Text style={[t.text.body, { fontWeight: "600" }]}>Remove {title}?</Text>
+              <Text style={t.text.small}>
+                Paseo deletes the project and archives its workspaces{count ? ` (${count} shown here)` : ""}. Worktrees Paseo made are deleted with their folders, including files git ignores there. The project folder stays on disk. This cannot be undone.
+              </Text>
+              <MenuItem t={t} icon="Trash2" tone={t.c.statusDanger} label={removing ? "Removing…" : `Remove ${title}`} disabled={removing} onPress={remove} />
+              <MenuItem t={t} icon="X" label="Cancel" onPress={() => setMenu("actions")} />
+            </View>
+          ) : menu === "decor" && project ? (
+            <>
+              <MenuItem t={t} icon="ChevronLeft" label="Colour and icon" onPress={() => setMenu("actions")} />
+              <DecorPicker t={t} value={decor} withIcon onChange={(next) => shared.groups.change((doc) => setDecoration(doc, "projects", project.key, next))} />
+            </>
+          ) : menu === "move" ? (
+            <>
+              <MenuItem t={t} icon="ChevronLeft" label="Move to group" onPress={() => setMenu("actions")} />
+              {shared.groups.doc.groups.map((group) => (
+                <MenuItem key={group.id} t={t} role="radio" icon="Folder" label={group.name} checked={group.id === currentGroup} onPress={() => moveTo(group.id)} />
+              ))}
+              <MenuItem t={t} role="radio" icon="FolderMinus" label="Ungrouped" checked={currentGroup === null} onPress={() => moveTo(null)} />
+            </>
+          ) : (
+            <>
+              <MenuItem t={t} icon="FolderInput" label="Move to group" expanded={false} onPress={() => setMenu("move")} />
+              <MenuItem t={t} icon="Palette" label="Colour and icon" onPress={() => setMenu("decor")} />
+              <MenuItem
+                t={t}
+                icon="Plus"
+                label="New workspace"
+                onPress={() => {
+                  setMenu(null);
+                  if (project) props.navigation.openProject(project);
+                }}
+              />
+              {project ? <CopyPathItem project={project} onDone={() => setMenu(null)} t={t} /> : null}
+              <MenuItem t={t} icon="Trash2" tone={t.c.statusDanger} label="Remove project…" onPress={() => setMenu("remove")} />
+            </>
+          )}
+        </Dropdown>
+      ) : null}
     </View>
   );
 }
@@ -1181,6 +1438,19 @@ function Header({ menu, setMenu, searching, setSearching, search, onSearch, filt
         <IconButton t={t} size="sm" icon="ListFilter" tone={filters || menu === "filter" ? props.theme.colors.foreground : undefined} label={filters ? `Filters, ${filters} on` : "Filter"} onPress={() => toggle("filter")} />
         {filters ? <View pointerEvents="none" style={{ position: "absolute", top: 2, right: 2, width: 6, height: 6, borderRadius: 3, backgroundColor: props.theme.colors.accent }} /> : null}
       </View>
+      {config.groupBy === "custom" ? (
+        <IconButton
+          t={t}
+          size="sm"
+          icon="FolderPlus"
+          label="New group"
+          onPress={() => {
+            const id = newGroupId();
+            renamingGroup.set(id);
+            shared.groups.change((doc) => createGroup(doc, id));
+          }}
+        />
+      ) : null}
       <IconButton t={t} size="sm" icon="SlidersHorizontal" tone={menu === "view" ? props.theme.colors.foreground : undefined} label="Display: grouping, sorting, what rows show" onPress={() => toggle("view")} />
       <IconButton t={t} size="sm" icon="SkipForward" label={onNext ? "Open the next one that needs you" : "Nothing needs you"} disabled={onNext === null} onPress={() => onNext?.()} />
     </View>
@@ -1263,13 +1533,20 @@ function ViewMenu({ update, state, saveState, shared, openSettings }: { update(p
   const chatsFor = config.showAgents ? config.agentsFor ?? "active" : "off";
   return (
     <View style={{ padding: 12, gap: 14 }}>
-      {row("Group by", config.groupBy, [["project", "Project"], ["status", "Status"], ["activity", "Last used"], ["label", "Label"], ["none", "None"]] as const, (groupBy) => update({ groupBy }))}
+      {row("Group by", config.groupBy, [["project", "Project"], ["custom", "Your groups"], ["status", "Status"], ["activity", "Last used"], ["label", "Label"], ["none", "None"]] as const, (groupBy) => update({ groupBy }))}
       {row("Sort by", config.orderBy, [["activity", "Last prompt"], ["created", "Created"], ["status", "Status"], ["name", "Name"], ["statusChanged", "Status change"], ["changes", "Changed lines"]] as const, (orderBy) => update({ orderBy }))}
       {row("Rows", config.rowStyle ?? "two-line", [["two-line", "Two lines"], ["one-line", "One line"]] as const, (rowStyle) => update({ rowStyle }))}
       {config.list === "workspaces" ? row("Chats under workspaces", chatsFor, [["off", "None"], ["active", "Open workspace"], ["all", "Every workspace"]] as const, (value) => update(value === "off" ? { showAgents: false } : { showAgents: true, agentsFor: value })) : null}
+      {row("Row height", config.density, [["compact", "Compact"], ["comfortable", "Comfortable"], ["spacious", "Spacious"]] as const, (density) => update({ density }))}
+      {/* The rest of the look is kept on this device. */}
+      {row("Text size", state.textSize === null ? "auto" : (String(state.textSize) as "11" | "12" | "13" | "14" | "15"), [["auto", "Auto"], ["11", "11"], ["12", "12"], ["13", "13"], ["14", "14"], ["15", "15"]] as const, (size) => saveState({ textSize: size === "auto" ? null : Number(size) }))}
+      {row("Space between groups", state.groupSpacing, [["none", "None"], ["small", "Small"], ["medium", "Medium"], ["large", "Large"], ["xlarge", "Extra large"]] as const, (groupSpacing) => saveState({ groupSpacing }))}
+      {row("Indent", state.indent, [["narrow", "Narrow"], ["normal", "Normal"], ["wide", "Wide"]] as const, (indent) => saveState({ indent }))}
       <View style={{ height: 1, backgroundColor: t.c.border, marginHorizontal: -12 }} />
       <View style={{ marginHorizontal: -8, marginVertical: -6 }}>
         {config.list === "workspaces" ? <MenuItem t={t} role="checkbox" icon="EyeOff" label="Show background workspaces" checked={state.showBackground} onPress={() => saveState({ showBackground: !state.showBackground })} /> : null}
+        <MenuItem t={t} role="checkbox" icon="Bold" label="Bold group names" checked={state.boldGroupNames} onPress={() => saveState({ boldGroupNames: !state.boldGroupNames })} />
+        {config.list === "workspaces" ? <MenuItem t={t} role="checkbox" icon="Folder" label="Folder icons" checked={state.showProjectIcons} onPress={() => saveState({ showProjectIcons: !state.showProjectIcons })} /> : null}
         <MenuItem t={t} icon="Settings2" label="All sidebar settings" onPress={openSettings} />
       </View>
     </View>
@@ -1279,6 +1556,10 @@ function ViewMenu({ update, state, saveState, shared, openSettings }: { update(p
 export interface ViewDeps extends PickerDeps {
   // Saves the view's group, sort and limit options to the active layout.
   updateView(patch: Partial<ViewConfig>): Promise<void>;
+  // Changes the user's project groups ("Your groups").
+  changeGroups(operation: (doc: ProjectGroups) => ProjectGroups): Promise<void>;
+  // Removes a project and its workspaces (Paseo's CLI on the daemon).
+  removeProject(projectId: string): Promise<RemoveProjectResult>;
   // Opens Settings, Sidebar on the layout in use (the Display menu's "All sidebar settings").
   openSidebarSettings(): void;
   // Opens Workbench, Tasks with this task's editor.
@@ -1297,9 +1578,15 @@ interface RowSource {
   onNext: (() => void) | null;
   noun: string;
   renderRow(reference: { key: string }, shared: Shared): ReactNode;
-  // Chat groups by workspace carry the workspace id as title; their heading looks up its name.
-  groupsAreWorkspaces: boolean;
+  // "Your groups": the sections placed under the user's groups (`sections` then lists them flat, in that order, for
+  // Next and bulk actions); null for every other grouping.
+  nested: NestedGroup<{ key: string }>[] | null;
+  // Every project by key, so a project with no workspace still has a heading under "Your groups".
+  projectRefs: ReadonlyMap<string, ProjectRef>;
 }
+
+// True when anything narrows the list; projects with no workspace then stay out of "Your groups".
+const filtering = (filter: Filter) => filter.statuses.length > 0 || filter.search !== "" || (filter.projects?.length ?? 0) > 0 || !!filter.hideDone || !!filter.changedOnly || !!filter.pinnedOnly;
 
 type Where<Snapshot> = (item: Snapshot) => boolean;
 
@@ -1341,16 +1628,27 @@ function workspaceRows(config: ViewConfig) {
   const compareBase = compareWorkspaces(config);
   // Like Paseo's own sidebar, pinned workspaces get their own section above the groups.
   const pinnedApart = config.pinnedFirst && config.groupBy !== "none";
-  return function useWorkspaceRows(filter: Filter, props: PluginSidebarViewProps, showBackground: boolean, infoOf: Shared["infoOf"]): RowSource {
+  // "Your groups" groups workspaces by project first, then places the projects under the user's groups.
+  const custom = config.groupBy === "custom";
+  const keyConfig: ViewConfig = custom ? { ...config, groupBy: "project" } : config;
+  return function useWorkspaceRows(filter: Filter, props: PluginSidebarViewProps, showBackground: boolean, infoOf: Shared["infoOf"], groups: ProjectGroups): RowSource {
     const marked = (workspace: PluginWorkspaceSnapshot) => withMark(workspace, infoOf);
     const compare = (left: PluginWorkspaceSnapshot, right: PluginWorkspaceSnapshot) => compareBase(marked(left), marked(right));
     const shown = (workspace: PluginWorkspaceSnapshot) => isVisible(workspace, showBackground) && matchesFilter(marked(workspace), filter);
     const pinned = useWorkspaces({ where: (workspace) => shown(workspace) && workspace.pinnedAt !== null, orderBy: compare });
     const inGroups = (workspace: PluginWorkspaceSnapshot) => shown(workspace) && !(pinnedApart && workspace.pinnedAt !== null);
     // The same hook in both branches, so the hook order never depends on the grouping.
-    const groupedRefs = useWorkspaces(config.groupBy === "none" ? { where: inGroups, orderBy: compare } : { where: inGroups, orderBy: compare, groupBy: (workspace) => groupKeys(config, marked(workspace)) });
-    const grouped = config.groupBy === "none" ? [{ key: "all", title: null, items: groupedRefs as readonly WorkspaceRef[] }] : orderGroups<Group<WorkspaceRef>>(groupedRefs as readonly Group<WorkspaceRef>[], config);
-    const sections = pinnedApart && pinned.length ? [{ key: "pinned", title: "Pinned", items: pinned }, ...grouped] : grouped;
+    const groupedRefs = useWorkspaces(config.groupBy === "none" ? { where: inGroups, orderBy: compare } : { where: inGroups, orderBy: compare, groupBy: (workspace) => groupKeys(keyConfig, marked(workspace)) });
+    const grouped = config.groupBy === "none" ? [{ key: "all", title: null, items: groupedRefs as readonly WorkspaceRef[] }] : orderGroups<Group<WorkspaceRef>>(groupedRefs as readonly Group<WorkspaceRef>[], keyConfig);
+    // Every project, one group each, for their names and refs; called always, so the hook order never changes.
+    const allProjects = useProjects({ groupBy: (project) => ({ key: project.ref.key, title: project.displayName }) });
+    const projectRefs = new Map(allProjects.flatMap((group) => group.items.map((ref) => [ref.key, ref] as const)));
+    const inner = grouped.map((group) => ({ key: group.key, title: group.title ?? "", items: group.items, project: group.key.slice("project:".length) }));
+    const listed = new Set(inner.map((section) => section.project));
+    const emptyProjects = custom && !filtering(filter) ? allProjects.filter((group) => !listed.has(group.key)).map((group) => ({ key: group.key, title: group.title ?? "" })) : [];
+    const nested = custom ? nestInGroups(inner, groups.groups, emptyProjects) : null;
+    const flat = nested ? nested.flatMap((group) => group.sections) : grouped;
+    const sections = pinnedApart && pinned.length ? [{ key: "pinned", title: "Pinned", items: pinned }, ...flat] : flat;
     const protectedKeys = new Set(useWorkspaces({ where: (workspace) => shown(workspace) && isProtected(marked(workspace)) }).map((ref) => ref.key));
     const waitingRefs = useWorkspaces({ where: (workspace) => isVisible(workspace, showBackground) && needsAttention(marked(workspace).indicator), orderBy: compare });
     const next = nextAttention(withHidden(attentionOrder(sections, new Set(waitingRefs.map((ref) => ref.key))), waitingRefs), props.active.workspace?.key ?? null);
@@ -1360,7 +1658,8 @@ function workspaceRows(config: ViewConfig) {
       onNext: next ? () => props.navigation.openWorkspace(next) : null,
       noun: "workspaces",
       renderRow: (reference, shared) => <WorkspaceRow key={reference.key} reference={reference as WorkspaceRef} shared={shared} />,
-      groupsAreWorkspaces: false,
+      nested,
+      projectRefs,
     };
   };
 }
@@ -1372,7 +1671,8 @@ function chatRows(config: ViewConfig) {
       ? (where: Where<PluginAgentSnapshot>) => [{ key: "all", title: null, items: useAgents({ where, orderBy: compare }) }]
       : (where: Where<PluginAgentSnapshot>) =>
           orderGroups<Group<AgentRef>>(useAgents({ where, orderBy: compare, groupBy: (chat) => chatGroupKey(config, chat) }), config);
-  return function useChatRows(filter: Filter, props: PluginSidebarViewProps, showBackground: boolean, infoOf: Shared["infoOf"]): RowSource {
+  const custom = config.groupBy === "custom";
+  return function useChatRows(filter: Filter, props: PluginSidebarViewProps, showBackground: boolean, infoOf: Shared["infoOf"], groups: ProjectGroups): RowSource {
     // Chats in archived, internal or (unless shown) background workspaces stay out, as their
     // workspaces do. A workspace the list has not loaded yet does not hide its chats.
     const inShownWorkspace = (chat: PluginAgentSnapshot) => {
@@ -1381,7 +1681,12 @@ function chatRows(config: ViewConfig) {
     };
     const listed = (chat: PluginAgentSnapshot) => isSidebarChat(chat) && inShownWorkspace(chat);
     const shown = (chat: PluginAgentSnapshot) => listed(chat) && chatMatches(chat, filter);
-    const sections = useSections(shown);
+    const grouped = useSections(shown);
+    // "Your groups": chats are grouped by workspace, and each workspace goes under its project's group.
+    const byProject = useWorkspaces({ groupBy: (workspace) => ({ key: workspace.project.key, title: workspace.projectDisplayName }) });
+    const projectOf = new Map(byProject.flatMap((group) => group.items.map((ref) => [ref.key, group.key] as const)));
+    const nested = custom ? nestInGroups(grouped.map((group) => ({ key: group.key, title: group.title ?? "", items: group.items, project: projectOf.get(group.key.slice("workspace:".length)) ?? "" })), groups.groups, []) : null;
+    const sections = nested ? nested.flatMap((group) => group.sections) : grouped;
     const isProtectedChat = (chat: PluginAgentSnapshot) => ["needs_input", "failed"].includes(chatIndicator(chat));
     const protectedKeys = new Set(useAgents({ where: (chat) => shown(chat) && isProtectedChat(chat) }).map((ref) => ref.key));
     const waitingRefs = useAgents({ where: (chat) => listed(chat) && needsAttention(chatIndicator(chat)), orderBy: compare });
@@ -1392,7 +1697,8 @@ function chatRows(config: ViewConfig) {
       onNext: next ? () => props.navigation.openAgent(next) : null,
       noun: "chats",
       renderRow: (reference, shared) => <ChatRow key={reference.key} reference={reference as AgentRef} shared={shared} />,
-      groupsAreWorkspaces: config.groupBy !== "status",
+      nested,
+      projectRefs: new Map(),
     };
   };
 }
@@ -1434,7 +1740,6 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
   const useRows = config.list === "chats" ? chatRows(config) : workspaceRows(config);
 
   return function MorphiseSidebarView(props: PluginSidebarViewProps) {
-    const styles = useMemo(() => viewStyles(props.theme, config), [props.theme]);
     const t = useTokens(props.theme, TOUCH);
     const reminders = remindersOf(tasksOf(useValue(deps.tasks)));
     // Rows show times, so the clock ticks every minute.
@@ -1445,6 +1750,9 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     const [unsaved, setUnsaved] = useState<ViewState | null>(null);
     const viewSaving = useRef(false);
     const state = unsaved ?? (viewState.status === "ready" ? viewState.values : DEFAULT_VIEW_STATE);
+    const look = sidebarLook(state, config.density, TOUCH);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const styles = useMemo(() => viewStyles(props.theme, config, look), [props.theme, ...Object.values(look)]);
     const ui = useValue(viewUi);
     const setUi = (patch: Partial<typeof ui>) => viewUi.set({ ...viewUi.get(), ...patch });
     const { search, searching, menu } = ui;
@@ -1511,7 +1819,42 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     };
     const filters = filter.statuses.length + (filter.projects?.length ?? 0) + Number(filter.hideDone) + Number(filter.changedOnly) + Number(filter.pinnedOnly);
     const updateView = (patch: Partial<ViewConfig>) => void deps.updateView(patch).catch(report(toast, "change the view"));
-    const source = useRows(filter, props, state.showBackground, infoOf);
+    const groupsState = useSettings(projectGroupsSettings);
+    const groupsDoc = groupsState.status === "ready" ? groupsState.values : EMPTY_PROJECT_GROUPS;
+    const source = useRows(filter, props, state.showBackground, infoOf, groupsDoc);
+    const changeGroups = (operation: (doc: ProjectGroups) => ProjectGroups) => void deps.changeGroups(operation).catch(report(toast, "change your groups"));
+    // "Your groups" in the workspace list: projects drag between groups (each group a column, each project a card), and
+    // groups drag up and down (one column of groups). Both hooks always run, with no columns otherwise.
+    const draggable = config.list === "workspaces" && source.nested !== null ? source.nested : [];
+    const projectDrag = useBoardDrag(
+      draggable.map((group) => ({ column: { id: group.groupId ?? UNGROUPED_DROP }, lanes: [{ key: "", tasks: group.sections.map((section) => ({ id: section.project })) }] })),
+      (projectKey, target) => changeGroups((doc) => dropProject(doc, projectKey, { group: target.column === UNGROUPED_DROP ? null : target.column, before: target.before })),
+      false,
+      "vertical",
+      0,
+    );
+    const groupDrag = useBoardDrag(
+      [{ column: { id: "groups" }, lanes: [{ key: "", tasks: draggable.flatMap((group) => (group.groupId ? [{ id: group.groupId }] : [])) }] }],
+      (groupId, target) => changeGroups((doc) => dropGroup(doc, groupId, target.before)),
+      false,
+      "vertical",
+      0,
+    );
+    const projectScroll = projectDrag.value.scroller("board", false);
+    const groupScroll = groupDrag.value.scroller("board", false);
+    // One scroller serves both drags.
+    const scrollRef = useCallback((view: ScrollView | null) => {
+      projectScroll.ref(view);
+      groupScroll.ref(view);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    const dragRoot = useCallback((view: View | null) => {
+      projectDrag.root.current = view;
+      groupDrag.root.current = view;
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    const projectTarget = projectDrag.value.state?.target ?? null;
+    const groupTarget = groupDrag.value.state?.target ?? null;
     const ready = useValue(deps.workspacesReady);
     const taskHost = useValue(deps.taskHost);
     const { sections, protectedKeys } = source;
@@ -1571,6 +1914,9 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
         openKey: props.active.agent?.key ?? null,
       },
       hover,
+      groups: { doc: groupsDoc, change: changeGroups, projectRefs: source.projectRefs },
+      drag: draggable.length ? { projects: projectDrag.value, groups: groupDrag.value } : null,
+      removeProject: deps.removeProject,
     };
     const collapsed = new Set(state.collapsed);
     const toggleCollapsed = (key: string) =>
@@ -1589,6 +1935,35 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
       ...(filter.changedOnly ? [{ key: "changed", label: "Changed", color: undefined, remove: () => saveState({ changedOnly: false }) }] : []),
       ...(filter.pinnedOnly ? [{ key: "pinned", label: "Pinned", color: undefined, remove: () => saveState({ pinnedOnly: false }) }] : []),
     ];
+
+    // One group of rows with its heading, Show more and Show less. The heading follows the group's key.
+    const renderSection = (section: RowSource["sections"][number] & { project?: string }, dropColumn?: string) => {
+      const folded = section.title !== null && collapsed.has(section.key);
+      // The Pinned section is never shortened: pins are few by choice.
+      const limit = section.key === "pinned" ? { ...config.rowLimit, enabled: false } : config.rowLimit;
+      const { rows, hidden } = capRows(section.items, protectedKeys, limit, expanded.has(section.key));
+      const collapsible = expanded.has(section.key) && capRows(section.items, protectedKeys, limit, false).hidden > 0;
+      const kind = headingKind(section.key);
+      const toggle = () => toggleCollapsed(section.key);
+      const heading =
+        section.title === null ? null : kind === "workspace" ? (
+          <WorkspaceGroupHeading chat={section.items[0] as AgentRef} count={section.items.length} collapsed={folded} onToggle={toggle} shared={shared} />
+        ) : kind === "project" ? (
+          <ProjectHeading title={section.title} first={(section.items[0] as WorkspaceRef | undefined) ?? null} projectRef={source.projectRefs.get(section.key.slice("project:".length)) ?? null} count={section.items.length} collapsed={folded} onToggle={toggle} shared={shared} />
+        ) : (
+          <GroupHeading title={section.title} count={section.items.length} collapsed={folded} onToggle={toggle} shared={shared} />
+        );
+      const card = dropColumn !== undefined && section.project !== undefined ? projectDrag.value.card("", section.project) : undefined;
+      return (
+        <View key={section.key} ref={card}>
+          {dropColumn !== undefined && projectTarget?.column === dropColumn && projectTarget.before === section.project ? <DropLine shared={shared} /> : null}
+          {heading}
+          {folded ? null : rows.map((reference) => source.renderRow(reference, shared))}
+          {!folded && hidden > 0 ? <MoreRow icon="ChevronDown" label="Show more" spoken={`Show ${hidden} more ${source.noun}`} count={hidden} onPress={() => setExpandedKey(section.key, true)} shared={shared} /> : null}
+          {!folded && collapsible ? <MoreRow icon="ChevronUp" label="Show less" spoken={`Show fewer ${source.noun}`} onPress={() => setExpandedKey(section.key, false)} shared={shared} /> : null}
+        </View>
+      );
+    };
 
     const steps = stepsOptions(config.steps);
     // In the chat, the cards are drawn there instead (see the steps.chat section).
@@ -1613,8 +1988,26 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
           </View>
         ) : null}
         {stepsCards && steps.position === "top" ? stepsCards : null}
-        <View style={{ flex: 1 }}>
-      <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 12 }}>
+        <View ref={dragRoot} style={{ flex: 1 }}>
+      <ScrollView
+        ref={scrollRef}
+        style={styles.scroll}
+        contentContainerStyle={{ paddingBottom: 12 }}
+        onScroll={(event) => {
+          projectScroll.onScroll(event);
+          groupScroll.onScroll(event);
+        }}
+        onContentSizeChange={(width, height) => {
+          projectScroll.onContentSizeChange(width, height);
+          groupScroll.onContentSizeChange(width, height);
+        }}
+        onLayout={(event) => {
+          projectScroll.onLayout(event);
+          groupScroll.onLayout(event);
+        }}
+        scrollEventThrottle={16}
+        scrollEnabled={projectScroll.scrollEnabled && groupScroll.scrollEnabled}
+      >
         {dueEntries.length > 0 ? (
           <View>
             <GroupHeading title="Reminders" count={dueEntries.length} collapsed={remindersFolded} onToggle={() => toggleCollapsed(REMINDERS_GROUP)} shared={shared} />
@@ -1625,30 +2018,39 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
         ) : null}
         {nothing && !ready ? <LoadingRows shared={shared} /> : null}
         {nothing && ready ? <Text style={styles.empty}>{filter.search || filters ? `No ${source.noun} match` : `No ${source.noun} yet`}</Text> : null}
-        {sections.map((section) => {
-          const folded = section.title !== null && collapsed.has(section.key);
-          // The Pinned section is never shortened: pins are few by choice.
-          const limit = section.key === "pinned" ? { ...config.rowLimit, enabled: false } : config.rowLimit;
-          const { rows, hidden } = capRows(section.items, protectedKeys, limit, expanded.has(section.key));
-          const collapsible = expanded.has(section.key) && capRows(section.items, protectedKeys, limit, false).hidden > 0;
-          const heading =
-            section.title === null ? null : source.groupsAreWorkspaces ? (
-              <WorkspaceGroupHeading chat={section.items[0] as AgentRef} count={section.items.length} collapsed={folded} onToggle={() => toggleCollapsed(section.key)} shared={shared} />
-            ) : section.key.startsWith("project:") ? (
-              <ProjectHeading title={section.title} first={(section.items[0] as WorkspaceRef | undefined) ?? null} count={section.items.length} collapsed={folded} onToggle={() => toggleCollapsed(section.key)} shared={shared} />
-            ) : (
-              <GroupHeading title={section.title} count={section.items.length} collapsed={folded} onToggle={() => toggleCollapsed(section.key)} shared={shared} />
-            );
-          return (
-            <View key={section.key}>
-              {heading}
-              {folded ? null : rows.map((reference) => source.renderRow(reference, shared))}
-              {!folded && hidden > 0 ? <MoreRow icon="ChevronDown" label="Show more" spoken={`Show ${hidden} more ${source.noun}`} count={hidden} onPress={() => setExpandedKey(section.key, true)} shared={shared} /> : null}
-              {!folded && collapsible ? <MoreRow icon="ChevronUp" label="Show less" spoken={`Show fewer ${source.noun}`} onPress={() => setExpandedKey(section.key, false)} shared={shared} /> : null}
+        {source.nested ? (
+          <>
+            {sections.filter((section) => section.key === "pinned").map((section) => renderSection(section))}
+            <View ref={groupDrag.value.column("groups")}>
+              {source.nested.map((group, index) => {
+                const folded = collapsed.has(group.key);
+                const column = group.groupId ?? UNGROUPED_DROP;
+                const columnRef = projectDrag.value.column(column);
+                const cardRef = group.groupId ? groupDrag.value.card("", group.groupId) : null;
+                // A group is both a column for projects and a card in the column of groups.
+                const ref = (view: View | null) => {
+                  columnRef(view);
+                  cardRef?.(view);
+                };
+                const lineBefore = groupTarget !== null && (groupTarget.before === group.groupId || (groupTarget.before === null && group.groupId === null));
+                return (
+                  <View key={group.key} ref={ref}>
+                    {lineBefore ? <DropLine shared={shared} /> : null}
+                    <UserGroupHeading group={group} index={index} count={group.sections.reduce((sum, section) => sum + section.items.length, 0)} collapsed={folded} onToggle={() => toggleCollapsed(group.key)} shared={shared} />
+                    {folded ? null : group.sections.map((section) => renderSection(section, column))}
+                    {projectTarget?.column === column && projectTarget.before === null ? <DropLine shared={shared} /> : null}
+                  </View>
+                );
+              })}
+              {groupTarget !== null && groupTarget.before === null && !source.nested.some((group) => group.groupId === null) ? <DropLine shared={shared} /> : null}
             </View>
-          );
-        })}
+          </>
+        ) : (
+          sections.map((section) => renderSection(section))
+        )}
       </ScrollView>
+          <DragGhost drag={projectDrag.value}>{(projectKey) => <DragPill title={draggable.flatMap((group) => group.sections).find((section) => section.project === projectKey)?.title ?? "Project"} shared={shared} />}</DragGhost>
+          <DragGhost drag={groupDrag.value}>{(groupId) => <DragPill title={draggable.find((group) => group.groupId === groupId)?.title ?? "Group"} shared={shared} />}</DragGhost>
           {stepsCards && steps.position === "bottom" ? stepsCards : null}
           {ui.selecting && config.list === "workspaces" ? <BulkBar shown={new Map(sections.flatMap((section) => section.items.map((item) => [item.key, item as WorkspaceRef] as const)))} shared={shared} /> : null}
           <Dropdown t={t} open={menu !== null} onClose={() => setMenu(null)} anchor={headerRef} width={420} maxHeight={560}>

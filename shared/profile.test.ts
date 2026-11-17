@@ -55,6 +55,11 @@ describe("profileSchema", () => {
     expect(issues({ sidebar: { view: { rowLimit: { enabled: true, rows: 3 } } } })).toEqual([]);
   });
 
+  it("groups the sidebar view by the user's own project groups, and still refuses an unknown grouping", () => {
+    expect(profileSchema.parse({ sidebar: { view: { groupBy: "custom" } } }).sidebar.view.groupBy).toBe("custom");
+    expect(issues({ sidebar: { view: { groupBy: "colour" } } })).toHaveLength(1);
+  });
+
   it("refuses a repeated row action", () => {
     expect(issues({ sidebar: { view: { rowActions: ["pin", "pin"] } } })).toEqual([
       "sidebar.view.rowActions: Expected each row action at most once",

@@ -14,6 +14,9 @@ import { registerPages } from "./server/polish/pages.register";
 import { registerUpdate } from "./server/polish/update.register";
 import { registerRun } from "./server/run/register";
 import { profileSettings } from "./shared/document";
+import { projectGroupsSettings } from "./shared/project-groups";
+import { registerProjectActions } from "./server/project-actions";
+import { registerStats } from "./server/stats/register";
 import { remindersKeeper } from "./shared/reminder-contracts";
 import { showChannel, showResult, showSettings, showUsed } from "./shared/show";
 import { bookmarkSettings } from "./shared/bookmarks";
@@ -30,6 +33,13 @@ export default function contribute(server: PluginServerContext) {
   server.handle(bookmarksWatch, watchSettings(bookmarks));
   // The Agents view: its settings, and Stop and Rename through Paseo's CLI (the SDK has neither).
   server.registerSettings(agentsBoardSettings);
+  // "Your groups" in the sidebar view: the user's project groups, shared by every app on this daemon.
+  server.registerSettings(projectGroupsSettings);
+  // Remove project in "Your groups", through Paseo's CLI (the SDK has no call for it).
+  registerProjectActions(server);
+  // Session stats and conversation search, read from the Claude Code and Codex log files (never from Paseo's
+  // timeline, which would resume a finished agent). Registers its own "stats" settings.
+  const stopStats = registerStats(server);
   const agentActions = registerAgentActions(server);
   // "Generate a title" on an agent card: a hidden helper agent writes it, the CLI applies it.
   const titlesSettings = server.registerSettings(titleSettings);
@@ -75,6 +85,7 @@ export default function contribute(server: PluginServerContext) {
   server.handle(showResult, ({ requestId, ok, message }) => (windows.answer(requestId, ok, message), { ok: true as const }));
   const stopShowTool = server.addHook("agent.open.before", createShowHook({ enabled: showOn, tool: createShowTool({ windows, enabled: showOn, log: console.log }) }));
   return () => {
+    stopStats();
     stopShowTool();
     windows.stop();
     stopRecap();

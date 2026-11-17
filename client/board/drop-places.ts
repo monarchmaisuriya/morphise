@@ -1,6 +1,13 @@
 // Where a dragged card lands, from the places the board's cards had when it was lifted. A task is drawn once per lane it
 // falls in (rows by label draw a task with two labels twice), so every drawn copy has a place of its own.
-import { type BoardColumn, type DropTarget, dropTarget, type Frame } from "../../shared/board";
+import { type DropTarget, dropTarget, type Frame } from "../../shared/board";
+
+/** What a drag reads of a column: its id, and its drawn cards' ids by lane. The task board's columns fit, and so do the
+ * sidebar's project groups. */
+export interface DragColumn {
+  column: { id: string };
+  lanes: readonly { key: string; tasks: readonly { id: string }[] }[];
+}
 
 /** One drawn copy of a card: its lane and its task. */
 export const copyKey = (laneKey: string, taskId: string) => JSON.stringify([laneKey, taskId]);
@@ -31,7 +38,7 @@ interface Options {
  * scrolling since and by the closed copies of the lifted task above it. The gap that opens at the target is left out,
  * so it cannot move the target it shows.
  */
-export function boardDropTarget(columns: BoardColumn[], places: Places, taskId: string, pointer: { x: number; y: number }, options: Options): CopyTarget | null {
+export function boardDropTarget(columns: readonly DragColumn[], places: Places, taskId: string, pointer: { x: number; y: number }, options: Options): CopyTarget | null {
   const copies = new Map<string, { lane: string; taskId: string }>();
   const shown = columns.flatMap((entry) => {
     const frame = places.columns.get(entry.column.id);

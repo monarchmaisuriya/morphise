@@ -1,4 +1,5 @@
 import { useSettings } from "@getpaseo/plugin/client";
+import { statsSettings } from "../../shared/stats";
 import { showEnabled, showSettings } from "../../shared/show";
 import { SettingsAction, SettingsCard, SettingsSection, TextInput } from "@getpaseo/plugin/client/ui";
 import { type ReactNode, useMemo, useState } from "react";
@@ -213,6 +214,7 @@ function viewFields(form: Form): { [Key in keyof ViewConfig]-?: ReactNode } {
         value={view.groupBy}
         options={[
           { value: "project", label: "Project" },
+          { value: "custom", label: "Your groups" },
           { value: "status", label: "Status" },
           { value: "label", label: "Label" },
           { value: "activity", label: "Last used (Today, Yesterday…)" },
@@ -277,6 +279,7 @@ function viewFields(form: Form): { [Key in keyof ViewConfig]-?: ReactNode } {
         options={[
           { value: "compact", label: "Compact" },
           { value: "comfortable", label: "Comfortable" },
+          { value: "spacious", label: "Spacious" },
         ]}
         onChange={(value) => set("density", value)}
       />
@@ -803,6 +806,7 @@ export function ChatTab(form: Form): ReactNode {
             </SettingsCard>
           </SettingsSection>
           <ShowInPaseoSetting />
+          <SessionStatsSetting />
           <SettingsSection title="Phones" info="On iOS and Android.">
             <SettingsCard>
               <SelectField
@@ -904,6 +908,37 @@ function CreditsSection({ form }: { form: Form }) {
 
 // "Show in Paseo": whether agents get the tool. Its own host-wide document (shared/show.ts), not a
 // layout setting; missing means on.
+// Session stats (their own document, so older Morphise versions ignore it): two pills by each Claude Code or Codex
+// chat's message box, the Stats panel, the details pane's Session section, and an optional strip under the message box.
+function SessionStatsSetting() {
+  const stored = useSettings(statsSettings);
+  const [failed, setFailed] = useState<string | null>(null);
+  if (stored.status === "invalid" || stored.status === "error") {
+    return (
+      <SettingsSection title="Session stats">
+        <SettingsCard>
+          <SwitchField label="Show session stats" hint={`Couldn't read this setting (${stored.error}). Switch to reset it.`} value={false} onChange={() => void (stored.status === "invalid" ? stored.reset() : stored.reload())} />
+        </SettingsCard>
+      </SettingsSection>
+    );
+  }
+  if (stored.status !== "ready") return null;
+  const set = (patch: Partial<typeof stored.values>) => {
+    setFailed(null);
+    void stored.save({ ...stored.values, ...patch }, stored.revision).then((ok) => {
+      if (!ok) setFailed(stored.saveError ?? "Another app saved this setting at the same moment; try again");
+    });
+  };
+  return (
+    <SettingsSection title="Session stats" info="Turns, model steps, model and tool time, time to first token, output speed, tokens and cache hit for each Claude Code or Codex chat, read from the chat's own log on the daemon's computer (counts only; nothing is stored or sent). Times come from the log's timestamps, so they are estimates.">
+      <SettingsCard>
+        <SwitchField label="Show session stats" hint="Two pills by each chat's message box, the Stats panel, and Session in the Agents view's details." value={stored.values.enabled} onChange={(enabled) => set({ enabled })} error={failed} />
+        <SwitchField label="Strip under the message box (desktop and web)" hint="The same readings in a line under the message box. It reads Paseo's page, so a Paseo update can hide it." value={stored.values.desktopStrip} onChange={(desktopStrip) => set({ desktopStrip })} />
+      </SettingsCard>
+    </SettingsSection>
+  );
+}
+
 function ShowInPaseoSetting() {
   const stored = useSettings(showSettings);
   const [failed, setFailed] = useState<string | null>(null);

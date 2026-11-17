@@ -390,7 +390,8 @@ export function statusGroups(lanes: Readonly<Record<Lane, readonly BoardAgent[]>
  * while a sub-agent works): it counts as updated now, as Paseo may not touch its record while a turn runs. `status` is
  * the status it shows (shownStatus), its own by default.
  */
-export function matchesFilter(agent: BoardAgent, filter: BoardFilter, now: number, context: { activeNow?: boolean; status?: Indicator } = {}): boolean {
+// `conversation`: an excerpt of the agent's conversation that "Search conversations" found for this search, if any.
+export function matchesFilter(agent: BoardAgent, filter: BoardFilter, now: number, context: { activeNow?: boolean; status?: Indicator; conversation?: string | null } = {}): boolean {
   if (filter.statuses.length && !filter.statuses.includes(context.status ?? indicatorOf(agent))) return false;
   const windowMs = updatedWithinMs(filter.updatedWithin);
   if (windowMs !== null && !context.activeNow) {
@@ -401,7 +402,7 @@ export function matchesFilter(agent: BoardAgent, filter: BoardFilter, now: numbe
   if (filter.labels.length && !agent.labels.some((label) => filter.labels.includes(label))) return false;
   if (filter.projects.length && !(agent.project && filter.projects.includes(agent.project))) return false;
   if (filter.workspaces.length && !(agent.workspaceId && filter.workspaces.includes(agent.workspaceId))) return false;
-  const haystack = [agent.title, agent.provider, agent.project, agent.workspace, agent.branch].filter(Boolean).join(" ").toLowerCase();
+  const haystack = [agent.title, agent.provider, agent.project, agent.workspace, agent.branch, context.conversation].filter(Boolean).join(" ").toLowerCase();
   return filter.search.trim().toLowerCase().split(/\s+/).filter(Boolean).every((word) => haystack.includes(word));
 }
 
