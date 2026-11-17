@@ -177,6 +177,31 @@ export function headingKind(key: string): HeadingKind {
 }
 
 // A section inside one of the user's groups: one project's workspaces, or one workspace's chats, tagged with its
+// "Your groups" lists projects with no workspace to show, so they can be put in a group: every project not `listed`,
+// except one with workspaces that are hidden (background ones while "Show background" is off, such as a workers
+// project), which stays as hidden as its workspaces.
+export function emptyProjectsToList<Project extends { key: string }>(projects: readonly Project[], listed: ReadonlySet<string>, hidden: ReadonlySet<string>): Project[] {
+  return projects.filter((project) => !listed.has(project.key) && !hidden.has(project.key));
+}
+
+// When a workspace was last used, as the "Last used" grouping reads it: its last prompt, else its creation.
+export const lastUsedAt = (workspace: Pick<ArrangeWorkspace, "lastPromptAt" | "createdAt">) => workspace.lastPromptAt ?? workspace.createdAt ?? "";
+
+// Most recently used first.
+export const byLastUsed = (left: Pick<ArrangeWorkspace, "lastPromptAt" | "createdAt">, right: Pick<ArrangeWorkspace, "lastPromptAt" | "createdAt">) => lastUsedAt(right).localeCompare(lastUsedAt(left));
+
+// "Your groups" with the most recently used group first: each group ranks by its most recently used project
+// (`recentProjects`: project keys, most recent first). Groups with no ranked project keep their saved order after the
+// rest, and Ungrouped stays last.
+export function orderGroupsByLastUsed<Ref>(nested: readonly NestedGroup<Ref>[], recentProjects: readonly string[]): NestedGroup<Ref>[] {
+  const rank = new Map(recentProjects.map((key, index) => [key, index] as const));
+  const best = (group: NestedGroup<Ref>) => Math.min(Infinity, ...group.sections.map((section) => rank.get(section.project) ?? Infinity));
+  const own = nested.filter((group) => group.groupId !== null);
+  const ungrouped = nested.filter((group) => group.groupId === null);
+  // Array.prototype.sort is stable, so ties (unranked groups) keep their saved order.
+  return [...own.map((group, index) => ({ group, index, best: best(group) })).sort((a, b) => a.best - b.best || a.index - b.index).map((entry) => entry.group), ...ungrouped];
+}
+
 // project key.
 export interface InnerSection<Ref> {
   key: string;

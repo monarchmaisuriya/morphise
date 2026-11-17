@@ -14,7 +14,7 @@ import { registerPages } from "./server/polish/pages.register";
 import { registerUpdate } from "./server/polish/update.register";
 import { registerRun } from "./server/run/register";
 import { profileSettings } from "./shared/document";
-import { projectGroupsSettings } from "./shared/project-groups";
+import { groupOrderSettings, projectGroupsSettings } from "./shared/project-groups";
 import { registerProjectActions } from "./server/project-actions";
 import { registerStats } from "./server/stats/register";
 import { registerActivity } from "./server/activity/register";
@@ -36,6 +36,7 @@ export default function contribute(server: PluginServerContext) {
   server.registerSettings(agentsBoardSettings);
   // "Your groups" in the sidebar view: the user's project groups, shared by every app on this daemon.
   server.registerSettings(projectGroupsSettings);
+  server.registerSettings(groupOrderSettings);
   // Remove project in "Your groups", through Paseo's CLI (the SDK has no call for it).
   registerProjectActions(server);
   // Session stats and conversation search, read from the Claude Code and Codex log files (never from Paseo's

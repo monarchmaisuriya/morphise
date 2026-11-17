@@ -9,6 +9,9 @@ import {
   isVisible,
   matchesFilter,
   nestInGroups,
+  emptyProjectsToList,
+  orderGroupsByLastUsed,
+  byLastUsed,
   orderGroups,
 } from "./arrange";
 import { profileSchema } from "./profile";
@@ -325,5 +328,24 @@ describe("headingKind", () => {
       "plain",
       "plain",
     ]);
+  });
+});
+
+describe("emptyProjectsToList", () => {
+  it("lists projects with no workspace, but not ones whose workspaces are hidden as background", () => {
+    const projects = [{ key: "api" }, { key: "fresh" }, { key: "workers" }];
+    expect(emptyProjectsToList(projects, new Set(["api"]), new Set(["workers"]))).toEqual([{ key: "fresh" }]);
+  });
+});
+
+describe("orderGroupsByLastUsed", () => {
+  const group = (id: string | null, projects: string[]) => ({ key: id ? `group:${id}` : "ungrouped", groupId: id, title: id ?? "Ungrouped", sections: projects.map((project) => ({ key: `project:${project}`, title: project, items: [], project })) });
+  it("puts the group with the most recently used project first, unranked groups after in saved order, Ungrouped last", () => {
+    const nested = [group("a", ["p1"]), group("b", ["p2", "p3"]), group("c", []), group("d", ["p9"]), group(null, ["p4"])];
+    expect(orderGroupsByLastUsed(nested, ["p4", "p3", "p1"]).map((entry) => entry.groupId)).toEqual(["b", "a", "c", "d", null]);
+  });
+  it("orders workspaces by last prompt, else creation, newest first", () => {
+    const list = [{ lastPromptAt: null, createdAt: "2026-11-10T00:00:00Z" }, { lastPromptAt: "2026-11-12T00:00:00Z", createdAt: "2026-11-01T00:00:00Z" }, { lastPromptAt: null, createdAt: null }];
+    expect([...list].sort(byLastUsed)).toEqual([list[1], list[0], list[2]]);
   });
 });

@@ -185,13 +185,6 @@ export function addStatsHeaderButton(client: PluginClientContext, read: StatsRea
     return (
       // Paseo's popover pads its content; the parts here add no padding of their own.
       <View style={{ width: 340, maxWidth: "100%", gap: 12 }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <Icon name="Gauge" size={16} color={t.c.foreground} />
-          <Text style={[t.text.body, { fontWeight: "600", flexShrink: 0 }]}>Session stats</Text>
-          <Text style={[t.text.small, { color: t.c.foregroundMuted, flex: 1, textAlign: "right" }]} numberOfLines={1}>
-            {chatId ? list.get(chatId)?.title ?? "" : ""}
-          </Text>
-        </View>
         {open.length > 1 ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
             {open.map(([id, chat]) => (

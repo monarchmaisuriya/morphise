@@ -33,11 +33,14 @@ import {
   matchesFilter,
   type NestedGroup,
   nestInGroups,
+  emptyProjectsToList,
+  byLastUsed,
+  orderGroupsByLastUsed,
   orderGroups,
   STATUS_TITLES,
   workspaceName,
 } from "../shared/arrange";
-import { createGroup, type Decoration, deleteGroup, dropGroup, dropProject, EMPTY_PROJECT_GROUPS, moveGroup, moveProject, newGroupId, type ProjectGroups, projectGroupsSettings, renameGroup, setDecoration } from "../shared/project-groups";
+import { createGroup, type Decoration, deleteGroup, dropGroup, dropProject, EMPTY_PROJECT_GROUPS, groupOrderSettings, moveGroup, moveProject, newGroupId, type ProjectGroups, projectGroupsSettings, renameGroup, setDecoration } from "../shared/project-groups";
 import { DecorIcon, DecorPicker } from "./decor-picker";
 import { openChat } from "./stats/session-stats";
 import type { RemoveProjectResult } from "../shared/project-actions";
@@ -212,9 +215,11 @@ interface Shared {
   // The one row or heading the pointer is over (see hover-tracker.ts).
   hover: HoverTracker;
   // "Your groups": the saved groups, a change to them, and every project by key (for projects with no workspace).
-  groups: { doc: ProjectGroups; change(operation: (doc: ProjectGroups) => ProjectGroups): void; projectRefs: ReadonlyMap<string, ProjectRef> };
-  // "Your groups" in the workspace list: dragging projects between groups, and groups up and down; null otherwise.
-  drag: { projects: DragApi; groups: DragApi } | null;
+  // `byLastUsed`: groups are ordered by when they were last used (Settings, Sidebar), so they cannot be moved by hand.
+  groups: { doc: ProjectGroups; change(operation: (doc: ProjectGroups) => ProjectGroups): void; projectRefs: ReadonlyMap<string, ProjectRef>; byLastUsed: boolean };
+  // "Your groups" in the workspace list: dragging projects between groups, and groups up and down (null while groups
+  // are ordered by last use); null otherwise.
+  drag: { projects: DragApi; groups: DragApi | null } | null;
   removeProject(projectId: string): Promise<RemoveProjectResult>;
 }
 
@@ -1252,8 +1257,12 @@ function UserGroupHeading({ group, index, count, collapsed, onToggle, shared }: 
               renamingGroup.set(id);
             }}
           />
-          <MenuItem t={t} icon="ArrowUp" label="Move up" disabled={index === 0} onPress={() => move(index - 1)} />
-          <MenuItem t={t} icon="ArrowDown" label="Move down" disabled={index >= saved.length - 1} onPress={() => move(index + 1)} />
+          {shared.groups.byLastUsed ? null : (
+            <>
+              <MenuItem t={t} icon="ArrowUp" label="Move up" disabled={index === 0} onPress={() => move(index - 1)} />
+              <MenuItem t={t} icon="ArrowDown" label="Move down" disabled={index >= saved.length - 1} onPress={() => move(index + 1)} />
+            </>
+          )}
           <MenuItem t={t} icon="Palette" label="Colour and icon" onPress={() => setMenu("decor")} />
           <MenuItem t={t} icon="Trash2" tone={t.c.statusDanger} label={confirmDelete ? `Delete: its ${projects} ${projects === 1 ? "project moves" : "projects move"} to Ungrouped` : "Delete group"} onPress={remove} />
           </>
@@ -1625,6 +1634,17 @@ function withMark(workspace: PluginWorkspaceSnapshot, infoOf: Shared["infoOf"]):
   return indicator === workspace.indicator ? workspace : { ...workspace, indicator };
 }
 
+// Project keys, most recently used first (by their most recently used shown workspace), and how to order "Your groups"
+// with them: by last use while Settings, Sidebar asks for it (the default), else in the saved order.
+function useRecentProjects(showBackground: boolean): { keys: readonly string[]; on: boolean } {
+  const order = useSettings(groupOrderSettings);
+  const keys = useWorkspaces({ where: (workspace) => isVisible(workspace, showBackground), orderBy: byLastUsed, groupBy: (workspace) => ({ key: workspace.project.key }) }).map((group) => group.key);
+  return { keys, on: order.status !== "ready" || order.values.lastUsedFirst };
+}
+function orderUserGroups<Ref>(nested: NestedGroup<Ref>[], recent: { keys: readonly string[]; on: boolean }): NestedGroup<Ref>[] {
+  return recent.on ? orderGroupsByLastUsed(nested, recent.keys) : nested;
+}
+
 function workspaceRows(config: ViewConfig) {
   const compareBase = compareWorkspaces(config);
   // Like Paseo's own sidebar, pinned workspaces get their own section above the groups.
@@ -1646,8 +1666,11 @@ function workspaceRows(config: ViewConfig) {
     const projectRefs = new Map(allProjects.flatMap((group) => group.items.map((ref) => [ref.key, ref] as const)));
     const inner = grouped.map((group) => ({ key: group.key, title: group.title ?? "", items: group.items, project: group.key.slice("project:".length) }));
     const listed = new Set(inner.map((section) => section.project));
-    const emptyProjects = custom && !filtering(filter) ? allProjects.filter((group) => !listed.has(group.key)).map((group) => ({ key: group.key, title: group.title ?? "" })) : [];
-    const nested = custom ? nestInGroups(inner, groups.groups, emptyProjects) : null;
+    // Projects whose unarchived workspaces are all hidden as background; called always, so the hook order never changes.
+    const hiddenProjects = new Set(useWorkspaces({ where: (workspace) => workspace.archivingAt === null && !isVisible(workspace, showBackground), groupBy: (workspace) => ({ key: workspace.project.key }) }).map((group) => group.key));
+    const emptyProjects = custom && !filtering(filter) ? emptyProjectsToList(allProjects, listed, hiddenProjects).map((group) => ({ key: group.key, title: group.title ?? "" })) : [];
+    const recentProjects = useRecentProjects(showBackground);
+    const nested = custom ? orderUserGroups(nestInGroups(inner, groups.groups, emptyProjects), recentProjects) : null;
     const flat = nested ? nested.flatMap((group) => group.sections) : grouped;
     const sections = pinnedApart && pinned.length ? [{ key: "pinned", title: "Pinned", items: pinned }, ...flat] : flat;
     const protectedKeys = new Set(useWorkspaces({ where: (workspace) => shown(workspace) && isProtected(marked(workspace)) }).map((ref) => ref.key));
@@ -1686,7 +1709,8 @@ function chatRows(config: ViewConfig) {
     // "Your groups": chats are grouped by workspace, and each workspace goes under its project's group.
     const byProject = useWorkspaces({ groupBy: (workspace) => ({ key: workspace.project.key, title: workspace.projectDisplayName }) });
     const projectOf = new Map(byProject.flatMap((group) => group.items.map((ref) => [ref.key, group.key] as const)));
-    const nested = custom ? nestInGroups(grouped.map((group) => ({ key: group.key, title: group.title ?? "", items: group.items, project: projectOf.get(group.key.slice("workspace:".length)) ?? "" })), groups.groups, []) : null;
+    const recentProjects = useRecentProjects(showBackground);
+    const nested = custom ? orderUserGroups(nestInGroups(grouped.map((group) => ({ key: group.key, title: group.title ?? "", items: group.items, project: projectOf.get(group.key.slice("workspace:".length)) ?? "" })), groups.groups, []), recentProjects) : null;
     const sections = nested ? nested.flatMap((group) => group.sections) : grouped;
     const isProtectedChat = (chat: PluginAgentSnapshot) => ["needs_input", "failed"].includes(chatIndicator(chat));
     const protectedKeys = new Set(useAgents({ where: (chat) => shown(chat) && isProtectedChat(chat) }).map((ref) => ref.key));
@@ -1826,6 +1850,8 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     useEffect(() => () => openChat.set(null), []);
     const groupsState = useSettings(projectGroupsSettings);
     const groupsDoc = groupsState.status === "ready" ? groupsState.values : EMPTY_PROJECT_GROUPS;
+    const groupOrder = useSettings(groupOrderSettings);
+    const groupsByLastUsed = groupOrder.status !== "ready" || groupOrder.values.lastUsedFirst;
     const source = useRows(filter, props, state.showBackground, infoOf, groupsDoc);
     const changeGroups = (operation: (doc: ProjectGroups) => ProjectGroups) => void deps.changeGroups(operation).catch(report(toast, "change your groups"));
     // "Your groups" in the workspace list: projects drag between groups (each group a column, each project a card), and
@@ -1919,8 +1945,8 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
         openKey: props.active.agent?.key ?? null,
       },
       hover,
-      groups: { doc: groupsDoc, change: changeGroups, projectRefs: source.projectRefs },
-      drag: draggable.length ? { projects: projectDrag.value, groups: groupDrag.value } : null,
+      groups: { doc: groupsDoc, change: changeGroups, projectRefs: source.projectRefs, byLastUsed: groupsByLastUsed },
+      drag: draggable.length ? { projects: projectDrag.value, groups: groupsByLastUsed ? null : groupDrag.value } : null,
       removeProject: deps.removeProject,
     };
     const collapsed = new Set(state.collapsed);

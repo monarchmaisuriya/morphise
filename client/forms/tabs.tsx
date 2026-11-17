@@ -1,6 +1,7 @@
 import { useSettings } from "@getpaseo/plugin/client";
 import { statsSettings } from "../../shared/stats";
 import { activitySettings } from "../../shared/activity";
+import { groupOrderSettings } from "../../shared/project-groups";
 import { showEnabled, showSettings } from "../../shared/show";
 import { SettingsAction, SettingsCard, SettingsSection, TextInput } from "@getpaseo/plugin/client/ui";
 import { type ReactNode, useMemo, useState } from "react";
@@ -944,6 +945,40 @@ function SessionStatsSetting() {
   );
 }
 
+// How "Your groups" are ordered (its own host-wide document, so older Morphise versions ignore it); missing means on.
+function GroupOrderSetting() {
+  const stored = useSettings(groupOrderSettings);
+  const [failed, setFailed] = useState<string | null>(null);
+  if (stored.status === "invalid" || stored.status === "error") {
+    return (
+      <SettingsSection title="Your groups">
+        <SettingsCard>
+          <SwitchField label="Most recently used group first" hint={`Couldn't read this setting (${stored.error}). Switch to reset it.`} value={false} onChange={() => void (stored.status === "invalid" ? stored.reset() : stored.reload())} />
+        </SettingsCard>
+      </SettingsSection>
+    );
+  }
+  if (stored.status !== "ready") return null;
+  return (
+    <SettingsSection title="Your groups" info="When the sidebar view is grouped by Your groups (Display, Group by).">
+      <SettingsCard>
+        <SwitchField
+          label="Most recently used group first"
+          hint="The group whose workspace you used last goes to the top; Ungrouped stays last. Turn off to order groups yourself by dragging or Move up and Move down."
+          value={stored.values.lastUsedFirst}
+          onChange={(lastUsedFirst) => {
+            setFailed(null);
+            void stored.save({ ...stored.values, lastUsedFirst }, stored.revision).then((ok) => {
+              if (!ok) setFailed(stored.saveError ?? "Another app saved this setting at the same moment; try again");
+            });
+          }}
+          error={failed}
+        />
+      </SettingsCard>
+    </SettingsSection>
+  );
+}
+
 // The Activity tab in the Workbench (its own host-wide document, so older Morphise versions ignore it); missing means on.
 function ActivityTabSetting() {
   const stored = useSettings(activitySettings);
@@ -963,7 +998,7 @@ function ActivityTabSetting() {
       <SettingsCard>
         <SwitchField
           label="Show the Activity tab"
-          hint="In the Workbench, after Bookmarks."
+          hint="The first tab in the Workbench."
           value={stored.values.enabled}
           onChange={(enabled) => {
             setFailed(null);
@@ -1087,6 +1122,7 @@ export function SidebarTab(form: Form): ReactNode {
       <SettingsSection title="Rows">
         <SettingsCard>{VIEW_SECTIONS.rows.map((key) => view[key])}</SettingsCard>
       </SettingsSection>
+      <GroupOrderSetting />
       <SettingsSection title="Chats" info="Chats listed under their workspace, and sub-agents under their chat. Turn chats off to list workspaces only.">
         <SettingsCard>{VIEW_SECTIONS.chats.map((key) => view[key])}</SettingsCard>
       </SettingsSection>

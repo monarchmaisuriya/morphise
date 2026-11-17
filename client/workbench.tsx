@@ -83,10 +83,10 @@ function useWorkbenchCounts(deps: SurfaceDeps) {
 
 // One list, without group headings, in this order.
 const ENTRIES: readonly { view: WorkbenchView; label: string; icon: string }[] = [
+  { view: "activity", label: "Activity", icon: "Activity" },
   { view: "agents", label: "Agents", icon: "Bot" },
   { view: "board", label: "Tasks", icon: "SquareKanban" },
   { view: "bookmarks", label: "Bookmarks", icon: "Bookmark" },
-  { view: "activity", label: "Activity", icon: "Activity" },
 ];
 
 // One view as a tab along the top, drawn as Paseo draws its chat tabs: a 28 pt chip with a 14 pt icon and a muted

@@ -56,6 +56,10 @@ export const DECOR_ICONS = [
 
 export const projectGroupsSettings = defineSettings({ id: "project-groups", scope: "host", version: 1, schema: projectGroupsSchema });
 
+// How "Your groups" are ordered (Settings, Sidebar): the group used most recently first (the default), or the order
+// the user set by dragging and Move up / Move down. Its own document, so older Morphise versions ignore it.
+export const groupOrderSettings = defineSettings({ id: "project-group-order", scope: "host", version: 1, schema: z.object({ lastUsedFirst: z.boolean().default(true) }) });
+
 function indexOfGroup(doc: ProjectGroups, groupId: string): number {
   const index = doc.groups.findIndex((group) => group.id === groupId);
   if (index < 0) throw new Error(`No group has the id "${groupId}"`);

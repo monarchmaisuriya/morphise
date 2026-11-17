@@ -2,6 +2,13 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.36.1 - 2026-11-17
+
+- **Most recently used group first** (Settings, Sidebar, Your groups; on by default): under Your groups, the group whose workspace you used last goes to the top, ranked by each workspace's last prompt (else its creation), with Ungrouped last. While it is on, Move up, Move down and dragging groups are off; turn it off to order groups yourself (your saved order is kept). Its own setting, so 0.36.0 ignores it.
+- **Background projects stay hidden:** under Your groups, a project whose workspaces are all background ones (such as a workers project) is no longer listed as an empty project, unless Show background is on.
+- **Activity is the first Workbench tab.**
+- **Stats popover:** the "Session stats" title row and the chat's name are gone; it starts with the chat picker (when the workspace has several chats) and the tiles.
+
 ## 0.36.0 - 2026-11-17
 
 The features of the Paseo plugin Activity (koinzhang), rebuilt in Morphise (credit and licence in NOTICE.md). Activity reads Paseo's timelines; Morphise reads each chat's own Claude Code or Codex log instead, so no finished agent is woken.
