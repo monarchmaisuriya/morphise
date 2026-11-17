@@ -9,6 +9,7 @@ import { z } from "zod";
 export const HTML_SERVER = "chat_polish";
 export const HTML_TOOL = "html_render";
 export const HTML_PREVIEW_TOOL = "html_preview";
+export const HTML_GUIDE_TOOL = "html_guide";
 
 /** The tool as each provider names it: "mcp__server__tool" (Claude CLI), "server.tool" (Codex), the alias an MCP bridge registers for it
  * (omp's "mcp_server__tool_<alias>"), or the human label a host publishes in its place ("server / tool"). Only the words are compared, so a
@@ -39,8 +40,14 @@ export function readHeights(output: unknown): Array<[number, number]> | undefine
 const PAGE_ID = /Page id: ([0-9a-f]{64})/;
 export const pageIdLine = (id: string) => `Page id: ${id}`;
 export const readPageId = (output: unknown) => PAGE_ID.exec(JSON.stringify(output) ?? "")?.[1];
+// The earlier page an html_render call updates, on a line of its answer; the chat shows that page as "Updated below".
+const REPLACES = /Replaces: ([0-9a-f]{64})/;
+export const replacesLine = (id: string) => `Replaces: ${id}`;
+export const readReplaces = (output: unknown) => REPLACES.exec(JSON.stringify(output) ?? "")?.[1];
 /** A page html_render stored, by its id; null once it's gone from the plugin's cache. */
 export const storedPage = defineRpc({ name: "polish.html.page", input: z.object({ id: z.string().regex(/^[0-9a-f]{64}$/) }), output: z.object({ html: z.string().nullable() }) });
+/** Keeps a stored page past the 30-day cleanup while a bookmark holds it (Save), or lets it go (the bookmark removed). `kept`: whether a copy is kept now. */
+export const keepPage = defineRpc({ name: "polish.html.keep", input: z.object({ id: z.string().regex(/^[0-9a-f]{64}$/), keep: z.boolean() }), output: z.object({ kept: z.boolean() }) });
 
 /** The browser that lays pages out before they show: Chrome for Testing's headless shell, which the user can download from the dashboard. */
 export const browserStatusSchema = z.object({

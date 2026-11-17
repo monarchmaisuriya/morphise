@@ -5,6 +5,12 @@ import type { ChatSettings } from "../chat-view";
 // profile. Options Morphise already had keep their Morphise key (one owner each); the rest live in
 // `chat.polish`. `polishPrefs` gives the ported code Chat Polish's `Prefs` shape.
 
+// Pages (html_render) are on unless turned off: a profile stores no key for on (the default, removed when saved) and
+// `false` for off. The one rule every reader of the switch uses.
+export function pagesOn(polish: { html?: boolean } | undefined): boolean {
+  return polish?.html !== false;
+}
+
 export const HIDEABLE = ["read", "search", "fetch", "task", "todo"] as const;
 export type Hideable = (typeof HIDEABLE)[number];
 export const RICH_TEXT = ["quote", "table", "code", "inline", "heading", "list", "callout", "rule"] as const;
@@ -108,7 +114,7 @@ export type PolishSettings = z.output<typeof polishSchema>;
 
 // Each option's default; a saved value equal to it is removed (older Morphise versions reject keys
 // they do not know, so an unchanged profile carries none).
-export const POLISH_DEFAULTS: Partial<Record<keyof PolishSettings, unknown>> = { mergeMin: 2, diffLineNumbers: true, thoughtFirstLine: false, barButtons: "both", barPosition: "above", sideModel: "", thumbCorners: "rounded", replyWidth: "paseo", floatingRadius: 10, floatingGap: 8, loaderColor: "paseo", pageHeight: 0, uiFont: "paseo", markdownStyle: "paseo", hoverPreviews: false, hoverDelay: 1, previewWrap: true, previewLineNumbers: true, previewStripes: false, tableCopy: false, runButtons: true, runOutput: "block", runLines: 15, runPanelButtons: "icons", runCard: "line", runShell: "block", merge: true, failedOpen: true, images: "native", imageStacks: false, imageStackOpen: "hover", selection: true, restyle: false, window: "paseo", loader: "dots", loaderSize: "s", diagrams: "mermaid", iconSet: "lucide", html: false, syntax: "one-dark-darker-mariana" };
+export const POLISH_DEFAULTS: Partial<Record<keyof PolishSettings, unknown>> = { mergeMin: 2, diffLineNumbers: true, thoughtFirstLine: false, barButtons: "both", barPosition: "above", sideModel: "", thumbCorners: "rounded", replyWidth: "paseo", floatingRadius: 10, floatingGap: 8, loaderColor: "paseo", pageHeight: 0, uiFont: "paseo", markdownStyle: "paseo", hoverPreviews: false, hoverDelay: 1, previewWrap: true, previewLineNumbers: true, previewStripes: false, tableCopy: false, runButtons: true, runOutput: "block", runLines: 15, runPanelButtons: "icons", runCard: "line", runShell: "block", merge: true, failedOpen: true, images: "native", imageStacks: false, imageStackOpen: "hover", selection: true, restyle: false, window: "paseo", loader: "dots", loaderSize: "s", diagrams: "mermaid", iconSet: "lucide", html: true, syntax: "one-dark-darker-mariana" };
 
 // Chat Polish's Prefs, as its ported code reads them.
 export interface Prefs {
@@ -191,7 +197,7 @@ export function polishPrefs(chat: ChatSettings | undefined): Prefs {
     windowStyle: polish.window ?? "paseo",
     recap: chat?.recap === true ? "on" : "off",
     diagrams: polish.diagrams ?? "mermaid",
-    html: polish.html === true ? "on" : "off",
+    html: pagesOn(polish) ? "on" : "off",
     images: polish.images ?? "native",
     imageStacks: polish.imageStacks === true ? "on" : "off",
     imageStackOpen: polish.imageStackOpen ?? "hover",

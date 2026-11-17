@@ -73,7 +73,7 @@ export default function contribute(server: PluginServerContext) {
   // ...and each new one is asked to keep that plan, since Claude Code only lists the tools by name.
   const stopPlanInstruction = server.addHook("agent.create.before", createPlanInstruction(profile));
   // The daemon side of the parts ported from Chat Polish (see NOTICE.md).
-  const stopPolish = [registerMedia, registerPages, registerUpdate].map((register) => register(server, profile));
+  const stopPolish = [registerMedia, (polish: PluginServerContext, reader: typeof profile) => registerPages(polish, reader, bookmarks), registerUpdate].map((register) => register(server, profile));
   // Shell commands the user runs from a chat (/run, Run buttons), ported from Shell Yeah (see NOTICE.md).
   const stopRun = registerRun(server);
   const keeper = createTaskKeeper(tasks);

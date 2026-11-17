@@ -187,9 +187,10 @@ export function reduceWorkspaceInfo(current: WorkspaceList, change: Change): Wor
 }
 
 // Open workspaces whose name or project contains the search, most recently used first.
-export function workspaceChoices(list: WorkspaceList, search: string): WorkspaceInfo[] {
+// `includeClosed`: archived workspaces too (not background ones), for looking back, as the Activity tab does.
+export function workspaceChoices(list: WorkspaceList, search: string, includeClosed = false): WorkspaceInfo[] {
   const query = search.trim().toLowerCase();
   return [...list.values()]
-    .filter((workspace) => workspace.open && (!query || `${workspace.name} ${workspace.project}`.toLowerCase().includes(query)))
+    .filter((workspace) => (includeClosed ? !workspace.background : workspace.open) && (!query || `${workspace.name} ${workspace.project}`.toLowerCase().includes(query)))
     .sort((left, right) => (right.lastUsed ?? "").localeCompare(left.lastUsed ?? "") || left.name.localeCompare(right.name));
 }

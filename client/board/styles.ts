@@ -1,5 +1,5 @@
 import type { PluginTheme } from "@getpaseo/plugin";
-import { BLUE } from "../ui/hues";
+import { isDarkSurface, PRIORITY_YELLOWS } from "../ui/hues";
 
 // How each priority reads and looks; P1 is the most urgent. Every priority is a dot (PriorityMark), told apart by its
 // colour (priorityColor) and fill: solid for Urgent, High and Medium, hollow for Low.
@@ -19,5 +19,6 @@ export function priorityOf(priority: number | null): { name: string; mark: Prior
 }
 
 export function priorityColor(colors: PluginTheme["colors"], priority: number | null): string {
-  return priority === 1 ? colors.statusDanger : priority === 2 ? colors.statusWarning : priority === 3 ? BLUE : colors.foregroundMuted;
+  const yellows = PRIORITY_YELLOWS[isDarkSurface(colors.surface0) ? "dark" : "light"];
+  return priority === 1 ? colors.statusDanger : priority === 2 ? yellows.high : priority === 3 ? yellows.medium : colors.foregroundMuted;
 }

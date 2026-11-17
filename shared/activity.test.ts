@@ -32,8 +32,8 @@ describe("summarize", () => {
       agent("2026-11-05T05:00:00Z", activity([["2026-11-05T05:00:00Z", { p: 2, models: { "claude-opus-5-5": 2 } }]])),
     ]);
     expect(summary.kpis).toEqual([
-      { label: "Sessions", value: "2", detail: "last 7 days", change: 100 },
-      { label: "Prompts", value: "3", detail: "last 7 days", change: 50 },
+      { label: "Sessions", value: "2", detail: "last 7 days", change: 100, trend: [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0] },
+      { label: "Prompts", value: "3", detail: "last 7 days", change: 50, trend: [0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0] },
       { label: "Top provider", value: "claude", detail: "100%", change: 100 },
       { label: "Top model", value: "claude-opus-5-5", detail: "100%", change: 50 },
     ]);

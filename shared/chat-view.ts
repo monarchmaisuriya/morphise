@@ -4,7 +4,7 @@
 // the default for everything.
 
 import { readSteps, type Step } from "./steps";
-import type { PolishSettings } from "./polish/prefs";
+import { pagesOn, type PolishSettings } from "./polish/prefs";
 
 export const TOOL_KINDS = ["shell", "read", "edit", "search", "fetch", "sub_agent", "other"] as const;
 export type ToolKind = (typeof TOOL_KINDS)[number];
@@ -188,7 +188,7 @@ export function chatView(saved: ChatSettings | undefined, hidden: readonly strin
     // While Morphise draws tool rows, pages already in a chat keep drawing as pages after the option
     // (which only gives new agents the tool) is turned off, instead of as a tool row of raw HTML.
     // With Paseo's own rows and the option off, nothing is transformed.
-    pages: draw && (toolCalls !== "paseo" || saved?.polish?.html === true),
+    pages: draw && (toolCalls !== "paseo" || pagesOn(saved?.polish)),
     hidden: new Set(hidden),
     stepsInChat,
   };

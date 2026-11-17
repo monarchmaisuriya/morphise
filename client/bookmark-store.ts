@@ -73,6 +73,24 @@ export async function bookmarkPassage(capture: BookmarkCapture, input: { agentId
   });
 }
 
+// Bookmarks a page from a chat (a page row's Save); the page itself is kept on the daemon by the caller.
+export async function bookmarkPage(capture: BookmarkCapture, input: { agentId: string; workspaceId: string | null; page: { id: string; title: string } }, now = new Date()): Promise<void> {
+  const title = input.page.title.slice(0, 200);
+  await capture.apply({
+    kind: "add",
+    bookmark: {
+      id: `b-${now.getTime().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+      agentId: input.agentId,
+      workspaceId: input.workspaceId,
+      chat: capture.chatTitle(input.agentId).slice(0, 200),
+      excerpt: excerptOf(title),
+      note: "",
+      at: now.toISOString(),
+      page: { id: input.page.id, title },
+    },
+  });
+}
+
 export async function bookmarkLastAnswer(capture: BookmarkCapture, agentId: string, workspaceId: string | null, note: string, now = new Date()): Promise<void> {
   if (capture.isRunning(agentId)) throw new Error("This chat is still answering; bookmark it once the answer is finished");
   const page = await capture.readTail(agentId);

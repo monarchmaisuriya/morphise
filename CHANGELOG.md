@@ -2,6 +2,22 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.37.0 - 2026-11-17
+
+Claude-style visuals in chats: Morphise's HTML pages are on by default and much more capable.
+
+- **Pages on by default:** agents draw a page when a visual clearly helps, or when you ask. New chats get the tools, and existing Claude, Codex and OpenCode chats when their session reopens (a daemon restart). Turn it off in Settings, Chat, HTML pages. Anyone who never turned pages on gets them now.
+- **Built-in helpers in every page:** `Morphise.chart` draws bar, line, area, donut and sparkline charts in your theme's colours, sized to the chat and with labels that never overlap; tables with class "sortable" sort by any column (numbers with $, %, k and M too) and `data-filter` adds a filter box; `.gallery` lays out pictures with captions.
+- **`html_guide`:** the detailed rules for charts, tables, diagrams, images, interactive pages and mock-ups, read by the agent only when it draws one, so every chat's instructions stay short.
+- **Update in place:** an agent can replace an earlier page; the earlier one shows "Updated below" with full screen.
+- **Ask from a page:** a click on a page's button can put a follow-up into your message box (`Morphise.ask`). It never sends; only a click or keypress in that page counts, at most once every 6 seconds, and the same text isn't added twice within a minute.
+- **Save and download:** Save puts a page in the Workbench's Bookmarks and keeps it on the daemon while the bookmark lasts (Open shows it full window); Download HTML and Download SVG on each page.
+- **Stats popover redesign:** total tokens and cache hit first, a bar of where the tokens went (cache read, cache write, output, new input), turns, steps, first token and speed, model time against tool time, tool counts as chips (failures in red), and skills and MCP tools ranked with bars; 420 wide. The Stats panel puts it in two cards side by side when there is room.
+- **Activity tab redesign:** KPI tiles with a 14-day trend and a change pill, a heatmap that fills the width with weekday labels and a Less to More legend, rankings and "Most used" with one colour and each row's share, insights as tiles with icons.
+- **Activity workspace filter:** searchable, wider, with each workspace's project, and archived workspaces too.
+- **Priority colours:** High is a slightly darker yellow, Medium a light yellow (deeper shades on light themes, so both stay visible).
+- **Going back to 0.36:** pages turn off again for profiles that never set them; pages that use the new helpers show blank there; saved-page bookmarks keep only their title.
+
 ## 0.36.3 - 2026-11-17
 
 - **Skills and MCP list** in the Stats popover and panel: its rows sit in a card like the tiles above, so names, times and counts line up with the tile text instead of the section's edges.

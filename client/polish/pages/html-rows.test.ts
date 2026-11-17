@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { heightsLine, pageIdLine } from "../../../shared/polish/html";
 import type { ToolCallItem } from "../agent-types";
 import { htmlRowData } from "./html-rows";
+import { isReplaced } from "./replaced";
 
 const call = (name: string, input: unknown, extra: Record<string, unknown> = {}) =>
   ({ type: "tool_call", callId: "1", name, status: "completed", error: null, detail: { type: "unknown", input, output: null }, ...extra }) as unknown as ToolCallItem;
@@ -39,5 +40,17 @@ describe("htmlRowData", () => {
     expect(htmlRowData(withOutput("chat_polish.html_render", cut, { output: `Shown.\n\n${pageIdLine(id)}` }))?.stored).toBe(id);
     expect(htmlRowData(withOutput("chat_polish.html_render", cut, { output: "Shown." }))?.stored).toBeNull();
     expect(htmlRowData(withOutput("chat_polish.html_render", { title: "Chart", html: "<p>x</p>" }, { output: pageIdLine(id) }))).not.toHaveProperty("stored");
+  });
+});
+
+describe("page ids and updates", () => {
+  it("carries the page's own id, and marks the page it replaces so that row shows Updated below", () => {
+    const first = "a".repeat(64);
+    const second = "b".repeat(64);
+    const row = htmlRowData(withOutput("chat_polish.html_render", { title: "v2", html: "<p>2</p>" }, { output: `Shown.\n\n${pageIdLine(second)}\n\nReplaces: ${first}` }));
+    expect(row).toMatchObject({ id: second, replaces: first });
+    expect(isReplaced(first)).toBe(true);
+    expect(isReplaced(second)).toBe(false);
+    expect(isReplaced(undefined)).toBe(false);
   });
 });

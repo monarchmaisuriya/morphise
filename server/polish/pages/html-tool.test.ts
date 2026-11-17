@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { readPageId } from "../../../shared/polish/html";
+import { readPageId, readReplaces } from "../../../shared/polish/html";
 import { PAGE_POLICY } from "../../../shared/polish/page";
 
 interface RpcReply {
@@ -62,6 +62,7 @@ describe("the html_render MCP server", () => {
     expect(config.mcpServers?.chat_polish).toEqual({ type: "http", url: tool.url, headers: { Authorization: `Bearer ${tool.token}` }, alwaysLoad: true });
     expect(config.toolPolicy?.preapproved).toEqual([
       { kind: "mcp", server: "chat_polish", tool: "html_render" },
+      { kind: "mcp", server: "chat_polish", tool: "html_guide" },
       { kind: "mcp", server: "chat_polish", tool: "html_preview" },
     ]);
     expect(config.systemPrompt).toMatch(/^Base\n\n# HTML pages\nYou have an html_render tool/);
@@ -87,7 +88,7 @@ describe("the html_render MCP server", () => {
   });
 
   it("answers MCP over HTTP: lists the tool, rejects broken pages, publishes and stores a good one", async () => {
-    const { startHtmlTool, readStoredPage } = await import("./html-tool");
+    const { startHtmlTool, readStoredPage, keepStoredPage } = await import("./html-tool");
     const tool = await startHtmlTool();
     const post = (body: unknown, token = tool.token) =>
       fetch(tool.url, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
@@ -97,8 +98,14 @@ describe("the html_render MCP server", () => {
     expect((await ask(1, "initialize", { protocolVersion: "2025-06-18" })).result.serverInfo.name).toBe("chat_polish");
     expect((await post({ jsonrpc: "2.0", method: "notifications/initialized" })).status).toBe(202);
     const tools = (await ask(2, "tools/list")).result.tools;
-    expect(tools.map((listed) => listed.name)).toEqual(["html_render"]);
-    expect(tools[0]!.description).toMatch(/only when the user asks for a visual/);
+    expect(tools.map((listed) => listed.name)).toEqual(["html_render", "html_guide"]);
+    expect(tools[0]!.description).toMatch(/call html_guide with the kind of page/);
+    const chartsGuide = (await ask(20, "tools/call", { name: "html_guide", arguments: { topic: "charts" } })).result;
+    expect(chartsGuide.isError).toBe(false);
+    expect(chartsGuide.content[0].text).toMatch(/Morphise\.chart/);
+    const unknownGuide = (await ask(21, "tools/call", { name: "html_guide", arguments: { topic: "poems" } })).result;
+    expect(unknownGuide.isError).toBe(true);
+    expect(unknownGuide.content[0].text).toMatch(/charts, tables, diagrams, images, interactive, mockups/);
     expect((await ask(3, "tools/call", { name: "html_render", arguments: { title: "t", html: "<style>.a{height:100vh}</style>" } })).result.isError).toBe(true);
     // An agent created while the browser was installed can still call html_preview: it reports what html_render would reject, and never publishes.
     const previewed = (await ask(3, "tools/call", { name: "html_preview", arguments: { html: "<style>.a{height:100vh}</style>" } })).result;
@@ -113,6 +120,22 @@ describe("the html_render MCP server", () => {
     expect(id).toMatch(/^[0-9a-f]{64}$/);
     expect(await readStoredPage({ id })).toEqual({ html: "<p>Use 12px, not 100vh or names like ovhd</p>" });
     expect(await readStoredPage({ id: "0".repeat(64) })).toEqual({ html: null });
+    // Save keeps a copy past the 30-day cleanup; a page that isn't stored can't be kept.
+    expect(await keepStoredPage({ id, keep: true })).toEqual({ kept: true });
+    expect(await keepStoredPage({ id: "0".repeat(64), keep: true })).toEqual({ kept: false });
+    expect(await keepStoredPage({ id, keep: false })).toEqual({ kept: false });
+    await expect(keepStoredPage({ id: "../x", keep: true })).rejects.toThrow(/Not a page id/);
+    // An update names the page it replaces; the same page, an unknown id or a malformed one is refused.
+    const update = async (html: string, replaces: string) => (await ask(6, "tools/call", { name: "html_render", arguments: { title: "t", html, force: true, replaces } })).result;
+    const updated = await update("<p>Second version</p>", id);
+    expect(updated.isError).toBe(false);
+    expect(readReplaces(updated)).toBe(id);
+    // The same page published again (a revert) gets an id of its own, so it can replace the version between.
+    const reverted = await update("<p>Use 12px, not 100vh or names like ovhd</p>", readPageId(updated)!);
+    expect(reverted.isError).toBe(false);
+    expect(readPageId(reverted)).not.toBe(id);
+    expect((await update("<p>Third</p>", "f".repeat(64))).content[0]!.text).toMatch(/No page f+ is stored/);
+    expect((await update("<p>Third</p>", "page-1")).isError).toBe(true);
     const publish = async (html: string) => (await ask(5, "tools/call", { name: "html_render", arguments: { title: "t", html, force: true } })).result;
     expect((await publish('<div style="min-height:100dvh"></div>')).content[0]!.text).toMatch(/viewport height unit \(100dvh\)/);
     expect((await publish("<script>\nconst a = {;\n</script>")).content[0]!.text).toMatch(/^Script 1 has a syntax error on its line 2/);

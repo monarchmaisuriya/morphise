@@ -230,7 +230,7 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
       view === "bookmarks" ? (
         <Bookmarks t={t} deps={deps} workspaces={workspaces} open={openChat} />
       ) : view === "activity" ? (
-        <ActivityView client={deps.client} theme={theme} compact={layout.compact} workspaces={workspaces} />
+        <ActivityView client={deps.client} theme={theme} compact={layout.compact} workspaces={deps.workspaces} />
       ) : (view === "agents" || view === "board") && !ready ? null : view === "agents" ? (
         <AgentsBoardView client={deps.client} workspaces={deps.workspaces} theme={theme} compact={layout.compact} navigation={navigation} layout={agentsLayout} bookmarkLastAnswer={deps.bookmarkLastAnswer} />
       ) : view === "board" ? (

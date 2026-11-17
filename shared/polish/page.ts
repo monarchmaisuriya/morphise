@@ -1,4 +1,5 @@
 // Ported from Chat Polish (lthieu96/paseo-chat-polish, MIT, see NOTICE.md): shared/page.ts
+import { KIT_CSS, KIT_SCRIPT } from "./page-kit";
 // The page an html_render call published, as the chat frames it: the app's theme, the built-in styles and the boot script. Shared so the
 // daemon can lay a page out the same way when it checks it (server/page-check.ts).
 
@@ -87,11 +88,11 @@ const STANDALONE = "html{background:var(--bg)}body{max-width:1120px;margin:0 aut
 export const PAGE_POLICY = "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' https:; style-src 'unsafe-inline' https:; font-src https: data:; img-src data: blob:; worker-src blob:; connect-src 'none'; form-action 'none'";
 
 /**
- * The agent's page after a head of ours: the policy, theme, kit and boot script. A meta policy covers only what follows it, so the page comes
+ * The agent's page after a head of ours: the policy, theme, kit, boot script and the helpers (./page-kit.ts). A meta policy covers only what follows it, so the page comes
  * after all of it. The parser still files the page's own <meta>, <style>, <title> and <link> into this head, folds its <html> attributes onto
  * the root and drops its doctype and <head> tag.
  */
 export function htmlPage(html: string, theme: string, standalone = false) {
-  const head = `<meta http-equiv="Content-Security-Policy" content="${PAGE_POLICY}"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style id="cp-theme">${theme}</style><style>${KIT}${standalone ? STANDALONE : ""}</style><script>${BOOT}</script>`;
+  const head = `<meta http-equiv="Content-Security-Policy" content="${PAGE_POLICY}"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style id="cp-theme">${theme}</style><style>${KIT}${KIT_CSS}${standalone ? STANDALONE : ""}</style><script>${BOOT}</script><script>${KIT_SCRIPT}</script>`;
   return `<!doctype html><html><head>${head}</head>${html}`;
 }

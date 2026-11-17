@@ -1,0 +1,76 @@
+// The html_guide tool's answers: the detailed rules for one kind of page, read by the agent only when it draws one, so
+// the instructions every chat carries stay short (as Claude's own visuals load a module per kind). The helpers they
+// describe are in shared/polish/page-kit.ts.
+
+export const GUIDE_TOPICS = ["charts", "tables", "diagrams", "images", "interactive", "mockups"] as const;
+export type GuideTopic = (typeof GUIDE_TOPICS)[number];
+
+const CHARTS = `# Charts
+Use the built-in helper instead of drawing axes yourself: it sizes to the page, uses the theme's series colours, spaces labels so they never overlap, and keeps a fixed height.
+
+  <div id="sales"></div>
+  <script>
+    Morphise.chart("#sales", {
+      type: "bar",                 // "bar" | "line" | "area" | "donut" | "sparkline"
+      labels: ["Jan", "Feb", "Mar"],
+      series: [{ name: "2025", values: [12, 18, 9] }, { name: "2026", values: [15, 21, 14] }],
+      unit: "k",                   // optional: shown after values
+      height: 240,                 // optional; default 240 (sparkline 48)
+      stacked: false,              // bar only
+      horizontal: false            // bar only: bars run left to right, for long labels
+    });
+  </script>
+
+- One chart per element. Up to 6 series; a donut takes one series, one value per label.
+- Values are numbers; leave a gap with null. Keep labels short (a long label is shortened with an ellipsis).
+- Put the title and a one-line takeaway in HTML above the chart (h2, p.muted), not inside it.
+- Several charts: a .grid of .card elements, each with an h3 and its chart.
+- A KPI row: .grid of .stat cards (.label, .value), with a sparkline under each value if a trend matters.
+- Morphise.chart(...) returns { update(spec) } to redraw with new data (a slider or a select), without changing the height.`;
+
+const TABLES = `# Tables
+Plain <table> is already styled (numbers right-aligned with td.num). Add class "sortable" to sort by any column with a click, and data-filter to add a filter box above it:
+
+  <table class="sortable" data-filter="Filter rows">
+    <thead><tr><th>Store</th><th class="num">Orders</th><th class="num">Revenue</th></tr></thead>
+    <tbody><tr><td>North</td><td class="num">120</td><td class="num">$4,200</td></tr></tbody>
+  </table>
+
+- Numbers sort as numbers ($, %, commas and k/M suffixes are understood).
+- Over about 15 rows, wrap the table in <div class="scroll" style="max-height:360px"> so the page height stays fixed.
+- A table your script adds after the page loads: call Morphise.sortable(table) on it.
+- For a small comparison (2 to 4 items), cards in a .grid read better than a table.`;
+
+const DIAGRAMS = `# Diagrams
+- Flowcharts, sequence, state, class and ER diagrams: write a \`\`\`mermaid block in your reply instead of a page. The chat draws and lays it out.
+- Draw an SVG page only for what mermaid can't do (a custom layout, an annotated picture). Then compute every position in your script from the data, never hand-pick coordinates; give each item its own row (20px per text line plus 12px); keep 8px between labels; size the viewBox from the rows; split long labels with <tspan>.`;
+
+const IMAGES = `# Images
+- Local images (screenshots, generated images) inside your working folder: write their absolute paths, as in <img src="/abs/shot.png">. PNG, JPEG, GIF or WebP up to 12 MB. Nothing outside the folder shows.
+- Several images: a gallery, each with a caption:
+
+  <div class="gallery">
+    <figure><img src="/abs/a.png" alt="Before"><figcaption>Before</figcaption></figure>
+    <figure><img src="/abs/b.png" alt="After"><figcaption>After</figcaption></figure>
+  </div>
+
+- Before and after: two figures in a gallery, same size. Always set alt text.`;
+
+const INTERACTIVE = `# Interactive pages
+- Controls (sliders, selects, buttons) go in a .row above or below the content, in HTML. Readouts are single lines with tabular numbers.
+- Nothing may change the page's height: reserve space for every state (fixed or min-height areas).
+- Morphise.ask("text") puts a follow-up into the user's message box when they click something; it never sends. Call it only from a click handler, with a short question the user would ask next, e.g. a button "Drill into Q3" → Morphise.ask("Break Q3 down by week"). It does nothing in a downloaded page.
+- Simulations: size the canvas by devicePixelRatio, offer Play, Pause, Reset, draw a meaningful first frame, pause while off-screen (IntersectionObserver), and respect prefers-reduced-motion.
+- Charts that follow a control: keep the object Morphise.chart returns and call its update(spec).`;
+
+const MOCKUPS = `# Mock-ups
+- Build from the kit: .stack, .row, .grid, .card, .stat (.label, .value), .chip, .muted, .small; buttons (.primary for the main action), inputs, selects and tables are styled.
+- Use the theme variables only (--fg, --muted, --bg, --surface, --border, --accent, --accent-fg, --success, --warning, --danger, --chart-1..6), so the mock-up follows light and dark themes.
+- Keep it to what the question needs: one screen, real-looking but short text, no lorem ipsum.`;
+
+export const GUIDES: Record<GuideTopic, string> = { charts: CHARTS, tables: TABLES, diagrams: DIAGRAMS, images: IMAGES, interactive: INTERACTIVE, mockups: MOCKUPS };
+
+export function guideText(topic: unknown): { text: string; known: boolean } {
+  const known = typeof topic === "string" && (GUIDE_TOPICS as readonly string[]).includes(topic);
+  return known ? { text: GUIDES[topic as GuideTopic], known } : { text: `Pick a topic: ${GUIDE_TOPICS.join(", ")}.`, known: false };
+}

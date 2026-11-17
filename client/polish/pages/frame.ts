@@ -69,15 +69,56 @@ export function fitFrame(current: { height: number; width: number }, report: { h
   return { height: report.height, later: report.height < current.height };
 }
 
-/** What the chat does with a message posted to it: open a link, leave full screen, replay a shortcut, or resize the frame. */
-export type FrameMessage = { kind: "link"; url: string } | { kind: "escape" } | { kind: "shortcut"; key: FrameKey } | { kind: "report"; report: { height: number; width: number } };
+export const ASK_MAX = 2000;
+// A page may fill the message box at most this often: longer than a click's or keypress's user activation lasts in
+// browsers (about 5 s), so one activation allows one ask at most.
+export const ASK_EVERY_MS = 6000;
+// The same follow-up is not added again within this time.
+export const ASK_REPEAT_MS = 60_000;
+
+/** Whether an ask may fill the message box now, given the last one that did (its time and text). */
+export function askAllowed(text: string, now: number, last: { at: number; text: string } | null): boolean {
+  if (!last) return true;
+  if (now - last.at < ASK_EVERY_MS) return false;
+  return !(text === last.text && now - last.at < ASK_REPEAT_MS);
+}
+
+/** The follow-up a page asked to put in the message box (Morphise.ask), trimmed, if `data` is one. */
+export function frameAsk(data: unknown): string | undefined {
+  const d = data as { type?: unknown; text?: unknown } | null;
+  if (d?.type !== "cp-html-ask" || typeof d.text !== "string") return undefined;
+  const text = d.text.trim().slice(0, ASK_MAX);
+  return text || undefined;
+}
+
+/** The SVG a frame sent back for an export request (`id`), null when the page has none. */
+export function frameSvg(data: unknown): { id: string; svg: string | null } | undefined {
+  const d = data as { type?: unknown; id?: unknown; svg?: unknown } | null;
+  if (d?.type !== "cp-html-svg" || typeof d.id !== "string") return undefined;
+  return { id: d.id, svg: typeof d.svg === "string" && /^<svg[\s>]/.test(d.svg) ? d.svg : null };
+}
+
+/** What the chat does with a message posted to it: open a link, leave full screen, replay a shortcut, resize the frame, fill the message box, or take an exported SVG. */
+export type FrameMessage =
+  | { kind: "link"; url: string }
+  | { kind: "escape" }
+  | { kind: "shortcut"; key: FrameKey }
+  | { kind: "report"; report: { height: number; width: number } }
+  | { kind: "ask"; text: string }
+  | { kind: "svg"; id: string; svg: string | null };
 
 /**
  * The chat's answer to a message, or undefined to ignore it. Only the page's own frame is heard (`own`). Its script can post whenever
  * it likes, so only a page the reader is using (its frame has focus) opens links or passes keys on; a height report counts either way.
+ * An ask also needs the chat's own user activation (`activated`: a click in the frame activates the chat around it), so a page can't
+ * fill the message box on its own; how often is the caller's to limit (ASK_EVERY_MS). It never sends anything.
  */
-export function frameMessage(data: unknown, from: { own: boolean; focused: boolean; mac: boolean }): FrameMessage | undefined {
+export function frameMessage(data: unknown, from: { own: boolean; focused: boolean; mac: boolean; activated?: boolean }): FrameMessage | undefined {
   if (!from.own) return undefined;
+  const ask = frameAsk(data);
+  if (ask) return from.focused && from.activated === true ? { kind: "ask", text: ask } : undefined;
+  const svg = frameSvg(data);
+  if (svg) return { kind: "svg", ...svg };
   const url = frameLink(data);
   if (url) return from.focused ? { kind: "link", url } : undefined;
   const key = frameKey(data);

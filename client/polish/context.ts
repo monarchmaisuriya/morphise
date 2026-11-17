@@ -10,6 +10,8 @@ export interface PolishContext {
   updateChat(change: (chat: Record<string, unknown>) => void): Promise<void>;
   // Adds a Workbench bookmark of a passage from a chat.
   bookmarkPassage(input: { agentId: string; workspaceId: string | null; excerpt: string }): Promise<void>;
+  // Adds a Workbench bookmark of a page from a chat (the page is kept on the daemon first).
+  bookmarkPage(input: { agentId: string; workspaceId: string | null; page: { id: string; title: string } }): Promise<void>;
   // Morphise's file and Details actions for chat rows.
   rowActions: RowActions;
 }

@@ -1,15 +1,16 @@
 // Ported from Chat Polish (lthieu96/paseo-chat-polish, MIT, see NOTICE.md): client/html-frame.ts
 import { openExternalUrl } from "@getpaseo/plugin/client";
 import { createElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Platform } from "react-native";
 import { htmlPage, themeCss, type HtmlColors } from "../../../../shared/polish/page";
 import { seriesFrom } from "../../web/color";
 import { readHostAppearance } from "../../web/host";
 import { showAsPopover } from "../../web/popover";
 import { usePrefs } from "../../prefs";
-import { FRAME_SANDBOX, fitFrame, frameMessage, heightAt, limitFrameHeight, recentPages } from "../frame";
+import { askAllowed, FRAME_SANDBOX, fitFrame, frameMessage, heightAt, limitFrameHeight, recentPages } from "../frame";
 
 // Web only (html-item.tsx checks Platform.OS); just the DOM this module touches.
-declare const navigator: { userAgent: string } | undefined;
+declare const navigator: { userAgent: string; userActivation?: { isActive: boolean } } | undefined;
 type MessageListener = (event: { source: unknown; data: unknown }) => void;
 interface KeyListenerEvent {
   key: string;
@@ -47,6 +48,13 @@ export const lastFrameHeight = (id: string, heights?: ReadonlyArray<readonly [nu
 const isMac = () => typeof navigator !== "undefined" && /Macintosh/.test(navigator.userAgent);
 // After a width change, a shorter page has to stay shorter this long before the frame follows (see fitFrame).
 const SHRINK_AFTER_MS = 400;
+// The last follow-up any page put in a message box (Morphise.ask), for askAllowed.
+let lastAsk: { at: number; text: string } | null = null;
+// How long the chat waits for a page's SVG before treating it as having none.
+const EXPORT_WAIT_MS = 2000;
+
+/** Asks a page's frame for its SVG; set on the `exporter` a caller passes to HtmlFrame. */
+export type SvgExporter = { current: (() => Promise<string | null>) | null };
 
 const SANS = '-apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif';
 const MONO = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
@@ -72,6 +80,8 @@ export function HtmlFrame({
   heights,
   fill = false,
   onEscape,
+  onAsk,
+  exporter,
 }: {
   html: string;
   id?: string;
@@ -80,10 +90,16 @@ export function HtmlFrame({
   heights?: ReadonlyArray<readonly [number, number]>;
   fill?: boolean;
   onEscape?: () => void;
+  // A follow-up the page asked for (Morphise.ask) after a click in it; it goes into the message box, never sent.
+  onAsk?: (text: string) => void;
+  exporter?: SvgExporter;
 }) {
   const ref = useRef<Frame | null>(null);
   const escape = useRef(onEscape);
   escape.current = onEscape;
+  const ask = useRef(onAsk);
+  ask.current = onAsk;
+  const pendingSvg = useRef(new Map<string, (svg: string | null) => void>());
   const css = useHtmlTheme(colors);
   const latest = useRef(css);
   latest.current = css;
@@ -111,7 +127,18 @@ export function HtmlFrame({
     const onMessage: MessageListener = ({ source, data }) => {
       const frame = ref.current;
       if (!frame) return;
-      const message = frameMessage(data, { own: source === frame.contentWindow, focused: document.activeElement === frame, mac: isMac() });
+      const activated = typeof navigator !== "undefined" && navigator.userActivation?.isActive === true;
+      const message = frameMessage(data, { own: source === frame.contentWindow, focused: document.activeElement === frame, mac: isMac(), activated });
+      if (message?.kind === "ask") {
+        const now = Date.now();
+        if (!askAllowed(message.text, now, lastAsk)) return;
+        lastAsk = { at: now, text: message.text };
+        return ask.current?.(message.text);
+      }
+      if (message?.kind === "svg") {
+        pendingSvg.current.get(message.id)?.(message.svg);
+        return void pendingSvg.current.delete(message.id);
+      }
       if (message?.kind === "link") return void openExternalUrl(message.url).catch((error: unknown) => console.warn("[morphise] Opening a page's link failed", error));
       // Esc only leaves full screen; an allowed shortcut replays on the frame element, so the app's listeners get it as if the chat had focus.
       if (message?.kind === "escape") return escape.current?.();
@@ -131,6 +158,21 @@ export function HtmlFrame({
     };
   }, []);
   useEffect(postTheme, [css]);
+  useEffect(() => {
+    if (!exporter) return;
+    exporter.current = () =>
+      new Promise((resolve) => {
+        const request = Math.random().toString(36).slice(2);
+        pendingSvg.current.set(request, resolve);
+        ref.current?.contentWindow?.postMessage({ type: "cp-html-export-svg", id: request }, "*");
+        setTimeout(() => {
+          if (pendingSvg.current.delete(request)) resolve(null);
+        }, EXPORT_WAIT_MS);
+      });
+    return () => {
+      exporter.current = null;
+    };
+  }, [exporter]);
   return createElement("iframe", {
     ref,
     srcDoc,
@@ -168,7 +210,8 @@ export function useEscapeKey(active: boolean, onEscape: () => void) {
   const latest = useRef(onEscape);
   latest.current = onEscape;
   useEffect(() => {
-    if (!active) return;
+    // Phones have no window to listen on (React Native's window has no addEventListener); their back gesture closes the modal.
+    if (!active || Platform.OS !== "web") return;
     const onKey = (event: KeyListenerEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();

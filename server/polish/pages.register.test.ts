@@ -36,10 +36,10 @@ describe("HTML page tools for new agents", () => {
   it("adds the chat_polish server while the option is on, preapproved through the provider's base", async () => {
     const result = await addHtmlTools(profile(true))(request(), context());
     expect(result?.config.mcpServers?.chat_polish?.type).toBe("http");
-    expect(result?.config.toolPolicy?.preapproved).toHaveLength(2);
+    expect(result?.config.toolPolicy?.preapproved).toHaveLength(3);
     expect(result?.metadata).toEqual({});
     const derived = await addHtmlTools(profile(true))(request({ provider: "work" }), context({ work: { extends: "claude" } }));
-    expect(derived?.config.toolPolicy?.preapproved).toHaveLength(2);
+    expect(derived?.config.toolPolicy?.preapproved).toHaveLength(3);
   });
 
   it("gives each new agent its own token, saved with the agent's folder, not the server's shared one", async () => {
@@ -77,8 +77,8 @@ describe("HTML page tools for new agents", () => {
     error.mockRestore();
   });
 
-  it("leaves agents alone while the option is off (the default) and never touches internal agents", async () => {
-    expect(await addHtmlTools(profile())(request(), context())).toBeUndefined();
+  it("adds them by default, leaves agents alone while the option is off, and never touches internal agents", async () => {
+    expect((await addHtmlTools(profile())(request(), context()))?.config.mcpServers?.chat_polish?.type).toBe("http");
     expect(await addHtmlTools(profile(false))(request(), context())).toBeUndefined();
     expect(await addHtmlTools(profile(true))(request({ internal: true }), context())).toBeUndefined();
   });

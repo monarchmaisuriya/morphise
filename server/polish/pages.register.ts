@@ -1,19 +1,20 @@
 import { resolve } from "node:path";
 import type { PluginHookContext, PluginHookPayload, PluginHookResult, PluginServerContext } from "@getpaseo/plugin/server";
+import { bookmarkDocumentSchema } from "../../shared/bookmarks";
 import { activeProfile } from "../../shared/document";
-import { browserStatus, HTML_SERVER, installBrowser, openHtml, removeBrowser, storedPage } from "../../shared/polish/html";
+import { browserStatus, HTML_SERVER, installBrowser, keepPage, openHtml, removeBrowser, storedPage } from "../../shared/polish/html";
 import { polishPrefs } from "../../shared/polish/prefs";
 import { folderOfToken, issueAgentToken, loadAgentFolders } from "./pages/agent-folders";
 import { installHeadlessShell, removeHeadlessShell, shellStatus, staleShell } from "./pages/headless-shell";
-import { type AgentConfig, baseProvider, closeLocalServer, PREAPPROVES, localServerUsedBefore, openHtmlPage, readStoredPage, startHtmlTool, withHtmlTool } from "./pages/html-tool";
+import { type AgentConfig, baseProvider, closeLocalServer, keepStoredPage, pruneKept, PREAPPROVES, localServerUsedBefore, openHtmlPage, readStoredPage, startHtmlTool, withHtmlTool } from "./pages/html-tool";
 import { TITLE_HELPER } from "../titles";
 import type { ProfileReader } from "./profile-reader";
 
 type CreateHook = (payload: PluginHookPayload<"agent.create.before">, context: PluginHookContext) => Promise<PluginHookResult<"agent.create.before">>;
 
-// HTML pages (experimental, off by default; Settings, Chat, HTML pages): while the option is on,
-// new agents get the chat_polish MCP server (html_render, and html_preview while the headless
-// browser is installed). Off, or with an unreadable profile, agents are created as Paseo would.
+// HTML pages (on unless turned off; Settings, Chat, HTML pages): while the option is on, new agents (and stored ones Paseo
+// re-creates) get the chat_polish MCP server (html_render, html_guide, and html_preview while the headless browser is
+// installed). Off, or with an unreadable profile, agents are created as Paseo would.
 async function htmlPagesOn(profile: ProfileReader) {
   try {
     const state = await profile.read();
@@ -52,9 +53,24 @@ export function addHtmlTools(profile: ProfileReader): CreateHook {
   };
 }
 
-export function registerPages(server: PluginServerContext, profile: ProfileReader): () => void {
+// The Workbench's bookmarks, read once at start to let go of kept pages no bookmark holds.
+export interface BookmarksReader {
+  read(): Promise<{ status: string; values?: unknown }>;
+}
+
+async function pruneUnheldPages(bookmarks: BookmarksReader) {
+  const state = await bookmarks.read();
+  if (state.status !== "ready") return;
+  const document = bookmarkDocumentSchema.safeParse(state.values);
+  if (!document.success) return;
+  const removed = await pruneKept(new Set(document.data.bookmarks.flatMap((bookmark) => (bookmark.page ? [bookmark.page.id] : []))));
+  if (removed) console.info(`[morphise] removed ${removed} kept page(s) no bookmark holds`);
+}
+
+export function registerPages(server: PluginServerContext, profile: ProfileReader, bookmarks?: BookmarksReader): () => void {
   server.handle(openHtml, openHtmlPage);
   server.handle(storedPage, readStoredPage);
+  server.handle(keepPage, keepStoredPage);
   server.handle(browserStatus, shellStatus);
   // The download takes minutes and every RPC has a 30 s deadline, so it runs on in the background
   // and Settings polls browserStatus for its progress.
@@ -73,6 +89,7 @@ export function registerPages(server: PluginServerContext, profile: ProfileReade
     loadAgentFolders().catch((error: unknown) => console.error("[morphise] html tools: couldn't load the agent folder store; per-agent calls fail until the plugin restarts", error));
     return htmlTool();
   });
+  if (bookmarks) void pruneUnheldPages(bookmarks).catch((error: unknown) => console.warn("[morphise] couldn't tidy kept pages", error));
   const stopHook = server.addHook("agent.create.before", addHtmlTools(profile));
   return () => {
     stopped = true;

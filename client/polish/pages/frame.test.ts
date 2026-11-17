@@ -1,6 +1,6 @@
 // Ported from Chat Polish (lthieu96/paseo-chat-polish, MIT, see NOTICE.md): test/html.test.mjs
 import { describe, expect, it } from "vitest";
-import { FRAME_SANDBOX, fitFrame, frameKey, frameLink, frameMessage, frameReport, frameShortcut, heightAt, limitFrameHeight, recentPages } from "./frame";
+import { ASK_EVERY_MS, ASK_MAX, askAllowed, FRAME_SANDBOX, fitFrame, frameKey, frameLink, frameMessage, frameReport, frameShortcut, heightAt, limitFrameHeight, recentPages } from "./frame";
 
 describe("the page frame", () => {
   it("never gets the app's origin", () => {
@@ -110,5 +110,33 @@ describe("the page frame", () => {
     // Pages of the same length but different text are different pages.
     pages.set("<p>abc</p>", 7);
     expect(pages.get("<p>abd</p>")).toBeUndefined();
+  });
+});
+
+describe("asks and SVG exports from a page", () => {
+  const ask = { type: "cp-html-ask", text: "  Break Q3 down by week  " };
+  const from = { own: true, focused: true, mac: true, activated: true };
+  it("fills the message box only for the page's own focused frame, right after a click", () => {
+    expect(frameMessage(ask, from)).toEqual({ kind: "ask", text: "Break Q3 down by week" });
+    expect(frameMessage(ask, { ...from, activated: false })).toBeUndefined();
+    expect(frameMessage(ask, { ...from, focused: false })).toBeUndefined();
+    expect(frameMessage(ask, { ...from, own: false })).toBeUndefined();
+    expect(frameMessage({ ...ask, text: "   " }, from)).toBeUndefined();
+    expect((frameMessage({ ...ask, text: "x".repeat(5000) }, from) as { text: string }).text).toHaveLength(ASK_MAX);
+  });
+  it("takes back an exported SVG, or null for a page without one or anything else", () => {
+    expect(frameMessage({ type: "cp-html-svg", id: "1", svg: "<svg viewBox='0 0 1 1'></svg>" }, { ...from, focused: false })).toEqual({ kind: "svg", id: "1", svg: "<svg viewBox='0 0 1 1'></svg>" });
+    expect(frameMessage({ type: "cp-html-svg", id: "1", svg: "<script>x</script>" }, from)).toEqual({ kind: "svg", id: "1", svg: null });
+    expect(frameMessage({ type: "cp-html-svg", id: "1", svg: null }, from)).toEqual({ kind: "svg", id: "1", svg: null });
+  });
+});
+
+describe("askAllowed", () => {
+  it("allows one ask per activation window and no repeat of the same text within a minute", () => {
+    expect(askAllowed("a", 0, null)).toBe(true);
+    expect(askAllowed("b", ASK_EVERY_MS - 1, { at: 0, text: "a" })).toBe(false);
+    expect(askAllowed("b", ASK_EVERY_MS, { at: 0, text: "a" })).toBe(true);
+    expect(askAllowed("a", ASK_EVERY_MS, { at: 0, text: "a" })).toBe(false);
+    expect(askAllowed("a", 60_000, { at: 0, text: "a" })).toBe(true);
   });
 });

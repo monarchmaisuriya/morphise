@@ -27,7 +27,7 @@ import { registerWeb } from "./client/polish/web.register";
 import { registerRun } from "./client/run/register";
 import { chimeWav } from "./client/chime";
 import { type AttentionList, reduceAttention } from "./client/attention";
-import { ANSWER_TAIL, bookmarkLastAnswer, bookmarkPassage, createBookmarkStore, createBookmarkWriter } from "./client/bookmark-store";
+import { ANSWER_TAIL, bookmarkLastAnswer, bookmarkPage, bookmarkPassage, createBookmarkStore, createBookmarkWriter } from "./client/bookmark-store";
 import { type Chats, reduceChats } from "./client/chats";
 import { reduceWorkspaceInfo, type WorkspaceList } from "./client/workspaces";
 import { type AlertEntry, remindersOf, startReminderAlerts } from "./client/reminder-alerts";
@@ -208,6 +208,7 @@ export default function contribute(client: PluginClientContext) {
     client,
     updateChat,
     bookmarkPassage: (input) => bookmarkPassage(bookmarkCapture, input),
+    bookmarkPage: (input) => bookmarkPage(bookmarkCapture, input),
     rowActions: createRowActions(client, surfaces),
   };
   // Ported strings (chat rows, page restyle) follow Paseo's language: Chinese for zh-*, else English.

@@ -1,11 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { profileSchema } from "../profile";
-import { POLISH_DEFAULTS, polishPrefs } from "./prefs";
+import { POLISH_DEFAULTS, polishPrefs, pagesOn } from "./prefs";
+
+describe("pagesOn", () => {
+  it("is on unless the profile turned it off", () => {
+    expect(pagesOn(undefined)).toBe(true);
+    expect(pagesOn({})).toBe(true);
+    expect(pagesOn({ html: true })).toBe(true);
+    expect(pagesOn({ html: false })).toBe(false);
+  });
+});
 
 describe("Chat Polish preferences from Morphise's profile", () => {
   it("leaves Paseo's look by default", () => {
     const prefs = polishPrefs(undefined);
-    expect(prefs).toMatchObject({ nativeStyle: "paseo", windowStyle: "paseo", diagrams: "mermaid", html: "off", images: "native", imageStacks: "off", iconSet: "lucide", recap: "off", merge: "on", selection: "on", failedOpen: true });
+    expect(prefs).toMatchObject({ nativeStyle: "paseo", windowStyle: "paseo", diagrams: "mermaid", html: "on", images: "native", imageStacks: "off", iconSet: "lucide", recap: "off", merge: "on", selection: "on", failedOpen: true });
     expect(prefs.selectionActions).toEqual(["quote", "reply", "side", "copy", "bookmark"]);
   });
 

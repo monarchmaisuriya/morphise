@@ -238,7 +238,7 @@ export function PagesTab(form: Form): ReactNode {
           <PreviewWidth theme={form.theme} compact={form.compact}>{(compact) => <PagesPreview theme={form.theme} prefs={prefs} compact={compact} />}</PreviewWidth>
         </SettingsCard>
       </SettingsSection>
-    <SettingsSection title="HTML pages (experimental)" info="Ask an agent to chart, visualise or mock up something, and it draws an interactive page in the chat. Pages show on desktop and web; phones show the page's name.">
+    <SettingsSection title="HTML pages" info="Agents draw an interactive page in the chat when a visual helps, or when you ask: charts, tables, diagrams, comparisons, mock-ups. A click in a page can fill your message box (it never sends), and each page can be saved to the Workbench's Bookmarks or downloaded. Pages show on desktop and web; phones show the page's name.">
       <SettingsCard>
         <SwitchField label={t("prefs.row.htmlPages")} hint={`${t("prefs.hint.htmlPages")} Morphise runs a local page server on 127.0.0.1 for them.`} value={prefs.html === "on"} onChange={(value) => set("html", value)} />
         <SelectField label="Page height" hint="Taller pages scroll inside their frame." value={String(prefs.pageHeight)} options={[{ value: "0", label: "No limit" }, { value: "800", label: "Up to 800 px" }, { value: "500", label: "Up to 500 px" }]} onChange={(value) => set("pageHeight", Number(value) as 500 | 800 | 0)} />

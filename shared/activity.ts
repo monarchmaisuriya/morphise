@@ -89,7 +89,8 @@ export type ActivityMetric = (typeof ACTIVITY_METRICS)[number];
 const metricValues = z.object({ sessions: count, prompts: count, skills: count, mcp: count });
 export type MetricValues = z.infer<typeof metricValues>;
 
-const kpi = z.object({ label: z.string(), value: z.string(), detail: z.string().nullable(), change: z.number().nullable() });
+// `trend`: the value per local day over the last 14 days, oldest first (Sessions and Prompts only).
+const kpi = z.object({ label: z.string(), value: z.string(), detail: z.string().nullable(), change: z.number().nullable(), trend: z.array(z.number()).optional() });
 const ranking = z.object({ key: z.string(), label: z.string(), values: metricValues });
 const insight = z.object({ label: z.string(), value: z.string() });
 const top = z.object({ name: z.string(), count, detail: z.string().nullable() });
@@ -263,9 +264,12 @@ export function summarize(agents: readonly ActivityAgent[], options: { now: numb
   const topModel = leader(modelWeek[0]);
   const providerTotal = [...providerWeek[0].values()].reduce((a, b) => a + b, 0);
   const modelTotal = [...modelWeek[0].values()].reduce((a, b) => a + b, 0);
+  const fortnight = Array.from({ length: 14 }, (_, index) => today - 13 + index);
+  const sessionTrend = fortnight.map((day) => [...(creations.get(day)?.values() ?? [])].reduce((a, b) => a + b, 0));
+  const promptTrend = fortnight.map((day) => promptsPerDay.get(day) ?? 0);
   const kpis: ActivitySummary["kpis"] = [
-    { label: "Sessions", value: String(sessions[0]), detail: "last 7 days", change: change(sessions[0], sessions[1]) },
-    { label: "Prompts", value: String(prompts[0]), detail: "last 7 days", change: change(prompts[0], prompts[1]) },
+    { label: "Sessions", value: String(sessions[0]), detail: "last 7 days", change: change(sessions[0], sessions[1]), trend: sessionTrend },
+    { label: "Prompts", value: String(prompts[0]), detail: "last 7 days", change: change(prompts[0], prompts[1]), trend: promptTrend },
     { label: "Top provider", value: topProvider?.[0] ?? "None", detail: topProvider ? percent(topProvider[1], providerTotal) : null, change: topProvider ? change(topProvider[1], providerWeek[1].get(topProvider[0]) ?? 0) : null },
     { label: "Top model", value: topModel?.[0] ?? "None", detail: topModel ? percent(topModel[1], modelTotal) : null, change: topModel ? change(topModel[1], modelWeek[1].get(topModel[0]) ?? 0) : null },
   ];

@@ -27,3 +27,13 @@ describe("bookmarks", () => {
     expect(lastAnswer([{ item: { type: "user_message", text: "hi" } }])).toBeNull();
   });
 });
+
+describe("saved pages", () => {
+  const page = (id: string, pageId: string, title = "Revenue") => ({ id, agentId: "a1", workspaceId: null, chat: "c", excerpt: title, note: "", at: "2026-11-17T00:00:00Z", page: { id: pageId, title } });
+  it("saves a page once, even when another page in the chat has the same title", () => {
+    let document = applyBookmark(EMPTY_BOOKMARKS, { kind: "add", bookmark: page("1", "a".repeat(64)) });
+    document = applyBookmark(document, { kind: "add", bookmark: page("2", "a".repeat(64)) });
+    document = applyBookmark(document, { kind: "add", bookmark: page("3", "b".repeat(64)) });
+    expect(document.bookmarks.map((bookmark) => bookmark.id)).toEqual(["3", "1"]);
+  });
+});

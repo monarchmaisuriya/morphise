@@ -57,8 +57,12 @@ describe("chat rows in the timeline", () => {
     stop();
   });
 
-  it("leaves tool calls to Paseo by default, and draws them as Chat Polish's rows with cards or lines", () => {
-    expect(register(undefined).transformers.size).toBe(0);
+  it("leaves tool calls to Paseo by default (transforming only HTML pages), and draws them as Chat Polish's rows with cards or lines", () => {
+    const plain = register(undefined);
+    expect(plain.transformers.size).toBe(1);
+    expect(plain.run("tool_call", call({ type: "shell", command: "ls", output: "a" }))).toBeUndefined();
+    plain.stop();
+    expect(register({ polish: { html: false } }).transformers.size).toBe(0);
     const lines = register({ toolCalls: "compact", polish: { merge: false } });
     const row = lines.run("tool_call", call({ type: "shell", command: "npm test", output: "ok" }));
     expect(row?.items[0]).toMatchObject({ kind: "polish-tool", data: { verb: "Ran", target: "npm test", kind: "shell" } });

@@ -6,9 +6,10 @@ import { accentColor, breaksSteps, turnRecap, chatLook, withLineLimit, chatView,
 const call = (detail: Record<string, unknown>, status = "completed", extra: Record<string, unknown> = {}) => ({ type: "tool_call", callId: "c1", name: "Bash", detail, status, error: null, ...extra });
 
 describe("chat view rules", () => {
-  it("leaves every row to Paseo by default, and transforms nothing", () => {
+  it("leaves every row to Paseo by default, transforming tool calls only to draw HTML pages", () => {
     const view = chatView(undefined, [], false);
-    expect(transformedTypes(view)).toEqual([]);
+    expect(transformedTypes(view)).toEqual(["tool_call"]);
+    expect(transformedTypes(chatView({ polish: { html: false } }, [], false))).toEqual([]);
     expect(rowFate("tool_call", call({ type: "shell", command: "ls" }), view)).toEqual({ kind: "keep" });
     expect(rowFate("reasoning", { type: "reasoning", text: "hmm" }, view)).toEqual({ kind: "keep" });
   });
@@ -89,7 +90,7 @@ describe("chat view rules", () => {
     expect(rowFate("user_message", { type: "user_message", text: "hi" }, chatView({ toolCalls: "cards" }, [], false))).toEqual({ kind: "keep" });
     expect(rowFate("assistant_message", { type: "assistant_message", text: "ok" }, chatView({ toolCalls: "cards" }, [], false))).toEqual({ kind: "step", alone: "keep" });
     expect(transformedTypes(chatView(undefined, [], false))).not.toContain("assistant_message");
-    expect(transformedTypes(chatView({ polish: { images: "small" } }, [], false))).toEqual(["assistant_message"]);
+    expect(transformedTypes(chatView({ polish: { images: "small", html: false } }, [], false))).toEqual(["assistant_message"]);
   });
 
   it("draws plans as the card in the chat, keeping an emptied plan as Paseo draws it, and lets each update end a run then", () => {
@@ -237,7 +238,7 @@ describe("0.15 chat rules", () => {
   });
 
   it("draws errors, notices and compaction as notice rows when asked", () => {
-    const view = chatView({ notices: true }, [], false);
+    const view = chatView({ notices: true, polish: { html: false } }, [], false);
     expect(transformedTypes(view).sort()).toEqual(["compaction", "error", "notification"]);
     expect(rowFate("notification", { type: "notification", level: "warning", message: "Rate limited" }, view)).toEqual({ kind: "notice" });
     expect(rowFate("compaction", { type: "compaction", status: "completed" }, chatView(undefined, [], false))).toEqual({ kind: "keep" });
@@ -354,9 +355,10 @@ describe("plans and pages", () => {
     expect(rowFate("tool_call", { type: "tool_call", name: "plan_approval", status: "completed", detail: { type: "plan", text: "1. Do it" } }, view)).toEqual({ kind: "plan" });
   });
 
-  it("keeps drawing pages after HTML pages is turned off while Morphise draws tool rows", () => {
-    expect(chatView({ toolCalls: "cards" }, [], false).pages).toBe(true);
-    expect(chatView({}, [], false).pages).toBe(false);
+  it("draws pages by default, and keeps drawing them after HTML pages is turned off while Morphise draws tool rows", () => {
+    expect(chatView({ toolCalls: "cards", polish: { html: false } }, [], false).pages).toBe(true);
+    expect(chatView({}, [], false).pages).toBe(true);
+    expect(chatView({ polish: { html: false } }, [], false).pages).toBe(false);
     expect(chatView({ polish: { html: true } }, [], false).pages).toBe(true);
     expect(chatView({ enabled: false, toolCalls: "cards" }, [], false).pages).toBe(false);
   });

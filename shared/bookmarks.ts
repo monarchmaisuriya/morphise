@@ -16,6 +16,9 @@ export const bookmarkSchema = z.object({
   excerpt: z.string().max(MAX_EXCERPT),
   note: z.string().max(MAX_NOTE),
   at: z.string(),
+  // A page saved from a chat (html_render): its stored id, kept on the daemon while the bookmark lasts, and its title.
+  // Older Morphise versions drop this field when they rewrite the document; the excerpt (the title) stays.
+  page: z.object({ id: z.string().regex(/^[0-9a-f]{64}$/), title: z.string().max(200) }).optional(),
 });
 
 export type Bookmark = z.infer<typeof bookmarkSchema>;
@@ -35,7 +38,9 @@ export type BookmarkOperation = { kind: "add"; bookmark: Bookmark } | { kind: "r
 export function applyBookmark(document: BookmarkDocument, operation: BookmarkOperation): BookmarkDocument {
   if (operation.kind === "remove") return { bookmarks: document.bookmarks.filter((bookmark) => bookmark.id !== operation.id) };
   const { bookmark } = operation;
-  if (document.bookmarks.some((item) => item.agentId === bookmark.agentId && item.excerpt === bookmark.excerpt)) return document;
+  // The same page, or the same answer of the same chat, is not saved twice (two pages may share a title).
+  const same = (item: Bookmark) => (bookmark.page ? item.page?.id === bookmark.page.id : !item.page && item.agentId === bookmark.agentId && item.excerpt === bookmark.excerpt);
+  if (document.bookmarks.some(same)) return document;
   return { bookmarks: [bookmark, ...document.bookmarks].slice(0, MAX_BOOKMARKS) };
 }
 

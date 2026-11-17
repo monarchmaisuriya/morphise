@@ -5,7 +5,8 @@ import { chmod, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/pr
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { join } from "node:path";
 import { Script } from "node:vm";
-import { HTML_PREVIEW_TOOL, HTML_SERVER, HTML_TOOL, heightsLine, localImages, pageIdLine } from "../../../shared/polish/html";
+import { HTML_GUIDE_TOOL, HTML_PREVIEW_TOOL, HTML_SERVER, HTML_TOOL, heightsLine, localImages, pageIdLine, replacesLine } from "../../../shared/polish/html";
+import { GUIDE_TOPICS, guideText } from "./guide";
 import { PAGE_POLICY } from "../../../shared/polish/page";
 import { ImageTooLarge, openInFolder } from "../media/image";
 import { folderOfToken } from "./agent-folders";
@@ -16,45 +17,41 @@ import { checkPage, type PageCheck } from "./page-check";
 // A new agent's config as the agent.create.before hook receives it (Paseo's AgentSessionConfig).
 export type AgentConfig = PluginHookRequests["agent.create.before"]["config"];
 
-// The tool's description is the style guide: the model reads it when it builds a page, on every provider.
-const DESCRIPTION = `Show a finished HTML page inline in this chat, above your reply: a chart, table, dashboard, simulation, interactive explainer or UI mockup. Call it only when the user asks for a visual, and once per page, when the page is complete.
+// The tool's description is the contract and the short style guide: the model reads it when it builds a page, on every
+// provider. The rules for each kind of page come from html_guide (./guide.ts), read only when the agent draws one.
+const DESCRIPTION = `Show a finished HTML page inline in this chat, above your reply: a chart, table, comparison, dashboard, diagram, interactive explainer or UI mock-up. Call it once per page, when the page is complete. To change a page you showed earlier, pass its id as replaces: the old one then shows "Updated below".
+
+Before building one, call ${HTML_GUIDE_TOOL} with the kind of page (charts, tables, diagrams, images, interactive, mockups) for its helpers and rules.
 
 Page
-- One self-contained HTML document with inline <style> and <script>. Prefer inline SVG or canvas; load a library from an https CDN only when it saves real work.
-- Local images (screenshots, generated images): write their absolute paths, as in src="/abs/shot.png" or CSS url(/abs/bg.webp). PNG, JPEG, GIF or WebP up to 12 MB, inside your working folder; the chat inlines them and shows no image from anywhere else.
-- The page sits on the chat background, as wide as the reply column (about 700px on desktop, 360px on phones) and aligned with your text. No page background, no outer card, border or title banner, and no horizontal padding on the outermost element. Use fluid widths.
+- One self-contained HTML document with inline <style> and <script>. Prefer the built-in helpers (Morphise.chart, table.sortable, .gallery) and inline SVG; load a library from an https CDN only when it saves real work.
+- Local images: absolute paths inside your working folder (PNG, JPEG, GIF or WebP up to 12 MB); nothing else shows.
+- The page sits on the chat background, as wide as the reply column (about 700px on desktop, 360px on phones). No page background, outer card, border or title banner, and no horizontal padding on the outermost element. Fluid widths.
 - Content sets the height. Never use vh units or height:100% on html or body; give charts and canvases fixed pixel heights.
 
 Theme
-These CSS variables follow the user's theme live. Use only them for color, never hard-coded values; a canvas or chart library reads them with getComputedStyle(document.documentElement).getPropertyValue("--fg").
---fg, --muted (secondary text), --bg (chat background), --surface (raised panels), --border, --accent, --accent-fg (text on accent), --success, --warning, --danger, --chart-1 to --chart-6 (data series), --radius, --font, --mono.
+CSS variables that follow the user's theme live; use only them for color: --fg, --muted, --bg, --surface, --border, --accent, --accent-fg, --success, --warning, --danger, --chart-1 to --chart-6, --radius, --font, --mono. Built-in classes: .stack, .row, .grid, .card, .stat > .label + .value, .chip, .muted, .small, .num, .scroll; buttons (.primary), inputs, selects, range sliders, tables, code and kbd are styled.
 
-Built-in styles (prefer them to custom CSS)
-.stack (vertical, 12px gap), .row (horizontal, wraps, 8px gap), .grid (auto-fit columns), .card (raised panel), .stat > .label + .value (a metric), .chip, .muted, .small. Buttons (add .primary for the main action), inputs, selects, range sliders, tables, code and kbd are already styled.
-
-Style
-At most three font sizes, spacing in multiples of 4px, one accent color, series colors only for data. Right-align numbers in tables; label axes and units. Animations run 150 to 300ms ease-out and respect prefers-reduced-motion. Simulations size the canvas by devicePixelRatio, offer Play, Pause, Reset and sliders for the key parameters, draw a meaningful first frame, and pause while off-screen (IntersectionObserver).
-
-Follow the layout rules in your instructions: you never see the page, so nothing may rely on hand-picked coordinates. The tool lays the page out at 700 and 360px before showing it; when it finds script errors, overlapping or cut-off text, overflow or a moving height, it shows nothing and returns them for you to fix.`;
+The tool lays the page out at 700 and 360px before showing it; when it finds script errors, overlapping or cut-off text, overflow or a moving height, it shows nothing and returns them for you to fix.`;
 
 /**
- * Added to a new agent's system prompt while the html pref is on: when the tool is wanted, and the layout rules, since a description can load late and the agent
- * never sees its page. Overlapping labels were the most common fault in trials, all from text placed at hand-picked coordinates.
+ * Added to a new agent's system prompt while pages are on: when to draw one, and the layout rules, since a description can load late and the
+ * agent never sees its page. Overlapping labels were the most common fault in trials, all from text placed at hand-picked coordinates.
  */
 const SYSTEM_PROMPT = `# HTML pages
 You have an ${HTML_TOOL} tool that shows an HTML page inline in this chat.
 
 When to use it
-- Only when the user asks for a visual, in any language: draw, chart, plot, visualize, illustrate, simulate, animate, mock up. Answer everything else in text.
+- When a visual clearly helps the user understand: numbers to compare, a trend over time, data in a table, a structure or process, steps, an interactive explainer, a mock-up. And always when the user asks to draw, chart, plot, visualize, illustrate, simulate, animate or mock up something, in any language.
+- Answer everything else in text. A short answer stays text; don't add a page to decorate it.
 - Flowcharts, sequence, state, class and ER diagrams: write a \`\`\`mermaid block in your reply instead. The chat draws and lays it out.
+- Call ${HTML_GUIDE_TOOL} for the kind of page first.
 
 Layout rules
 You never see the page you publish, so build it so nothing can overlap, get cut off or move the chat:
-- Put text in normal HTML flow (flex, grid, tables) and let it wrap. Don't position text absolutely or at fixed coordinates when HTML layout can place it.
-- In SVG and canvas, compute positions from the data in your script, never from hand-picked numbers. Give each item (step, message, bar) its own row, at least 20px per line of text plus 12px. Put labels in their own row above or beside a shape, never on another label, line or arrow. Size the viewBox from the rows. Split long labels into short lines with <tspan>, and make boxes wider than their text (about 0.6 × font size per character).
-- Keep at least 8px between labels, and between text and a box edge. Everything must fit a 360px-wide page too.
-- Simulations: moving parts get a region of their own; readouts and controls go below the canvas, in HTML.
-- Animations and controls must not change the page's height: the chat resizes the frame to fit, so the conversation would jump. Reserve space for every state up front: fixed or min-height areas (one that scrolls its overflow is fine), room for rows that appear later, single-line readouts with tabular numbers.
+- Put text in normal HTML flow (flex, grid, tables) and let it wrap. Use Morphise.chart for charts rather than placing text at coordinates.
+- In your own SVG and canvas, compute positions from the data in your script, never from hand-picked numbers. Keep at least 8px between labels. Everything must fit a 360px-wide page too.
+- Animations and controls must not change the page's height: reserve space for every state up front.
 
 Your reply
 After publishing, write one or two sentences the page doesn't already say: a takeaway, a caveat or a next step. Never say the page is shown, above, ready or rendered, and never reply with only punctuation.`;
@@ -71,10 +68,17 @@ const TOOL = {
       title: { type: "string", description: "Short name for the page" },
       html: { type: "string", description: "A complete, self-contained HTML document" },
       force: { type: "boolean", description: "Publish without the layout check. Only when a check reported problems you made on purpose." },
+      replaces: { type: "string", description: "The page id (from an earlier answer's 'Page id:' line) of a page in this chat this one updates" },
     },
     required: ["title", "html"],
   },
   annotations: { title: "Render HTML", readOnlyHint: true },
+};
+const GUIDE = {
+  name: HTML_GUIDE_TOOL,
+  description: `The helpers and rules for one kind of page, to read before building it with ${HTML_TOOL}: charts, tables, diagrams, images, interactive or mockups.`,
+  inputSchema: { type: "object", properties: { topic: { type: "string", enum: [...GUIDE_TOPICS], description: "The kind of page" } }, required: ["topic"] },
+  annotations: { title: "Page guide", readOnlyHint: true },
 };
 const PREVIEW = {
   name: HTML_PREVIEW_TOOL,
@@ -136,7 +140,7 @@ interface Caller {
 interface RpcMessage {
   id?: unknown;
   method?: unknown;
-  params?: { protocolVersion?: unknown; name?: unknown; arguments?: { html?: unknown; force?: unknown } };
+  params?: { protocolVersion?: unknown; name?: unknown; arguments?: { html?: unknown; force?: unknown; replaces?: unknown; topic?: unknown } };
 }
 
 /**
@@ -150,9 +154,14 @@ export async function mcpAnswer(m: RpcMessage, caller: Caller) {
   if (m.method === "initialize") return result({ protocolVersion: m.params?.protocolVersion ?? "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: HTML_SERVER, version: "1" } });
   if (m.method === "ping") return result({});
   // html_preview while the headless shell is installed; without it pages go out unchecked and there's nothing to preview them in.
-  if (m.method === "tools/list") return result({ tools: headlessShell() ? [TOOL, PREVIEW] : [TOOL] });
+  if (m.method === "tools/list") return result({ tools: headlessShell() ? [TOOL, GUIDE, PREVIEW] : [TOOL, GUIDE] });
   if (m.method !== "tools/call") return { jsonrpc: "2.0", id: m.id, error: { code: -32601, message: "Method not found" } };
   console.info(`[morphise] html tools: ${String(m.params?.name)} called for ${caller.folder ?? "legacy"}`);
+  // Routed by name first: html_guide takes no page.
+  if (m.params?.name === GUIDE.name) {
+    const guide = guideText(m.params?.arguments?.topic);
+    return text(guide.text, !guide.known);
+  }
   const html = m.params?.arguments?.html;
   const preview = m.params?.name === PREVIEW.name;
   if ((m.params?.name !== TOOL.name && !preview) || typeof html !== "string" || !html.trim()) return text(preview ? "Pass a complete HTML document." : "Pass a title and a complete HTML document.", true);
@@ -170,8 +179,10 @@ export async function mcpAnswer(m: RpcMessage, caller: Caller) {
   const shown = "Shown to the reader above your reply. Don't say it's shown and don't describe it; reply in one or two sentences with what it doesn't say: a takeaway, a caveat or a next step.";
   // The browser is there but the check didn't run (it couldn't start, or failed): the agent should know nothing vouched for the page.
   const unchecked = !check && m.params?.arguments?.force !== true && headlessShell();
-  const stored = await savePage(html).then(pageIdLine, (error: unknown) => console.warn("[morphise] couldn't store the page", error));
-  return text([unchecked ? `${shown} The layout check couldn't run, so it went out unchecked.` : shown, unread, check && heightsLine(check.heights), stored].filter(Boolean).join("\n\n"));
+  const replaces = await replacedPage(m.params?.arguments?.replaces);
+  if (replaces.error) return text(replaces.error, true);
+  const stored = await savePage(html, true).then(pageIdLine, (error: unknown) => console.warn("[morphise] couldn't store the page", error));
+  return text([unchecked ? `${shown} The layout check couldn't run, so it went out unchecked.` : shown, unread, check && heightsLine(check.heights), stored, replaces.id && replacesLine(replaces.id)].filter(Boolean).join("\n\n"));
 }
 
 /**
@@ -222,7 +233,7 @@ export function withHtmlTool(config: AgentConfig, { url, token }: { url: string;
     ...config,
     mcpServers: { ...config.mcpServers, [HTML_SERVER]: { type: "http", url, headers: { Authorization: `Bearer ${token}` }, alwaysLoad: true } },
     ...(PREAPPROVES.has(base) && {
-      toolPolicy: { ...config.toolPolicy, preapproved: [...others, ...[HTML_TOOL, HTML_PREVIEW_TOOL].map((tool) => ({ kind: "mcp" as const, server: HTML_SERVER, tool }))] },
+      toolPolicy: { ...config.toolPolicy, preapproved: [...others, ...[HTML_TOOL, HTML_GUIDE_TOOL, HTML_PREVIEW_TOOL].map((tool) => ({ kind: "mcp" as const, server: HTML_SERVER, tool }))] },
     }),
     systemPrompt: added ? config.systemPrompt : [config.systemPrompt, headlessShell() ? SYSTEM_PROMPT.replace("\n\nYour reply", `\n${PREVIEW_RULE}\n\nYour reply`) : SYSTEM_PROMPT].filter(Boolean).join("\n\n"),
   };
@@ -343,8 +354,10 @@ export const startHtmlTool = () => localServer().then(({ port, token }) => ({ ur
 const PAGE_KEEP_MS = 30 * 24 * 60 * 60 * 1000;
 
 /** Saves a page under its sha256, where the local server serves it and the html.page RPC reads it, and returns that id. */
-async function savePage(html: string) {
-  const id = createHash("sha256").update(html).digest("hex");
+// `published`: a page html_render shows gets an id of its own (the page and a random salt), so "Updated below" and a bookmark name
+// that one publish, even when the same page is published again (a revert) or in another chat. Open in browser keys by content.
+async function savePage(html: string, published = false) {
+  const id = published ? createHash("sha256").update(html).update(randomBytes(16)).digest("hex") : pageId(html);
   await mkdir(pagesDir(), { recursive: true });
   await writeFile(join(pagesDir(), `${id}.html`), html);
   void pruneOldPages();
@@ -361,8 +374,57 @@ async function pruneOldPages(now = Date.now()) {
   }
 }
 
-/** A page html_render stored, for the chat when Paseo cut the call's input; null once it's gone. */
-export const readStoredPage = ({ id }: { id: string }) => readFile(join(pagesDir(), `${id}.html`), "utf8").then((html) => ({ html }), () => ({ html: null }));
+const pageId = (html: string) => createHash("sha256").update(html).digest("hex");
+const PAGE_ID = /^[0-9a-f]{64}$/;
+
+/**
+ * The page `replaces` names, checked: a stored page id. Each publish has an id of its own (savePage), so the new page can't
+ * be the one it replaces. Absent: nothing replaced.
+ */
+async function replacedPage(replaces: unknown): Promise<{ id?: string; error?: string }> {
+  if (replaces === undefined || replaces === null || replaces === "") return {};
+  if (typeof replaces !== "string" || !PAGE_ID.test(replaces)) return { error: "replaces must be a page id from an earlier answer's 'Page id:' line." };
+  const known = await readStoredPage({ id: replaces });
+  return known.html === null ? { error: `No page ${replaces} is stored; leave replaces out to show this one as a new page.` } : { id: replaces };
+}
+
+// Pages a bookmark keeps (Save), out of reach of pruneOldPages, which only looks at pagesDir itself.
+const keptDir = () => join(pagesDir(), "kept");
+
+/** A page html_render stored, for the chat when Paseo cut the call's input, or a kept one; null once it's gone. */
+export const readStoredPage = ({ id }: { id: string }): Promise<{ html: string | null }> =>
+  readFile(join(pagesDir(), `${id}.html`), "utf8").then(
+    (html) => ({ html }),
+    () => readFile(join(keptDir(), `${id}.html`), "utf8").then((html) => ({ html }), () => ({ html: null })),
+  );
+
+/** Removes kept pages no bookmark holds any more (a bookmark removed elsewhere, pushed out past the limit, or dropped by an older version). */
+export async function pruneKept(held: ReadonlySet<string>): Promise<number> {
+  const names = await readdir(keptDir()).catch(() => [] as string[]);
+  let removed = 0;
+  for (const name of names) {
+    const id = /^([0-9a-f]{64})\.html$/.exec(name)?.[1];
+    if (!id || held.has(id)) continue;
+    await rm(join(keptDir(), name), { force: true }).catch(() => undefined);
+    removed++;
+  }
+  return removed;
+}
+
+/** Keeps a copy of a stored page while a bookmark holds it, or removes that copy. A page already gone can't be kept. */
+export async function keepStoredPage({ id, keep }: { id: string; keep: boolean }): Promise<{ kept: boolean }> {
+  if (!PAGE_ID.test(id)) throw new Error("Not a page id");
+  const file = join(keptDir(), `${id}.html`);
+  if (!keep) {
+    await rm(file, { force: true });
+    return { kept: false };
+  }
+  const { html } = await readStoredPage({ id });
+  if (html === null) return { kept: false };
+  await mkdir(keptDir(), { recursive: true });
+  await writeFile(file, html);
+  return { kept: true };
+}
 
 /** Saves the page under its hash and returns its address on the daemon's localhost. */
 export async function openHtmlPage({ html }: { html: string }) {

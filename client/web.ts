@@ -18,7 +18,9 @@ declare const document: {
   querySelectorAll(selector: string): ArrayLike<PageElement>;
   querySelector(selector: string): PageElement | null;
   createElement(tag: "style"): StyleElement;
+  createElement(tag: "a"): AnchorElement;
   head: { appendChild(node: StyleElement): unknown };
+  body: { appendChild(node: AnchorElement): unknown };
   visibilityState: "visible" | "hidden";
   hasFocus(): boolean;
   addEventListener(type: "keydown" | "visibilitychange", listener: () => void, capture: boolean): void;
@@ -35,7 +37,19 @@ interface NotificationConstructor {
   permission: "default" | "granted" | "denied";
   requestPermission(): Promise<"default" | "granted" | "denied">;
 }
-declare const globalThis: { Notification?: NotificationConstructor; matchMedia?(query: string): { matches: boolean }; navigator?: { platform?: string; userAgent?: string } };
+interface AnchorElement {
+  href: string;
+  download: string;
+  click(): void;
+  remove(): void;
+}
+declare const globalThis: {
+  Notification?: NotificationConstructor;
+  matchMedia?(query: string): { matches: boolean };
+  navigator?: { platform?: string; userAgent?: string };
+  Blob?: new (parts: string[], options: { type: string }) => unknown;
+  URL?: { createObjectURL(blob: unknown): string; revokeObjectURL(url: string): void };
+};
 
 // Whether this web app runs on a Mac ("Show in Finder" rather than "Show in folder").
 export function isMac(): boolean {
@@ -293,4 +307,19 @@ export function showNotification(title: string, body: string, tag: string): bool
     console.error("[morphise] Could not show a desktop notification", error);
     return false;
   }
+}
+
+// Saves text as a file through the browser's download (the desktop app's own handling where it runs); false where there
+// is no DOM (phones) or the page can't make one.
+export function downloadFile(name: string, content: string, type: string): boolean {
+  if (Platform.OS !== "web" || !globalThis.Blob || !globalThis.URL) return false;
+  const url = globalThis.URL.createObjectURL(new globalThis.Blob([content], { type }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => globalThis.URL?.revokeObjectURL(url), 10_000);
+  return true;
 }

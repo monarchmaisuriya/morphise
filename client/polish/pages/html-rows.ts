@@ -1,6 +1,7 @@
 // Ported from Chat Polish (lthieu96/paseo-chat-polish, MIT, see NOTICE.md): client/html.ts
 import { z } from "zod";
-import { isHtmlTool, readHeights, readPageId } from "../../../shared/polish/html";
+import { isHtmlTool, readHeights, readPageId, readReplaces } from "../../../shared/polish/html";
+import { markReplaced } from "./replaced";
 import type { ToolCallItem } from "../agent-types";
 
 // The HTML page row: its timeline kind, and its data for a finished html_render call (undefined
@@ -15,6 +16,9 @@ export const htmlSchema = z.object({
   html: z.string(),
   heights: z.array(z.tuple([z.number(), z.number()])).min(1).optional(),
   stored: z.string().nullable().optional(),
+  // The id html_render stored the page under, and the earlier page it updates (both absent on older pages).
+  id: z.string().optional(),
+  replaces: z.string().optional(),
 });
 export type HtmlData = z.output<typeof htmlSchema>;
 
@@ -34,5 +38,9 @@ export function htmlRowData(item: ToolCallItem): HtmlData | undefined {
   if (typeof input?.html !== "string" || output?.isError === true) return undefined;
   const heights = readHeights(output);
   const cut = CUT.test(input.html);
-  return { title: typeof input.title === "string" && input.title.trim() ? input.title.trim() : "Page", html: input.html, ...(heights && { heights }), ...(cut && { stored: readPageId(output) ?? null }) };
+  const id = readPageId(output);
+  const replaces = readReplaces(output);
+  // The earlier page now shows "Updated below" (./replaced.ts); page ids are content hashes, so this needs no chat.
+  if (replaces) markReplaced(replaces);
+  return { title: typeof input.title === "string" && input.title.trim() ? input.title.trim() : "Page", html: input.html, ...(heights && { heights }), ...(cut && { stored: id ?? null }), ...(id && { id }), ...(replaces && { replaces }) };
 }

@@ -23,6 +23,9 @@ export function withAlpha(color: string, alpha: number): string | null {
 // Paseo themes have no blue or purple, so these two hues are fixed; both read on light and dark.
 export const BLUE = "#4c8dff";
 export const PURPLE = "#a371f7";
+// Priority dots: High a slightly darker yellow, Medium a light yellow, each in a shade that keeps 3:1 contrast against
+// the theme's background (light yellow on a white page would not).
+export const PRIORITY_YELLOWS = { dark: { high: "#d9a62a", medium: "#f0d77a" }, light: { high: "#a87a0c", medium: "#c9a227" } } as const;
 // Done is gray: the theme's muted text colour, drawn faint in the sidebar (as in 0.7).
 export const DONE_OPACITY = 0.6;
 

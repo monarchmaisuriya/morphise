@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { chatTools } from "./activity";
 const NO_TOOLS = chatTools({ slots: {}, skills: {}, mcp: {}, coding: false });
 import { emptyCounters } from "./stats";
-import { activityRows, agentIdFromTab, cacheHitTone, headerLabel, formatDuration, formatShare, formatSpeed, formatTokens, pillLabel, stripText, usageRows } from "./stats-format";
+import { activityRows, agentIdFromTab, rankedUses, timeSplit, tokenParts, cacheHitTone, headerLabel, formatDuration, formatShare, formatSpeed, formatTokens, pillLabel, stripText, usageRows } from "./stats-format";
 
 describe("stats formatting", () => {
   it("shortens token counts", () => {
@@ -58,5 +58,23 @@ describe("the stats button in the top bar", () => {
 describe("the cache-hit bar's colour", () => {
   it("is good from 80%, fair from 50%, and poor below", () => {
     expect([0.992, 0.8, 0.79, 0.5, 0.49, 0].map(cacheHitTone)).toEqual(["good", "good", "fair", "fair", "poor", "poor"]);
+  });
+});
+
+describe("tokenParts", () => {
+  it("splits the total into cache read, cache write, output and new input that add up to it", () => {
+    const stats = { ...emptyCounters(), inputTokens: 1000, cachedTokens: 900, cacheWriteTokens: 60, outputTokens: 200 };
+    const parts = tokenParts(stats);
+    expect(parts.map((part) => [part.key, part.tokens])).toEqual([["cacheRead", 900], ["cacheWrite", 60], ["output", 200], ["newInput", 40]]);
+    expect(parts.reduce((sum, part) => sum + part.share, 0)).toBeCloseTo(1);
+    expect(tokenParts(emptyCounters()).every((part) => part.share === 0)).toBe(true);
+  });
+  it("splits model time from tool time", () => {
+    expect(timeSplit({ ...emptyCounters(), modelMs: 300, toolMs: 100 })).toEqual({ modelShare: 0.75 });
+    expect(timeSplit(emptyCounters())).toBeNull();
+  });
+  it("ranks skills and MCP tools together", () => {
+    const tools = chatTools({ slots: {}, skills: { plan: { count: 2, failures: 0, lastAt: 5 } }, mcp: { "notion.search": { count: 9, failures: 1, lastAt: 1 }, "slack.read": { count: 2, failures: 0, lastAt: 9 } }, coding: false });
+    expect(rankedUses(tools).map((use) => [use.name, use.kind])).toEqual([["notion.search", "mcp"], ["slack.read", "mcp"], ["plan", "skill"]]);
   });
 });

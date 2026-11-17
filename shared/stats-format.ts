@@ -1,4 +1,4 @@
-import type { ChatTools } from "./activity";
+import type { ChatTools, NamedUseRow } from "./activity";
 import { cacheHitShare, outputSpeed, type SessionCounters, type StatsReadResult, timeToFirstToken, totalTokens, uncachedInput } from "./stats";
 
 // How the session stats read in the pills, popovers, panel and details pane. A reading the log cannot give is "-".
@@ -96,4 +96,37 @@ export function headerLabel(result: StatsReadResult | null): string {
 // How the cache hit reads: most input from the cache is good, half or more is fair, less is poor (paying for new input).
 export function cacheHitTone(share: number): "good" | "fair" | "poor" {
   return share >= 0.8 ? "good" : share >= 0.5 ? "fair" : "poor";
+}
+
+// Where a chat's tokens went, for the Stats popover's bar: read from the cache, written to it, output, and input
+// neither read from nor written to the cache. They add up to the total (input, cache included, plus output).
+export type TokenPartKey = "cacheRead" | "cacheWrite" | "output" | "newInput";
+export interface TokenPart {
+  key: TokenPartKey;
+  label: string;
+  tokens: number;
+  // Of the total, 0 to 1 (0 when there are no tokens).
+  share: number;
+}
+export function tokenParts(stats: SessionCounters): TokenPart[] {
+  const total = totalTokens(stats);
+  const parts: [TokenPartKey, string, number][] = [
+    ["cacheRead", "Cache read", stats.cachedTokens],
+    ["cacheWrite", "Cache write", stats.cacheWriteTokens],
+    ["output", "Output", stats.outputTokens],
+    ["newInput", "New input", uncachedInput(stats)],
+  ];
+  return parts.map(([key, label, tokens]) => ({ key, label, tokens, share: total > 0 ? tokens / total : 0 }));
+}
+
+// Model time against tool time, as shares of their sum; null when neither was measured.
+export function timeSplit(stats: SessionCounters): { modelShare: number } | null {
+  const sum = stats.modelMs + stats.toolMs;
+  return sum > 0 ? { modelShare: stats.modelMs / sum } : null;
+}
+
+// Skills and MCP tools in one list, most used first (then most recent), each marked with its kind.
+export type RankedUse = NamedUseRow & { kind: "skill" | "mcp" };
+export function rankedUses(tools: ChatTools): RankedUse[] {
+  return [...tools.skills.map((use) => ({ ...use, kind: "skill" as const })), ...tools.mcp.map((use) => ({ ...use, kind: "mcp" as const }))].sort((a, b) => b.count - a.count || b.lastAt - a.lastAt || a.name.localeCompare(b.name));
 }
