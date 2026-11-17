@@ -2,12 +2,13 @@
 // shows the open chat's readings, a Stats panel, and the rows the Agents details pane shows. Readings come from the
 // daemon (`morphise.stats.read`), which reads the chat's own log; they refresh every 2 s while something on screen
 // shows them. After Harness Stats by kogekiplay (MIT, see NOTICE.md).
-import type { PluginAgentPanelProps, PluginButtonContentProps, PluginButtonIconProps, PluginButtonRegistration, PluginClientContext } from "@getpaseo/plugin/client";
-import { useEffect, useState } from "react";
-import { ScrollView, Text, View } from "react-native";
-import { cacheHitShare, outputSpeed, type StatsReadResult, statsRead, timeToFirstToken, totalTokens } from "../../shared/stats";
+import { type AgentRef, type PluginAgentPanelProps, type PluginButtonContentProps, type PluginButtonIconProps, type PluginButtonRegistration, type PluginClientContext, useAgent, useAgents } from "@getpaseo/plugin/client";
+import { type ReactNode, useEffect, useState } from "react";
+import { Pressable, ScrollView, Text, View } from "react-native";
+import { cacheHitShare, outputSpeed, type StatsReadResult, statsRead, timeToFirstToken, totalTokens, type TurnReading } from "../../shared/stats";
 import type { ChatTools } from "../../shared/activity";
-import { activityRows, cacheHitTone, formatDuration, formatShare, formatSpeed, formatTokens, headerLabel, rankedUses, timeSplit, tokenParts, toolsRows, usageRows } from "../../shared/stats-format";
+import { chatName } from "../../shared/chat-status";
+import { activityRows, cacheHitTone, formatDuration, formatShare, formatSpeed, formatTokens, headerLabel, paceLine, rankedUses, timeLine, timeSplit, tokenParts, toolsRows, topTokenParts, turnRows, usageRows } from "../../shared/stats-format";
 import { BLUE, PURPLE, withAlpha } from "../ui/hues";
 import { formatElapsed } from "../../shared/time-text";
 import { type Chats, chatForWorkspace } from "../chats";
@@ -18,34 +19,34 @@ import { Button, Card, Icon, STAT_ROW_GAP, StatTile, Tag, type Tokens, useTokens
 export const STATS_PANEL_ID = "stats";
 const REFRESH_MS = 2000;
 
-export type StatsReader = (agentId: string) => Promise<StatsReadResult>;
+export type StatsReader = (agentId: string, turns?: boolean) => Promise<StatsReadResult>;
 
 // One reader, with one cache, per app connection, shared by the pills, the panel and the details pane.
 const readers = new WeakMap<PluginClientContext, StatsReader>();
 export function statsReader(client: PluginClientContext): StatsReader {
   let read = readers.get(client);
-  if (!read) readers.set(client, (read = createStatsCache((agentId) => client.rpc(statsRead, { agentId })).read));
+  if (!read) readers.set(client, (read = createStatsCache((agentId, turns) => client.rpc(statsRead, turns ? { agentId, turns } : { agentId })).read));
   return read;
 }
 
-// The latest reading for a chat, refreshed every 2 s while mounted.
-export function useSessionStats(read: StatsReader, agentId: string | null): StatsReadResult | null {
+// The latest reading for a chat, refreshed every 2 s (or `every` ms) while mounted; `turns` adds the per-turn numbers.
+export function useSessionStats(read: StatsReader, agentId: string | null, { every = REFRESH_MS, turns = false }: { every?: number; turns?: boolean } = {}): StatsReadResult | null {
   const [result, setResult] = useState<StatsReadResult | null>(null);
   useEffect(() => {
     if (!agentId) return;
     let alive = true;
     const tick = () =>
-      void read(agentId).then(
+      void read(agentId, turns).then(
         (next) => alive && setResult(next),
         (error: unknown) => alive && setResult({ status: "error", error: error instanceof Error ? error.message : String(error) }),
       );
     tick();
-    const timer = setInterval(tick, REFRESH_MS);
+    const timer = setInterval(tick, every);
     return () => {
       alive = false;
       clearInterval(timer);
     };
-  }, [read, agentId]);
+  }, [read, agentId, every, turns]);
   return result;
 }
 
@@ -148,14 +149,13 @@ function UseList({ t, tools, shown = USES_SHOWN, columns = 1 }: { t: Tokens; too
 // the tokens went, the turn numbers, model time against tool time, the tool counts, and the skills and MCP tools
 // used; or why there is no reading.
 // `wide` (the Stats panel with room): a dashboard of headline tiles and cards (see below).
-export function StatsTiles({ t, result, wide = false }: { t: Tokens; result: StatsReadResult | null; wide?: boolean }) {
-  if (!result) return <Text style={t.text.small}>Reading the chat's log…</Text>;
-  if (result.status === "error") return <Text style={[t.text.small, { color: t.c.statusDanger }]}>This chat's log could not be read: {result.error}</Text>;
-  if (result.status === "unavailable") return <Text style={t.text.small}>{result.reason}</Text>;
+// `children`: more cards for the panel, placed after the token and time readings and before the tools.
+export function StatsTiles({ t, result, wide = false, children }: { t: Tokens; result: StatsReadResult | null; wide?: boolean; children?: ReactNode }) {
+  if (!result || result.status !== "ready") return <NoReading t={t} result={result} />;
   const { stats, tools } = result;
   const hit = cacheHitShare(stats);
-  const hitTone = hit === null ? undefined : { good: t.c.statusSuccess, fair: t.c.statusWarning, poor: t.c.statusDanger }[cacheHitTone(hit)];
-  const partColor = { cacheRead: t.c.statusSuccess, cacheWrite: t.c.statusWarning, output: PURPLE, newInput: t.c.foregroundMuted };
+  const hitTone = hitColor(t, hit);
+  const partColor = partColors(t);
   const parts = tokenParts(stats);
   const split = timeSplit(stats);
   const chips: [string, string, string | null][] = [
@@ -277,6 +277,7 @@ export function StatsTiles({ t, result, wide = false }: { t: Tokens; result: Sta
             )}
           </Card>
         </View>
+        {children}
         <Card t={t} title="Tools" icon="Wrench">
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
             {chips.map(([label, value, alert]) => (
@@ -298,10 +299,209 @@ export function StatsTiles({ t, result, wide = false }: { t: Tokens; result: Sta
       {summary}
       <Divider t={t} />
       {pace}
+      {children}
       <Divider t={t} />
       {toolsPart}
       {partial}
     </View>
+  );
+}
+
+// Why a chat has no reading yet: still reading, the log could not be read, or there is no log.
+function NoReading({ t, result }: { t: Tokens; result: Exclude<StatsReadResult, { status: "ready" }> | null }) {
+  if (!result) return <Text style={t.text.small}>Reading the chat's log…</Text>;
+  if (result.status === "error") return <Text style={[t.text.small, { color: t.c.statusDanger }]}>This chat's log could not be read: {result.error}</Text>;
+  return <Text style={t.text.small}>{result.reason}</Text>;
+}
+
+const hitColor = (t: Tokens, hit: number | null) => (hit === null ? undefined : { good: t.c.statusSuccess, fair: t.c.statusWarning, poor: t.c.statusDanger }[cacheHitTone(hit)]);
+const partColors = (t: Tokens) => ({ cacheRead: t.c.statusSuccess, cacheWrite: t.c.statusWarning, output: PURPLE, newInput: t.c.foregroundMuted });
+
+const GLANCE_TOOLS = 3;
+
+// The popover: a glance, not the whole panel. Total tokens and cache hit, one bar with its two biggest parts named,
+// the pace in a line or two, and the three most used skills and MCP tools; every other reading is in the panel.
+function StatsGlance({ t, result }: { t: Tokens; result: StatsReadResult | null }) {
+  if (!result || result.status !== "ready") return <NoReading t={t} result={result} />;
+  const { stats, tools } = result;
+  const hit = cacheHitShare(stats);
+  const partColor = partColors(t);
+  const parts = tokenParts(stats);
+  const time = timeLine(stats);
+  const uses = rankedUses(tools).slice(0, GLANCE_TOOLS);
+  return (
+    <View style={{ gap: 12 }}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", gap: 12 }}>
+        <Figure t={t} size="hero" label="Total tokens" value={formatTokens(totalTokens(stats))} />
+        <Figure t={t} size="hero" label="Cache hit" value={formatShare(hit)} tone={hitColor(t, hit)} align="right" />
+      </View>
+      <View style={{ gap: 6 }}>
+        <StackedBar t={t} height={8} label={parts.map((part) => `${part.label} ${formatTokens(part.tokens)}`).join(", ")} parts={parts.map((part) => ({ share: part.share, color: partColor[part.key] }))} />
+        <View style={{ flexDirection: "row", gap: 12 }}>
+          {topTokenParts(stats, 2).map((part) => (
+            <View key={part.key} style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+              <View style={{ width: 7, height: 7, borderRadius: 2, backgroundColor: partColor[part.key] }} />
+              <Text style={[t.text.small, { color: t.c.foregroundMuted }]}>{part.label}</Text>
+              <Text style={[t.text.small, { color: t.c.foreground, fontVariant: ["tabular-nums"] }]}>{formatTokens(part.tokens)}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+      <View style={{ gap: 2 }}>
+        <Text style={[t.text.small, { color: t.c.foregroundMuted, fontVariant: ["tabular-nums"] }]} numberOfLines={1}>
+          {paceLine(stats)}
+        </Text>
+        {time ? (
+          <Text style={[t.text.small, { color: t.c.foregroundMuted, fontVariant: ["tabular-nums"] }]} numberOfLines={1}>
+            {time}
+          </Text>
+        ) : null}
+      </View>
+      {uses.length ? (
+        <>
+          <Divider t={t} />
+          <View style={{ gap: 6 }}>
+            <Text style={t.text.meta}>Most used</Text>
+            {uses.map((use) => (
+              <View key={`${use.kind}:${use.name}`} accessibilityLabel={`${use.name}, ${use.kind === "skill" ? "skill" : "MCP tool"}, used ${use.count} times`} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Text style={[t.text.body, { flex: 1 }]} numberOfLines={1} ellipsizeMode="middle">
+                  {use.name}
+                  {use.kind === "skill" ? <Text style={[t.text.small, { color: t.c.foregroundMuted }]}>  skill</Text> : null}
+                </Text>
+                {use.failures ? <Text style={[t.text.small, { color: t.c.statusDanger }]}>{use.failures} failed</Text> : null}
+                <Text style={[t.text.body, { fontVariant: ["tabular-nums"] }]}>{use.count}</Text>
+              </View>
+            ))}
+          </View>
+        </>
+      ) : null}
+      {result.partial ? <Text style={t.text.small}>Still reading a long log; the numbers grow as it goes.</Text> : null}
+    </View>
+  );
+}
+
+const TURN_ROWS = 10;
+// A turn whose opening line had no timestamp has no start time (0).
+const clock = (ms: number) => (ms > 0 ? new Date(ms).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "-");
+
+// The Stats page's turns: one bar per turn (its tokens, split as the token bar is), the picked turn's numbers above
+// (the latest until one is pressed), and a table, most recent first. Hidden without turns (or from an older daemon).
+function TurnsCard({ t, turns, wide }: { t: Tokens; turns: readonly TurnReading[] | undefined; wide: boolean }) {
+  const [picked, setPicked] = useState<number | null>(null);
+  const [all, setAll] = useState(false);
+  if (!turns?.length) return null;
+  const partColor = partColors(t);
+  const rows = turnRows(turns);
+  const shown = rows.find((row) => row.turn === picked) ?? rows[0];
+  const max = Math.max(1, ...turns.map((turn) => totalTokens(turn)));
+  const height = 96;
+  const columns: [label: string, value: (row: (typeof rows)[number]) => string][] = wide
+    ? [["Started", (row) => clock(row.startAt)], ["Took", (row) => row.took], ["Steps", (row) => String(row.steps)], ["Tokens", (row) => row.tokens], ["Cache hit", (row) => row.cacheHit], ["Model", (row) => row.model], ["Tools", (row) => row.tools]]
+    : [["Took", (row) => row.took], ["Tokens", (row) => row.tokens], ["Cache hit", (row) => row.cacheHit]];
+  const cell = [t.text.small, { flex: 1, textAlign: "right" as const, fontVariant: ["tabular-nums" as const] }];
+  const visible = all ? rows : rows.slice(0, TURN_ROWS);
+  return (
+    <Card t={t} title={turns[0].turn > 1 ? `Turns (the last ${turns.length})` : "Turns"} icon="ListOrdered" right={<Text style={t.text.meta}>{`${turns.length} ${turns.length === 1 ? "turn" : "turns"}`}</Text>}>
+      <Text style={[t.text.meta, { fontVariant: ["tabular-nums"] }]} numberOfLines={1}>
+        {`Turn ${shown.turn} · started ${clock(shown.startAt)} · took ${shown.took} · ${shown.steps} steps · ${shown.tokens} tokens · ${shown.cacheHit} cache hit`}
+      </Text>
+      <View style={{ flexDirection: "row", alignItems: "flex-end", gap: turns.length > 60 ? 1 : 3, height }}>
+        {turns.map((turn) => {
+          const total = totalTokens(turn);
+          const on = turn.turn === shown.turn;
+          return (
+            <Pressable key={turn.turn} accessibilityRole="button" accessibilityLabel={`Turn ${turn.turn}: ${formatTokens(total)} tokens, took ${formatDuration(turn.endAt > turn.startAt ? turn.endAt - turn.startAt : null)}`} onPress={() => setPicked(turn.turn)} style={{ flex: 1, maxWidth: 28, height, justifyContent: "flex-end" }}>
+              <View style={{ height: Math.max(2, (total / max) * height), borderRadius: 2, overflow: "hidden", opacity: on ? 1 : 0.55, flexDirection: "column-reverse", backgroundColor: t.c.surface2 }}>
+                {tokenParts(turn).map((part) => (part.share > 0 ? <View key={part.key} style={{ height: `${part.share * 100}%`, minHeight: 1, backgroundColor: partColor[part.key] }} /> : null))}
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
+      <View style={{ gap: 2 }}>
+        <View style={{ flexDirection: "row", gap: 8, paddingHorizontal: 8, paddingBottom: 4, borderBottomWidth: 1, borderBottomColor: t.c.border }}>
+          <Text style={[t.text.meta, { width: 56 }]}>Turn</Text>
+          {columns.map(([label]) => (
+            <Text key={label} style={[t.text.meta, { flex: 1, textAlign: "right" }]} numberOfLines={1}>
+              {label}
+            </Text>
+          ))}
+        </View>
+        {visible.map((row) => (
+          <Pressable key={row.turn} accessibilityRole="button" accessibilityLabel={`Turn ${row.turn}, ${row.tokens} tokens, took ${row.took}`} onPress={() => setPicked(row.turn)} style={{ flexDirection: "row", gap: 8, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: row.turn === shown.turn ? t.c.surface1 : undefined }}>
+            <Text style={[t.text.body, { width: 56, fontVariant: ["tabular-nums"] }]}>{row.turn}</Text>
+            {columns.map(([label, value]) => (
+              <Text key={label} style={cell} numberOfLines={1}>
+                {value(row)}
+              </Text>
+            ))}
+          </Pressable>
+        ))}
+      </View>
+      {rows.length > TURN_ROWS ? <Button t={t} variant="ghost" label={all ? "Show fewer turns" : `Show all ${rows.length} turns`} onPress={() => setAll(!all)} /> : null}
+    </Card>
+  );
+}
+
+const SUB_AGENT_ROWS = 10;
+// Sub-agents read their own logs less often than the chat on screen.
+const SUB_AGENT_REFRESH_MS = 10_000;
+
+// One sub-agent: its name, tokens, cache hit and turns, and a bar of its tokens against the busiest sub-agent's
+// (`onTokens` reports its total up, for that bar and the card's sum).
+function SubAgentRow({ t, read, agent, max, onTokens }: { t: Tokens; read: StatsReader; agent: AgentRef; max: number; onTokens(id: string, tokens: number): void }) {
+  const name = useAgent(agent, (item) => chatName(item)) ?? "Sub-agent";
+  const result = useSessionStats(read, agent.id, { every: SUB_AGENT_REFRESH_MS });
+  const tokens = result?.status === "ready" ? totalTokens(result.stats) : 0;
+  useEffect(() => onTokens(agent.id, tokens), [agent.id, tokens, onTokens]);
+  const ready = result?.status === "ready" ? result : null;
+  const hit = ready ? cacheHitShare(ready.stats) : null;
+  return (
+    <View accessibilityLabel={ready ? `${name}: ${formatTokens(tokens)} tokens, ${formatShare(hit)} cache hit, ${ready.stats.turns} turns` : name} style={{ flexDirection: "row", alignItems: "center", gap: 8, minHeight: 24 }}>
+      <Text style={[t.text.body, { flex: 1 }]} numberOfLines={1}>
+        {name}
+      </Text>
+      {ready ? (
+        <>
+          <Text style={[t.text.small, { color: t.c.foregroundMuted, fontVariant: ["tabular-nums"] }]}>{`${ready.stats.turns} ${ready.stats.turns === 1 ? "turn" : "turns"}`}</Text>
+          <Text style={[t.text.small, { color: hitColor(t, hit) ?? t.c.foregroundMuted, minWidth: 48, textAlign: "right", fontVariant: ["tabular-nums"] }]}>{formatShare(hit)}</Text>
+          <View style={{ width: 72, height: 4, borderRadius: 2, backgroundColor: t.c.surface2 }}>
+            <View style={{ width: `${max > 0 ? (tokens / max) * 100 : 0}%`, minWidth: 3, height: 4, borderRadius: 2, backgroundColor: PURPLE }} />
+          </View>
+          <Text style={[t.text.body, { minWidth: 56, textAlign: "right", fontWeight: "600", fontVariant: ["tabular-nums"] }]}>{formatTokens(tokens)}</Text>
+        </>
+      ) : (
+        <Text style={[t.text.small, { color: result?.status === "error" ? t.c.statusDanger : t.c.foregroundMuted }]} numberOfLines={1}>
+          {!result ? "Reading…" : result.status === "error" ? "Log unreadable" : result.status === "unavailable" ? result.reason : ""}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+// The chat's sub-agents (separate Paseo agents with their own logs, so not in this chat's numbers), latest first.
+// Hidden when it has none.
+function SubAgentsCard({ t, read, agentId }: { t: Tokens; read: StatsReader; agentId: string }) {
+  const subs = useAgents({ where: (agent) => agent.parentAgentId === agentId, orderBy: ["lastActivityAt", "desc"] });
+  const [tokens, setTokens] = useState<ReadonlyMap<string, number>>(new Map());
+  const [all, setAll] = useState(false);
+  const [onTokens] = useState(() => (id: string, count: number) => setTokens((previous) => (previous.get(id) === count ? previous : new Map(previous).set(id, count))));
+  if (!subs.length) return null;
+  const listed = subs.map((agent) => tokens.get(agent.id) ?? 0);
+  const sum = listed.reduce((a, b) => a + b, 0);
+  const max = Math.max(0, ...listed);
+  const visible = all ? subs : subs.slice(0, SUB_AGENT_ROWS);
+  // Only listed rows read their logs, so the sum is shown only when every sub-agent is listed.
+  const summary = visible.length === subs.length ? `${subs.length} · ${formatTokens(sum)} tokens` : String(subs.length);
+  return (
+    <Card t={t} title="Sub-agents" icon="Bot" right={<Text style={[t.text.meta, { fontVariant: ["tabular-nums"] }]}>{summary}</Text>}>
+      <View style={{ gap: 6 }}>
+        {visible.map((agent) => (
+          <SubAgentRow key={agent.key} t={t} read={read} agent={agent} max={max} onTokens={onTokens} />
+        ))}
+      </View>
+      {subs.length > SUB_AGENT_ROWS ? <Button t={t} variant="ghost" label={all ? "Show fewer" : `Show all ${subs.length}`} onPress={() => setAll(!all)} /> : null}
+    </Card>
   );
 }
 
@@ -334,7 +534,7 @@ export function addStatsHeaderButton(client: PluginClientContext, read: StatsRea
             ))}
           </ScrollView>
         ) : null}
-        {chatId ? <StatsTiles t={t} result={result} /> : <Text style={t.text.small}>Open a chat in this workspace to see its stats.</Text>}
+        {chatId ? <StatsGlance t={t} result={result} /> : <Text style={t.text.small}>Open a chat in this workspace to see its stats.</Text>}
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, borderTopWidth: 1, borderTopColor: t.c.border, paddingTop: 8 }}>
           <Text style={[t.text.small, { flex: 1, color: t.c.foregroundMuted }]}>From the chat's own log; times are estimates.</Text>
           {chatId ? (
@@ -361,11 +561,15 @@ export function addStatsHeaderButton(client: PluginClientContext, read: StatsRea
 export function createStatsPanel(read: StatsReader) {
   return function StatsPanel(props: PluginAgentPanelProps) {
     const t = useTokens(props.theme, props.layout.compact);
-    const result = useSessionStats(read, props.params.agentId);
+    const result = useSessionStats(read, props.params.agentId, { turns: true });
     const [width, setWidth] = useState(0);
+    const wide = !props.layout.compact && width >= PANEL_WIDE;
     return (
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: t.inset, gap: 12, width: "100%", maxWidth: 1400 }} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
-        <StatsTiles t={t} result={result} wide={!props.layout.compact && width >= PANEL_WIDE} />
+        <StatsTiles t={t} result={result} wide={wide}>
+          <TurnsCard t={t} turns={result?.status === "ready" ? result.turns : undefined} wide={wide} />
+          <SubAgentsCard t={t} read={read} agentId={props.params.agentId} />
+        </StatsTiles>
         <Text style={[t.text.small, { color: t.c.foregroundMuted }]}>From the chat's own log on the daemon's computer; times come from its timestamps, so they are estimates.</Text>
       </ScrollView>
     );

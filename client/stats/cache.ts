@@ -5,22 +5,25 @@ import type { StatsReadResult } from "../../shared/stats";
 
 const LIMIT = 200;
 
-export function createStatsCache(fetch: (agentId: string) => Promise<StatsReadResult>) {
+// A reading with per-turn numbers (`turns`, the Stats panel's) is kept apart from the lighter one everything else polls.
+export function createStatsCache(fetch: (agentId: string, turns: boolean) => Promise<StatsReadResult>) {
   const last = new Map<string, StatsReadResult>();
   const inFlight = new Map<string, Promise<StatsReadResult>>();
-  const read = (agentId: string): Promise<StatsReadResult> => {
-    const pending = inFlight.get(agentId);
+  const keyOf = (agentId: string, turns: boolean) => (turns ? `${agentId}\u0000turns` : agentId);
+  const read = (agentId: string, turns = false): Promise<StatsReadResult> => {
+    const key = keyOf(agentId, turns);
+    const pending = inFlight.get(key);
     if (pending) return pending;
-    const next = fetch(agentId)
+    const next = fetch(agentId, turns)
       .then((result) => {
-        last.delete(agentId);
-        last.set(agentId, result);
+        last.delete(key);
+        last.set(key, result);
         if (last.size > LIMIT) last.delete(last.keys().next().value as string);
         return result;
       })
-      .finally(() => inFlight.delete(agentId));
-    inFlight.set(agentId, next);
+      .finally(() => inFlight.delete(key));
+    inFlight.set(key, next);
     return next;
   };
-  return { read, peek: (agentId: string) => last.get(agentId) };
+  return { read, peek: (agentId: string, turns = false) => last.get(keyOf(agentId, turns)) };
 }

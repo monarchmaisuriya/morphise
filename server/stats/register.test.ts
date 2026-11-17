@@ -2,7 +2,7 @@ import { join } from "node:path";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { conversationSearch } from "../../shared/conversation-search";
-import { statsRead, statsSettings } from "../../shared/stats";
+import { statsRead, statsReadResultSchema, statsSettings } from "../../shared/stats";
 import { createStatsHandlers, registerStats, type StatsAgent, type StatsPaseo } from "./register";
 import { SessionReader } from "./sessions";
 
@@ -36,7 +36,13 @@ describe("stats read", () => {
     const { paseo, refresh } = fakePaseo({ persistence: { sessionId: "claude-session-1" } });
     const result = await handlers().read({ agentId: "a1" }, paseo);
     expect(result).toMatchObject({ status: "ready", provider: "claude", partial: false, stats: { steps: 2, turns: 1, outputTokens: 40 } });
+    // Turns ride only on reads that ask for them (the Stats panel), not on every pill's poll.
+    expect(result.status === "ready" ? result.turns : null).toBeUndefined();
     expect(refresh).toHaveBeenCalledTimes(1);
+    const withTurns = await handlers().read({ agentId: "a1", turns: true }, paseo);
+    expect(withTurns.status === "ready" ? withTurns.turns?.map((turn) => [turn.turn, turn.steps, turn.outputTokens]) : null).toEqual([[1, 2, 40]]);
+    // What the app receives must pass the reading's own schema, or every stats surface shows an error.
+    expect(statsReadResultSchema.safeParse(withTurns).success).toBe(true);
     expect(log).toHaveBeenCalledWith("[morphise] stats a1");
   });
 

@@ -39,9 +39,29 @@ export function emptyCounters(): SessionCounters {
   return { turns: 0, steps: 0, inputTokens: 0, cachedTokens: 0, cacheWriteTokens: 0, outputTokens: 0, timedOutputTokens: 0, modelMs: 0, toolMs: 0, ttftMs: 0, ttftSteps: 0 };
 }
 
+// The most recent turns a reading carries; older ones are dropped first.
+export const TURNS_KEPT = 200;
+
+// What one turn added to the counters: from the line that opened it (`startAt`, ms) to its last counted line
+// (`endAt`). `turn` numbers turns as `turns` counts them, from 1.
+export const turnReadingSchema = z.object({
+  turn: z.number().int().positive(),
+  startAt: count,
+  endAt: count,
+  steps: count,
+  inputTokens: count,
+  cachedTokens: count,
+  cacheWriteTokens: count,
+  outputTokens: count,
+  modelMs: count,
+  toolMs: count,
+});
+export type TurnReading = z.infer<typeof turnReadingSchema>;
+
 export const statsReadResultSchema = z.discriminatedUnion("status", [
   // `partial`: the log was longer than one read takes; the next read continues where this one stopped.
-  z.object({ status: z.literal("ready"), provider: z.enum(STATS_PROVIDERS), partial: z.boolean(), stats: sessionCountersSchema, tools: chatToolsSchema }),
+  // `turns`: oldest first; missing from a daemon older than Morphise 0.38.
+  z.object({ status: z.literal("ready"), provider: z.enum(STATS_PROVIDERS), partial: z.boolean(), stats: sessionCountersSchema, tools: chatToolsSchema, turns: z.array(turnReadingSchema).max(TURNS_KEPT).optional() }),
   // No log to read: no session id yet, no file yet, or a provider without a log Morphise reads.
   z.object({ status: z.literal("unavailable"), reason: z.string() }),
   // A log that exists but cannot be read or understood.
@@ -49,14 +69,15 @@ export const statsReadResultSchema = z.discriminatedUnion("status", [
 ]);
 export type StatsReadResult = z.output<typeof statsReadResultSchema>;
 
-export const statsRead = defineRpc({ name: "morphise.stats.read", input: z.object({ agentId: z.string().min(1).max(200) }), output: statsReadResultSchema });
+// `turns`: also send the per-turn readings (only the Stats panel shows them, so the pills' 2 s polls stay small).
+export const statsRead = defineRpc({ name: "morphise.stats.read", input: z.object({ agentId: z.string().min(1).max(200), turns: z.boolean().optional() }), output: statsReadResultSchema });
 
-export function totalTokens(stats: SessionCounters): number {
+export function totalTokens(stats: Pick<SessionCounters, "inputTokens" | "outputTokens">): number {
   return stats.inputTokens + stats.outputTokens;
 }
 
 /** Input neither read from nor written to the cache. */
-export function uncachedInput(stats: SessionCounters): number {
+export function uncachedInput(stats: Pick<SessionCounters, "inputTokens" | "cachedTokens" | "cacheWriteTokens">): number {
   return Math.max(0, stats.inputTokens - stats.cachedTokens - stats.cacheWriteTokens);
 }
 
@@ -71,6 +92,6 @@ export function timeToFirstToken(stats: SessionCounters): number | null {
 }
 
 /** Share of input read from the cache, 0 to 1; null without input. */
-export function cacheHitShare(stats: SessionCounters): number | null {
+export function cacheHitShare(stats: Pick<SessionCounters, "inputTokens" | "cachedTokens">): number | null {
   return stats.inputTokens > 0 ? Math.min(1, stats.cachedTokens / stats.inputTokens) : null;
 }

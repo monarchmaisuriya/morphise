@@ -1,5 +1,5 @@
 import type { ChatTools, NamedUseRow } from "./activity";
-import { cacheHitShare, outputSpeed, type SessionCounters, type StatsReadResult, timeToFirstToken, totalTokens, uncachedInput } from "./stats";
+import { cacheHitShare, outputSpeed, type SessionCounters, type StatsReadResult, timeToFirstToken, totalTokens, type TurnReading, uncachedInput } from "./stats";
 
 // How the session stats read in the pills, popovers, panel and details pane. A reading the log cannot give is "-".
 
@@ -108,7 +108,7 @@ export interface TokenPart {
   // Of the total, 0 to 1 (0 when there are no tokens).
   share: number;
 }
-export function tokenParts(stats: SessionCounters): TokenPart[] {
+export function tokenParts(stats: Pick<SessionCounters, "inputTokens" | "cachedTokens" | "cacheWriteTokens" | "outputTokens">): TokenPart[] {
   const total = totalTokens(stats);
   const parts: [TokenPartKey, string, number][] = [
     ["cacheRead", "Cache read", stats.cachedTokens],
@@ -117,6 +117,52 @@ export function tokenParts(stats: SessionCounters): TokenPart[] {
     ["newInput", "New input", uncachedInput(stats)],
   ];
   return parts.map(([key, label, tokens]) => ({ key, label, tokens, share: total > 0 ? tokens / total : 0 }));
+}
+
+// The popover's one-line legend: the `count` biggest parts of the token bar, largest first, leaving out empty ones.
+export function topTokenParts(stats: SessionCounters, count: number): TokenPart[] {
+  return tokenParts(stats)
+    .filter((part) => part.tokens > 0)
+    .sort((a, b) => b.tokens - a.tokens)
+    .slice(0, count);
+}
+
+const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
+
+// The popover's pace line: turns, steps, then first token and speed when the log gives them.
+export function paceLine(stats: SessionCounters): string {
+  const ttft = timeToFirstToken(stats);
+  const speed = outputSpeed(stats);
+  return [plural(stats.turns, "turn"), plural(stats.steps, "step"), ttft === null ? null : `${formatDuration(ttft)} first token`, speed === null ? null : formatSpeed(speed)].filter(Boolean).join(" · ");
+}
+
+// The popover's time line: model time and tool time, or null when neither was measured.
+export function timeLine(stats: SessionCounters): string | null {
+  return stats.modelMs + stats.toolMs > 0 ? `Model ${formatDuration(stats.modelMs || null)} · Tools ${formatDuration(stats.toolMs || null)}` : null;
+}
+
+// The Stats page's turn table, most recent turn first. `took`: from the turn's opening line to its last counted line.
+export interface TurnRow {
+  turn: number;
+  startAt: number;
+  took: string;
+  steps: number;
+  tokens: string;
+  cacheHit: string;
+  model: string;
+  tools: string;
+}
+export function turnRows(turns: readonly TurnReading[]): TurnRow[] {
+  return [...turns].reverse().map((turn) => ({
+    turn: turn.turn,
+    startAt: turn.startAt,
+    took: formatDuration(turn.endAt > turn.startAt ? turn.endAt - turn.startAt : null),
+    steps: turn.steps,
+    tokens: formatTokens(totalTokens(turn)),
+    cacheHit: formatShare(cacheHitShare(turn)),
+    model: formatDuration(turn.modelMs || null),
+    tools: formatDuration(turn.toolMs || null),
+  }));
 }
 
 // Model time against tool time, as shares of their sum; null when neither was measured.

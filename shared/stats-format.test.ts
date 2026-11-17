@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { chatTools } from "./activity";
 const NO_TOOLS = chatTools({ slots: {}, skills: {}, mcp: {}, coding: false });
 import { emptyCounters } from "./stats";
-import { activityRows, agentIdFromTab, rankedUses, timeSplit, tokenParts, cacheHitTone, headerLabel, formatDuration, formatShare, formatSpeed, formatTokens, pillLabel, stripText, usageRows } from "./stats-format";
+import { activityRows, agentIdFromTab, paceLine, rankedUses, timeLine, topTokenParts, turnRows, timeSplit, tokenParts, cacheHitTone, headerLabel, formatDuration, formatShare, formatSpeed, formatTokens, pillLabel, stripText, usageRows } from "./stats-format";
 
 describe("stats formatting", () => {
   it("shortens token counts", () => {
@@ -76,5 +76,39 @@ describe("tokenParts", () => {
   it("ranks skills and MCP tools together", () => {
     const tools = chatTools({ slots: {}, skills: { plan: { count: 2, failures: 0, lastAt: 5 } }, mcp: { "notion.search": { count: 9, failures: 1, lastAt: 1 }, "slack.read": { count: 2, failures: 0, lastAt: 9 } }, coding: false });
     expect(rankedUses(tools).map((use) => [use.name, use.kind])).toEqual([["notion.search", "mcp"], ["slack.read", "mcp"], ["plan", "skill"]]);
+  });
+});
+
+describe("the popover's glance lines", () => {
+  const stats = { ...emptyCounters(), turns: 15, steps: 245, inputTokens: 92_000_000, cachedTokens: 91_200_000, cacheWriteTokens: 957_100, outputTokens: 141_500, timedOutputTokens: 141_500, modelMs: 1_648_000, toolMs: 840_000, ttftMs: 5000, ttftSteps: 1 };
+
+  it("names only the biggest token parts, largest first, never an empty one", () => {
+    expect(topTokenParts(stats, 2).map((part) => part.key)).toEqual(["cacheRead", "cacheWrite"]);
+    expect(topTokenParts({ ...emptyCounters(), inputTokens: 10, outputTokens: 5 }, 2).map((part) => part.key)).toEqual(["newInput", "output"]);
+    expect(topTokenParts(emptyCounters(), 2)).toEqual([]);
+  });
+
+  it("puts turns, steps, first token and speed on one line, leaving out what the log cannot give", () => {
+    expect(paceLine(stats)).toBe("15 turns · 245 steps · 5.0 s first token · 86 t/s");
+    expect(paceLine({ ...emptyCounters(), turns: 1, steps: 1 })).toBe("1 turn · 1 step");
+  });
+
+  it("puts model and tool time on one line, or nothing without timings", () => {
+    expect(timeLine(stats)).toBe("Model 27m 28s · Tools 14m 00s");
+    expect(timeLine(emptyCounters())).toBeNull();
+  });
+});
+
+describe("turnRows", () => {
+  const turn = (number: number, startAt: number, endAt: number, extra = {}) => ({ turn: number, startAt, endAt, steps: 3, inputTokens: 1000, cachedTokens: 900, cacheWriteTokens: 50, outputTokens: 200, modelMs: 4000, toolMs: 1000, ...extra });
+
+  it("lists the most recent turn first with its tokens, cache hit, and how long it took", () => {
+    const rows = turnRows([turn(1, 0, 60_000), turn(2, 100_000, 100_000, { modelMs: 0, toolMs: 0 })]);
+    expect(rows.map((row) => [row.turn, row.tokens, row.took, row.cacheHit])).toEqual([
+      [2, "1.2k", "-", "90%"],
+      [1, "1.2k", "1m 00s", "90%"],
+    ]);
+    expect(rows[1].model).toBe("4.0 s");
+    expect(rows[0].model).toBe("-");
   });
 });

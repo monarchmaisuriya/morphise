@@ -4,7 +4,7 @@ import { readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
-import type { SessionCounters, StatsProvider } from "../../shared/stats";
+import type { SessionCounters, StatsProvider, TurnReading } from "../../shared/stats";
 import { chatTools, type ChatTools } from "../../shared/activity";
 import { ActivityFold } from "./fold-activity";
 import { SessionFold } from "./fold";
@@ -26,7 +26,7 @@ export interface ReadLimits {
 }
 export const DEFAULT_READ_LIMITS: ReadLimits = { maxBytes: 64 * 1024 * 1024, maxMs: 15_000 };
 
-export type SessionRead = { kind: "ready"; provider: StatsProvider; stats: SessionCounters; tools: ChatTools; partial: boolean } | { kind: "unavailable"; reason: string };
+export type SessionRead = { kind: "ready"; provider: StatsProvider; stats: SessionCounters; tools: ChatTools; turns: TurnReading[]; partial: boolean } | { kind: "unavailable"; reason: string };
 
 interface CachedSession {
   fold: SessionFold;
@@ -172,7 +172,7 @@ export class SessionReader {
           if (Date.now() > deadline) break;
         }
       }
-      return { kind: "ready", provider, stats: { ...entry.fold.stats }, tools: chatTools(entry.activity.activity), partial: entry.offset < info.size };
+      return { kind: "ready", provider, stats: { ...entry.fold.stats }, tools: chatTools(entry.activity.activity), turns: entry.fold.turnReadings(), partial: entry.offset < info.size };
     })();
     try {
       return await entry.busy;

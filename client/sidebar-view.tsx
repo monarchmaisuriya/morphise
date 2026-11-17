@@ -47,6 +47,7 @@ import type { RemoveProjectResult } from "../shared/project-actions";
 import { type DragApi, DragGhost, useBoardDrag, useCardDragHandlers } from "./board/drag";
 import { attentionOrder, NEEDS_ME, needsAttention, needsMeOn, nextAttention } from "../shared/attention";
 import { chatGroupKey, chatIndicator, chatMatches, chatName, compareChats, isSidebarChat } from "../shared/chat-status";
+import { branchSegments } from "../shared/tree-lines";
 import { INDICATORS, type Indicator, type Profile } from "../shared/profile";
 import { stepsOptions } from "../shared/steps";
 import { type AttentionList, waitingChildren } from "./attention";
@@ -146,6 +147,7 @@ function viewStyles(theme: Theme, config: ViewConfig, look: ReturnType<typeof si
     // Chats hang off a thin line under their workspace's status mark, sub-agents off one under their chat's.
     branchDown: { position: "absolute" as const, top: 0, bottom: 0, width: 1, backgroundColor: c.border },
     branchTurn: { position: "absolute" as const, top: 0, borderLeftWidth: 1, borderBottomWidth: 1, borderBottomLeftRadius: 6, borderColor: c.border },
+    branchTee: { position: "absolute" as const, height: 1, backgroundColor: c.border },
     // Where each kind of row's line sits: x of the line, x where the row's status slot starts, and the row's middle
     // (every chat and sub-agent row is at least `height` tall, set by `rowMain`).
     branch: {
@@ -405,13 +407,26 @@ function AgentRow({ reference, sub, subs = [], shared }: { reference: AgentRef; 
 }
 
 // One row (with what hangs under it) on its parent's line. Drawn after the row, so the open row's highlight never hides
-// the line: straight down past every row but the last, which the line turns into with a rounded corner.
+// the line: every row's line reaches its status slot, the last with a rounded corner, the rest with a tee
+// (`branchSegments`).
 function Branch({ x, to, middle, last, children, shared }: { x: number; to: number; middle: number; last: boolean; children: ReactNode; shared: Shared }) {
   const { styles } = shared;
   return (
     <View>
       {children}
-      <View pointerEvents="none" style={last ? [styles.branchTurn, { left: x, width: to - x, height: middle }] : [styles.branchDown, { left: x }]} />
+      {branchSegments({ x, to, middle }, last).map((segment) => (
+        <View
+          key={segment.kind}
+          pointerEvents="none"
+          style={
+            segment.kind === "turn"
+              ? [styles.branchTurn, { left: segment.left, width: segment.width, height: segment.height }]
+              : segment.kind === "tee"
+                ? [styles.branchTee, { left: segment.left, top: segment.top, width: segment.width }]
+                : [styles.branchDown, { left: segment.left }]
+          }
+        />
+      ))}
     </View>
   );
 }

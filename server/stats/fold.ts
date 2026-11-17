@@ -1,5 +1,8 @@
 // Ported from Harness Stats (kogekiplay/paseo-harness-stats, MIT, see NOTICE.md): server/fold.ts at 4e8fae9
-import { emptyCounters, type SessionCounters } from "../../shared/stats";
+import { emptyCounters, type SessionCounters, TURNS_KEPT, type TurnReading } from "../../shared/stats";
+
+// The counters a turn adds to; each total is the sum of these changes over every line.
+const ADDITIVE = ["steps", "inputTokens", "cachedTokens", "cacheWriteTokens", "outputTokens", "modelMs", "toolMs"] as const;
 
 type RecordValue = Record<string, unknown>;
 const record = (value: unknown): RecordValue =>
@@ -31,6 +34,10 @@ export class SessionFold {
   readonly stats: SessionCounters;
   private turn = "initial";
   private turns = new Set<string>();
+  // What each turn added (the most recent TURNS_KEPT, oldest first), and when the current turn's opening line came.
+  private turnRecords = new Map<string, TurnReading>();
+  private opened: { turn: string; at: number } | null = null;
+  private turnNumbers = new Map<string, number>();
   private responses = new Set<string>();
   private modern = false;
   private legacySteps = 0;
@@ -55,6 +62,7 @@ export class SessionFold {
   }
 
   private addTurn() {
+    if (!this.turns.has(this.turn)) this.turnNumbers.set(this.turn, this.turns.size + 1);
     this.turns.add(this.turn);
     this.stats.turns = this.turns.size;
   }
@@ -84,8 +92,89 @@ export class SessionFold {
   }
   apply(value: unknown) {
     const row = record(value);
+    const turnBefore = this.turn;
+    const before = ADDITIVE.map((key) => this.stats[key]);
     if (this.provider === "codex") this.codex(row);
     else this.claudeRow(row);
+    // Per turn: whatever this line changed in the totals goes to the turn it belongs to, so every provider rule above
+    // stays the only place a number is worked out.
+    const at = time(row.timestamp);
+    if (this.turn !== turnBefore) {
+      this.settle(turnBefore);
+      if (Number.isFinite(at)) this.opened = { turn: this.turn, at };
+    }
+    const changes = ADDITIVE.map((key, index) => this.stats[key] - before[index]);
+    if (changes.every((change) => change === 0)) return;
+    let turn = this.turnRecords.get(this.turn);
+    if (!turn) {
+      const start = this.opened?.turn === this.turn ? this.opened.at : Number.isFinite(at) ? at : 0;
+      turn = { turn: 0, startAt: start, endAt: start, steps: 0, inputTokens: 0, cachedTokens: 0, cacheWriteTokens: 0, outputTokens: 0, modelMs: 0, toolMs: 0 };
+      this.turnRecords.set(this.turn, turn);
+      if (this.turnRecords.size > TURNS_KEPT) this.dropOldestTurn();
+    }
+    ADDITIVE.forEach((key, index) => (turn[key] += changes[index]));
+    if (Number.isFinite(at)) turn.endAt = Math.max(turn.endAt, at);
+  }
+
+  // A turn the log has moved past without model usage (so `turns` never counted it) can get no more changes: changes
+  // go to the current turn only. Its changes join the latest counted turn, so only counted turns fill the kept ones.
+  private settle(turnId: string) {
+    const record = this.turnRecords.get(turnId);
+    if (!record || this.turnNumbers.has(turnId)) return;
+    let into: TurnReading | null = null;
+    let latest = 0;
+    for (const [id, other] of this.turnRecords) {
+      const number = this.turnNumbers.get(id) ?? 0;
+      if (number > latest) [into, latest] = [other, number];
+    }
+    if (!into) return;
+    for (const key of ADDITIVE) into[key] += record[key];
+    into.startAt = Math.min(into.startAt, record.startAt);
+    into.endAt = Math.max(into.endAt, record.endAt);
+    this.turnRecords.delete(turnId);
+  }
+
+  // Past TURNS_KEPT, the lowest-numbered counted turn goes (a dropped turn that gets late usage comes back as the
+  // lowest and goes again, so the list never runs out of order).
+  private dropOldestTurn() {
+    let oldest: string | null = null;
+    let lowest = Infinity;
+    for (const id of this.turnRecords.keys()) {
+      const number = this.turnNumbers.get(id);
+      if (number !== undefined && number < lowest) [oldest, lowest] = [id, number];
+    }
+    if (oldest !== null) this.turnRecords.delete(oldest);
+  }
+
+  /**
+   * What each of the most recent turns added, in turn order, numbered as `turns` counts them. A record whose turn was
+   * never counted and not yet settled (the current turn, or one before any counted turn) goes to the counted turn
+   * before it, or else the one after, so numbers stay unique and the sums still match the totals. A turn whose net
+   * change comes out below zero (lines stamped earlier than ones before them) reads as zero.
+   */
+  turnReadings(): TurnReading[] {
+    const readings: TurnReading[] = [];
+    let carried: TurnReading | null = null;
+    const merge = (into: TurnReading, from: TurnReading) => {
+      for (const key of ADDITIVE) into[key] += from[key];
+      into.startAt = Math.min(into.startAt, from.startAt);
+      into.endAt = Math.max(into.endAt, from.endAt);
+    };
+    for (const [id, record] of this.turnRecords) {
+      const turn = this.turnNumbers.get(id);
+      const copy = { ...record, turn: turn ?? 0 };
+      if (turn === undefined) {
+        if (readings.length) merge(readings[readings.length - 1], copy);
+        else if (carried) merge(carried, copy);
+        else carried = copy;
+        continue;
+      }
+      if (carried) merge(copy, carried);
+      carried = null;
+      readings.push(copy);
+    }
+    for (const reading of readings) for (const key of ADDITIVE) reading[key] = Math.max(0, reading[key]);
+    return readings.sort((a, b) => a.turn - b.turn);
   }
   private codex(row: RecordValue) {
     const p = record(row.payload),

@@ -2,6 +2,14 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.38.0 - 2026-11-17
+
+- **Tree lines reach every dot:** in the sidebar view, every chat under a workspace and every sub-agent under a chat now has a short line into its status dot, not only the last one; the last keeps its rounded corner and the line stays unbroken.
+- **Calmer Stats popover:** total tokens and cache hit, one bar of where the tokens went with its two biggest parts named, the pace in two lines (turns, steps, first token, speed; model and tool time), and the three most used skills and MCP tools. The tool-count chips, the time bar and the longer list moved to the Stats panel, one click away with Open panel.
+- **Stats panel, Turns:** a bar per turn (its tokens, coloured like the token bar) and a table of the turns, most recent first: when each started, how long it took, steps, tokens, cache hit, model and tool time. Press a bar or a row to see that turn's numbers. The last 200 turns are kept.
+- **Stats panel, Sub-agents:** when a chat has sub-agents, each is listed with its tokens, cache hit and turns (they have their own logs, so they are not in the chat's numbers), read every 10 s.
+- **Going back to 0.37:** nothing to undo; the panel loses the two new cards.
+
 ## 0.37.2 - 2026-11-17
 
 - **One spacing everywhere:** the Activity, Agents, Tasks and Bookmarks tabs, the Stats panel, the Checks and Notes panels and agent details all keep the same gap from their edges (16 px, 12 px on phones), so their content lines up when you switch between them.
