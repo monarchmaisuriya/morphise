@@ -118,8 +118,7 @@ function viewStyles(theme: Theme, config: ViewConfig, look: ReturnType<typeof si
   const shift = rowPad - 8;
   return {
     scroll: { flex: 1 },
-    header: { flexDirection: "row" as const, alignItems: "center" as const, minHeight: 36, paddingLeft: 16, paddingRight: 8, gap: 2 },
-    headerText: { color: c.foregroundMuted, fontSize: 12, flex: 1 },
+    header: { flexDirection: "row" as const, alignItems: "center" as const, justifyContent: "space-between" as const, minHeight: 36, paddingHorizontal: 8, gap: 2 },
     tools: { paddingHorizontal: 8, paddingBottom: 6, gap: 6 },
     // More space above a heading than below it: the heading belongs to the rows that follow.
     heading: { flexDirection: "row" as const, alignItems: "center" as const, gap: 6, minHeight: 28, paddingLeft: 16, paddingRight: 12, marginTop: groupGap },
@@ -1455,8 +1454,8 @@ interface HeaderProps {
   shared: Shared;
 }
 
-// The view's header, like Paseo's "Workspaces" heading: the list's name, then icon buttons for
-// search, filters, view options and Next. Menus open over the list instead of pushing it down.
+// The view's header: icon buttons for Dispatch, search, filters, new group, view options and Next,
+// spread evenly across the full width with no title. Menus open over the list instead of pushing it down.
 function Header({ menu, setMenu, searching, setSearching, search, onSearch, filters, onNext, headerRef, shared }: HeaderProps) {
   const { styles, props, t, config } = shared;
   const showSearch = searching || search !== "";
@@ -1464,7 +1463,6 @@ function Header({ menu, setMenu, searching, setSearching, search, onSearch, filt
   const openScreen = useValue(screenOpener);
   return (
     <View ref={headerRef} style={styles.header}>
-      <Text style={styles.headerText}>{config.list === "chats" ? "Chats" : "Workspaces"}</Text>
       {openScreen ? <IconButton t={t} size="sm" icon={DISPATCH_ICON} label="Dispatch: start several agents in new workspaces" onPress={() => openScreen({ screenId: DISPATCH_SCREEN_ID })} /> : null}
       <IconButton t={t} size="sm" icon="Search" tone={showSearch ? props.theme.colors.foreground : undefined} label={showSearch ? "Close search" : "Search"} onPress={() => (showSearch ? (onSearch(""), setSearching(false)) : setSearching(true))} />
       <View>

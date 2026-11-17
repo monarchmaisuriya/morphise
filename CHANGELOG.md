@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.38.2 - 2026-11-17
+
+- **Sidebar header:** the Morphise sidebar view's header drops its "Workspaces" (or "Chats") title, and its icon buttons (Dispatch, Search, Filter, New group, Display, Next) are spread evenly across the full width, on desktop and on phones. Tooltips, labels and keyboard use are unchanged.
+
 ## 0.38.1 - 2026-11-17
 
 - **Tree lines start at the parent:** the line the chats or sub-agents hang on now starts just under the parent row's dot (a workspace's or a chat's), so it reads as coming out of the parent instead of starting at the first child.
