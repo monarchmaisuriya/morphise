@@ -47,7 +47,7 @@ import type { RemoveProjectResult } from "../shared/project-actions";
 import { type DragApi, DragGhost, useBoardDrag, useCardDragHandlers } from "./board/drag";
 import { attentionOrder, NEEDS_ME, needsAttention, needsMeOn, nextAttention } from "../shared/attention";
 import { chatGroupKey, chatIndicator, chatMatches, chatName, compareChats, isSidebarChat } from "../shared/chat-status";
-import { branchSegments } from "../shared/tree-lines";
+import { branchSegments, parentStem } from "../shared/tree-lines";
 import { INDICATORS, type Indicator, type Profile } from "../shared/profile";
 import { stepsOptions } from "../shared/steps";
 import { type AttentionList, waitingChildren } from "./attention";
@@ -263,7 +263,9 @@ function useRemindToggle() {
 // area. As in Paseo, the buttons take the place of the trailing time on hover; they always show
 // on touch screens and when they carry state (a set reminder, an armed archive). A long press, or
 // a right-click on the web, runs `onLongPress`.
-function RowShell({ selected, child, grandchild, twoLine, label, onPress, onLongPress, main, trailing, actions, showActions, disabled, rowRef, onHover, shared }: { selected: boolean; child?: boolean; twoLine?: boolean; label: string; onPress(): void; onLongPress?(): void; main: ReactNode; trailing?: ReactNode; actions?: ReactNode; showActions?: boolean; disabled?: boolean; rowRef?: RefObject<View | null>; onHover?(on: boolean): void; grandchild?: boolean; shared: Shared }) {
+// `stem`: the x of the line its children hang on (`branch.chat.x` or `branch.sub.x`), when it has children listed; the
+// line then starts under this row's dot (`parentStem`).
+function RowShell({ selected, child, grandchild, twoLine, label, onPress, onLongPress, main, trailing, actions, showActions, disabled, rowRef, onHover, stem, shared }: { selected: boolean; child?: boolean; twoLine?: boolean; label: string; onPress(): void; onLongPress?(): void; main: ReactNode; trailing?: ReactNode; actions?: ReactNode; showActions?: boolean; disabled?: boolean; rowRef?: RefObject<View | null>; onHover?(on: boolean): void; grandchild?: boolean; stem?: number; shared: Shared }) {
   const { styles } = shared;
   const key = useId();
   const hovered = useHovered(shared.hover, key);
@@ -284,17 +286,21 @@ function RowShell({ selected, child, grandchild, twoLine, label, onPress, onLong
         {actionsShown ? null : trailing}
       </Pressable>
       {actionsShown ? <View style={[styles.actions, twoLine ? styles.actionsTwoLine : null]}>{actions}</View> : null}
+      {stem !== undefined ? <View pointerEvents="none" style={[styles.branchDown, parentStem({ x: stem, inset: styles.row.marginHorizontal, dotFromTop: twoLine ? styles.twoLine.paddingVertical + STATUS_LINE / 2 : null })]} /> : null}
     </View>
   );
 }
 
+
+// The height of the line the status mark sits on (a two-line row's title line).
+const STATUS_LINE = 20;
 
 // The status mark in the same 16px column as project tiles, as Paseo draws it. Running work pulses.
 // `still`: running work drawn by the rows under this one, which pulse instead.
 function StatusMark({ indicator, still = false, shared }: { indicator: Indicator; still?: boolean; shared: Shared }) {
   const pulse = usePulse(indicator === "running" && !still);
   return (
-    <View style={[shared.styles.slot, { height: 20 }]}>
+    <View style={[shared.styles.slot, { height: STATUS_LINE }]}>
       <Animated.View accessibilityLabel={STATUS_TITLES[indicator]} style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: statusColor(shared.props.theme.colors, indicator), opacity: indicator === "done" ? DONE_OPACITY : pulse }} />
     </View>
   );
@@ -378,6 +384,7 @@ function AgentRow({ reference, sub, subs = [], shared }: { reference: AgentRef; 
       <RowShell
         child={!sub}
         grandchild={sub}
+        stem={!sub && listedSubs.size > 0 && !remind.open ? styles.branch.sub.x : undefined}
         selected={props.active.agent?.key === reference.key}
         label={`Open chat ${chat.name}, ${STATUS_TITLES[indicator]}`}
         onPress={() => props.navigation.openAgent(reference)}
@@ -1014,6 +1021,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
           onPress={() => (selecting ? toggleSelected(reference.key) : props.navigation.openWorkspace(reference))}
           onLongPress={() => (selecting ? toggleSelected(reference.key) : setMenu("actions"))}
           onHover={hover}
+          stem={chatsShown && !reminding ? styles.branch.chat.x : undefined}
           showActions={confirmArchive || menu !== null}
           main={main}
           trailing={time}

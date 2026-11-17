@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.38.1 - 2026-11-17
+
+- **Tree lines start at the parent:** the line the chats or sub-agents hang on now starts just under the parent row's dot (a workspace's or a chat's), so it reads as coming out of the parent instead of starting at the first child.
+
 ## 0.38.0 - 2026-11-17
 
 - **Tree lines reach every dot:** in the sidebar view, every chat under a workspace and every sub-agent under a chat now has a short line into its status dot, not only the last one; the last keeps its rounded corner and the line stays unbroken.
