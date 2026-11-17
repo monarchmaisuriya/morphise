@@ -1,7 +1,7 @@
 {
   "name": "morphise",
   "private": true,
-  "version": "0.38.4",
+  "version": "0.38.5",
   "files": [
     "paseo-plugin.json",
     "OVERVIEW.md",

@@ -11,6 +11,7 @@ import {
   moveProject,
   newGroupId,
   onSaved,
+  parseHexColor,
   projectGroupMap,
   projectGroupsSchema,
   type ProjectGroups,
@@ -212,5 +213,23 @@ describe("the colour and icon choices", () => {
     expect(DECOR_ICONS).toHaveLength(36);
     for (const color of DECOR_COLORS) expect(() => setDecoration(twoGroups(), "groups", "gwork", { color: color.value, icon: null })).not.toThrow();
     for (const icon of DECOR_ICONS) expect(() => setDecoration(twoGroups(), "groups", "gwork", { color: null, icon: `lucide:${icon}` })).not.toThrow();
+  });
+});
+
+describe("custom colours", () => {
+  it("accepts six-digit hex with or without # and any case, stored upper case with #", () => {
+    expect(parseHexColor("#8e4ec6")).toBe("#8E4EC6");
+    expect(parseHexColor("8E4EC6")).toBe("#8E4EC6");
+    expect(parseHexColor("  #12a594 ")).toBe("#12A594");
+  });
+
+  it("refuses anything else, so a typo never reaches the shared document", () => {
+    for (const text of ["", "#", "#fff", "#12345", "#1234567", "#GGGGGG", "purple", "rgb(1,2,3)"]) expect(parseHexColor(text)).toBeNull();
+  });
+
+  it("produces colours the stored decoration accepts", () => {
+    const color = parseHexColor("abcdef");
+    expect(color).not.toBeNull();
+    expect(() => setDecoration(twoGroups(), "projects", "prj_1", { color, icon: null })).not.toThrow();
   });
 });

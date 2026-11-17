@@ -657,12 +657,14 @@ function ReminderRow({ entry, chat, shared }: { entry: AlertEntry; chat: AgentRe
 }
 
 // A small icon and text on a row's second line or in the hover card.
-function Meta({ icon, text, color, shared }: { icon?: string; text: string; color?: string; shared: Shared }) {
-  const muted = shared.props.theme.colors.foregroundMuted;
+// `color` tints the icon and text; `fill` instead tints the tag's background and keeps both in the normal text colour.
+function Meta({ icon, text, color, fill, shared }: { icon?: string; text: string; color?: string; fill?: string; shared: Shared }) {
+  const { foreground, foregroundMuted: muted } = shared.props.theme.colors;
+  const tone = fill ? foreground : color;
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 3, flexShrink: 1, minWidth: 0 }}>
-      {icon ? <Icon name={icon} size={11} color={color ?? muted} /> : null}
-      <Text style={[shared.styles.meta, color ? { color } : null]} numberOfLines={1}>
+    <View style={[{ flexDirection: "row", alignItems: "center", gap: 3, flexShrink: 1, minWidth: 0 }, fill ? { backgroundColor: `${fill}38`, paddingHorizontal: 5, borderRadius: 4 } : null]}>
+      {icon ? <Icon name={icon} size={11} color={tone ?? muted} /> : null}
+      <Text style={[shared.styles.meta, tone ? { color: tone } : null]} numberOfLines={1}>
         {text}
       </Text>
     </View>
@@ -823,6 +825,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
     indicator: item.indicator,
     branch: item.branch,
     project: item.projectDisplayName,
+    projectKey: item.project.key,
     diff: item.diffStat,
     since: item.statusEnteredAt,
     // A workspace never prompted shows the time it was created, as Paseo's list does.
@@ -951,7 +954,9 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   const branchColor = info?.dirty ? c.statusWarning : undefined;
   if (branchShown) details.push(<Meta key="branch" icon="GitBranch" color={branchColor} text={workspace.branch ?? ""} shared={shared} />);
   if (shows.branch && info && (info.ahead || info.behind)) details.push(<AheadBehind key="sync" ahead={info.ahead ?? 0} behind={info.behind ?? 0} shared={shared} />);
-  if (shows.project && config.groupBy !== "project") details.push(<Meta key="project" icon="Folder" color={tileColor(workspace.project)} text={workspace.project} shared={shared} />);
+  // The project tag is filled with the project's chosen colour, or its automatic one; its text keeps the normal colour.
+  const projectFill = shared.groups.doc.decorations.projects[workspace.projectKey]?.color ?? tileColor(workspace.project);
+  if (shows.project && config.groupBy !== "project") details.push(<Meta key="project" icon="Folder" fill={projectFill} text={workspace.project} shared={shared} />);
   if (shows.host && host && shared.hosts.length > 1) details.push(<Meta key="host" icon="Server" text={host} shared={shared} />);
   if (shows.diff && changes) details.push(<DiffText key="diff" diff={changes} shared={shared} />);
   if (shows.services && info?.services.length) details.push(<ServicesMeta key="services" services={info.services} shared={shared} />);
@@ -1254,8 +1259,13 @@ function UserGroupHeading({ group, index, count, collapsed, onToggle, shared }: 
           onLongPress={groupDrag && TOUCH && id ? () => groupDrag.arm(id) : undefined}
           style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6, minHeight: 28 }}
         >
-          {decor.icon ? <DecorIcon icon={decor.icon} color={decor.color ?? props.theme.colors.foregroundMuted} size={12} /> : null}
-          <Text style={[styles.headingText, decor.color ? { color: decor.color } : null]} numberOfLines={1}>
+          {decor.icon ? (
+            <DecorIcon icon={decor.icon} color={decor.color ?? props.theme.colors.foregroundMuted} size={12} />
+          ) : decor.color ? (
+            // A colour without an icon shows as a small swatch, since the name keeps the normal text colour.
+            <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: decor.color }} />
+          ) : null}
+          <Text style={styles.headingText} numberOfLines={1}>
             {group.title}
           </Text>
           {config.counts ? <Text style={styles.count}>{count}</Text> : null}
@@ -1385,7 +1395,7 @@ function ProjectHeading({ title, first, projectRef = null, count, collapsed, onT
             </View>
           )
         )}
-        <Text style={[styles.projectText, decor.color ? { color: decor.color } : null]} numberOfLines={1}>
+        <Text style={styles.projectText} numberOfLines={1}>
           {title}
         </Text>
         {config.counts && (hovered || collapsed || TOUCH) ? <Text style={styles.count}>{count}</Text> : null}

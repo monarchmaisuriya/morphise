@@ -48,6 +48,12 @@ export const DECOR_COLORS = [
   { value: "#8B8D98", name: "Gray" },
 ] as const;
 
+// "#8e4ec6", "8E4EC6" or "#8E4EC6" as the stored form "#8E4EC6"; null when it is not a six-digit hex colour.
+export function parseHexColor(text: string): string | null {
+  const hex = text.trim().replace(/^#/, "");
+  return /^[0-9A-Fa-f]{6}$/.test(hex) ? `#${hex.toUpperCase()}` : null;
+}
+
 export const DECOR_ICONS = [
   "Folder", "FolderGit2", "Code", "Terminal", "Globe", "Server", "Database", "Smartphone", "Monitor", "Package", "Rocket", "FlaskConical",
   "BookOpen", "FileText", "PenTool", "Palette", "Briefcase", "Building2", "House", "Users", "Heart", "Star", "Zap", "Bot",

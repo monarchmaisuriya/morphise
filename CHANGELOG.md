@@ -2,6 +2,12 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.38.5 - 2026-11-17
+
+- **Any colour:** "Colour and icon" (and a workspace's "Set colour") has a "+" swatch after the presets: type a hex code such as #2BB3C0 and press Enter, or, on desktop and web, pick from the colour wheel (it saves when the wheel closes). Anything that isn't a six-digit hex code is refused with a note.
+- **Project tag follows the project's colour:** the small folder tag on workspace rows is now filled with the project's chosen colour (or its automatic colour when none is chosen), with its text in the normal colour.
+- **Colour as background, not text:** project and group names keep the normal text colour; the colour shows on the letter tile, the tag, the icon, or, for a group with a colour but no icon, a small swatch.
+
 ## 0.38.4 - 2026-11-17
 
 - **Search-first sidebar header:** the Morphise sidebar view's header now starts with a search box that fills the row (no more Search button to open it), with a clear button while you type. The tools follow in groups split by thin dividers: Dispatch and New group, then Filter and Display, then Next. Every button from before is still there, one click away.
