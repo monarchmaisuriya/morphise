@@ -89,9 +89,8 @@ const REMINDERS_GROUP = "reminders";
 // being rebuilt when its options change.
 // Selection mode (bulk actions) lives here too: workspace keys, so it survives a rebuild and each
 // action goes to the workspace's own host.
-const viewUi = createValueStore<{ search: string; searching: boolean; menu: "filter" | "view" | null; expanded: readonly string[]; selecting: boolean; selected: readonly string[] }>({
+const viewUi = createValueStore<{ search: string; menu: "filter" | "view" | null; expanded: readonly string[]; selecting: boolean; selected: readonly string[] }>({
   search: "",
-  searching: false,
   menu: null,
   expanded: [],
   selecting: false,
@@ -118,7 +117,8 @@ function viewStyles(theme: Theme, config: ViewConfig, look: ReturnType<typeof si
   const shift = rowPad - 8;
   return {
     scroll: { flex: 1 },
-    header: { flexDirection: "row" as const, alignItems: "center" as const, justifyContent: "space-between" as const, minHeight: 36, paddingHorizontal: 8, gap: 2 },
+    header: { flexDirection: "row" as const, alignItems: "center" as const, minHeight: 40, paddingHorizontal: 8, gap: 2 },
+    headerDivider: { width: 1, height: 14, marginHorizontal: 4, backgroundColor: c.border },
     tools: { paddingHorizontal: 8, paddingBottom: 6, gap: 6 },
     // More space above a heading than below it: the heading belongs to the rows that follow.
     heading: { flexDirection: "row" as const, alignItems: "center" as const, gap: 6, minHeight: 28, paddingLeft: 16, paddingRight: 12, marginTop: groupGap },
@@ -1445,10 +1445,10 @@ type Menu = "filter" | "view" | null;
 interface HeaderProps {
   menu: Menu;
   setMenu(menu: Menu): void;
-  searching: boolean;
-  setSearching(on: boolean): void;
   search: string;
   onSearch(text: string): void;
+  // What screen readers say for the search box.
+  searchLabel: string;
   filters: number;
   // Opens the next item that needs the user; null when nothing does.
   onNext: (() => void) | null;
@@ -1457,21 +1457,22 @@ interface HeaderProps {
   shared: Shared;
 }
 
-// The view's header: icon buttons for Dispatch, search, filters, new group, view options and Next,
-// spread evenly across the full width with no title. Menus open over the list instead of pushing it down.
-function Header({ menu, setMenu, searching, setSearching, search, onSearch, filters, onNext, headerRef, shared }: HeaderProps) {
+// The view's header, search first: a search box that fills the row, then the tools in groups split
+// by thin dividers: create (Dispatch, New group), view (Filter, Display), and Next on its own.
+// Menus open over the list instead of pushing it down.
+function Header({ menu, setMenu, search, onSearch, searchLabel, filters, onNext, headerRef, shared }: HeaderProps) {
   const { styles, props, t, config } = shared;
-  const showSearch = searching || search !== "";
   const toggle = (next: Exclude<Menu, null>) => setMenu(menu === next ? null : next);
   const openScreen = useValue(screenOpener);
+  const divider = <View style={styles.headerDivider} />;
   return (
     <View ref={headerRef} style={styles.header}>
-      {openScreen ? <IconButton t={t} size="sm" icon={DISPATCH_ICON} label="Dispatch: start several agents in new workspaces" onPress={() => openScreen({ screenId: DISPATCH_SCREEN_ID })} /> : null}
-      <IconButton t={t} size="sm" icon="Search" tone={showSearch ? props.theme.colors.foreground : undefined} label={showSearch ? "Close search" : "Search"} onPress={() => (showSearch ? (onSearch(""), setSearching(false)) : setSearching(true))} />
-      <View>
-        <IconButton t={t} size="sm" icon="ListFilter" tone={filters || menu === "filter" ? props.theme.colors.foreground : undefined} label={filters ? `Filters, ${filters} on` : "Filter"} onPress={() => toggle("filter")} />
-        {filters ? <View pointerEvents="none" style={{ position: "absolute", top: 2, right: 2, width: 6, height: 6, borderRadius: 3, backgroundColor: props.theme.colors.accent }} /> : null}
+      {/* The box takes the space the buttons leave, down to nothing (Field's own `grow` keeps 140). */}
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Field t={t} plain icon="Search" value={search} onChangeText={onSearch} placeholder="Search" accessibilityLabel={searchLabel} />
       </View>
+      {search !== "" ? <IconButton t={t} size="sm" icon="X" label="Clear search" onPress={() => onSearch("")} /> : null}
+      {openScreen ? <IconButton t={t} size="sm" icon={DISPATCH_ICON} label="Dispatch: start several agents in new workspaces" onPress={() => openScreen({ screenId: DISPATCH_SCREEN_ID })} /> : null}
       {config.groupBy === "custom" ? (
         <IconButton
           t={t}
@@ -1485,7 +1486,13 @@ function Header({ menu, setMenu, searching, setSearching, search, onSearch, filt
           }}
         />
       ) : null}
+      {divider}
+      <View>
+        <IconButton t={t} size="sm" icon="ListFilter" tone={filters || menu === "filter" ? props.theme.colors.foreground : undefined} label={filters ? `Filters, ${filters} on` : "Filter"} onPress={() => toggle("filter")} />
+        {filters ? <View pointerEvents="none" style={{ position: "absolute", top: 2, right: 2, width: 6, height: 6, borderRadius: 3, backgroundColor: props.theme.colors.accent }} /> : null}
+      </View>
       <IconButton t={t} size="sm" icon="SlidersHorizontal" tone={menu === "view" ? props.theme.colors.foreground : undefined} label="Display: grouping, sorting, what rows show" onPress={() => toggle("view")} />
+      {divider}
       <IconButton t={t} size="sm" icon="SkipForward" label={onNext ? "Open the next one that needs you" : "Nothing needs you"} disabled={onNext === null} onPress={() => onNext?.()} />
     </View>
   );
@@ -1804,10 +1811,9 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     const styles = useMemo(() => viewStyles(props.theme, config, look), [props.theme, ...Object.values(look)]);
     const ui = useValue(viewUi);
     const setUi = (patch: Partial<typeof ui>) => viewUi.set({ ...viewUi.get(), ...patch });
-    const { search, searching, menu } = ui;
+    const { search, menu } = ui;
     const expanded = new Set(ui.expanded);
     const setSearch = (text: string) => setUi({ search: text });
-    const setSearching = (on: boolean) => setUi({ searching: on });
     const setMenu = (next: Menu) => setUi({ menu: next });
     const setExpanded = (next: ReadonlySet<string>) => setUi({ expanded: [...next] });
     // Project names for the Projects filter, from the same visible workspaces.
@@ -1987,7 +1993,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     const reminderLimit = config.reminderRows ?? DEFAULT_REMINDER_ROWS;
     const shownReminders = expanded.has(REMINDERS_GROUP) ? dueEntries : dueEntries.slice(0, reminderLimit);
 
-    const placeholder = config.list === "chats" ? "Search chats" : "Search name, branch or project";
+    const searchLabel = config.list === "chats" ? "Search chats" : "Search name, branch or project";
     const activeTags = [
       ...(needsMeOn(filter.statuses) ? [{ key: "needs", label: "Needs me", color: props.theme.colors.statusWarning, remove: () => saveState({ statusFilter: [] }) }] : filter.statuses.map((indicator) => ({ key: indicator, label: STATUS_TITLES[indicator], color: statusColor(props.theme.colors, indicator), remove: () => saveState({ statusFilter: state.statusFilter.filter((item) => item !== indicator) }) }))),
       ...(filter.projects ?? []).map((key) => ({ key, label: projects.find((project) => project.key === key)?.title ?? "Project", color: tileColor(projects.find((project) => project.key === key)?.title ?? ""), remove: () => saveState({ projectFilter: state.projectFilter.filter((item) => item !== key) }) })),
@@ -2033,11 +2039,10 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
         <ShowTargets navigation={props.navigation} />
         <PopoverHost bounds={viewRef}>
         {on ? (
-          <Header menu={menu} setMenu={setMenu} searching={searching} setSearching={setSearching} search={search} onSearch={setSearch} filters={filters} onNext={source.onNext} headerRef={headerRef} shared={shared} />
+          <Header menu={menu} setMenu={setMenu} search={search} onSearch={setSearch} searchLabel={searchLabel} filters={filters} onNext={source.onNext} headerRef={headerRef} shared={shared} />
         ) : null}
-        {on && (searching || search !== "" || activeTags.length) ? (
+        {on && activeTags.length ? (
           <View style={styles.tools}>
-            {searching || search !== "" ? <Field t={t} plain autoFocus={searching && search === ""} icon="Search" value={search} onChangeText={setSearch} placeholder={placeholder} accessibilityLabel={placeholder} /> : null}
             {activeTags.length ? (
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4 }}>
                 {activeTags.map((tag) => (

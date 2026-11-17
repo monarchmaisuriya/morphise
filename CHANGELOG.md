@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.38.4 - 2026-11-17
+
+- **Search-first sidebar header:** the Morphise sidebar view's header now starts with a search box that fills the row (no more Search button to open it), with a clear button while you type. The tools follow in groups split by thin dividers: Dispatch and New group, then Filter and Display, then Next. Every button from before is still there, one click away.
+
 ## 0.38.3 - 2026-11-17
 
 - **Lighter branch dots:** in the Morphise sidebar view, the status dots of rows that hang off a tree line (chats under a workspace, sub-agents under a chat) are drawn at 70% of their usual opacity, so they read as lighter than the parent's dot. Colours, the running pulse and the done dimming are unchanged on top of that.
