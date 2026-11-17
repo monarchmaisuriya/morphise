@@ -58,7 +58,9 @@ export function useDraftId(make: () => string = newTaskId): [id: string, next: (
 }
 
 // The full editor for one card: every field, its reminder, checklist, links and actions.
-export function CardEditor({ deps, target, theme, compact, onClose }: { deps: BoardDeps; target: EditorTarget; theme: PluginTheme; compact: boolean; onClose(): void }) {
+// `openWorkspace` opens a workspace in Paseo, or is null where the editor cannot (no navigation); `here` is the
+// workspace the board belongs to, which needs no button.
+export function CardEditor({ deps, target, theme, compact, onClose, openWorkspace = null, here = null }: { deps: BoardDeps; target: EditorTarget; theme: PluginTheme; compact: boolean; onClose(): void; openWorkspace?: ((workspaceId: string) => void) | null; here?: string | null }) {
   const document: TaskDocument = tasksOf(useValue(deps.tasks));
   const task = target.kind === "existing" ? document.tasks.find((item) => item.id === target.taskId) ?? null : null;
   // What the card held when the editor opened. Save sends only the fields changed since, so edits
@@ -99,7 +101,13 @@ export function CardEditor({ deps, target, theme, compact, onClose }: { deps: Bo
   // Labels deleted elsewhere while the editor is open are dropped rather than failing the save.
   const labels = draft.labels.filter((id) => document.labels.some((label) => label.id === id));
 
-  async function save() {
+  // `after` runs once the card is saved and the editor closed: Open workspace saves first, so leaving the Workbench
+  // loses no edit, and a failed save keeps the editor open with its error.
+  async function save(after?: () => void) {
+    const done = () => {
+      onClose();
+      after?.();
+    };
     if (dueProblem) return setError(dueProblem);
     if (reminderProblem) return setError(reminderProblem);
     if (target.kind === "existing" && !task) return setError("This task was deleted in another app; nothing was saved");
@@ -110,7 +118,7 @@ export function CardEditor({ deps, target, theme, compact, onClose }: { deps: Bo
       const read = draft.reminderText.trim() === "" ? null : parseReminder(draft.reminderText, new Date());
       if (read && !read.ok) return setError(read.error);
       const reminder = read ? read.reminder : null;
-      if (await run({ kind: "addTask", task: { id: newId, column: draft.column, title: draft.title.trim(), description: draft.description, priority: draft.priority, labels, due, reminder, links } })) onClose();
+      if (await run({ kind: "addTask", task: { id: newId, column: draft.column, title: draft.title.trim(), description: draft.description, priority: draft.priority, labels, due, reminder, links } })) done();
       return;
     }
     const patch: Partial<Pick<Task, "title" | "description" | "priority" | "labels" | "due">> = {};
@@ -125,7 +133,7 @@ export function CardEditor({ deps, target, theme, compact, onClose }: { deps: Bo
     if (draft.url !== original.url) operations.push({ kind: "setLink", id: task.id, link: "url", value: url || null });
     if (draft.workspaceId !== original.workspaceId) operations.push({ kind: "setLink", id: task.id, link: "workspaceId", value: draft.workspaceId });
     if (draft.column !== original.column) operations.push({ kind: "moveTask", id: task.id, column: draft.column });
-    if (operations.length === 0 || (await run(...operations))) onClose();
+    if (operations.length === 0 || (await run(...operations))) done();
   }
 
   function insertIntoChat() {
@@ -162,6 +170,7 @@ export function CardEditor({ deps, target, theme, compact, onClose }: { deps: Bo
     });
   };
   const checked = task ? task.checklist.filter((item) => item.done).length : 0;
+  const canSave = draft.title.trim() !== "" && !dueProblem && !reminderProblem;
 
   return (
     <Modal title={task ? "Edit task" : "New task"} open onOpenChange={(open) => !open && onClose()}>
@@ -238,7 +247,12 @@ export function CardEditor({ deps, target, theme, compact, onClose }: { deps: Bo
             </PropertyRow>
           ) : null}
           <PropertyRow t={t} icon="FolderGit2" label="Workspace">
-            <WorkspacePicker t={t} workspaces={deps.workspaces} value={draft.workspaceId} onChange={(workspaceId) => set({ workspaceId })} holder={(workspaceId) => workspaceTask(document, workspaceId, task?.id)?.title ?? null} />
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+              <WorkspacePicker t={t} workspaces={deps.workspaces} value={draft.workspaceId} onChange={(workspaceId) => set({ workspaceId })} holder={(workspaceId) => workspaceTask(document, workspaceId, task?.id)?.title ?? null} />
+              {draft.workspaceId && openWorkspace && draft.workspaceId !== here ? (
+                <IconButton t={t} icon="ArrowUpRight" label={task ? "Save and open the workspace" : "Add the task and open the workspace"} disabled={!canSave} onPress={() => void save(() => openWorkspace(draft.workspaceId as string))} />
+              ) : null}
+            </View>
           </PropertyRow>
           <PropertyRow t={t} icon="Link" label="Link">
             <Field t={t} plain value={draft.url} onChangeText={(url) => set({ url })} placeholder="https://…" accessibilityLabel="Web address" />
@@ -274,7 +288,7 @@ export function CardEditor({ deps, target, theme, compact, onClose }: { deps: Bo
           </View>
           <View style={{ flexDirection: "row", gap: 8 }}>
             <Button t={t} label="Cancel" onPress={onClose} />
-            <Button t={t} variant="primary" label={task ? "Save" : "Add task"} accessibilityLabel="Save" disabled={!draft.title.trim() || !!dueProblem || !!reminderProblem} onPress={() => void save()} />
+            <Button t={t} variant="primary" label={task ? "Save" : "Add task"} accessibilityLabel="Save" disabled={!canSave} onPress={() => void save()} />
           </View>
         </View>
         </PopoverHost>

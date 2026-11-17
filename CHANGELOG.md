@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.34.0 - 2026-11-17
+
+- **Open a task's workspace from its editor:** an arrow beside the Workspace field in Edit task saves your edits, then opens that workspace. If the save fails (a due date it cannot read, say), the editor stays open with the error. It is hidden in a workspace's own Tasks panel, where that workspace is already open.
+- **Cleaner chat lines in the sidebar view:** the line chats and sub-agents hang from now shows through the open chat's highlight instead of being hidden by it, and turns into the last row (or Show more) with a rounded corner.
+
 ## 0.33.2 - 2026-11-16
 
 - **Fix: picture thumbnails in Paseo's macOS app.** The app loads only code signed by its own developer, so it refused sharp's native image library and every picture tile was sent as the full image ("sharp unavailable" in the daemon log). Morphise now also installs sharp's WebAssembly build (about 9 MB), which sharp loads on its own when the native one is refused; tiles get small WebP thumbnails again. Other daemons keep the native library.

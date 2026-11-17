@@ -125,10 +125,16 @@ function viewStyles(theme: Theme, config: ViewConfig) {
     line: { flexDirection: "row" as const, alignItems: "center" as const, gap: 6, minHeight: 20 },
     subLine: { flexDirection: "row" as const, alignItems: "center" as const, gap: 8, minHeight: 16, overflow: "hidden" as const },
     meta: { color: c.foregroundMuted, fontSize: 12, flexShrink: 1 },
-    // Chats under a workspace hang off a thin line in the status column.
-    nest: { position: "relative" as const },
-    connector: { position: "absolute" as const, left: 23, top: 0, bottom: 8, width: 1, backgroundColor: c.border },
-    subConnector: { position: "absolute" as const, left: 43, top: 0, bottom: 8, width: 1, backgroundColor: c.border },
+    // Chats hang off a thin line under their workspace's status mark, sub-agents off one under their chat's.
+    branchDown: { position: "absolute" as const, top: 0, bottom: 0, width: 1, backgroundColor: c.border },
+    branchTurn: { position: "absolute" as const, top: 0, borderLeftWidth: 1, borderBottomWidth: 1, borderBottomLeftRadius: 6, borderColor: c.border },
+    // Where each kind of row's line sits: x of the line, x where the row's status slot starts, and the row's middle
+    // (every chat and sub-agent row is at least `height` tall, set by `rowMain`).
+    branch: {
+      chat: { x: 23, to: 32, middle: height / 2 },
+      sub: { x: 39, to: 52, middle: height / 2 },
+      more: 14,
+    },
     slot: { width: 16, alignItems: "center" as const, justifyContent: "center" as const },
     child: { paddingLeft: 24, minHeight: TOUCH ? 40 : 30 },
     // A sub-agent sits one step further in, under its parent chat.
@@ -349,6 +355,18 @@ function AgentRow({ reference, sub, subs = [], shared }: { reference: AgentRef; 
   );
 }
 
+// One row (with what hangs under it) on its parent's line. Drawn after the row, so the open row's highlight never hides
+// the line: straight down past every row but the last, which the line turns into with a rounded corner.
+function Branch({ x, to, middle, last, children, shared }: { x: number; to: number; middle: number; last: boolean; children: ReactNode; shared: Shared }) {
+  const { styles } = shared;
+  return (
+    <View>
+      {children}
+      <View pointerEvents="none" style={last ? [styles.branchTurn, { left: x, width: to - x, height: middle }] : [styles.branchDown, { left: x }]} />
+    </View>
+  );
+}
+
 // A chat's sub-agents, latest first: the first few (5 unless changed), then Show more, or only the
 // open one when the view shows just that. The open sub-agent stays listed past the limit.
 function SubAgents({ parent, subs, shared }: { parent: AgentRef; subs: readonly AgentRef[]; shared: Shared }) {
@@ -360,15 +378,30 @@ function SubAgents({ parent, subs, shared }: { parent: AgentRef; subs: readonly 
   const { rows, hidden } = listedSubAgents(parent.key, subs, shared.listing);
   if (rows.length === 0) return null;
   return (
-    <View style={styles.nest}>
-      <View pointerEvents="none" style={styles.subConnector} />
-      {rows.map((agent) => (
-        <AgentRow key={agent.key} reference={agent} sub shared={shared} />
-      ))}
-      {hidden > 0 ? <MoreRow grandchild icon="ChevronDown" label="Show more" spoken={`Show ${hidden} more sub-agents`} count={hidden} onPress={() => shared.setExpanded(key, true)} shared={shared} /> : null}
-      {!openOnly && expanded && subs.length > limit ? <MoreRow grandchild icon="ChevronUp" label="Show less" spoken="Show fewer sub-agents" onPress={() => shared.setExpanded(key, false)} shared={shared} /> : null}
+    <View>
+      {hangOn(
+        styles.branch.sub,
+        rows.map((agent) => [agent.key, false, <AgentRow reference={agent} sub shared={shared} />]),
+        [
+          hidden > 0 ? ["more", true, <MoreRow grandchild icon="ChevronDown" label="Show more" spoken={`Show ${hidden} more sub-agents`} count={hidden} onPress={() => shared.setExpanded(key, true)} shared={shared} />] : null,
+          !openOnly && expanded && subs.length > limit ? ["less", true, <MoreRow grandchild icon="ChevronUp" label="Show less" spoken="Show fewer sub-agents" onPress={() => shared.setExpanded(key, false)} shared={shared} />] : null,
+        ],
+        shared,
+      )}
     </View>
   );
+}
+
+// Rows and the Show more / Show less rows after them, each on the line; the last one listed takes the turn. A Show
+// row (`true`) is shorter than a chat row, so its turn meets it at its own middle.
+type Hung = readonly [key: string, short: boolean, row: ReactNode];
+function hangOn(place: { x: number; to: number; middle: number }, rows: readonly Hung[], extra: readonly (Hung | null)[], shared: Shared) {
+  const all = [...rows, ...extra.filter((item): item is Hung => item !== null)];
+  return all.map(([key, short, row], index) => (
+    <Branch key={key} x={place.x} to={place.to} middle={short ? shared.styles.branch.more : place.middle} last={index === all.length - 1} shared={shared}>
+      {row}
+    </Branch>
+  ));
 }
 
 // A workspace's chats, latest first: the first few (5 unless changed), then Show more. The chat
@@ -380,13 +413,16 @@ function WorkspaceChats({ workspaceKey, chats, subsOf, openKey, shared }: { work
   const expanded = shared.isExpanded(key);
   const { rows, hidden } = listedTopChats(workspaceKey, chats, shared.listing, openKey);
   return (
-    <View style={styles.nest}>
-      <View pointerEvents="none" style={styles.connector} />
-      {rows.map((chat) => (
-        <AgentRow key={chat.key} reference={chat} subs={shared.config.showSubAgents === false ? [] : subsOf.get(chat.id) ?? []} shared={shared} />
-      ))}
-      {hidden > 0 ? <MoreRow child icon="ChevronDown" label="Show more" spoken={`Show ${hidden} more chats`} count={hidden} onPress={() => shared.setExpanded(key, true)} shared={shared} /> : null}
-      {expanded && chats.length > limit ? <MoreRow child icon="ChevronUp" label="Show less" spoken="Show fewer chats" onPress={() => shared.setExpanded(key, false)} shared={shared} /> : null}
+    <View>
+      {hangOn(
+        styles.branch.chat,
+        rows.map((chat) => [chat.key, false, <AgentRow reference={chat} subs={shared.config.showSubAgents === false ? [] : subsOf.get(chat.id) ?? []} shared={shared} />]),
+        [
+          hidden > 0 ? ["more", true, <MoreRow child icon="ChevronDown" label="Show more" spoken={`Show ${hidden} more chats`} count={hidden} onPress={() => shared.setExpanded(key, true)} shared={shared} />] : null,
+          expanded && chats.length > limit ? ["less", true, <MoreRow child icon="ChevronUp" label="Show less" spoken="Show fewer chats" onPress={() => shared.setExpanded(key, false)} shared={shared} />] : null,
+        ],
+        shared,
+      )}
     </View>
   );
 }

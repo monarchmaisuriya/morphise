@@ -46,7 +46,7 @@ Buttons, rows, commands and controls run one of a small set of actions: open a l
 - **Board:** open "Tasks" in the sidebar, the Tasks panel in a workspace (only that workspace's cards), or "Open tasks" in the Command Center.
   - Columns: name, colour, order, a work in progress limit, and which one is Done, under Customise.
   - Cards: title, description, priority P1 to P4, labels, due date, reminder, checklist, link, workspace, and the chat they belong to ("Insert into chat" puts the card in its message box). Drag a card to move it, to another column or to a new place in its own (with the mouse on a computer, after a long press on a phone); the board scrolls when a card is held near its edge. Screen readers move a card a column at a time from its actions.
-  - Workspaces: pick a card's workspace in its editor, or use "Attach tasks" in a workspace's Tasks panel to bring existing tasks in. The main board shows each card's workspace.
+  - Workspaces: pick a card's workspace in its editor (the arrow beside it saves the card and opens that workspace), or use "Attach tasks" in a workspace's Tasks panel to bring existing tasks in. The main board shows each card's workspace.
   - Quick add: `Fix login p1 @bug #review due:fri tomorrow 9am`. The preview under the box shows what each part became.
   - Filter, and Display (order, rows by priority, label or workspace, card size). Active filters show as removable tags, and a column says how many cards a filter hides.
   - Add a card straight into a column with its plus button: type a title, press Enter, keep going.

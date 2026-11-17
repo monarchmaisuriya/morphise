@@ -228,7 +228,7 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
       ) : view === "board" ? (
         // Today or Archived shows when a link asked for it, or Today when the Workbench opened for what is due; Filter
         // changes it after.
-        <TasksBoard key={`board:${tasksStart}:${openings}`} deps={deps} theme={theme} compact={layout.compact} workspaceId={null} initialTab={tasksStart} openChat={openChat} initialTask={taskToOpen} />
+        <TasksBoard key={`board:${tasksStart}:${openings}`} deps={deps} theme={theme} compact={layout.compact} workspaceId={null} initialTab={tasksStart} openChat={openChat} openWorkspace={navigation ? (workspaceId) => navigation.openWorkspace({ workspaceId }) : null} initialTask={taskToOpen} />
       ) : null;
 
     return (

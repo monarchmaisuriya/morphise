@@ -721,13 +721,15 @@ interface BoardProps {
   workspaceId: string | null;
   initialTab: Tab;
   openChat: ((agentId: string) => void) | null;
+  // Opens a workspace from a card's editor; null where Paseo gives no navigation.
+  openWorkspace: ((workspaceId: string) => void) | null;
   // A task whose editor opens with the board (a reminder row's link); null for none.
   initialTask?: string | null;
 }
 
 export type BoardTab = Tab;
 
-export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, openChat, initialTask = null }: BoardProps) {
+export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, openChat, openWorkspace, initialTask = null }: BoardProps) {
   const { document, now, run, problem, state } = useBoardState(deps);
   const t = useTokens(theme, compact);
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -856,7 +858,7 @@ export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, open
           return task ? <CardView t={t} task={task} document={document} now={now} compact={t.compact || layout.density === "compact"} workspaces={workspaceId === null && layout.swimlanes !== "workspace" ? deps.workspaces : null} onOpen={() => undefined} run={run} lifted /> : null;
         }}
       </DragGhost>
-      {editing ? <CardEditor deps={deps} target={editing} theme={theme} compact={compact} onClose={() => setEditing(null)} /> : null}
+      {editing ? <CardEditor deps={deps} target={editing} theme={theme} compact={compact} onClose={() => setEditing(null)} openWorkspace={openWorkspace} here={workspaceId} /> : null}
       {customising ? <CustomiseBoard deps={deps} theme={theme} compact={compact} onClose={() => setCustomising(false)} /> : null}
     </View>
     </DragProvider>
@@ -865,6 +867,6 @@ export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, open
 
 export function createWorkspaceTasksPanel(deps: BoardDeps) {
   return function WorkspaceTasksPanel({ theme, layout, workspaceId, navigation }: PluginWorkspacePanelProps) {
-    return <TasksBoard deps={deps} theme={theme} compact={layout.compact} workspaceId={workspaceId} initialTab="board" openChat={navigation ? (agentId) => navigation.openAgent({ agentId }) : null} />;
+    return <TasksBoard deps={deps} theme={theme} compact={layout.compact} workspaceId={workspaceId} initialTab="board" openChat={navigation ? (agentId) => navigation.openAgent({ agentId }) : null} openWorkspace={navigation ? (id) => navigation.openWorkspace({ workspaceId: id }) : null} />;
   };
 }
