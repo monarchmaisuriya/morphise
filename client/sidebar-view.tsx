@@ -112,7 +112,7 @@ const toggleSelected = (workspaceKey: string) => {
 function viewStyles(theme: Theme, config: ViewConfig, look: ReturnType<typeof sidebarLook>) {
   const c = theme.colors;
   // "Compact" is Paseo's own 36px row; "comfortable" adds air.
-  const { height, textSize, groupGap, rowPad } = look;
+  const { height, childHeight, textSize, groupGap, rowPad } = look;
   // Rows and their chat lines move in by the indent beyond the usual 8.
   const shift = rowPad - 8;
   return {
@@ -148,16 +148,18 @@ function viewStyles(theme: Theme, config: ViewConfig, look: ReturnType<typeof si
     branchTurn: { position: "absolute" as const, top: 0, borderLeftWidth: 1, borderBottomWidth: 1, borderBottomLeftRadius: 6, borderColor: c.border },
     branchTee: { position: "absolute" as const, height: 1, backgroundColor: c.border },
     // Where each kind of row's line sits: x of the line, x where the row's status slot starts, and the row's middle
-    // (every chat and sub-agent row is at least `height` tall, set by `rowMain`).
+    // (every chat and sub-agent row is `childHeight` tall, set by `child` and `childMain`).
     branch: {
-      chat: { x: 23 + shift, to: 32 + shift, middle: height / 2 },
-      sub: { x: 39 + shift, to: 52 + shift, middle: height / 2 },
+      chat: { x: 23 + shift, to: 32 + shift, middle: childHeight / 2 },
+      sub: { x: 39 + shift, to: 52 + shift, middle: childHeight / 2 },
       more: 14,
     },
     slot: { width: 16, alignItems: "center" as const, justifyContent: "center" as const },
-    child: { paddingLeft: 24 + shift, minHeight: TOUCH ? 40 : 30 },
+    child: { paddingLeft: 24 + shift, minHeight: childHeight },
     // A sub-agent sits one step further in, under its parent chat.
-    grandchild: { paddingLeft: 44 + shift },
+    grandchild: { paddingLeft: 44 + shift, minHeight: childHeight },
+    // The pressable inside a chat or sub-agent row: as tall as the row, not a workspace row's `height`.
+    childMain: { minHeight: childHeight },
     // The open row: the theme's second surface, softened so it does not weigh more than the rows around it.
     selected: { backgroundColor: withAlpha(c.surface2, 0.7) ?? c.surface2 },
     hovered: { backgroundColor: c.surface1 },
@@ -280,7 +282,7 @@ function RowShell({ selected, child, grandchild, twoLine, label, onPress, onLong
   return (
     // A plain View, not a Pressable: on web a Pressable becomes a Tab stop even when told not to.
     <View ref={rowRef} onPointerMove={() => shared.hover.mark(key)} style={[styles.row, child ? styles.child : null, grandchild ? styles.grandchild : null, selected ? styles.selected : hovered ? styles.hovered : null]}>
-      <Pressable accessibilityRole={disabled ? "text" : "button"} accessibilityLabel={label} disabled={disabled} onPress={onPress} onLongPress={onLongPress} style={[styles.rowMain, twoLine ? styles.twoLine : null]} {...contextMenu}>
+      <Pressable accessibilityRole={disabled ? "text" : "button"} accessibilityLabel={label} disabled={disabled} onPress={onPress} onLongPress={onLongPress} style={[styles.rowMain, child || grandchild ? styles.childMain : null, twoLine ? styles.twoLine : null]} {...contextMenu}>
         {main}
         {actionsShown ? null : trailing}
       </Pressable>

@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.38.9 - 2026-11-17
+
+- **Slimmer chat rows in the sidebar:** chats and sub-agents under a workspace are 8 px shorter than the workspace row (28 px at Compact, 32 at Comfortable, 36 at Spacious; 40 on touch screens), so the open chat's highlight hugs its line. They were meant to be shorter already, but their clickable area kept a full row's height. The tree lines still meet each dot.
+
 ## 0.38.8 - 2026-11-17
 
 - **Typed icons take the colour:** text typed as a group's or project's icon (such as "BP") is drawn in the chosen colour, like the built-in icons. Emoji keep their own colours.

@@ -36,10 +36,13 @@ const GROUP_GAP = { none: 0, small: 6, medium: 14, large: 20, xlarge: 28 } as co
 const ROW_PAD = { narrow: 4, normal: 8, wide: 16 } as const;
 
 // The sidebar view's sizes from this device's look and the layout's row height ("density"); touch screens keep rows
-// tall enough for a finger. The defaults give the sidebar as it was before these settings.
+// tall enough for a finger. The defaults give the sidebar as it was before these settings. `childHeight`: the rows that
+// hang off a workspace (chats, sub-agents), 8 shorter than its own row so the tree reads tight; 40 on touch screens.
 export function sidebarLook(look: ViewState, density: "compact" | "comfortable" | "spacious", touch: boolean) {
+  const height = touch ? 44 : density === "compact" ? 36 : density === "comfortable" ? 40 : 44;
   return {
-    height: touch ? 44 : density === "compact" ? 36 : density === "comfortable" ? 40 : 44,
+    height,
+    childHeight: touch ? 40 : height - 8,
     textSize: look.textSize ?? (density === "compact" ? 13 : 14),
     groupGap: GROUP_GAP[look.groupSpacing],
     rowPad: ROW_PAD[look.indent],
