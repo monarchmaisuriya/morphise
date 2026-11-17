@@ -30,6 +30,8 @@ export function tokens(theme: PluginTheme, compact: boolean) {
     control: compact ? 40 : 32,
     row: compact ? 44 : 36,
     radius: { control: 6, row: 8, card: 10, panel: 12 },
+    // The gap between a tab's or panel's edge and its content, the same on every Morphise surface.
+    inset: compact ? 12 : 16,
     space: { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 },
     text: {
       title: { color: c.foreground, fontSize: 20, fontWeight: "600" as const },
@@ -544,6 +546,46 @@ export function SectionLabel({ t, title, trailing }: { t: Tokens; title: string;
     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 28, gap: 8 }}>
       <Text style={t.text.label}>{title}</Text>
       {trailing}
+    </View>
+  );
+}
+
+// A titled card for dashboards (the Workbench's Activity tab, the Stats panel), so both share one spacing: 16 inside,
+// a 12 radius, a hairline border and a title row of 24. `side`: one of several cards in a row, which share its width.
+export function Card({ t, title, icon, right, side = false, children }: { t: Tokens; title?: string; icon?: string; right?: ReactNode; side?: boolean; children: ReactNode }) {
+  return (
+    <View style={{ gap: 12, padding: 16, borderRadius: t.radius.panel, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface0, ...(side ? { flex: 1, minWidth: 0 } : null) }}>
+      {title ? (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, minHeight: 24 }}>
+          {icon ? <Icon name={icon} size={14} color={t.c.foregroundMuted} /> : null}
+          <Text style={[t.text.heading, { flex: 1 }]} numberOfLines={1}>
+            {title}
+          </Text>
+          {right}
+        </View>
+      ) : null}
+      {children}
+    </View>
+  );
+}
+
+// One headline number in a tile: muted label (with an optional badge at its end, such as a change), a large value, and
+// optional lines under it. Tiles sit in a wrapping row with a 12 gap (STAT_ROW_GAP), on every dashboard.
+export const STAT_ROW_GAP = 12;
+export function StatTile({ t, label, value, tone, badge, footer, children }: { t: Tokens; label: string; value: string; tone?: string; badge?: ReactNode; footer?: ReactNode; children?: ReactNode }) {
+  return (
+    <View style={{ flexGrow: 1, flexBasis: 150, minWidth: 0, padding: 14, gap: 6, borderRadius: t.radius.card, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, minHeight: 20 }}>
+        <Text style={[t.text.meta, { flex: 1 }]} numberOfLines={1}>
+          {label}
+        </Text>
+        {badge}
+      </View>
+      <Text style={{ color: tone ?? t.c.foreground, fontSize: 22, fontWeight: "600", fontVariant: ["tabular-nums"] }} numberOfLines={1}>
+        {value}
+      </Text>
+      {children}
+      {footer}
     </View>
   );
 }

@@ -63,7 +63,6 @@ const LANE_STATUS: Record<Lane, Indicator> = { waiting: "needs_input", running: 
 const LANE_ICONS: Record<Lane, string> = { ...Object.fromEntries(LANES.map((lane) => [lane, STATUS_ICONS[LANE_STATUS[lane]]])), archived: "Archive" } as Record<Lane, string>;
 const LANE_GAP = 12;
 const NOTHING_CLEARED: readonly string[] = [];
-const BOARD_PADDING = 12;
 const SORT_TITLES: Record<SortKey, string> = { updated: "Updated", created: "Created", title: "Title", workspace: "Workspace", project: "Project", branch: "Branch", folder: "Folder", context: "Context", duration: "Duration" };
 // A lane draws this many cards, then a button for the next ones.
 const PAGE = 50;
@@ -416,7 +415,7 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
   );
 
   const toolbar = (
-    <View style={{ gap: 8, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 8 }}>
+    <View style={{ gap: 8, paddingHorizontal: t.inset, paddingTop: t.inset, paddingBottom: 12 }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
         <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8, height: t.control, paddingHorizontal: 10, borderRadius: t.radius.control, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1 }}>
           <Icon name="Search" size={14} color={t.c.foregroundMuted} />
@@ -467,7 +466,7 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
 
   const boardWidth = Math.max(0, width - (current && sideDetails ? DETAILS_WIDTH : 0));
   const openLanes = laneList.filter((lane) => !folded(lane));
-  const layout = openLaneWidth({ width: boardWidth, open: openLanes.length, folded: laneList.length - openLanes.length, gap: LANE_GAP, padding: BOARD_PADDING, max: LANE_MAX[settings.board.laneWidth] });
+  const layout = openLaneWidth({ width: boardWidth, open: openLanes.length, folded: laneList.length - openLanes.length, gap: LANE_GAP, padding: t.inset, max: LANE_MAX[settings.board.laneWidth] });
 
   const itemOf = (agent: BoardAgent, as: ViewLayout) => (
     <BoardCard
@@ -569,20 +568,20 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
 
   const board =
     list.status === "loading" ? (
-      <Text style={[t.text.meta, { padding: 16 }]}>Loading agents</Text>
+      <Text style={[t.text.meta, { padding: t.inset }]}>Loading agents</Text>
     ) : list.status === "error" ? (
-      <Text style={[t.text.danger, { padding: 16 }]}>Could not list the agents: {list.error}</Text>
+      <Text style={[t.text.danger, { padding: t.inset }]}>Could not list the agents: {list.error}</Text>
     ) : onBoard.length === 0 ? (
       // Outside the lanes' sideways scroller, so the line wraps at any width.
-      <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 8 }}>
+      <View style={{ flex: 1, paddingHorizontal: t.inset, paddingTop: 8 }}>
         <Text style={t.text.meta}>{settings.board.doneWindow === "all" ? "No agents on this host yet." : "No agents in this window. Older finished agents show with Done and Archived set to Everything in this tab's settings."}</Text>
       </View>
     ) : asList ? (
       listView
     ) : compact ? (
-      <View style={{ flex: 1, paddingHorizontal: 12 }}>{laneView(phoneLane)}</View>
+      <View style={{ flex: 1, paddingHorizontal: t.inset }}>{laneView(phoneLane)}</View>
     ) : (
-      <ScrollView horizontal scrollEnabled={layout.scrolls} style={{ flex: 1 }} contentContainerStyle={{ gap: LANE_GAP, paddingHorizontal: BOARD_PADDING, paddingBottom: 8, flexGrow: 1 }}>
+      <ScrollView horizontal scrollEnabled={layout.scrolls} style={{ flex: 1 }} contentContainerStyle={{ gap: LANE_GAP, paddingHorizontal: t.inset, paddingBottom: 8, flexGrow: 1 }}>
         {laneList.map(laneView)}
       </ScrollView>
     );

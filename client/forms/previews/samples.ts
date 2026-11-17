@@ -56,11 +56,11 @@ export const SAMPLE_PAGE = `<div class="stack" style="gap:16px">
 </div>
 <div class="card" style="padding:16px">
 <b>Slowest routes</b>
-<table style="width:100%;margin-top:8px"><thead><tr><th>Route</th><th>p95</th><th>Calls</th></tr></thead><tbody>
-<tr><td>/api/billing</td><td>412 ms</td><td>18,204</td></tr>
-<tr><td>/api/users</td><td>238 ms</td><td>94,551</td></tr>
-<tr><td>/api/search</td><td>201 ms</td><td>61,032</td></tr>
-<tr><td>/api/session</td><td>96 ms</td><td>402,118</td></tr>
+<table style="width:100%;margin-top:8px"><thead><tr><th>Route</th><th class="num">p95</th><th class="num">Calls</th></tr></thead><tbody>
+<tr><td>/api/billing</td><td class="num">412 ms</td><td class="num">18,204</td></tr>
+<tr><td>/api/users</td><td class="num">238 ms</td><td class="num">94,551</td></tr>
+<tr><td>/api/search</td><td class="num">201 ms</td><td class="num">61,032</td></tr>
+<tr><td>/api/session</td><td class="num">96 ms</td><td class="num">402,118</td></tr>
 </tbody></table>
 </div>
 <div class="row"><button class="primary" id="replay">Replay</button><span class="small muted">Milliseconds, one point per hour. The 14:00 spike is a deploy.</span></div>

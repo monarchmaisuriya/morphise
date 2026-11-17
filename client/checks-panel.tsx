@@ -61,7 +61,7 @@ export function createChecksPanel(deps: ChecksDeps) {
       await composer.focus().catch(() => {});
     };
     return (
-      <ScrollView style={{ flex: 1, backgroundColor: theme.colors.surface0 }} contentContainerStyle={{ padding: layout.compact ? 12 : 16, gap: 12 }}>
+      <ScrollView style={{ flex: 1, backgroundColor: theme.colors.surface0 }} contentContainerStyle={{ padding: t.inset, gap: 12 }}>
         <Pressable accessibilityRole="link" accessibilityLabel={`Open pull request ${pr.number ?? ""} on GitHub`} onPress={() => void openExternalUrl(pr.url)} style={{ gap: 2 }}>
           <Text style={{ color: t.c.foreground, fontSize: 15, fontWeight: "600" }} numberOfLines={2}>
             {pr.number ? `#${pr.number} ` : ""}

@@ -79,7 +79,7 @@ function NotesBody({ agentId, theme, compact }: { agentId: string; theme: Theme;
   const statusIcon = status.kind === "saving" ? "LoaderCircle" : status.kind === "failed" ? "TriangleAlert" : "Check";
 
   return (
-    <View style={{ flex: 1, padding: compact ? 12 : 16, gap: 10, backgroundColor: t.c.surface0 }}>
+    <View style={{ flex: 1, padding: t.inset, gap: 10, backgroundColor: t.c.surface0 }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
         <Icon name="NotebookPen" size={15} color={t.c.foregroundMuted} />
         <Text style={t.text.heading}>Notes</Text>

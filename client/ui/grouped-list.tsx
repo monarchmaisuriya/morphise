@@ -15,7 +15,7 @@ const ACTIONS_MARK = { dataSet: { mxCardActions: "" } } as object;
 // `scroll` goes to the list's scroller (a drag uses it to scroll near the edges and to follow scrolling).
 export function GroupList({ t, children, scroll }: { t: Tokens; children: ReactNode; scroll?: object }) {
   return (
-    <ScrollView {...scroll} style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: t.compact ? 12 : 16, paddingTop: 4, paddingBottom: 24 }}>
+    <ScrollView {...scroll} style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: t.inset, paddingTop: 4, paddingBottom: 24 }}>
       <View style={{ width: "100%", gap: 12 }}>{children}</View>
     </ScrollView>
   );

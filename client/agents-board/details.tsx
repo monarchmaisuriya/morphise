@@ -226,7 +226,7 @@ export function AgentDetails({
   ].filter((row): row is [string, string] => row[1] !== null);
 
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: t.compact ? 12 : 16, gap: 16 }}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: t.inset, gap: 16 }}>
       <View style={{ gap: 8 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
           {onBack ? <IconButton t={t} icon="ArrowLeft" label="Back to the board" onPress={onBack} /> : null}

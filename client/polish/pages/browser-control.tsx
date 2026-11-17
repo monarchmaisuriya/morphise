@@ -1,5 +1,6 @@
 // Ported from Chat Polish (lthieu96/paseo-chat-polish, MIT, see NOTICE.md): client/dashboard/prefs-editor.tsx (HtmlSwitch's browser row)
 import { useRpc } from "@getpaseo/plugin/client";
+import { SettingsRow } from "@getpaseo/plugin/client/ui";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import { browserStatus, installBrowser, removeBrowser, type BrowserStatus } from "../../../shared/polish/html";
@@ -53,9 +54,10 @@ export function BrowserControl({ t }: { t: Tokens }) {
           unsupported: tr("prefs.browser.unsupported"),
         }[status.state];
   const percent = status?.total ? Math.floor(((status.received ?? 0) / status.total) * 100) : undefined;
+  // Paseo's own settings row, so its padding and type match the switches above it; a failure shows as the row's error.
+  const failedText = error ?? (status?.state === "failed" ? hint : null);
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: t.space.md }}>
-      <Text style={[t.text.meta, { flex: 1, color: error || status?.state === "failed" ? t.c.statusDanger : t.c.foregroundMuted }]}>{hint}</Text>
+    <SettingsRow label={tr("prefs.browser.label")} hint={failedText ? undefined : hint} error={failedText}>
       {error ? (
         <Button t={t} icon="RotateCw" label={tr("prefs.button.refresh")} onPress={() => void read({}).then(done, failed)} />
       ) : status?.state === "downloading" ? (
@@ -73,6 +75,6 @@ export function BrowserControl({ t }: { t: Tokens }) {
           onPress={() => void install({}).then(done, failed)}
         />
       ) : null}
-    </View>
+    </SettingsRow>
   );
 }

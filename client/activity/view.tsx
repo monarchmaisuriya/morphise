@@ -5,13 +5,13 @@
 // client/global-surface.tsx, client/ranking-bars.tsx and client/workspace/terminals-section.tsx at 83a1c90.
 import type { PluginTheme } from "@getpaseo/plugin";
 import type { PluginClientContext } from "@getpaseo/plugin/client";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { ACTIVITY_METRICS, type ActivityMetric, type ActivitySummary, activitySummary } from "../../shared/activity";
 import { BLUE, PURPLE, tileColor, withAlpha } from "../ui/hues";
 import { WorkspacePicker } from "../board/workspace-picker";
 import type { ValueStore } from "../profile-store";
-import { Button, Icon, PopoverHost, Segmented, Select, type Tokens, useTokens } from "../ui/kit";
+import { Button, Card, Icon, PopoverHost, Segmented, Select, STAT_ROW_GAP, StatTile, type Tokens, useTokens } from "../ui/kit";
 import type { WorkspaceList } from "../workspaces";
 import { Terminals } from "./terminals";
 
@@ -66,22 +66,6 @@ const hourLabel = (utcMs: number) => {
 };
 const dayDate = (day: string) => new Date(`${day}T00:00:00Z`);
 
-// `side`: one of two cards side by side, which share the row's width.
-function Card({ t, title, icon, right, side = false, children }: { t: Tokens; title: string; icon: string; right?: ReactNode; side?: boolean; children: ReactNode }) {
-  return (
-    <View style={{ gap: 10, padding: 14, borderRadius: t.radius.card, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface0, ...(side ? { flex: 1, minWidth: 0 } : null) }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, minHeight: 24 }}>
-        <Icon name={icon} size={14} color={t.c.foregroundMuted} />
-        <Text style={[t.text.heading, { flex: 1 }]} numberOfLines={1}>
-          {title}
-        </Text>
-        {right}
-      </View>
-      {children}
-    </View>
-  );
-}
-
 function MetricPicker({ t, value, onChange, label }: { t: Tokens; value: ActivityMetric; onChange(value: ActivityMetric): void; label: string }) {
   return <Segmented t={t} label={label} value={value} onChange={onChange} options={ACTIVITY_METRICS.map((metric) => ({ value: metric, label: METRIC_LABELS[metric] }))} />;
 }
@@ -100,31 +84,32 @@ function MiniBars({ t, values, color }: { t: Tokens; values: readonly number[]; 
 
 function Kpis({ t, summary }: { t: Tokens; summary: ActivitySummary }) {
   return (
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: STAT_ROW_GAP }}>
       {summary.kpis.map((kpi) => {
         const tone = kpi.change === null || kpi.change === 0 ? t.c.foregroundMuted : kpi.change > 0 ? t.c.statusSuccess : t.c.statusDanger;
-        return (
-          <View key={kpi.label} style={{ flexGrow: 1, flexBasis: 180, padding: 14, gap: 8, borderRadius: t.radius.card, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <Text style={[t.text.meta, { flex: 1 }]} numberOfLines={1}>
-                {kpi.label}
-              </Text>
-              {kpi.change !== null ? (
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: 6, height: 20, borderRadius: 10, backgroundColor: withAlpha(tone, 0.14) ?? t.c.surface2 }}>
-                  <Icon name={kpi.change > 0 ? "TrendingUp" : kpi.change < 0 ? "TrendingDown" : "Minus"} size={11} color={tone} />
-                  <Text style={[t.text.small, { color: tone, fontVariant: ["tabular-nums"] }]}>{`${kpi.change > 0 ? "+" : ""}${kpi.change}%`}</Text>
-                </View>
-              ) : null}
+        const badge =
+          kpi.change !== null ? (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: 6, height: 20, borderRadius: 10, backgroundColor: withAlpha(tone, 0.14) ?? t.c.surface2 }}>
+              <Icon name={kpi.change > 0 ? "TrendingUp" : kpi.change < 0 ? "TrendingDown" : "Minus"} size={11} color={tone} />
+              <Text style={[t.text.small, { color: tone, fontVariant: ["tabular-nums"] }]}>{`${kpi.change > 0 ? "+" : ""}${kpi.change}%`}</Text>
             </View>
-            <Text style={{ color: t.c.foreground, fontSize: 24, fontWeight: "600", fontVariant: ["tabular-nums"] }} numberOfLines={1}>
-              {kpi.value}
-            </Text>
+          ) : null;
+        return (
+          <StatTile
+            key={kpi.label}
+            t={t}
+            label={kpi.label}
+            value={kpi.value}
+            badge={badge}
+            footer={
+              <Text style={t.text.small} numberOfLines={1}>
+                {kpi.trend ? "Last 14 days" : kpi.detail ? `${kpi.detail} of the last 7 days` : ""}
+                {kpi.change !== null ? " · vs the week before" : ""}
+              </Text>
+            }
+          >
             {kpi.trend ? <MiniBars t={t} values={kpi.trend} color={BLUE} /> : null}
-            <Text style={t.text.small} numberOfLines={1}>
-              {kpi.trend ? "Last 14 days" : kpi.detail ? `${kpi.detail} of the last 7 days` : ""}
-              {kpi.change !== null ? " · vs the week before" : ""}
-            </Text>
-          </View>
+          </StatTile>
         );
       })}
     </View>
@@ -382,19 +367,20 @@ export function ActivityView({ client, theme, compact, workspaces }: { client: P
   const [width, setWidth] = useState(0);
   const load = useActivity(client, provider === ALL ? null : provider, workspaceId, attempt);
   const summary = load.status === "ready" ? load.summary : null;
-  const providerOptions = [{ value: ALL, label: "All providers" }, ...(summary?.providers ?? (provider === ALL ? [] : [provider])).map((name) => ({ value: name, label: name }))];
+  const providerOptions = [{ value: ALL, label: "All providers", icon: "Cpu" }, ...(summary?.providers ?? (provider === ALL ? [] : [provider])).map((name) => ({ value: name, label: name, icon: "Cpu" }))];
   const wide = width >= WIDE;
   const indexing = summary ? summary.indexing.done + summary.indexing.errors < summary.indexing.total : false;
 
   return (
     <PopoverHost>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: compact ? 12 : 20, gap: 12 }} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: t.inset, gap: 12 }} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
         <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
-          <View style={{ width: compact ? "100%" : 200 }}>
+          {/* Both filters size to their content, side by side; the indexing note sits at the far end. */}
+          <View>
             <Select t={t} label="Provider" value={provider} options={providerOptions} onChange={setProvider} />
           </View>
           <View style={{ maxWidth: compact ? "100%" : 360 }}>
-            <WorkspacePicker t={t} workspaces={workspaces} value={workspaceId} onChange={setWorkspaceId} none={{ label: "All workspaces", icon: "Layers" }} includeClosed width={compact ? 320 : 440} />
+            <WorkspacePicker t={t} workspaces={workspaces} value={workspaceId} onChange={setWorkspaceId} none={{ label: "All workspaces", icon: "Layers", choice: true }} includeClosed width={compact ? 320 : 440} />
           </View>
           <View style={{ flex: 1 }} />
           {load.status === "ready" && load.stale ? (

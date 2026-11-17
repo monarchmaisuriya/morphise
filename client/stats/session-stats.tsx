@@ -13,7 +13,7 @@ import { formatElapsed } from "../../shared/time-text";
 import { type Chats, chatForWorkspace } from "../chats";
 import { createValueStore, type ValueStore, useValue } from "../profile-store";
 import { createStatsCache } from "./cache";
-import { Button, Icon, Tag, type Tokens, useTokens } from "../ui/kit";
+import { Button, Card, Icon, STAT_ROW_GAP, StatTile, Tag, type Tokens, useTokens } from "../ui/kit";
 
 export const STATS_PANEL_ID = "stats";
 const REFRESH_MS = 2000;
@@ -103,31 +103,42 @@ const PANEL_WIDE = 760;
 
 // Skills and MCP tools together, most used first: name (with "skill" for skills), a bar by count, failures, when
 // last used, and the count.
-function UseList({ t, tools, shown = USES_SHOWN }: { t: Tokens; tools: ChatTools; shown?: number }) {
+// `columns`: 2 lays the rows out in two columns (the wide Stats panel).
+function UseList({ t, tools, shown = USES_SHOWN, columns = 1 }: { t: Tokens; tools: ChatTools; shown?: number; columns?: 1 | 2 }) {
   const [all, setAll] = useState(false);
   const uses = rankedUses(tools);
   if (!uses.length) return <Text style={[t.text.small, { color: t.c.foregroundMuted }]}>No skills or MCP tools used in this chat.</Text>;
   const max = Math.max(...uses.map((use) => use.count));
   const now = new Date();
+  const visible = all ? uses : uses.slice(0, shown);
+  const half = Math.ceil(visible.length / 2);
+  const groups = columns === 2 && visible.length > 3 ? [visible.slice(0, half), visible.slice(half)] : [visible];
+  const row = (use: (typeof uses)[number]) => {
+    const ago = formatElapsed(new Date(use.lastAt).toISOString(), now);
+    return (
+      <View key={`${use.kind}:${use.name}`} accessibilityLabel={`${use.name}, ${use.kind === "skill" ? "skill" : "MCP tool"}, used ${use.count} times`} style={{ flexDirection: "row", alignItems: "center", gap: 8, minHeight: 22 }}>
+        <Text style={[t.text.body, { flex: 1 }]} numberOfLines={1} ellipsizeMode="middle">
+          {use.name}
+          {use.kind === "skill" ? <Text style={[t.text.small, { color: t.c.foregroundMuted }]}>  skill</Text> : null}
+        </Text>
+        {use.failures ? <Text style={[t.text.small, { color: t.c.statusDanger }]}>{use.failures} failed</Text> : null}
+        <Text style={[t.text.small, { color: t.c.foregroundMuted, fontVariant: ["tabular-nums"] }]}>{ago ? (ago === "now" ? "now" : ago) : ""}</Text>
+        <View style={{ width: 56, height: 4, borderRadius: 2, backgroundColor: t.c.surface2 }}>
+          <View style={{ width: `${(use.count / max) * 100}%`, minWidth: 3, height: 4, borderRadius: 2, backgroundColor: PURPLE }} />
+        </View>
+        <Text style={[t.text.body, { minWidth: 28, textAlign: "right", fontVariant: ["tabular-nums"] }]}>{use.count}</Text>
+      </View>
+    );
+  };
   return (
     <View style={{ gap: 6 }}>
-      {(all ? uses : uses.slice(0, shown)).map((use) => {
-        const ago = formatElapsed(new Date(use.lastAt).toISOString(), now);
-        return (
-          <View key={`${use.kind}:${use.name}`} accessibilityLabel={`${use.name}, ${use.kind === "skill" ? "skill" : "MCP tool"}, used ${use.count} times`} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <Text style={[t.text.body, { flex: 1 }]} numberOfLines={1} ellipsizeMode="middle">
-              {use.name}
-              {use.kind === "skill" ? <Text style={[t.text.small, { color: t.c.foregroundMuted }]}>  skill</Text> : null}
-            </Text>
-            {use.failures ? <Text style={[t.text.small, { color: t.c.statusDanger }]}>{use.failures} failed</Text> : null}
-            <Text style={[t.text.small, { color: t.c.foregroundMuted, fontVariant: ["tabular-nums"] }]}>{ago ? (ago === "now" ? "now" : ago) : ""}</Text>
-            <View style={{ width: 56, height: 4, borderRadius: 2, backgroundColor: t.c.surface2 }}>
-              <View style={{ width: `${(use.count / max) * 100}%`, minWidth: 3, height: 4, borderRadius: 2, backgroundColor: PURPLE }} />
-            </View>
-            <Text style={[t.text.body, { minWidth: 28, textAlign: "right", fontVariant: ["tabular-nums"] }]}>{use.count}</Text>
+      <View style={{ flexDirection: "row", gap: 24 }}>
+        {groups.map((group, index) => (
+          <View key={index} style={{ flex: 1, minWidth: 0, gap: 6 }}>
+            {group.map(row)}
           </View>
-        );
-      })}
+        ))}
+      </View>
       {uses.length > shown ? <Button t={t} variant="ghost" label={all ? "Show less" : `Show ${uses.length - shown} more`} onPress={() => setAll(!all)} /> : null}
     </View>
   );
@@ -136,7 +147,7 @@ function UseList({ t, tools, shown = USES_SHOWN }: { t: Tokens; tools: ChatTools
 // A chat's readings, summary first (after the design picked on 2026-11-17): total tokens and cache hit, a bar of where
 // the tokens went, the turn numbers, model time against tool time, the tool counts, and the skills and MCP tools
 // used; or why there is no reading.
-// `wide` (the Stats panel with room): summary and pace in one card, tools in a second beside it.
+// `wide` (the Stats panel with room): a dashboard of headline tiles and cards (see below).
 export function StatsTiles({ t, result, wide = false }: { t: Tokens; result: StatsReadResult | null; wide?: boolean }) {
   if (!result) return <Text style={t.text.small}>Reading the chat's log…</Text>;
   if (result.status === "error") return <Text style={[t.text.small, { color: t.c.statusDanger }]}>This chat's log could not be read: {result.error}</Text>;
@@ -214,17 +225,70 @@ export function StatsTiles({ t, result, wide = false }: { t: Tokens; result: Sta
   );
   const partial = result.partial ? <Text style={t.text.small}>Still reading a long log; the numbers grow as it goes.</Text> : null;
   if (wide) {
-    const card = { flex: 1, minWidth: 0, gap: 16, padding: 16, borderRadius: 12, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface0 } as const;
+    // The panel as a dashboard: the headline numbers in a row, where the tokens and the time went side by side (the
+    // same height), then every tool count and the skills and MCP tools used across the full width.
+    const legend = (
+      <View style={{ gap: 8 }}>
+        {parts.map((part) => (
+          <View key={part.key} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: partColor[part.key] }} />
+            <Text style={[t.text.body, { flex: 1, color: t.c.foregroundMuted }]}>{part.label}</Text>
+            <Text style={[t.text.small, { fontVariant: ["tabular-nums"] }]}>{`${Math.round(part.share * 1000) / 10}%`}</Text>
+            <Text style={[t.text.body, { minWidth: 64, textAlign: "right", fontWeight: "600", fontVariant: ["tabular-nums"] }]}>{formatTokens(part.tokens)}</Text>
+          </View>
+        ))}
+      </View>
+    );
+    const timeRow = (label: string, ms: number, share: number, color: string) => (
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: color }} />
+        <Text style={[t.text.body, { flex: 1, color: t.c.foregroundMuted }]}>{label}</Text>
+        <Text style={[t.text.small, { fontVariant: ["tabular-nums"] }]}>{`${Math.round(share * 100)}%`}</Text>
+        <Text style={[t.text.body, { minWidth: 64, textAlign: "right", fontWeight: "600", fontVariant: ["tabular-nums"] }]}>{formatDuration(ms)}</Text>
+      </View>
+    );
+    const toolColor = withAlpha(t.c.foregroundMuted, 0.45) ?? t.c.foregroundMuted;
     return (
       <View style={{ gap: 12 }}>
-        <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
-          <View style={card}>
-            {summary}
-            <Divider t={t} />
-            {pace}
-          </View>
-          <View style={card}>{toolsPart}</View>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: STAT_ROW_GAP }}>
+          <StatTile t={t} label="Total tokens" value={formatTokens(totalTokens(stats))} />
+          <StatTile t={t} label="Cache hit" value={formatShare(hit)} tone={hitTone} />
+          <StatTile t={t} label="Turns" value={String(stats.turns)} />
+          <StatTile t={t} label="Model steps" value={String(stats.steps)} />
+          <StatTile t={t} label="First token" value={formatDuration(timeToFirstToken(stats))} />
+          <StatTile t={t} label="Output speed" value={formatSpeed(outputSpeed(stats))} />
         </View>
+        <View style={{ flexDirection: "row", gap: 12, alignItems: "stretch" }}>
+          <Card t={t} title="Where the tokens went" icon="Database" side>
+            <StackedBar t={t} height={10} label={parts.map((part) => `${part.label} ${formatTokens(part.tokens)}`).join(", ")} parts={parts.map((part) => ({ share: part.share, color: partColor[part.key] }))} />
+            {legend}
+          </Card>
+          <Card t={t} title="Where the time went" icon="Clock" side>
+            {split ? (
+              <>
+                <StackedBar t={t} height={10} label={`Model time ${formatDuration(stats.modelMs)}, tool time ${formatDuration(stats.toolMs)}`} parts={[{ share: split.modelShare, color: BLUE }, { share: 1 - split.modelShare, color: toolColor }]} />
+                <View style={{ gap: 8 }}>
+                  {timeRow("Model", stats.modelMs, split.modelShare, BLUE)}
+                  {timeRow("Tools", stats.toolMs, 1 - split.modelShare, toolColor)}
+                </View>
+              </>
+            ) : (
+              <Text style={t.text.small}>No timings in this chat's log yet.</Text>
+            )}
+          </Card>
+        </View>
+        <Card t={t} title="Tools" icon="Wrench">
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+            {chips.map(([label, value, alert]) => (
+              <View key={label} style={{ flexDirection: "row", alignItems: "center", gap: 5, height: 26, paddingHorizontal: 10, borderRadius: 6, backgroundColor: t.c.surface1 }}>
+                <Text style={[t.text.small, { color: t.c.foregroundMuted }]}>{label}</Text>
+                <Text style={[t.text.small, { color: t.c.foreground, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>{value}</Text>
+                {alert ? <Text style={[t.text.small, { color: t.c.statusDanger }]}>{alert}</Text> : null}
+              </View>
+            ))}
+          </View>
+          <UseList t={t} tools={tools} shown={20} columns={2} />
+        </Card>
         {partial}
       </View>
     );
@@ -300,10 +364,10 @@ export function createStatsPanel(read: StatsReader) {
     const result = useSessionStats(read, props.params.agentId);
     const [width, setWidth] = useState(0);
     return (
-      <View style={{ padding: 16, gap: 12, width: "100%", maxWidth: 1100 }} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: t.inset, gap: 12, width: "100%", maxWidth: 1400 }} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
         <StatsTiles t={t} result={result} wide={!props.layout.compact && width >= PANEL_WIDE} />
         <Text style={[t.text.small, { color: t.c.foregroundMuted }]}>From the chat's own log on the daemon's computer; times come from its timestamps, so they are estimates.</Text>
-      </View>
+      </ScrollView>
     );
   };
 }

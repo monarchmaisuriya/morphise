@@ -13,8 +13,9 @@ export function useWorkspaceName(workspaces: ValueStore<WorkspaceList>, workspac
 // Picks a workspace, or none: a value button that opens a searchable list of workspaces, most recently used first,
 // each with its project. For a task: open workspaces, and one another task holds (`holder` gives that task's title)
 // shows it and cannot be picked. `none` names the no-workspace choice ("All workspaces" for a filter);
-// `includeClosed` lists archived workspaces too.
-export function WorkspacePicker({ t, workspaces, value, onChange, holder = () => null, none = { label: "No workspace", icon: "CircleSlash" }, includeClosed = false, width = 360 }: { t: Tokens; workspaces: ValueStore<WorkspaceList>; value: string | null; onChange(workspaceId: string | null): void; holder?(workspaceId: string): string | null; none?: { label: string; icon: string }; includeClosed?: boolean; width?: number }) {
+// `includeClosed` lists archived workspaces too. `none.choice`: the no-workspace option is a real choice (a filter's "All"),
+// drawn like a picked value.
+export function WorkspacePicker({ t, workspaces, value, onChange, holder = () => null, none = { label: "No workspace", icon: "CircleSlash" }, includeClosed = false, width = 360 }: { t: Tokens; workspaces: ValueStore<WorkspaceList>; value: string | null; onChange(workspaceId: string | null): void; holder?(workspaceId: string): string | null; none?: { label: string; icon: string; choice?: boolean }; includeClosed?: boolean; width?: number }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const anchor = useRef<View>(null);
@@ -39,8 +40,10 @@ export function WorkspacePicker({ t, workspaces, value, onChange, holder = () =>
         onPress={() => (open ? close() : setOpen(true))}
         style={{ alignSelf: "flex-start", maxWidth: "100%", height: t.control, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 8, borderRadius: t.radius.control, borderWidth: 1, borderColor: open ? t.c.accent : t.c.border, backgroundColor: t.c.surface1 }}
       >
-        <Icon name="FolderGit2" size={14} color={value ? t.c.foreground : t.c.foregroundMuted} />
-        <Text style={{ color: value ? t.c.foreground : t.c.foregroundMuted, fontSize: 13, flexShrink: 1 }} numberOfLines={1}>
+        {/* Drawn as Select's trigger draws: a muted icon, and the label in the text colour once it names a choice (a workspace,
+            or a none that is a real choice such as "All workspaces"). */}
+        <Icon name="FolderGit2" size={14} color={t.c.foregroundMuted} />
+        <Text style={{ color: value || none.choice ? t.c.foreground : t.c.foregroundMuted, fontSize: 13, flexShrink: 1 }} numberOfLines={1}>
           {label}
         </Text>
         <Icon name={open ? "ChevronUp" : "ChevronDown"} size={14} color={t.c.foregroundMuted} />

@@ -2,6 +2,13 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.37.2 - 2026-11-17
+
+- **One spacing everywhere:** the Activity, Agents, Tasks and Bookmarks tabs, the Stats panel, the Checks and Notes panels and agent details all keep the same gap from their edges (16 px, 12 px on phones), so their content lines up when you switch between them.
+- **Stats panel:** a row of number tiles, then where the tokens went and where the time went side by side, then a full-width Tools card with its list in two columns; no more empty space on wide windows.
+- **Activity tab:** the number tiles match the Stats panel's; the provider and workspace filters size to their text and line up; "All workspaces" reads as a choice like "All providers".
+- **Settings:** the Pages tab's browser row and the Credits rows are padded like every other settings row; the sample table's numbers are right-aligned.
+
 ## 0.37.1 - 2026-11-17
 
 - **Fix:** Settings, Pages failed with "Plugin state hooks must run inside a plugin host". The page preview there drew the chat's page row, which since 0.37.0 looked up the chat's workspace with a hook Settings can't run; only the chat's own row looks it up now.

@@ -758,7 +758,7 @@ export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, open
   const compactRows = layout.density === "compact";
   // Today or Archived counts as one filter: Filter is where they are picked.
   const filters = tab === "board" ? activeFilterCount(layout.filter) : 1;
-  const pad = compact ? 12 : 16;
+  const pad = t.inset;
   const shownIn = (column: string) => columns.find((entry) => entry.column.id === column)?.lanes.flatMap((lane) => lane.tasks.map((task) => task.id)) ?? [];
   const manual = effective.sort === "manual";
   const drag = useBoardDrag(

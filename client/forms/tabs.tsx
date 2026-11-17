@@ -3,7 +3,7 @@ import { statsSettings } from "../../shared/stats";
 import { activitySettings } from "../../shared/activity";
 import { groupOrderSettings } from "../../shared/project-groups";
 import { showEnabled, showSettings } from "../../shared/show";
-import { SettingsAction, SettingsCard, SettingsSection, TextInput } from "@getpaseo/plugin/client/ui";
+import { SettingsAction, SettingsCard, SettingsRow, SettingsSection, TextInput } from "@getpaseo/plugin/client/ui";
 import { type ReactNode, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { AgentTimelineItem, ToolCallItem } from "../polish/agent-types";
@@ -899,18 +899,14 @@ const CREDITS: readonly { name: string; author: string; uses: string }[] = [
   { name: "Activity", author: "koinzhang", uses: "the Activity tab and the Tools counts in Stats" },
 ];
 
-function CreditsSection({ form }: { form: Form }) {
-  const c = form.theme.colors;
+// One row per plugin, as Paseo draws its settings rows, so the card's padding matches every other card.
+function CreditsSection(_props: { form: Form }) {
   return (
     <SettingsSection title="Credits" info="Morphise includes code from these MIT-licensed Paseo plugins. Their licences are in NOTICE.md in Morphise's repository.">
       <SettingsCard>
-        <View style={{ padding: 12, gap: 6 }}>
-          {CREDITS.map((credit) => (
-            <Text key={credit.name} style={{ color: c.foregroundMuted, fontSize: 13 }}>
-              <Text style={{ color: c.foreground, fontWeight: "600" }}>{credit.name}</Text> by {credit.author}: {credit.uses}.
-            </Text>
-          ))}
-        </View>
+        {CREDITS.map((credit) => (
+          <SettingsRow key={credit.name} label={credit.name} hint={`By ${credit.author}: ${credit.uses}.`} />
+        ))}
       </SettingsCard>
     </SettingsSection>
   );
