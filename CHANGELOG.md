@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.38.6 - 2026-11-17
+
+- **Minimal search:** the sidebar header's search has no box until you use it: just the magnifier and "Search", with a light box while you type. The header is back to its 36 px height.
+- **Lighter project tag:** the project tag on workspace rows drops its filled background; its folder icon and name take the project's colour instead (the chosen one, or the automatic one).
+
 ## 0.38.5 - 2026-11-17
 
 - **Any colour:** "Colour and icon" (and a workspace's "Set colour") has a "+" swatch after the presets: type a hex code such as #2BB3C0 and press Enter, or, on desktop and web, pick from the colour wheel (it saves when the wheel closes). Anything that isn't a six-digit hex code is refused with a note.

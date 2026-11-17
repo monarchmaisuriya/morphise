@@ -117,7 +117,7 @@ function viewStyles(theme: Theme, config: ViewConfig, look: ReturnType<typeof si
   const shift = rowPad - 8;
   return {
     scroll: { flex: 1 },
-    header: { flexDirection: "row" as const, alignItems: "center" as const, minHeight: 40, paddingHorizontal: 8, gap: 2 },
+    header: { flexDirection: "row" as const, alignItems: "center" as const, minHeight: 36, paddingHorizontal: 8, gap: 2 },
     headerDivider: { width: 1, height: 14, marginHorizontal: 4, backgroundColor: c.border },
     tools: { paddingHorizontal: 8, paddingBottom: 6, gap: 6 },
     // More space above a heading than below it: the heading belongs to the rows that follow.
@@ -657,14 +657,12 @@ function ReminderRow({ entry, chat, shared }: { entry: AlertEntry; chat: AgentRe
 }
 
 // A small icon and text on a row's second line or in the hover card.
-// `color` tints the icon and text; `fill` instead tints the tag's background and keeps both in the normal text colour.
-function Meta({ icon, text, color, fill, shared }: { icon?: string; text: string; color?: string; fill?: string; shared: Shared }) {
-  const { foreground, foregroundMuted: muted } = shared.props.theme.colors;
-  const tone = fill ? foreground : color;
+function Meta({ icon, text, color, shared }: { icon?: string; text: string; color?: string; shared: Shared }) {
+  const muted = shared.props.theme.colors.foregroundMuted;
   return (
-    <View style={[{ flexDirection: "row", alignItems: "center", gap: 3, flexShrink: 1, minWidth: 0 }, fill ? { backgroundColor: `${fill}38`, paddingHorizontal: 5, borderRadius: 4 } : null]}>
-      {icon ? <Icon name={icon} size={11} color={tone ?? muted} /> : null}
-      <Text style={[shared.styles.meta, tone ? { color: tone } : null]} numberOfLines={1}>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 3, flexShrink: 1, minWidth: 0 }}>
+      {icon ? <Icon name={icon} size={11} color={color ?? muted} /> : null}
+      <Text style={[shared.styles.meta, color ? { color } : null]} numberOfLines={1}>
         {text}
       </Text>
     </View>
@@ -954,9 +952,9 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   const branchColor = info?.dirty ? c.statusWarning : undefined;
   if (branchShown) details.push(<Meta key="branch" icon="GitBranch" color={branchColor} text={workspace.branch ?? ""} shared={shared} />);
   if (shows.branch && info && (info.ahead || info.behind)) details.push(<AheadBehind key="sync" ahead={info.ahead ?? 0} behind={info.behind ?? 0} shared={shared} />);
-  // The project tag is filled with the project's chosen colour, or its automatic one; its text keeps the normal colour.
-  const projectFill = shared.groups.doc.decorations.projects[workspace.projectKey]?.color ?? tileColor(workspace.project);
-  if (shows.project && config.groupBy !== "project") details.push(<Meta key="project" icon="Folder" fill={projectFill} text={workspace.project} shared={shared} />);
+  // The project tag's icon and text take the project's chosen colour, or its automatic one.
+  const projectColor = shared.groups.doc.decorations.projects[workspace.projectKey]?.color ?? tileColor(workspace.project);
+  if (shows.project && config.groupBy !== "project") details.push(<Meta key="project" icon="Folder" color={projectColor} text={workspace.project} shared={shared} />);
   if (shows.host && host && shared.hosts.length > 1) details.push(<Meta key="host" icon="Server" text={host} shared={shared} />);
   if (shows.diff && changes) details.push(<DiffText key="diff" diff={changes} shared={shared} />);
   if (shows.services && info?.services.length) details.push(<ServicesMeta key="services" services={info.services} shared={shared} />);
@@ -1479,7 +1477,7 @@ function Header({ menu, setMenu, search, onSearch, searchLabel, filters, onNext,
     <View ref={headerRef} style={styles.header}>
       {/* The box takes the space the buttons leave, down to nothing (Field's own `grow` keeps 140). */}
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Field t={t} plain icon="Search" value={search} onChangeText={onSearch} placeholder="Search" accessibilityLabel={searchLabel} />
+        <Field t={t} plain bare icon="Search" value={search} onChangeText={onSearch} placeholder="Search" accessibilityLabel={searchLabel} />
       </View>
       {search !== "" ? <IconButton t={t} size="sm" icon="X" label="Clear search" onPress={() => onSearch("")} /> : null}
       {openScreen ? <IconButton t={t} size="sm" icon={DISPATCH_ICON} label="Dispatch: start several agents in new workspaces" onPress={() => openScreen({ screenId: DISPATCH_SCREEN_ID })} /> : null}
