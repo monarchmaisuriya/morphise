@@ -3,7 +3,7 @@
 // daemon (`morphise.stats.read`), which reads the chat's own log; they refresh every 2 s while something on screen
 // shows them. After Harness Stats by kogekiplay (MIT, see NOTICE.md).
 import type { PluginAgentPanelProps, PluginButtonContentProps, PluginButtonIconProps, PluginButtonRegistration, PluginClientContext } from "@getpaseo/plugin/client";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { cacheHitShare, type StatsReadResult, statsRead } from "../../shared/stats";
 import type { ChatTools } from "../../shared/activity";
@@ -89,11 +89,25 @@ function Tiles({ t, rows, columns = 2 }: { t: Tokens; rows: readonly Row[]; colu
   );
 }
 
-function SectionTitle({ t, icon, title }: { t: Tokens; icon: string; title: string }) {
+// `right`: something small at the row's end, such as the cache-hit bar.
+function SectionTitle({ t, icon, title, right }: { t: Tokens; icon: string; title: string; right?: ReactNode }) {
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
       <Icon name={icon} size={13} color={t.c.foregroundMuted} />
-      <Text style={[t.text.small, { color: t.c.foregroundMuted, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.4 }]}>{title}</Text>
+      <Text style={[t.text.small, { flex: 1, color: t.c.foregroundMuted, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.4 }]}>{title}</Text>
+      {right}
+    </View>
+  );
+}
+
+const HIT_BAR_WIDTH = 72;
+
+// The cache hit as a short bar at the end of the Usage title: green from 80%, amber from 50%, else red.
+function CacheHitBar({ t, hit }: { t: Tokens; hit: number }) {
+  const tone = { good: t.c.statusSuccess, fair: t.c.statusWarning, poor: t.c.statusDanger }[cacheHitTone(hit)];
+  return (
+    <View accessibilityLabel={`Cache hit ${Math.round(hit * 100)}%`} style={{ width: HIT_BAR_WIDTH, height: 4, borderRadius: 2, backgroundColor: t.c.surface2, overflow: "hidden" }}>
+      <View style={{ width: `${Math.min(100, hit * 100)}%`, height: 4, backgroundColor: tone }} />
     </View>
   );
 }
@@ -150,12 +164,7 @@ export function StatsTiles({ t, result }: { t: Tokens; result: StatsReadResult |
         <ToolList t={t} tools={result.tools} />
       </View>
       <View style={{ gap: 6 }}>
-        <SectionTitle t={t} icon="Database" title="Usage" />
-        {hit !== null ? (
-          <View accessibilityLabel={`Cache hit ${Math.round(hit * 100)}%`} style={{ height: 3, borderRadius: 1.5, backgroundColor: t.c.surface2, overflow: "hidden" }}>
-            <View style={{ width: `${Math.min(100, hit * 100)}%`, height: 3, backgroundColor: { good: t.c.statusSuccess, fair: t.c.statusWarning, poor: t.c.statusDanger }[cacheHitTone(hit)] }} />
-          </View>
-        ) : null}
+        <SectionTitle t={t} icon="Database" title="Usage" right={hit !== null ? <CacheHitBar t={t} hit={hit} /> : null} />
         <Tiles t={t} rows={usageRows(result.stats)} />
       </View>
       {result.partial ? <Text style={t.text.small}>Still reading a long log; the numbers grow as it goes.</Text> : null}

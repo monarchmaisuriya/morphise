@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.36.2 - 2026-11-17
+
+- **Cache-hit bar:** in the Stats popover and panel it is now a short bar at the end of the Usage title, in line with the tiles below, instead of a full-width line under it. Still green from 80%, amber from 50%, red below.
+
 ## 0.36.1 - 2026-11-17
 
 - **Most recently used group first** (Settings, Sidebar, Your groups; on by default): under Your groups, the group whose workspace you used last goes to the top, ranked by each workspace's last prompt (else its creation), with Ungrouped last. While it is on, Move up, Move down and dragging groups are off; turn it off to order groups yourself (your saved order is kept). Its own setting, so 0.36.0 ignores it.
