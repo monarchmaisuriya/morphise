@@ -49,7 +49,7 @@ import { type PickerDeps, ReminderPicker, type ReminderTarget } from "./reminder
 import { followUpTask, snoozeTime, workspaceTask } from "../shared/task-ops";
 import { type ApplyTaskOperations, type TaskStore, tasksOf } from "./task-store";
 import { Button, Dropdown, Field, Icon, IconButton, MenuItem, PopoverHost, Segmented, Tag, type Tokens, useTokens } from "./ui/kit";
-import { BLUE, DONE_OPACITY, PURPLE, statusColor, tileColor } from "./ui/hues";
+import { BLUE, DONE_OPACITY, PURPLE, statusColor, tileColor, withAlpha } from "./ui/hues";
 import { usePulse } from "./ui/pulse";
 import { StepsCards } from "./steps-card";
 import { DISPATCH_ICON, DISPATCH_SCREEN_ID, screenOpener } from "./dispatch";
@@ -139,7 +139,8 @@ function viewStyles(theme: Theme, config: ViewConfig) {
     child: { paddingLeft: 24, minHeight: TOUCH ? 40 : 30 },
     // A sub-agent sits one step further in, under its parent chat.
     grandchild: { paddingLeft: 44 },
-    selected: { backgroundColor: c.surface2 },
+    // The open row: the theme's second surface, softened so it does not weigh more than the rows around it.
+    selected: { backgroundColor: withAlpha(c.surface2, 0.7) ?? c.surface2 },
     hovered: { backgroundColor: c.surface1 },
     label: { color: c.foreground, fontSize: config.density === "compact" ? 13 : 14, flexShrink: 1 },
     childLabel: { color: c.foregroundMuted, fontSize: 13, flexShrink: 1 },

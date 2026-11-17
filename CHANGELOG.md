@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.34.3 - 2026-11-17
+
+- **Priority flags:** every priority is now the same flag, told apart by its colour (Urgent red, High amber, Medium blue, Low gray), and a task with no priority shows a struck-out gray flag. They replace the signal bars of 0.34.2, on cards, in list rows and in the task editor, whose Priority label is a flag too.
+- **A softer highlight on the open row:** in the sidebar view, the open chat's or workspace's highlight is 70% of the theme's second surface, so it no longer weighs more than the rows around it.
+
 ## 0.34.2 - 2026-11-17
 
 - **Priority icons from one family:** every priority is now a set of signal bars, from empty bars for no priority through Low, Medium and High to full red bars for Urgent (which was a circle with "!"; no priority was a dash). Cards, list rows and the task editor all use them.

@@ -185,7 +185,7 @@ export function CardEditor({ deps, target, theme, compact, onClose, openWorkspac
           <PropertyRow t={t} icon="Columns3" label="Status">
             <Select t={t} label="Status" value={draft.column} onChange={(column) => set({ column })} options={document.columns.map((column) => ({ value: column.id, label: column.name, dot: column.color ?? (column.done ? t.c.statusSuccess : t.c.foregroundMuted) }))} />
           </PropertyRow>
-          <PropertyRow t={t} icon="Signal" label="Priority">
+          <PropertyRow t={t} icon="Flag" label="Priority">
             <Segmented
               t={t}
               label="Priority"
