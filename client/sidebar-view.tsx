@@ -293,13 +293,16 @@ function RowShell({ selected, child, grandchild, twoLine, label, onPress, onLong
 
 // The height of the line the status mark sits on (a two-line row's title line).
 const STATUS_LINE = 20;
+// Dots on rows that hang off a branch (chats, sub-agents) are lighter than their parent's dot.
+const BRANCH_DOT_OPACITY = 0.7;
 
 // The status mark in the same 16px column as project tiles, as Paseo draws it. Running work pulses.
 // `still`: running work drawn by the rows under this one, which pulse instead.
-function StatusMark({ indicator, still = false, shared }: { indicator: Indicator; still?: boolean; shared: Shared }) {
+// `branch`: the row hangs off a tree line; its dot is dimmed on top of the pulse and the done opacity.
+function StatusMark({ indicator, still = false, branch = false, shared }: { indicator: Indicator; still?: boolean; branch?: boolean; shared: Shared }) {
   const pulse = usePulse(indicator === "running" && !still);
   return (
-    <View style={[shared.styles.slot, { height: STATUS_LINE }]}>
+    <View style={[shared.styles.slot, { height: STATUS_LINE, opacity: branch ? BRANCH_DOT_OPACITY : 1 }]}>
       <Animated.View accessibilityLabel={STATUS_TITLES[indicator]} style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: statusColor(shared.props.theme.colors, indicator), opacity: indicator === "done" ? DONE_OPACITY : pulse }} />
     </View>
   );
@@ -391,7 +394,7 @@ function AgentRow({ reference, sub, subs = [], shared }: { reference: AgentRef; 
         showActions={linksTasks(shared, reference.hostId) && shared.chatReminders.has(reference.id)}
         main={
           <>
-            <StatusMark indicator={indicator} still={runningShownBelow(runningSubs, listedSubs)} shared={shared} />
+            <StatusMark indicator={indicator} still={runningShownBelow(runningSubs, listedSubs)} branch shared={shared} />
             <Text style={styles.childLabel} numberOfLines={1}>
               {chat.name}
             </Text>

@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.38.3 - 2026-11-17
+
+- **Lighter branch dots:** in the Morphise sidebar view, the status dots of rows that hang off a tree line (chats under a workspace, sub-agents under a chat) are drawn at 70% of their usual opacity, so they read as lighter than the parent's dot. Colours, the running pulse and the done dimming are unchanged on top of that.
+
 ## 0.38.2 - 2026-11-17
 
 - **Sidebar header:** the Morphise sidebar view's header drops its "Workspaces" (or "Chats") title, and its icon buttons (Dispatch, Search, Filter, New group, Display, Next) are spread evenly across the full width, on desktop and on phones. Tooltips, labels and keyboard use are unchanged.
