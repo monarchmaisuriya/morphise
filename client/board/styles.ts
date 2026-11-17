@@ -8,6 +8,13 @@ export const PRIORITY = {
   4: { name: "Low", icon: "SignalLow" },
 } as const;
 
+// A task with no priority still gets a mark, so every card and row has one in the same place.
+export const NO_PRIORITY = { name: "No priority", icon: "Minus" } as const;
+
+export function priorityOf(priority: number | null): { name: string; icon: string } {
+  return priority === 1 || priority === 2 || priority === 3 || priority === 4 ? PRIORITY[priority] : NO_PRIORITY;
+}
+
 export function priorityColor(colors: PluginTheme["colors"], priority: number | null): string {
   return priority === 1 ? colors.statusDanger : priority === 2 ? colors.statusWarning : priority === 3 ? colors.accent : colors.foregroundMuted;
 }

@@ -23,7 +23,7 @@ import { CustomiseBoard } from "./customise";
 import { CARD_GAP, DragGhost, DragProvider, useBoardDrag, useCardDragHandlers, useDrag } from "./drag";
 import type { BoardDeps } from "./deps";
 import { useWorkspaceName } from "./workspace-picker";
-import { PRIORITY, priorityColor } from "./styles";
+import { PRIORITY, priorityColor, priorityOf } from "./styles";
 
 type Layout = Pick<TaskView, "filter" | "sort" | "swimlanes" | "density">;
 type Tab = "board" | "today" | "archived";
@@ -92,7 +92,7 @@ function CardView({ t, task, document, now, compact, workspaces, onOpen, run, li
   const today = todayDate(now);
   const checked = task.checklist.filter((item) => item.done).length;
   const inDone = document.columns[index]?.done === true;
-  const priority = task.priority ? PRIORITY[task.priority as 1 | 2 | 3 | 4] : null;
+  const priority = priorityOf(task.priority);
   const dueTone = task.due && !inDone ? (task.due < today ? t.c.statusDanger : task.due === today ? t.c.statusWarning : undefined) : undefined;
   const reminderTone = task.reminder && !inDone && isDue(task.reminder, now) ? t.c.statusDanger : undefined;
   const labels = task.labels.flatMap((id) => document.labels.filter((label) => label.id === id));
@@ -114,11 +114,9 @@ function CardView({ t, task, document, now, compact, workspaces, onOpen, run, li
       style={{ padding: compact ? 10 : 12, gap: 8, borderRadius: t.radius.card, backgroundColor: t.c.surface0, borderWidth: 1, borderColor: lifted ? t.c.accent : hovered ? t.c.foregroundMuted : t.c.border, opacity: inDone && !lifted ? 0.75 : 1 }}
     >
       <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
-        {priority ? (
-          <View style={{ paddingTop: 2 }} accessibilityLabel={`Priority ${priority.name}`}>
-            <Icon name={priority.icon} size={13} color={priorityColor(t.c, task.priority)} />
-          </View>
-        ) : null}
+        <View style={{ paddingTop: 2 }} accessibilityLabel={task.priority ? `Priority ${priority.name}` : priority.name}>
+          <Icon name={priority.icon} size={13} color={priorityColor(t.c, task.priority)} />
+        </View>
         <Text style={[t.text.body, { flex: 1, fontWeight: "500", textDecorationLine: inDone ? "line-through" : "none" }]} numberOfLines={compact ? 2 : 4}>
           {task.title}
         </Text>
@@ -561,7 +559,7 @@ function TaskRow({ t, task, document, now, workspaces, onOpen, run, onLongPress,
   const inDone = column?.done === true;
   const today = todayDate(now);
   const checked = task.checklist.filter((item) => item.done).length;
-  const priority = task.priority ? PRIORITY[task.priority as 1 | 2 | 3 | 4] : null;
+  const priority = priorityOf(task.priority);
   const dueTone = task.due && !inDone ? (task.due < today ? t.c.statusDanger : task.due === today ? t.c.statusWarning : undefined) : undefined;
   const reminderTone = task.reminder && !inDone && isDue(task.reminder, now) ? t.c.statusDanger : undefined;
   const labels = task.labels.flatMap((id) => document.labels.filter((label) => label.id === id));
@@ -576,7 +574,7 @@ function TaskRow({ t, task, document, now, workspaces, onOpen, run, onLongPress,
   return (
     <GroupRow
       t={t}
-      leading={priority ? <View accessibilityLabel={`Priority ${priority.name}`}><Icon name={priority.icon} size={14} color={priorityColor(t.c, task.priority)} /></View> : null}
+      leading={<View accessibilityLabel={task.priority ? `Priority ${priority.name}` : priority.name}><Icon name={priority.icon} size={14} color={priorityColor(t.c, task.priority)} /></View>}
       title={task.title}
       struck={inDone}
       dim={inDone}

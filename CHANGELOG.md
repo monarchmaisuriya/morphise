@@ -2,6 +2,12 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.34.1 - 2026-11-17
+
+- **A mark for "no priority":** tasks without a priority show a muted dash where the priority icon goes, on cards and in list rows, and "None" in the task editor has the same dash, so every row lines up.
+- **Fix: long workspace names in Edit task.** A long name pushed the Workspace field and its open arrow past the dialog's edge; the name is now cut short with "…" and the arrow stays inside.
+- Segmented controls are 1 px tighter on each side, so the five priority choices still fit on one line.
+
 ## 0.34.0 - 2026-11-17
 
 - **Open a task's workspace from its editor:** an arrow beside the Workspace field in Edit task saves your edits, then opens that workspace. If the save fails (a due date it cannot read, say), the editor stays open with the error. It is hidden in a workspace's own Tasks panel, where that workspace is already open.

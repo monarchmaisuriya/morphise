@@ -13,7 +13,7 @@ import { tasksOf } from "../task-store";
 import { Button, Field, Icon, IconButton, PopoverHost, PropertyRow, Segmented, Select, Tag, type Tokens, useTokens } from "../ui/kit";
 import type { BoardDeps } from "./deps";
 import { WorkspacePicker } from "./workspace-picker";
-import { PRIORITY, priorityColor } from "./styles";
+import { NO_PRIORITY, PRIORITY, priorityColor } from "./styles";
 import { workspaceTask } from "../../shared/task-ops";
 
 export type EditorTarget = { kind: "existing"; taskId: string } | { kind: "new"; column: string; workspaceId: string | null };
@@ -191,7 +191,7 @@ export function CardEditor({ deps, target, theme, compact, onClose, openWorkspac
               label="Priority"
               value={String(draft.priority ?? 0)}
               onChange={(value) => set({ priority: value === "0" ? null : Number(value) })}
-              options={[{ value: "0", label: "None" }, ...([1, 2, 3, 4] as const).map((priority) => ({ value: String(priority), label: PRIORITY[priority].name, icon: PRIORITY[priority].icon, tone: priorityColor(t.c, priority) }))]}
+              options={[{ value: "0", label: "None", icon: NO_PRIORITY.icon, tone: priorityColor(t.c, null) }, ...([1, 2, 3, 4] as const).map((priority) => ({ value: String(priority), label: PRIORITY[priority].name, icon: PRIORITY[priority].icon, tone: priorityColor(t.c, priority) }))]}
             />
           </PropertyRow>
           <PropertyRow t={t} icon="Tag" label="Labels">
@@ -248,7 +248,10 @@ export function CardEditor({ deps, target, theme, compact, onClose, openWorkspac
           ) : null}
           <PropertyRow t={t} icon="FolderGit2" label="Workspace">
             <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-              <WorkspacePicker t={t} workspaces={deps.workspaces} value={draft.workspaceId} onChange={(workspaceId) => set({ workspaceId })} holder={(workspaceId) => workspaceTask(document, workspaceId, task?.id)?.title ?? null} />
+              {/* Shrinks so a long workspace name is cut short and the arrow stays inside the dialog. */}
+              <View style={{ flexShrink: 1, minWidth: 0 }}>
+                <WorkspacePicker t={t} workspaces={deps.workspaces} value={draft.workspaceId} onChange={(workspaceId) => set({ workspaceId })} holder={(workspaceId) => workspaceTask(document, workspaceId, task?.id)?.title ?? null} />
+              </View>
               {draft.workspaceId && openWorkspace && draft.workspaceId !== here ? (
                 <IconButton t={t} icon="ArrowUpRight" label={task ? "Save and open the workspace" : "Add the task and open the workspace"} disabled={!canSave} onPress={() => void save(() => openWorkspace(draft.workspaceId as string))} />
               ) : null}

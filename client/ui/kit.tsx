@@ -268,7 +268,7 @@ export function Segmented<Value extends string | number>({ t, options, value, on
             accessibilityState={{ checked: on }}
             accessibilityLabel={option.label}
             onPress={() => onChange(option.value)}
-            style={{ height: t.control - 6, paddingHorizontal: 8, flexDirection: "row", alignItems: "center", gap: 5, borderRadius: t.radius.control, backgroundColor: on ? t.c.surface2 : "transparent" }}
+            style={{ height: t.control - 6, paddingHorizontal: 7, flexDirection: "row", alignItems: "center", gap: 4, borderRadius: t.radius.control, backgroundColor: on ? t.c.surface2 : "transparent" }}
           >
             {option.icon ? <Icon name={option.icon} size={13} color={option.tone ?? (on ? t.c.foreground : t.c.foregroundMuted)} /> : null}
             <Text style={{ color: on ? t.c.foreground : t.c.foregroundMuted, fontSize: 12, fontWeight: on ? "600" : "400" }}>{option.label}</Text>
