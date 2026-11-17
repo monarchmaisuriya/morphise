@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.35.1 - 2026-11-17
+
+- **Session stats move to the top bar:** the two pills by the message box become one Stats button in each workspace's top bar, beside Remind me. It shows the open chat's total tokens and cache hit, and its popover holds everything: the chat's name, a picker when the workspace has several chats, the activity and usage readings as tiles, a cache-hit bar, and Open panel. The Stats panel uses the same tiles. The button follows the chat open in Morphise's sidebar view, else the workspace's first open chat.
+
 ## 0.35.0 - 2026-11-17
 
 Every feature of the Paseo plugins Project Groups (topar12) and Harness Stats (kogekiplay), and Better Paseo's search inside conversations, rebuilt in Morphise (credits and licences in NOTICE.md).

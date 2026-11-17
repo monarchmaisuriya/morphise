@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { emptyCounters } from "./stats";
-import { activityRows, agentIdFromTab, formatDuration, formatShare, formatSpeed, formatTokens, pillLabel, stripText, usageRows } from "./stats-format";
+import { activityRows, agentIdFromTab, headerLabel, formatDuration, formatShare, formatSpeed, formatTokens, pillLabel, stripText, usageRows } from "./stats-format";
 
 describe("stats formatting", () => {
   it("shortens token counts", () => {
@@ -42,5 +42,13 @@ describe("the strip under the message box", () => {
     expect(stripText(null)).toBe("…");
     expect(agentIdFromTab("workspace-tab-agent_abd5ffcc-7d85")).toBe("abd5ffcc-7d85");
     expect(agentIdFromTab("workspace-tab-terminal_1")).toBeNull();
+  });
+});
+
+describe("the stats button in the top bar", () => {
+  it("shows the open chat's tokens and cache hit, or just Stats when there is no reading", () => {
+    const stats = { ...emptyCounters(), inputTokens: 1_400_000, cachedTokens: 1_289_400, outputTokens: 100_000 };
+    expect(headerLabel({ status: "ready", provider: "claude", partial: false, stats })).toBe("1.5M · 92.1%");
+    expect([headerLabel(null), headerLabel({ status: "unavailable", reason: "x" }), headerLabel({ status: "error", error: "x" })]).toEqual(["Stats", "Stats", "Stats"]);
   });
 });

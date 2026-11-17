@@ -72,3 +72,9 @@ export function agentIdFromTab(testId: string | null | undefined): string | null
   const prefix = "workspace-tab-agent_";
   return testId?.startsWith(prefix) ? testId.slice(prefix.length) || null : null;
 }
+
+// The top bar's stats button: the open chat's total tokens and cache hit at a glance, else just "Stats".
+export function headerLabel(result: StatsReadResult | null): string {
+  if (!result || result.status !== "ready") return "Stats";
+  return `${formatTokens(totalTokens(result.stats))} · ${formatShare(cacheHitShare(result.stats))}`;
+}

@@ -36,7 +36,7 @@ import { Platform } from "react-native";
 import { POLISH_DEFAULTS, type PolishSettings, type Prefs, polishPrefs } from "../shared/polish/prefs";
 import { setPrefs } from "./polish/prefs";
 import { setCurrentTheme } from "./polish/theme-registry";
-import { addStatsPills, createStatsPanel, STATS_PANEL_ID, statsReader } from "./stats/session-stats";
+import { addStatsHeaderButton, createStatsPanel, STATS_PANEL_ID, statsReader } from "./stats/session-stats";
 import { startStatsStrip } from "./stats/strip";
 
 
@@ -506,14 +506,14 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
       },
     },
     {
-      // Session stats: two pills by each chat's message box, the Stats panel and its Command Center item.
+      // Session stats: a Stats button in each workspace's top bar, the Stats panel and its Command Center item.
       name: "stats",
-      key: ({ stats, directory }) => json([stats, directory.agents.map((agent) => [agent.id, agent.workspaceId])]),
+      key: ({ stats, directory }) => json([stats, directory.workspaces]),
       register({ stats, directory }, track) {
         if (!stats.enabled) return;
         const read = statsReader(client);
         if (stats.desktopStrip && Platform.OS === "web") track(startStatsStrip(read));
-        for (const agent of directory.agents) track(addStatsPills(client, read, agent));
+        for (const workspaceId of directory.workspaces) track(addStatsHeaderButton(client, read, tasks.chats, workspaceId));
         track(client.addAgentPanel({ id: STATS_PANEL_ID, title: "Stats", icon: "Gauge", Component: createStatsPanel(read) }));
         track(
           client.addCommandCenterItem({

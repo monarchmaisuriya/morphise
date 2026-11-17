@@ -39,6 +39,7 @@ import {
 } from "../shared/arrange";
 import { createGroup, type Decoration, deleteGroup, dropGroup, dropProject, EMPTY_PROJECT_GROUPS, moveGroup, moveProject, newGroupId, type ProjectGroups, projectGroupsSettings, renameGroup, setDecoration } from "../shared/project-groups";
 import { DecorIcon, DecorPicker } from "./decor-picker";
+import { openChat } from "./stats/session-stats";
 import type { RemoveProjectResult } from "../shared/project-actions";
 import { type DragApi, DragGhost, useBoardDrag, useCardDragHandlers } from "./board/drag";
 import { attentionOrder, NEEDS_ME, needsAttention, needsMeOn, nextAttention } from "../shared/attention";
@@ -1819,6 +1820,10 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     };
     const filters = filter.statuses.length + (filter.projects?.length ?? 0) + Number(filter.hideDone) + Number(filter.changedOnly) + Number(filter.pinnedOnly);
     const updateView = (patch: Partial<ViewConfig>) => void deps.updateView(patch).catch(report(toast, "change the view"));
+    // The open chat, for the top bar's Stats button (it is told only its workspace).
+    const activeAgentId = props.active.agent?.id ?? null;
+    useEffect(() => openChat.set(activeAgentId), [activeAgentId]);
+    useEffect(() => () => openChat.set(null), []);
     const groupsState = useSettings(projectGroupsSettings);
     const groupsDoc = groupsState.status === "ready" ? groupsState.values : EMPTY_PROJECT_GROUPS;
     const source = useRows(filter, props, state.showBackground, infoOf, groupsDoc);
