@@ -91,7 +91,7 @@ function Reply({ t, client, agent, onSent }: { t: Tokens; client: PluginClientCo
       <Field t={t} value={text} onChangeText={setText} placeholder={`Reply to ${agent.title}`} accessibilityLabel={`Reply to ${agent.title}`} multiline onSubmit={send} error={state.error} />
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
         <Text style={[t.text.small, { flex: 1 }]}>The agent starts working on it right away.</Text>
-        <Button t={t} variant="primary" icon="SendHorizontal" label={state.busy ? "Sending" : "Send"} disabled={!text.trim() || state.busy} onPress={send} />
+        <Button t={t} variant="primary" icon="SendHorizontal" label={state.busy ? "Sending…" : "Send"} disabled={!text.trim() || state.busy} onPress={send} />
       </View>
     </View>
   );
@@ -242,7 +242,7 @@ export function AgentDetails({
           <View style={{ gap: 6 }}>
             <Field t={t} value={renaming} onChangeText={setRenaming} autoFocus onSubmit={rename} accessibilityLabel={`New title for ${agent.title}`} error={renameState.error} />
             <View style={{ flexDirection: "row", gap: 8 }}>
-              <Button t={t} variant="primary" label={renameState.busy ? "Saving" : "Save"} disabled={renameState.busy} onPress={rename} />
+              <Button t={t} variant="primary" label={renameState.busy ? "Saving…" : "Save"} disabled={renameState.busy} onPress={rename} />
               <Button t={t} variant="ghost" label="Cancel" onPress={() => setRenaming(null)} />
             </View>
           </View>
@@ -298,7 +298,7 @@ export function AgentDetails({
         </Section>
       ) : null}
 
-      {history.status === "loading" ? <Text style={t.text.meta}>Reading the chat</Text> : null}
+      {history.status === "loading" ? <Text style={t.text.meta}>Reading the chat…</Text> : null}
       {history.status === "error" ? <Text style={t.text.danger}>Could not read the chat: {history.error}</Text> : null}
       {history.status === "ready" && history.first ? (
         <Section t={t} title="First prompt">

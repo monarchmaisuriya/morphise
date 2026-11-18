@@ -31,7 +31,7 @@ const CHECK = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" strok
 // of it on blocks that have Run; Run is always shown (as Claude Desktop shows its Run), brighter on hover. Colours are the theme's, which Paseo
 // keeps on :root as --colors-* (see client/polish/web/restyle.ts).
 const CSS = `
-[${RUN}] { position: absolute; top: 8px; right: 8px; display: flex; align-items: center; gap: 4px; padding: 4px; border: 0; border-radius: 4px; background: transparent; color: var(--colors-foreground-muted); cursor: pointer; opacity: 0.7; transition: opacity 120ms; font: 600 11px system-ui, sans-serif; user-select: none; }
+[${RUN}] { position: absolute; top: 8px; right: 8px; display: flex; align-items: center; gap: 4px; padding: 4px; border: 0; border-radius: 4px; background: transparent; color: var(--colors-foreground-muted); cursor: pointer; opacity: 0.7; transition: opacity 120ms; font: 600 12px system-ui, sans-serif; user-select: none; }
 [${RUN}]:hover { color: var(--colors-foreground); }
 ${CODE_BLOCK}:has(> [${RUN}]) > button[aria-label="Copy code"] { right: 34px !important; left: auto !important; }
 ${CODE_BLOCK}:hover > [${RUN}], [${RUN}]:focus-visible, [${RUN}][data-state="confirm"], [${RUN}][data-state="error"] { opacity: 1; }

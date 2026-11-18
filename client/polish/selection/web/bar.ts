@@ -369,7 +369,7 @@ button:disabled { opacity: 0.4; cursor: default; }
 const MARKUP = `
 <style>${STYLE}</style>
 <div class="panel" data-mode="bar">
-  <div class="bar" role="toolbar"></div>
+  <div class="bar" role="toolbar" data-label="selectionActions"></div>
   <div class="note" role="status"><span class="note-icon"></span><span class="note-text"></span></div>
   <div class="card">
     <div class="quote"></div>
@@ -460,7 +460,7 @@ export function installSelectionBar({ client, bookmarkPassage }: BarDeps): () =>
     ["background", "var(--pq-field)"],
     ["color", "var(--pq-fg)"],
     ["font-family", "var(--pq-font)"],
-    ["font-size", "13px"],
+    ["font-size", "14px"],
     ["line-height", "19px"],
     ["white-space", "pre-wrap"],
     ["overflow-wrap", "anywhere"],
@@ -733,6 +733,11 @@ export function installSelectionBar({ client, bookmarkPassage }: BarDeps): () =>
     else send();
   };
   field.addEventListener("keydown", onFieldKeyDown);
+  // The reset above (`all: unset`) drops the browser's focus ring, so the field's border shows focus instead.
+  const onFieldFocus: DomListener = () => field.style.setProperty("border-color", "var(--pq-fg)", "important");
+  const onFieldBlur: DomListener = () => field.style.setProperty("border-color", "var(--pq-border)", "important");
+  field.addEventListener("focus", onFieldFocus);
+  field.addEventListener("blur", onFieldBlur);
 
   const sync = () => {
     pending = 0;
@@ -809,6 +814,8 @@ export function installSelectionBar({ client, bookmarkPassage }: BarDeps): () =>
     panel.removeEventListener("mousedown", onPanelPointerDown);
     panel.removeEventListener("click", onPanelClick);
     field.removeEventListener("keydown", onFieldKeyDown);
+    field.removeEventListener("focus", onFieldFocus);
+    field.removeEventListener("blur", onFieldBlur);
     host.remove();
   };
 }

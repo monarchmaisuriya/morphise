@@ -63,6 +63,22 @@ function dueText(due: string, today: string): string {
   return due < today ? `Overdue · ${label}` : label;
 }
 
+// A card's name for screen readers. A button's name replaces everything inside it, so it carries the facts the card shows.
+function cardLabel(task: Task, document: TaskDocument, now: Date): string {
+  const inDone = document.columns.find((column) => column.id === task.column)?.done === true;
+  const priority = priorityOf(task.priority);
+  const labels = task.labels.flatMap((id) => document.labels.filter((label) => label.id === id).map((label) => label.name));
+  const checked = task.checklist.filter((item) => item.done).length;
+  return [
+    `Open ${task.title}`,
+    task.priority ? `Priority ${priority.name}` : priority.name,
+    labels.length ? `Labels ${labels.join(", ")}` : null,
+    task.due ? `Due ${dueText(task.due, todayDate(now))}` : null,
+    task.reminder ? `Reminder ${inDone ? "paused" : formatDue(task.reminder, now)}` : null,
+    task.checklist.length ? `${checked} of ${task.checklist.length} checked` : null,
+  ].filter(Boolean).join(", ");
+}
+
 // ---------- Cards ----------
 
 function MetaItem({ t, icon, text, tone }: { t: Tokens; icon: string; text?: string; tone?: string }) {
@@ -102,7 +118,7 @@ function CardView({ t, task, document, now, compact, workspaces, onOpen, run, li
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Open ${task.title}`}
+      accessibilityLabel={cardLabel(task, document, now)}
       accessibilityHint="Drag to move it"
       accessibilityActions={moves.map(({ name, label }) => ({ name, label }))}
       onAccessibilityAction={(event) => {
@@ -207,7 +223,7 @@ function QuickAdd({ t, document, run, workspaceId, trailing }: { t: Tokens; docu
   return (
     <View style={{ gap: 6 }}>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-        <Field t={t} grow plain icon="Plus" value={text} onChangeText={(next) => { setText(next); nextDraft(); }} onSubmit={() => void add()} accessibilityLabel="Quick add a task" placeholder="Add a task… try: Fix login p1 @bug #review due:fri tomorrow 9am" />
+        <Field t={t} grow plain icon="Plus" value={text} onChangeText={(next) => { setText(next); nextDraft(); }} onSubmit={() => void add()} accessibilityLabel="Quick add a task" placeholder="Add a task…" />
         {trailing}
       </View>
       {parsed ? (
@@ -227,7 +243,9 @@ function QuickAdd({ t, document, run, workspaceId, trailing }: { t: Tokens; docu
             {reminder ? <Tag t={t} label={`Reminder ${formatDue(reminder, now)}`} color={t.c.statusWarning} /> : null}
           </View>
         )
-      ) : null}
+      ) : (
+        <Text style={t.text.small}>Try: Fix login p1 @bug #review due:fri tomorrow 9am</Text>
+      )}
     </View>
   );
 }
@@ -263,7 +281,7 @@ function FilterPanel({ t, layout, setLayout, document, tab, setTab, todayCount, 
         value={tab}
         onChange={setTab}
         options={[
-          { value: "board", label: "Open cards", icon: "Columns3" },
+          { value: "board", label: "Open tasks", icon: "Columns3" },
           { value: "today", label: todayCount ? `Today · ${todayCount}` : "Today", icon: "CalendarClock", tone: todayCount ? t.c.statusWarning : undefined },
           { value: "archived", label: archivedCount ? `Archived · ${archivedCount}` : "Archived", icon: "Archive" },
         ]}
@@ -309,7 +327,7 @@ function DisplayPanel({ t, layout, setLayout }: { t: Tokens; layout: Layout; set
       <PanelRow t={t} label="Order">
         <Segmented
           t={t}
-          label="Order cards by"
+          label="Order tasks by"
           value={layout.sort}
           onChange={(sort) => setLayout({ ...layout, sort })}
           options={[
@@ -507,7 +525,7 @@ function ColumnView({ t, entry, document, now, layout, open, run, workspaceId, w
         <Text style={[t.text.heading, { fontSize: fontSize.base, flexShrink: 1 }]} numberOfLines={1}>
           {column.name}
         </Text>
-        <Text style={{ color: entry.overLimit ? t.c.statusDanger : t.c.foregroundMuted, fontSize: fontSize.sm, fontWeight: entry.overLimit ? "600" : "400" }} accessibilityLabel={column.wipLimit ? `${entry.count} of ${column.wipLimit} allowed` : `${entry.inScope} cards`}>
+        <Text style={{ color: entry.overLimit ? t.c.statusDanger : t.c.foregroundMuted, fontSize: fontSize.sm, fontWeight: entry.overLimit ? "600" : "400" }} accessibilityLabel={column.wipLimit ? `${entry.count} of ${column.wipLimit} allowed` : `${entry.inScope} tasks`}>
           {/* A card limit counts every card in the column; otherwise the count is this board's cards. */}
           {column.wipLimit ? `${entry.count} / ${column.wipLimit}` : entry.inScope}
         </Text>
@@ -518,7 +536,7 @@ function ColumnView({ t, entry, document, now, layout, open, run, workspaceId, w
       <ScrollView {...drag.scroller(column.id, false)} contentContainerStyle={{ paddingHorizontal: 8, gap: CARD_GAP }}>
         {adding ? (
           <View style={{ gap: 6 }}>
-            <Field t={t} autoFocus value={text} onChangeText={(next) => { setText(next); setProblem(null); nextDraft(); }} onSubmit={submit} error={problem} placeholder="Card title, then Enter" accessibilityLabel={`New card in ${column.name}`} />
+            <Field t={t} autoFocus value={text} onChangeText={(next) => { setText(next); setProblem(null); nextDraft(); }} onSubmit={submit} error={problem} placeholder="Task title, then Enter" accessibilityLabel={`New task in ${column.name}`} />
             <View style={{ flexDirection: "row", gap: 6 }}>
               <Button t={t} variant="primary" label="Add" disabled={!text.trim()} onPress={submit} />
               <Button t={t} variant="ghost" label="Close" onPress={() => { setAdding(false); setText(""); setProblem(null); }} />
@@ -542,7 +560,7 @@ function ColumnView({ t, entry, document, now, layout, open, run, workspaceId, w
         {empty && slot !== null ? <DropSlot t={t} height={slot} /> : null}
         {empty && !adding && slot === null ? (
           <Pressable accessibilityRole="button" accessibilityLabel={`Add a task to ${column.name}`} onPress={add} style={{ height: 64, alignItems: "center", justifyContent: "center", borderRadius: t.radius.card, borderWidth: 1, borderStyle: "dashed", borderColor: target ? t.c.accent : t.c.border }}>
-            <Text style={t.text.small}>{column.done ? "Finished cards land here" : "No cards · Add one"}</Text>
+            <Text style={t.text.small}>{column.done ? "Finished tasks land here" : "No tasks · Add one"}</Text>
           </Pressable>
         ) : null}
       </ScrollView>
@@ -584,7 +602,7 @@ function TaskRow({ t, task, document, now, workspaces, onOpen, run, onLongPress,
       detail={!compactCards && facts.length ? <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 12, overflow: "hidden" }}>{facts}</View> : undefined}
       facts={!compactCards && labels.length ? <View style={{ flexDirection: "row", gap: 4 }}>{labels.slice(0, 3).map((label) => <Tag key={label.id} t={t} label={label.name} color={label.color} />)}</View> : undefined}
       actions={done && !inDone ? <IconButton t={t} size="sm" icon="Check" label={`Move ${task.title} to ${done.name}`} onPress={() => void run({ kind: "moveTask", id: task.id, column: done.id })} /> : undefined}
-      label={`Open ${task.title}`}
+      label={cardLabel(task, document, now)}
       onPress={onOpen}
       onLongPress={onLongPress}
     />
@@ -657,7 +675,7 @@ function TaskList({ t, columns, document, now, open, run, workspaceId, workspace
               </View>
             ))}
             {empty && slot !== null ? <DropSlot t={t} height={slot} /> : null}
-            {empty && slot === null ? <GroupFooter t={t} text={target ? "Drop here" : column.done ? "Finished cards land here" : "No cards"} /> : null}
+            {empty && slot === null ? <GroupFooter t={t} text={target ? "Drop here" : column.done ? "Finished tasks land here" : "No tasks"} /> : null}
           </GroupBox>
           </View>
         );
@@ -779,7 +797,8 @@ export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, open
     <View ref={drag.root} style={{ flex: 1, backgroundColor: t.c.surface0 }}>
       {problem ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: pad, paddingVertical: 8, backgroundColor: t.c.surface1 }}>
-          <Icon name="TriangleAlert" size={14} color={t.c.statusWarning} />
+          {/* Loading is not a warning: a muted spinner icon until the first task list arrives. */}
+          {state.event === null && !state.connectionError ? <Icon name="LoaderCircle" size={14} color={t.c.foregroundMuted} /> : <Icon name="TriangleAlert" size={14} color={t.c.statusWarning} />}
           <Text style={t.text.meta}>{problem}</Text>
         </View>
       ) : null}
@@ -833,7 +852,7 @@ export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, open
                 </View>
               ))
             ) : (
-              <EmptyState t={t} icon="CalendarClock" title="Nothing due today" body={"Set a reminder with /remind 45m in a chat, the alarm button in a workspace's header, or on any card. Due and overdue cards show here too."} />
+              <EmptyState t={t} icon="CalendarClock" title="Nothing due today" body={"Set a reminder with /remind 45m in a chat, the alarm button in a workspace's header, or on any task. Due and overdue tasks show here too."} />
             )
           ) : archived.length ? (
             archived.map((task) => (
@@ -847,7 +866,7 @@ export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, open
               />
             ))
           ) : (
-            <EmptyState t={t} icon="Archive" title="No archived cards" body="Archive a card from its editor, or have Done cards archive themselves under Customise." />
+            <EmptyState t={t} icon="Archive" title="No archived tasks" body="Archive a task from its editor, or have Done tasks archive themselves under Customise." />
           )}
         </ScrollView>
       )}

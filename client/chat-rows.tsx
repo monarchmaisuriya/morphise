@@ -1,10 +1,9 @@
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
-import { useState } from "react";
 import { Text, View } from "react-native";
 import { z } from "zod";
 import { turnDetailsLine } from "../shared/turn-details";
 import { shortPath } from "./polish/rows/model";
-import { alpha, Expand, Row, useIndent, useSpacing, useStyles } from "./polish/rows/row";
+import { alpha, Expand, Row, useDisclosure, useIndent, useSpacing, useStyles } from "./polish/rows/row";
 
 // What Morphise's chat rows can do beyond drawing, and the turn recap row. The rows themselves are
 // Chat Polish's design (client/polish/rows/); prompts and replies are never drawn here, so Paseo's
@@ -49,12 +48,12 @@ const plural = (count: number, one: string, many: string) => `${count} ${count =
 // "Changed 3 files +40 −2" (and "1 command failed"), opening to an "Edited" row per file and a "Ran" row per failed
 // command, as the steps list draws them. Paseo's own footer already says how long the turn took, so the recap does
 // not; a turn that changed nothing and had no failure has no recap. Its look is the chat rows' (useRowSetup).
-export function RecapRow({ item, theme, layout }: PluginTimelineItemProps<z.output<typeof recapRowSchema>>) {
+export function RecapRow({ item, theme, layout, timestamp }: PluginTimelineItemProps<z.output<typeof recapRowSchema>>) {
     const s = useStyles(theme);
     const c = theme.colors;
     const spacing = useSpacing();
     const icons = !!useIndent("steps");
-    const [open, setOpen] = useState(false);
+    const [open, toggle] = useDisclosure();
     const recap = item.data;
     const ended = recap.outcome === "failed" ? "Failed" : recap.outcome === "canceled" ? "Stopped" : null;
     // Recaps added before 0.18.1 exist for turns that changed nothing; they draw nothing now.
@@ -84,7 +83,8 @@ export function RecapRow({ item, theme, layout }: PluginTimelineItemProps<z.outp
           meta={meta}
           metaColor={c.statusDanger}
           open={open}
-          onToggle={canOpen ? () => setOpen(!open) : undefined}
+          onToggle={canOpen ? toggle : undefined}
+          time={timestamp}
         />
         <Expand open={open} style={{ marginLeft: icons ? 9 : 0, paddingLeft: icons ? 15 : 13, paddingTop: 3, paddingBottom: 3, borderLeftWidth: 1, borderLeftColor: alpha(c.border, 0.6) }}>
           {() => (

@@ -24,8 +24,8 @@ declare const window: {
 };
 declare const document: { activeElement: unknown };
 interface HoverTarget {
-  addEventListener(type: "mouseenter" | "mouseleave", listener: () => void): void;
-  removeEventListener(type: "mouseenter" | "mouseleave", listener: () => void): void;
+  addEventListener(type: "mouseenter" | "mouseleave" | "focusin" | "focusout", listener: () => void): void;
+  removeEventListener(type: "mouseenter" | "mouseleave" | "focusin" | "focusout", listener: () => void): void;
 }
 declare const KeyboardEvent: new (type: "keydown", init: object) => unknown;
 interface Frame {
@@ -188,24 +188,32 @@ export function HtmlFrame({
 }
 
 /**
- * Whether the pointer is over the element behind `ref`, its frame and buttons included. mouseenter/leave don't fire when the pointer moves
- * between descendants, so moving from the page onto a button keeps it; react-native-web's nested Pressable hover flickered there.
+ * Whether the pointer is over the element behind `ref`, its frame and buttons included, or keyboard focus is inside it, so
+ * buttons that show on hover also show to someone tabbing to them. mouseenter/leave don't fire when the pointer moves between
+ * descendants, so moving from the page onto a button keeps it; react-native-web's nested Pressable hover flickered there.
  */
 export function useHovered(ref: { current: unknown }) {
-  const [hovered, setHovered] = useState(false);
+  const [pointer, setPointer] = useState(false);
+  const [focused, setFocused] = useState(false);
   useEffect(() => {
     const el = ref.current as HoverTarget | null;
     if (!el?.addEventListener) return;
-    const enter = () => setHovered(true);
-    const leave = () => setHovered(false);
+    const enter = () => setPointer(true);
+    const leave = () => setPointer(false);
+    const focusIn = () => setFocused(true);
+    const focusOut = () => setFocused(false);
     el.addEventListener("mouseenter", enter);
     el.addEventListener("mouseleave", leave);
+    el.addEventListener("focusin", focusIn);
+    el.addEventListener("focusout", focusOut);
     return () => {
       el.removeEventListener("mouseenter", enter);
       el.removeEventListener("mouseleave", leave);
+      el.removeEventListener("focusin", focusIn);
+      el.removeEventListener("focusout", focusOut);
     };
   }, [ref]);
-  return hovered;
+  return pointer || focused;
 }
 
 /** Esc pressed outside a full-screen page (its header, after a click on the backdrop); the page passes its own through HtmlFrame's onEscape. */

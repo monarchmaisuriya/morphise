@@ -2,6 +2,16 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.43.0 - 2026-11-18
+
+- **Dashed marks on chat rows:** chat and sub-agent rows under a workspace show a dashed circle in the parent's colour, at the same size; workspace rows keep their filled dot. Settings, Sidebar, Look on this device, "Chat row marks" picks the dashed circle or the dot, per device.
+- **All look settings in one place:** bold group names, folder icons and background workspaces moved from the Display menu to Settings, Sidebar, Look on this device; the Display menu now holds only Group by and Sort by.
+- **Reachable by keyboard:** buttons that showed only on hover (a sidebar row's Pin, Archive and Actions, group and project heading buttons, a page's Full screen, Save and Copy) also show while you Tab through them. Screen readers now hear what a row or card shows (status line, pull request and checks, due reminder, priority, labels, checklist), which row is open or selected, and whether a group or fold is open.
+- **Safer deletes:** deleting an automation rule, a column or a label asks for a second press within four seconds; the task editor's Delete disarms after four seconds; deleting a group with projects asks in a small panel, as removing a project does; removing a layout, prompt, button or command from a settings list is in the opened item, not one tap away.
+- **Clearer settings:** loading, unreadable and failed-save states look the same in every section, with Reset or Retry; a broken profile no longer blocks the Agents tab; settings unrelated to chat rows (Let agents open things in Paseo, Session stats) no longer hide when chat rows are off; Move up and down use arrows, and a list item shows whether it is open; the title prompt is a multi-line box; the Agents preview has the Desktop and Phone switch; every Icon field explains what to type.
+- **Consistent controls:** the reminder picker under a row has a Close button; "Clear reminder" replaces an ambiguous "Done"; the Activity tab steps through hours with Earlier and Later buttons (the bars are too narrow to tap on a phone); checks show icons, not coloured dots; loading Tasks no longer shows a warning triangle; the Terminals box, the Split chip and the error Copy button use the standard card and buttons; replies in the side chat render as Markdown; Windows and Linux see Ctrl+Enter, not ⌘↵.
+- **Fixes:** a row no longer says "Other host" while this host's id is still loading; small text in chat rows, project-tile letters and the commits-ahead arrow are readable on every theme; touch targets on phones are at least 32px (rows and headings 40px); the Activity heatmap no longer splits "Wed" over two lines; Workbench text says "task" throughout.
+
 ## 0.42.2 - 2026-11-18
 
 - **A tidier Display menu:** the sidebar's Display menu lists Group by and Sort by as one-line choices (as the Filter menu does), then Show (background workspaces, bold group names, folder icons), with All sidebar settings pinned at the top so it never scrolls away.

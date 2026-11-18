@@ -10,7 +10,7 @@ import type { AgentTimelineItem } from "../agent-types";
 import { useT } from "../i18n";
 import { useRowSetup } from "./look";
 import { todoData, type todoSchema } from "./model";
-import { FadeIn, INDENT, PMONO, Row, useDisclosure, useIndent, usePulse, useStyles, useTween } from "./row";
+import { FadeIn, INDENT, PMONO, Row, useDisclosure, useIndent, usePulse, useSpacing, useStyles, useTween } from "./row";
 import { changesOfTodo, stepKey, type TaskChange } from "./steps";
 import { radius } from "../../../shared/design/tokens";
 
@@ -80,7 +80,7 @@ function TodoList({ theme, items }: { theme: PluginTheme; items: z.output<typeof
 }
 
 /** A todo update on its own row (merging off, or no steps around it): "Tasks 1 / 3", progress and the task in progress; open, the list. */
-export function TodoItem({ item, theme }: PluginTimelineItemProps<z.output<typeof todoSchema>>) {
+export function TodoItem({ item, theme, layout }: PluginTimelineItemProps<z.output<typeof todoSchema>>) {
   const s = useStyles(theme);
   const c = theme.colors;
   const t = useT();
@@ -91,15 +91,17 @@ export function TodoItem({ item, theme }: PluginTimelineItemProps<z.output<typeo
   const done = items.filter((t) => t.status === "completed").length;
   const progress = useTween(items.length ? done / items.length : 0, 300);
   const rotation = useTween(open ? 1 : 0, 100);
+  // The same vertical rhythm, gap and phone chevron as every other row (Row in ./row.tsx), so the Tasks row sits evenly among them.
+  const spacing = useSpacing();
   return (
-    <View>
+    <View style={spacing}>
       <Pressable
         onPress={toggle}
         onHoverIn={() => setHovered(true)}
         onHoverOut={() => setHovered(false)}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
-        style={[s.row, { gap: 10, borderRadius: radius.md }]}
+        style={[s.row, { gap: 8, borderRadius: radius.md }]}
       >
         <View style={s.slot}>
           <Icon name="ListChecks" size={15} color={look.accent ?? c.foregroundMuted} />
@@ -117,7 +119,7 @@ export function TodoItem({ item, theme }: PluginTimelineItemProps<z.output<typeo
           </Text>
         ) : null}
         <View style={{ flex: 1 }} />
-        <Animated.View style={{ opacity: hovered || open ? 0.7 : 0, transform: [{ rotate: rotation.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "90deg"] }) }] }}>
+        <Animated.View style={{ opacity: hovered || open || layout.compact ? 0.7 : 0, transform: [{ rotate: rotation.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "90deg"] }) }] }}>
           <Icon name="ChevronRight" size={12} color={c.foregroundMuted} />
         </Animated.View>
       </Pressable>

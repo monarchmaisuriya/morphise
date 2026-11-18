@@ -11,7 +11,7 @@ import { removeProject as removeProjectRpc } from "./shared/project-actions";
 import { createProfileStore, createValueStore, layoutsOf, profileOf, promptsOf } from "./client/profile-store";
 import { type Problem, createReconciler } from "./client/reconciler";
 import { createDraftStore } from "./client/draft";
-import { createFormScreen } from "./client/forms/fields";
+import { createFormScreen, createSeparateScreen } from "./client/forms/fields";
 import { ButtonsTab, ChatTab, CommandsTab, GeneralTab, LayoutsTab, LookTab, PromptsTab, SidebarTab } from "./client/forms/tabs";
 import { MessagesTab, PagesTab } from "./client/forms/polish-tabs";
 import { AgentsBoardTab } from "./client/forms/agents-tab";
@@ -314,7 +314,7 @@ export default function contribute(client: PluginClientContext) {
     { id: "layouts", title: "Layouts", icon: "Layers", Component: createFormScreen(drafts, LayoutsTab, { editsProfile: false }) },
     { id: "general", title: "General", icon: "SlidersHorizontal", Component: createFormScreen(drafts, GeneralTab, { editsProfile: true }) },
     { id: EDITOR_SCREEN_ID, title: "Sidebar", icon: "PanelLeft", Component: createFormScreen(drafts, SidebarTab, { editsProfile: true }) },
-    { id: AGENTS_SETTINGS_TAB, title: "Agents", icon: "SquareKanban", Component: createFormScreen(drafts, AgentsBoardTab, { editsProfile: false }) },
+    { id: AGENTS_SETTINGS_TAB, title: "Agents", icon: "SquareKanban", Component: createSeparateScreen(AgentsBoardTab) },
     { id: "chat", title: "Chat", icon: "MessageSquare", Component: createFormScreen(drafts, ChatTab, { editsProfile: true }) },
     { id: "messages", title: "Messages", icon: "TextQuote", Component: createFormScreen(drafts, MessagesTab, { editsProfile: true }) },
     { id: "pages", title: "Pages", icon: "AppWindow", Component: createFormScreen(drafts, PagesTab, { editsProfile: true }) },

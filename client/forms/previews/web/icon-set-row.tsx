@@ -6,13 +6,14 @@ import { Platform, Text, View } from "react-native";
 import type { IconSet } from "../../../../shared/polish/prefs";
 import { Icon } from "../../../ui/kit";
 import { iconTwins, subscribeIconSets } from "../../../polish/web/icons";
+import { fontSize } from "../../../../shared/design/tokens";
 
 const SIZE = 16;
 
 function TwinRow({ theme, set, names }: { theme: PluginTheme; set: Exclude<IconSet, "lucide">; names: readonly string[] }) {
   const c = theme.colors;
   const twins = useSyncExternalStore(subscribeIconSets, () => iconTwins(set));
-  if (!twins) return <Text style={{ color: c.foregroundMuted, fontSize: 12 }}>This set shows here once it has downloaded (pick it with Restyle Paseo on).</Text>;
+  if (!twins) return <Text style={{ color: c.foregroundMuted, fontSize: fontSize.sm }}>This set shows here once it has downloaded (pick it with Restyle Paseo on).</Text>;
   return (
     <View style={{ flexDirection: "row", gap: 14 }}>
       {names.map((name) =>

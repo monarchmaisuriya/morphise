@@ -4,7 +4,7 @@
 import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { useEffect, useState } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
-import { Button, Icon, type Tokens } from "../ui/kit";
+import { Button, Card, Icon, type Tokens } from "../ui/kit";
 import { fontSize, radius } from "../../shared/design/tokens";
 
 type PaseoTerminal = Awaited<ReturnType<PluginClientContext["paseo"]["terminals"]["list"]>>["entries"][number];
@@ -44,8 +44,9 @@ function Row({ client, t, terminal, onClosed }: { client: PluginClientContext; t
   };
   return (
     <View style={{ gap: 6, paddingVertical: 6, borderTopWidth: 1, borderTopColor: t.c.border }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-        <Pressable accessibilityRole="button" accessibilityLabel={`${open ? "Hide" : "Show"} the last lines of ${terminal.name}`} onPress={() => setOpen(!open)} style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8 }}>
+      {/* Wraps on a narrow screen, so the close confirmation drops below the name instead of running off the edge. */}
+      <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`${open ? "Hide" : "Show"} the last lines of ${terminal.name}`} onPress={() => setOpen(!open)} style={{ flex: 1, minWidth: 160, flexDirection: "row", alignItems: "center", gap: 8 }}>
           <Icon name={open ? "ChevronDown" : "ChevronRight"} size={14} color={t.c.foregroundMuted} />
           <Icon name="SquareTerminal" size={14} color={t.c.foreground} />
           <View style={{ flex: 1 }}>
@@ -108,16 +109,11 @@ export function Terminals({ client, t, workspaceId }: { client: PluginClientCont
     };
   }, [client, workspaceId, refresh]);
   return (
-    <View style={{ gap: 6, padding: 14, borderRadius: t.radius.card, borderWidth: 1, borderColor: t.c.border }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-        <Icon name="SquareTerminal" size={14} color={t.c.foregroundMuted} />
-        <Text style={[t.text.heading, { flex: 1 }]}>Terminals</Text>
-        <Text style={t.text.small}>{terminals ? `${terminals.length} open` : ""}</Text>
-      </View>
+    <Card t={t} title="Terminals" icon="SquareTerminal" right={<Text style={t.text.small}>{terminals ? `${terminals.length} open` : ""}</Text>}>
       {error ? <Text style={t.text.danger}>Terminals could not be listed: {error}</Text> : null}
       {terminals === null && !error ? <Text style={t.text.small}>Reading…</Text> : null}
       {terminals?.length === 0 ? <Text style={t.text.small}>No open terminals in this workspace.</Text> : null}
       {terminals?.map((terminal) => <Row key={terminal.id} client={client} t={t} terminal={terminal} onClosed={() => setRefresh((count) => count + 1)} />)}
-    </View>
+    </Card>
   );
 }

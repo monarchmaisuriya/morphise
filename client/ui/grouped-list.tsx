@@ -2,7 +2,7 @@ import { type ReactNode, type Ref, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { cannotHover } from "../web";
 import { Icon, type Tokens } from "./kit";
-import { fontSize } from "../../shared/design/tokens";
+import { fontSize, radius } from "../../shared/design/tokens";
 
 // The grouped list the Agents and Tasks lists share (the shape of GitHub's boxed lists and Linear's grouped
 // list): each group a bordered box with a tinted header, rows with hairline dividers, one line per row on
@@ -25,7 +25,7 @@ export function GroupList({ t, children, scroll }: { t: Tokens; children: ReactN
 /** A small rounded count, as in a group's header. */
 function CountChip({ t, count, tone }: { t: Tokens; count: number | string; tone?: string }) {
   return (
-    <View style={{ minWidth: 20, height: 18, paddingHorizontal: 6, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: t.c.surface2 }}>
+    <View style={{ minWidth: 20, height: 18, paddingHorizontal: 6, borderRadius: radius.full, alignItems: "center", justifyContent: "center", backgroundColor: t.c.surface2 }}>
       <Text style={{ fontSize: fontSize.sm, fontWeight: "600", color: tone ?? t.c.foregroundMuted, fontVariant: ["tabular-nums"] }}>{count}</Text>
     </View>
   );
@@ -128,41 +128,48 @@ export function GroupRow({ t, nodeRef, leading, title, detail, struck, meta, fac
   );
   const showActions = hovered || !!focused;
   return (
-    <Pressable
+    // The row's main button and its buttons side by side, never nested: screen readers hide what is inside a button.
+    // Hover is the whole row's, so the pointer can move from the main button onto the actions.
+    <View
       ref={nodeRef}
       {...ROW_MARK}
-      accessibilityRole="button"
-      accessibilityState={{ selected: !!selected }}
-      accessibilityLabel={label}
-      onPress={onPress}
-      onLongPress={onLongPress}
-      onHoverIn={() => setHovered(true)}
-      onHoverOut={() => setHovered(false)}
-      onPressIn={() => setPressed(true)}
-      onPressOut={() => setPressed(false)}
-      style={{ flexDirection: "row", alignItems: "center", gap: 10, minHeight: dense ? (t.compact ? 48 : 36) : t.compact ? 60 : 48, paddingVertical: dense ? (t.compact ? 8 : 6) : t.compact ? 11 : 10, paddingHorizontal: 12, borderTopWidth: 1, borderTopColor: t.c.border, backgroundColor: background, opacity: dim ? 0.7 : 1 }}
+      onPointerEnter={() => setHovered(!touch)}
+      onPointerLeave={() => setHovered(false)}
+      style={{ flexDirection: "row", alignItems: "center", gap: 10, minHeight: dense ? (t.compact ? 48 : 36) : t.compact ? 60 : 48, paddingRight: 12, borderTopWidth: 1, borderTopColor: t.c.border, backgroundColor: background, opacity: dim ? 0.7 : 1 }}
     >
       {focused ? <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 2, backgroundColor: t.c.accent }} /> : null}
-      <View style={{ width: 16, alignItems: "center" }}>{leading}</View>
-      {t.compact ? (
-        <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
-          {titleNode}
-          {detail}
-          {meta}
-        </View>
-      ) : (
-        <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 10, overflow: "hidden" }}>
-            {titleNode}
-            {detail}
+      <View style={{ position: "relative", flex: 1, minWidth: 0, alignSelf: "stretch", flexDirection: "row" }}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ selected: !!selected }}
+          accessibilityLabel={label}
+          onPress={onPress}
+          onLongPress={onLongPress}
+          onPressIn={() => setPressed(true)}
+          onPressOut={() => setPressed(false)}
+          style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: dense ? (t.compact ? 8 : 6) : t.compact ? 11 : 10, paddingLeft: 12 }}
+        >
+          <View style={{ width: 16, alignItems: "center" }}>{leading}</View>
+          {t.compact ? (
+            <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
+              {titleNode}
+              {detail}
+              {meta}
+            </View>
+          ) : (
+            <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10, overflow: "hidden" }}>
+                {titleNode}
+                {detail}
+              </View>
+              {meta}
+            </View>
+          )}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 14, flexShrink: 0, alignSelf: "stretch" }}>
+            {t.compact ? null : facts}
           </View>
-          {meta}
-        </View>
-      )}
-      {/* The facts and, over their right end, the hover actions: anchored here so they never cover the pinned buttons. */}
-      <View style={{ position: "relative", flexDirection: "row", alignItems: "center", gap: 14, flexShrink: 0, alignSelf: "stretch" }}>
-        {t.compact ? null : facts}
-        {actions && touch ? <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>{actions}</View> : null}
+        </Pressable>
+        {/* Over the facts' right end, the hover actions: anchored here so they never cover the pinned buttons. */}
         {actions && !touch ? (
           <View
             {...ACTIONS_MARK}
@@ -173,7 +180,8 @@ export function GroupRow({ t, nodeRef, leading, title, detail, struck, meta, fac
           </View>
         ) : null}
       </View>
+      {actions && touch ? <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>{actions}</View> : null}
       {pinned ? <View style={{ flexDirection: "row", alignItems: "center", gap: 2, flexShrink: 0 }}>{pinned}</View> : null}
-    </Pressable>
+    </View>
   );
 }

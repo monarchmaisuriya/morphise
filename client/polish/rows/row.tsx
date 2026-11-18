@@ -37,8 +37,9 @@ export const INDENT = 28;
 // 20pt from reply text on both sides, with the tighter reply blocks in web/restyle-css.ts (6pt item gap, 4pt padding).
 // Compact and spacious move rows 6pt closer or 8pt further apart; web/restyle-css.ts sets the same values for Paseo's rows.
 const TIGHT = { compact: { marginTop: 0, marginBottom: -12 }, normal: { marginTop: 2, marginBottom: -8 }, spacious: { marginTop: 5, marginBottom: -3 } };
-// Compact tool rows (Morphise's "Lines") sit 4pt closer still.
-const TIGHTER = { compact: { marginTop: 0, marginBottom: -14 }, normal: { marginTop: 0, marginBottom: -12 }, spacious: { marginTop: 2, marginBottom: -8 } };
+// Compact tool rows (Morphise's "Lines") sit 4pt closer still. They are 24pt tall, the smallest target to press, and 2pt more margin
+// takes that back so they keep a 22pt row's pitch.
+const TIGHTER = { compact: { marginTop: 0, marginBottom: -16 }, normal: { marginTop: 0, marginBottom: -14 }, spacious: { marginTop: 2, marginBottom: -10 } };
 /** How far faded thought and tool rows step back, per strength (Paseo's own rows match it in web/restyle-css.ts). */
 const QUIET = { dim: 0.3, faded: 0.45, soft: 0.65, full: 1 };
 // Morphise's text and code sizes, as steps from Paseo's own sizes (Settings → Appearance).
@@ -82,17 +83,19 @@ function makeStyles(c: Colors, a: HostAppearance, look: RowLook) {
   const ui = a.uiFont ? { fontFamily: a.uiFont } : {};
   const mono = { fontFamily: a.monoFont ? `${a.monoFont}, ${MONO}` : MONO };
   const body = look.textPx ?? a.contentSize - 1 + TEXT_STEP[look.textSize];
+  // Secondary text a step or more below the body, but never under Paseo's smallest size (12) unless the body itself is.
+  const minor = (step: number) => Math.min(body, Math.max(fontSize.sm, body - step));
   const codeSize = look.codePx ?? a.codeSize + CODE_STEP[look.codeSize];
   const code = { ...mono, fontSize: codeSize, lineHeight: Math.round(codeSize * 1.5) };
   const rule = alpha(c.border, 0.6);
   const tight = look.style === "compact";
   return StyleSheet.create({
-    row: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: tight ? 22 : 26, paddingVertical: tight ? 1 : 3 },
+    row: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: tight ? 24 : 26, paddingVertical: tight ? 1 : 3 },
     slot: { width: ICON_SLOT, height: 18, alignItems: "center", justifyContent: "center" },
     verb: { ...ui, color: c.foreground, fontSize: body, fontWeight: "500" },
     target: { ...ui, color: c.foregroundMuted, fontSize: body, flexShrink: 1, opacity: 0.85 },
     mono: { ...mono, fontSize: codeSize + 1 },
-    meta: { ...ui, color: c.foregroundMuted, fontSize: body - 2, fontVariant: ["tabular-nums"], marginLeft: "auto", flexShrink: 0 },
+    meta: { ...ui, color: c.foregroundMuted, fontSize: minor(2), fontVariant: ["tabular-nums"], marginLeft: "auto", flexShrink: 0 },
     detail: { paddingLeft: INDENT, paddingTop: 2, marginTop: 6 },
     ruled: { paddingLeft: 18, borderLeftWidth: 1, borderLeftColor: c.border, gap: 4, paddingVertical: 2 },
     block: { borderRadius: radius.lg, backgroundColor: sunken(c.surface0), borderWidth: 1, borderColor: rule, overflow: "hidden" },
@@ -100,16 +103,16 @@ function makeStyles(c: Colors, a: HostAppearance, look: RowLook) {
     blockBody: { paddingHorizontal: 12, paddingVertical: 9 },
     code: { ...code, color: c.foreground },
     gutter: { ...code, color: c.foregroundMuted, opacity: 0.6, textAlign: "right", fontVariant: ["tabular-nums"], flexShrink: 0 },
-    small: { ...ui, color: c.foregroundMuted, fontSize: body - 1, lineHeight: Math.round((body - 1) * 1.45) },
+    small: { ...ui, color: c.foregroundMuted, fontSize: minor(1), lineHeight: Math.round(minor(1) * 1.45) },
     label: { ...ui, color: c.foregroundMuted, fontSize: fontSize.sm, fontWeight: "600", letterSpacing: 0.8, marginBottom: 4 },
     prose: { ...ui, color: c.foregroundMuted, fontSize: body, lineHeight: Math.round(body * 1.6) },
     card: { borderRadius: radius.xl, backgroundColor: c.surface1, borderWidth: 1, borderColor: rule, overflow: "hidden" },
     cardHead: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: rule },
     title: { ...ui, color: c.foreground, fontSize: body, fontWeight: "600" },
     more: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 16, paddingBottom: 12, paddingTop: 4 },
-    moreText: { ...ui, color: c.foregroundMuted, fontSize: body - 2, fontWeight: "500" },
+    moreText: { ...ui, color: c.foregroundMuted, fontSize: minor(2), fontWeight: "500" },
     hairline: { flex: 1, height: 1, backgroundColor: rule },
-    action: { ...ui, color: c.foregroundMuted, fontSize: body - 3 },
+    action: { ...ui, color: c.foregroundMuted, fontSize: minor(3) },
   });
 }
 

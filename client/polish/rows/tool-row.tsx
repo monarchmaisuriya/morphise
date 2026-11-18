@@ -26,7 +26,7 @@ export type Nestable = { nested?: boolean };
 
 function ShowAll({ s, hidden, onPress }: { s: Styles; hidden: number; onPress(): void }) {
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={{ paddingHorizontal: 12, paddingVertical: 6 }}>
+    <Pressable accessibilityRole="button" accessibilityLabel={`Show all, ${hidden} more lines`} onPress={onPress} style={{ paddingHorizontal: 12, paddingVertical: 6 }}>
       <Text style={s.action}>Show all · {hidden} more lines</Text>
     </Pressable>
   );
@@ -238,14 +238,14 @@ function ImagePreview({ s, path, actions, theme }: { s: Styles; path: string; ac
   return <Image source={{ uri: state.uri }} accessibilityLabel={`Picture of ${path}`} resizeMode="contain" style={{ width: "100%", maxWidth: 520, height: 260, borderRadius: radius.lg, backgroundColor: theme.colors.surface1 }} />;
 }
 
-function Action({ s, theme, icon, label, onPress }: { s: Styles; theme: PluginTheme; icon: string; label: string; onPress(): void }) {
+function Action({ s, theme, compact, icon, label, onPress }: { s: Styles; theme: PluginTheme; compact: boolean; icon: string; label: string; onPress(): void }) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
       hitSlop={6}
-      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => ({ flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 6, paddingVertical: 3, borderRadius: radius.md, backgroundColor: pressed || hovered ? theme.colors.surface2 : "transparent" })}
+      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => ({ flexDirection: "row", alignItems: "center", gap: 4, minHeight: compact ? 32 : 24, paddingHorizontal: 6, paddingVertical: 3, borderRadius: radius.md, backgroundColor: pressed || hovered ? theme.colors.surface2 : "transparent" })}
     >
       <Icon name={icon} size={12} color={theme.colors.foregroundMuted} />
       <Text style={s.action}>{label}</Text>
@@ -254,7 +254,7 @@ function Action({ s, theme, icon, label, onPress }: { s: Styles; theme: PluginTh
 }
 
 /** Copy, Details, Open file and Show in Finder under a row's details. */
-function Actions({ s, theme, data, agentId, actions, children }: { s: Styles; theme: PluginTheme; data: ToolData; agentId: string; actions: RowActions | null; children?: ReactNode }) {
+function Actions({ s, theme, compact, data, agentId, actions, children }: { s: Styles; theme: PluginTheme; compact: boolean; data: ToolData; agentId: string; actions: RowActions | null; children?: ReactNode }) {
   const toast = useToast();
   const { body, bodyKind } = detailBody(data.detail);
   const path = data.path?.startsWith("/") ? data.path : null;
@@ -265,10 +265,10 @@ function Actions({ s, theme, data, agentId, actions, children }: { s: Styles; th
     <>
       {children}
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 2, marginLeft: -6, marginTop: 4 }}>
-        {copied ? <Action s={s} theme={theme} icon="Copy" label="Copy" onPress={() => void copyText(copied).then(() => toast.show("Copied"), (error: unknown) => toast.error(String(error)))} /> : null}
-        {actions && body ? <Action s={s} theme={theme} icon="PanelRight" label="Details" onPress={() => void actions.openDetails(agentId, { title: `${data.verb} ${data.target ?? ""}`.trim(), body, bodyKind, path }).then(report("open the details"))} /> : null}
-        {actions && path ? <Action s={s} theme={theme} icon="FileSearch" label="Open file" onPress={() => void actions.openDetails(agentId, { title: path, body: "", bodyKind: "content", path }).then(report("open the file"))} /> : null}
-        {actions && path && Platform.OS === "web" ? <Action s={s} theme={theme} icon="FolderOpen" label={isMac() ? "Show in Finder" : "Show in folder"} onPress={() => void actions.reveal(path).then(report("show the file"), (error: unknown) => toast.error(String(error)))} /> : null}
+        {copied ? <Action s={s} theme={theme} compact={compact} icon="Copy" label="Copy" onPress={() => void copyText(copied).then(() => toast.show("Copied"), (error: unknown) => toast.error(String(error)))} /> : null}
+        {actions && body ? <Action s={s} theme={theme} compact={compact} icon="PanelRight" label="Details" onPress={() => void actions.openDetails(agentId, { title: `${data.verb} ${data.target ?? ""}`.trim(), body, bodyKind, path }).then(report("open the details"))} /> : null}
+        {actions && path ? <Action s={s} theme={theme} compact={compact} icon="FileSearch" label="Open file" onPress={() => void actions.openDetails(agentId, { title: path, body: "", bodyKind: "content", path }).then(report("open the file"))} /> : null}
+        {actions && path && Platform.OS === "web" ? <Action s={s} theme={theme} compact={compact} icon="FolderOpen" label={isMac() ? "Show in Finder" : "Show in folder"} onPress={() => void actions.reveal(path).then(report("show the file"), (error: unknown) => toast.error(String(error)))} /> : null}
       </View>
     </>
   );
@@ -319,7 +319,7 @@ export function ToolItem({ item, theme, layout, agentId, timestamp, nested }: Pl
       ) : null}
       {opens ? (
         <Expand open={open} style={[s.detail, { paddingLeft: indent, marginBottom: 12, gap: 8 }]}>
-          <Actions s={s} theme={theme} data={d} agentId={agentId} actions={actions}>
+          <Actions s={s} theme={theme} compact={layout.compact} data={d} agentId={agentId} actions={actions}>
             {body(false)}
           </Actions>
         </Expand>

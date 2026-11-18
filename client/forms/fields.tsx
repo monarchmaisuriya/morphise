@@ -1,8 +1,9 @@
-import { type PluginSurfaceProps, useSettings } from "@getpaseo/plugin/client";
-import { Loading, SettingsAction, SettingsCard, SettingsInput, SettingsSection, SettingsSelect, SettingsSwitch } from "@getpaseo/plugin/client/ui";
-import { Icon, tokens } from "../ui/kit";
+import { type PluginSurfaceProps, type SettingsState, useSettings } from "@getpaseo/plugin/client";
+import { Loading, SettingsAction, SettingsCard, SettingsInput, SettingsSection, SettingsSelect, SettingsSwitch, TextInput } from "@getpaseo/plugin/client/ui";
+import { Icon, Tag, tokens } from "../ui/kit";
 import { type ReactNode, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
+import type { ZodType } from "zod";
 import type { Action } from "../../shared/actions";
 import { type ProfileDocument, profileSettings } from "../../shared/document";
 import type { Profile } from "../../shared/profile";
@@ -10,7 +11,7 @@ import type { DraftStore, Saved } from "../draft";
 import { useValue } from "../profile-store";
 import { useAutoSave } from "./autosave";
 import { openAfterSwap } from "./list-move";
-import { fontSize } from "../../shared/design/tokens";
+import { fontSize, lineHeight, radius } from "../../shared/design/tokens";
 
 type Theme = PluginSurfaceProps["theme"];
 
@@ -35,6 +36,19 @@ export interface Form {
   inputKey: string;
 }
 
+// What a tab that keeps its own records needs from the screen: how to draw, and when inputs re-read their value.
+export type SettingsLook = Pick<Form, "theme" | "compact" | "inputKey">;
+
+// A tab whose settings are their own records, never the profile: drawn without the profile, so a profile that
+// cannot be read or is invalid does not hide it.
+export function createSeparateScreen(render: (look: SettingsLook) => ReactNode) {
+  return function MorphiseSeparateScreen({ theme, layout }: PluginSurfaceProps) {
+    return <>{render({ theme, compact: layout.compact, inputKey: "" })}</>;
+  };
+}
+
+export const ICON_HINT = "A Lucide icon name, such as BookOpen.";
+
 export function TextField({
   form,
   label,
@@ -44,7 +58,7 @@ export function TextField({
   hint,
   placeholder,
 }: {
-  form: Form;
+  form: Pick<Form, "inputKey">;
   label: string;
   value: string;
   onChange(text: string): void;
@@ -79,20 +93,23 @@ export function SelectField<Value extends string>({
   options,
   onChange,
   hint,
+  error,
 }: {
   label: string;
   value: Value;
   options: readonly { label: string; value: Value }[];
   onChange(value: Value): void;
   hint?: string;
+  error?: string | null;
 }) {
-  return <SettingsSelect label={label} hint={hint} value={value} options={options} onValueChange={onChange} />;
+  return <SettingsSelect label={label} hint={hint} value={value} options={options} onValueChange={onChange} error={error ?? null} />;
 }
 
 // Add, edit, move and remove the items of one list.
 export function ListEditor<Item>({
   form,
   title,
+  itemName,
   info,
   items,
   onChange,
@@ -104,6 +121,8 @@ export function ListEditor<Item>({
 }: {
   form: Form;
   title: string;
+  // One item, as the Add row names it: "layout", "Command Center item".
+  itemName: string;
   info?: string;
   items: readonly Item[];
   onChange(items: Item[]): void;
@@ -144,24 +163,38 @@ export function ListEditor<Item>({
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`${open === index ? "Close" : "Edit"} ${itemLabel(item, index)}`}
+                  accessibilityState={{ expanded: open === index }}
                   onPress={() => setOpen(open === index ? null : index)}
                   style={styles.label}
                 >
+                  <Icon name={open === index ? "ChevronDown" : "ChevronRight"} size={14} color={form.theme.colors.foregroundMuted} />
                   <Text style={styles.text} numberOfLines={1}>
                     {itemLabel(item, index)}
                   </Text>
                   {errors > 0 ? <Text style={styles.error}>{errors === 1 ? "1 problem" : `${errors} problems`}</Text> : null}
                 </Pressable>
-                <IconButton icon="ChevronUp" label="Move up" onPress={() => move(index, -1)} disabled={index === 0} theme={form.theme} />
-                <IconButton icon="ChevronDown" label="Move down" onPress={() => move(index, 1)} disabled={index === items.length - 1} theme={form.theme} />
-                <IconButton icon="Trash2" label={`Remove ${itemLabel(item, index)}`} onPress={() => { onChange(items.filter((_, position) => position !== index)); setOpen(null); }} theme={form.theme} />
+                <IconButton icon="ArrowUp" label="Move up" onPress={() => move(index, -1)} disabled={index === 0} theme={form.theme} />
+                <IconButton icon="ArrowDown" label="Move down" onPress={() => move(index, 1)} disabled={index === items.length - 1} theme={form.theme} />
               </View>
-              {open === index ? <View style={styles.body}>{renderItem(item, index, (change) => replace(index, change))}</View> : null}
+              {open === index ? (
+                <View style={styles.body}>
+                  {renderItem(item, index, (change) => replace(index, change))}
+                  {/* Removing takes the item open, then this press, so one stray tap never deletes a whole layout or prompt. */}
+                  <SettingsAction
+                    label={`Remove ${itemLabel(item, index)}`}
+                    actionLabel="Remove"
+                    onPress={() => {
+                      onChange(items.filter((_, position) => position !== index));
+                      setOpen(null);
+                    }}
+                  />
+                </View>
+              ) : null}
             </View>
           );
         })}
         <SettingsAction
-          label={items.length ? `Add to ${title.toLowerCase()}` : `No ${title.toLowerCase()} yet`}
+          label={items.length ? `Add a ${itemName}` : `No ${title} yet`}
           actionLabel="Add"
           onPress={() => {
             onChange([...items, create()]);
@@ -173,9 +206,70 @@ export function ListEditor<Item>({
   );
 }
 
+// A separately stored setting that could not be read, as the Agents tab shows one: what went wrong, and the way back
+// (Reset when its saved value is invalid, Retry when it could not load). Never a switch that resets when flipped.
+export function UnreadableSetting({ label, invalid, error, onReset, onRetry }: { label: string; invalid: boolean; error: string; onReset(): void; onRetry(): void }) {
+  return invalid ? (
+    <SettingsAction label={label} hint="The saved setting is invalid; Reset puts back the default." error={error} actionLabel="Reset" onPress={onReset} />
+  ) : (
+    <SettingsAction label={label} hint="Could not read this setting." error={error} actionLabel="Retry" onPress={onRetry} />
+  );
+}
+
+// A separately stored setting's section until its record can be used: Loading while it loads, so the section does
+// not pop in later, and what went wrong with the way back when it cannot be read.
+export function StoredSettingStatus<Schema extends ZodType>({ title, label, stored }: { title: string; label: string; stored: SettingsState<Schema> }) {
+  return (
+    <SettingsSection title={title}>
+      {stored.status === "error" || stored.status === "invalid" ? (
+        <SettingsCard>
+          <UnreadableSetting label={label} invalid={stored.status === "invalid"} error={stored.error} onReset={() => void stored.reset()} onRetry={() => void stored.reload()} />
+        </SettingsCard>
+      ) : (
+        <Loading />
+      )}
+    </SettingsSection>
+  );
+}
+
+// A multi-line text box, padded and labelled like Paseo's own settings rows, with their text size.
+// `parsed` boxes keep their own text (the draft holds a parsed form of it, which would rewrite the
+// text while typing); the others show the draft's value directly.
+export function multiline(form: SettingsLook, label: string, value: string, onChange: (text: string) => void, error: string | null, minHeight = 96, parsed = false) {
+  const { theme } = form;
+  const size = form.compact ? fontSize.content : fontSize.base;
+  return (
+    <View style={{ gap: 8, paddingVertical: 12, paddingHorizontal: 16 }}>
+      <Text style={{ color: theme.colors.foreground, fontSize: fontSize.base }}>{label}</Text>
+      <TextInput
+        accessibilityLabel={label}
+        multiline
+        key={parsed ? `${form.inputKey}:${label}` : undefined}
+        {...(parsed ? { defaultValue: value } : { value })}
+        onChangeText={onChange}
+        autoCapitalize="none"
+        autoCorrect={false}
+        style={{
+          minHeight,
+          padding: 8,
+          fontSize: size,
+          lineHeight: lineHeight(size),
+          color: theme.colors.foreground,
+          backgroundColor: theme.colors.surface1,
+          borderColor: error ? theme.colors.statusDanger : theme.colors.border,
+          borderWidth: 1,
+          borderRadius: radius.md,
+          textAlignVertical: "top",
+        }}
+      />
+      {error ? <Text style={{ color: theme.colors.statusDanger, fontSize: fontSize.sm }}>{error}</Text> : null}
+    </View>
+  );
+}
+
 function IconButton({ icon, label, onPress, disabled, theme }: { icon: string; label: string; onPress(): void; disabled?: boolean; theme: Theme }) {
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} disabled={disabled} style={{ padding: 8, opacity: disabled ? 0.35 : 1 }}>
+    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }} onPress={onPress} disabled={disabled} style={{ padding: 8, opacity: disabled ? 0.35 : 1 }}>
       <Icon name={icon} size={14} color={theme.colors.foregroundMuted} />
     </Pressable>
   );
@@ -232,7 +326,7 @@ export function ActionFields({ form, action, onChange, errorAt }: { form: Form; 
       case "open-url":
         return <TextField form={form} label="Web address" value={action.url} onChange={(url) => onChange({ ...action, url })} error={errorAt("url")} />;
       case "set-model":
-        return <TextField form={form} label="Model id" value={action.model} onChange={(model) => onChange({ ...action, model })} error={errorAt("model")} hint="As your provider names it" />;
+        return <TextField form={form} label="Model id" value={action.model} onChange={(model) => onChange({ ...action, model })} error={errorAt("model")} hint="As your provider names it." />;
       case "set-mode":
         return <TextField form={form} label="Mode id" value={action.mode} onChange={(mode) => onChange({ ...action, mode })} error={errorAt("mode")} />;
       case "set-thinking":
@@ -350,27 +444,18 @@ export function createFormScreen(
 }
 
 // A settings row holding a set of on/off chips: one line instead of a switch per choice.
-export function ChipRow({ form, label, hint, chips }: { form: Form; label: string; hint?: string; chips: { key: string; label: string; on: boolean; toggle(): void }[] }) {
-  const t = tokens(form.theme, false);
+export function ChipRow({ form, label, hint, chips }: { form: Pick<Form, "theme" | "compact">; label: string; hint?: string; chips: { key: string; label: string; on: boolean; toggle(): void }[] }) {
+  const t = tokens(form.theme, form.compact);
   return (
     <View style={{ paddingVertical: 14, paddingHorizontal: 16, gap: 10 }}>
       <View style={{ gap: 2 }}>
         <Text style={{ color: t.c.foreground, fontSize: fontSize.base }}>{label}</Text>
         {hint ? <Text style={t.text.small}>{hint}</Text> : null}
       </View>
+      {/* The kit's toggle chip, as the Tasks board's filters draw it, so every on/off chip in Morphise looks the same. */}
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
         {chips.map((chip) => (
-          <Pressable
-            key={chip.key}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: chip.on }}
-            accessibilityLabel={chip.label}
-            onPress={chip.toggle}
-            style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => ({ flexDirection: "row", alignItems: "center", gap: 6, height: 28, paddingHorizontal: 10, borderRadius: 14, borderWidth: 1, borderColor: chip.on ? t.c.accent : t.c.border, backgroundColor: chip.on ? t.c.surface2 : pressed || hovered ? t.c.surface1 : "transparent" })}
-          >
-            {chip.on ? <Icon name="Check" size={12} color={t.c.accent} /> : null}
-            <Text style={{ fontSize: fontSize.sm, color: chip.on ? t.c.foreground : t.c.foregroundMuted }}>{chip.label}</Text>
-          </Pressable>
+          <Tag key={chip.key} t={t} label={chip.label} on={chip.on} onPress={chip.toggle} />
         ))}
       </View>
     </View>

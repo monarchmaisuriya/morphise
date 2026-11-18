@@ -29,7 +29,7 @@ export function PlanItem({ item, theme }: PluginTimelineItemProps<z.output<typeo
         <Prose text={text} />
       </View>
       {long ? (
-        <Pressable accessibilityRole="button" onPress={toggle} style={s.more}>
+        <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} onPress={toggle} style={s.more}>
           <Text style={s.moreText}>{open ? t("chat.showLess") : t("chat.showFullPlan")}</Text>
           <Icon name={open ? "ChevronUp" : "ChevronDown"} size={12} color={theme.colors.foregroundMuted} />
         </Pressable>

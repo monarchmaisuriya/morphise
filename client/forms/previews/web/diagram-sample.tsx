@@ -7,6 +7,7 @@ import { Platform, Text, View } from "react-native";
 import { diagramDoc, drawDiagram } from "../../../polish/web/mermaid";
 import { alpha, sunken } from "../../../polish/rows/row";
 import { SAMPLE_DIAGRAM } from "../samples";
+import { fontSize, radius } from "../../../../shared/design/tokens";
 
 function DiagramFrame({ theme, pele }: { theme: PluginTheme; pele: boolean }) {
   const c = theme.colors;
@@ -24,9 +25,9 @@ function DiagramFrame({ theme, pele }: { theme: PluginTheme; pele: boolean }) {
   useEffect(() => (frame ? drawDiagram(frame, SAMPLE_DIAGRAM, (drawn) => (drawn ? setSize(drawn) : setFailed(true))) : undefined), [frame]);
   const note = failed ? "The sample diagram could not be drawn." : doc ? null : "The diagram sample shows once a chat in this window has drawn a diagram.";
   return (
-    <View style={{ padding: 12, borderRadius: 8, backgroundColor: sunken(c.surface0), borderWidth: 1, borderColor: alpha(c.border, 0.6), alignItems: "center" }}>
+    <View style={{ padding: 12, borderRadius: radius.lg, backgroundColor: sunken(c.surface0), borderWidth: 1, borderColor: alpha(c.border, 0.6), alignItems: "center" }}>
       {note ? (
-        <Text style={{ color: c.foregroundMuted, fontSize: 12, paddingVertical: 24 }}>{note}</Text>
+        <Text style={{ color: c.foregroundMuted, fontSize: fontSize.sm, paddingVertical: 24 }}>{note}</Text>
       ) : (
         createElement("iframe", {
           key,

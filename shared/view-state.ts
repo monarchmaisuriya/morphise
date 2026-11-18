@@ -28,6 +28,8 @@ export const viewStateSettings = defineSettings({
     // The lines that hang chats and sub-agents off their workspace, and whether the last one's corner is rounded or square.
     branchLines: z.boolean().default(true),
     branchCorners: z.enum(["rounded", "square"]).default("rounded"),
+    // The status mark on chat and sub-agent rows: a dashed circle in the status colour, or the workspace row's filled dot.
+    branchMark: z.enum(["dashed", "dot"]).default("dashed"),
     // Morphise's sidebar view has been on screen on this device. Paseo tells plugins nothing about which sidebar view it
     // shows, and a plugin reload forgets what this session saw, so Settings' "still showing its own sidebar" note reads this.
     viewShown: z.boolean().default(false),
@@ -54,5 +56,6 @@ export function sidebarLook(look: ViewState, density: "compact" | "comfortable" 
     projectIcons: look.showProjectIcons,
     branchLines: look.branchLines,
     branchRadius: look.branchCorners === "square" ? 0 : radius.md,
+    branchMark: look.branchMark,
   };
 }

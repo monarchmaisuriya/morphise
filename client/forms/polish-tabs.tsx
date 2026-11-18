@@ -1,7 +1,7 @@
-import { useRpc } from "@getpaseo/plugin/client";
+import { openExternalUrl, useRpc } from "@getpaseo/plugin/client";
 import { SettingsAction, SettingsCard, SettingsSection } from "@getpaseo/plugin/client/ui";
 import { type ReactNode, useEffect, useState } from "react";
-import { Text } from "react-native";
+import { Pressable, Text } from "react-native";
 import type { ChatSettings } from "../../shared/chat-view";
 import { ICON_KINDS, type IconKind, LOADERS, POLISH_DEFAULTS, type PolishSettings, polishPrefs, RICH_TEXT, type RichText, SELECTION_ACTIONS, type SelectionAction } from "../../shared/polish/prefs";
 import { applyUpdate, checkUpdate, type Revision, type UpdateStatus } from "../../shared/polish/update";
@@ -272,12 +272,18 @@ export function UpdateSection({ form }: { form: Form }): ReactNode {
       // The update runs on the daemon and restarts Morphise when it is done; this screen reloads then.
       .then((result) => (result.error ? (setError(result.error), setBusy(false)) : setStarted(true)), (reason: unknown) => (setError(String(reason)), setBusy(false)));
   };
-  const hint = started ? "Updating on this host; Morphise restarts when it is done" : error ?? (status === null ? "Checking" : status.state === "update" ? `${status.current ?? "?"} → ${status.target ?? "?"}` : status.state === "current" ? `Up to date${status.current ? ` (${status.current})` : ""}` : status.state === "local" ? "Installed from a folder: reload it instead" : status.error ?? "Could not check");
+  // A failed check or install shows as the row's error, not as ordinary help text.
+  const failure = started ? null : error ?? (status?.state === "error" ? status.error ?? "Could not check." : null);
+  const hint = started ? "Updating on this host; Morphise restarts when it is done." : status === null ? (failure ? undefined : "Checking") : status.state === "update" ? `${status.current ?? "?"} → ${status.target ?? "?"}` : status.state === "current" ? `Up to date${status.current ? ` (${status.current})` : ""}` : status.state === "local" ? "Installed from a folder: reload it instead." : undefined;
   return (
-    <SettingsSection title="Updates">
+    <SettingsSection title="Updates" info="Whether a newer Morphise is available for this host, and installing it.">
       <SettingsCard>
-        {status?.state === "update" && status.revision ? <SettingsAction label="Update available" hint={hint} actionLabel={started || busy ? "Updating" : "Update"} disabled={started || busy} onPress={() => install(status.revision!)} /> : <SettingsAction label="Morphise" hint={hint} actionLabel={busy ? "Checking" : "Check again"} disabled={busy} onPress={run} />}
-        {status?.state === "update" && status.links[0] ? <Text selectable style={{ paddingHorizontal: 16, paddingBottom: 12, fontSize: fontSize.sm, color: form.theme.colors.foregroundMuted }}>{status.links[0]}</Text> : null}
+        {status?.state === "update" && status.revision ? <SettingsAction label="Update available" hint={hint} error={failure} actionLabel={started || busy ? "Updating" : "Update"} disabled={started || busy} onPress={() => install(status.revision!)} /> : <SettingsAction label="Morphise" hint={hint} error={failure} actionLabel={busy ? "Checking" : "Check again"} disabled={busy} onPress={run} />}
+        {status?.state === "update" && status.links[0] ? (
+          <Pressable accessibilityRole="link" accessibilityLabel="Open the changes in this update" onPress={() => void openExternalUrl(status.links[0]).catch((reason: unknown) => setError(`Could not open the link: ${String(reason)}`))} style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
+            <Text style={{ fontSize: fontSize.sm, color: form.theme.colors.accent, textDecorationLine: "underline" }}>{status.links[0]}</Text>
+          </Pressable>
+        ) : null}
       </SettingsCard>
     </SettingsSection>
   );

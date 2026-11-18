@@ -1,6 +1,6 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { Modal, useToast } from "@getpaseo/plugin/client/ui";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { slug, type TaskOperation } from "../../shared/task-ops";
 import type { Task, TaskDocument } from "../../shared/tasks";
@@ -74,6 +74,12 @@ export function CardEditor({ deps, target, theme, compact, onClose, openWorkspac
   const [newItem, setNewItem] = useState("");
   const [newLabel, setNewLabel] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Delete asks for a second press within four seconds, as every other delete does, then disarms.
+  useEffect(() => {
+    if (!confirmDelete) return;
+    const timer = setTimeout(() => setConfirmDelete(false), 4000);
+    return () => clearTimeout(timer);
+  }, [confirmDelete]);
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
   const t = useTokens(theme, compact);
@@ -212,7 +218,7 @@ export function CardEditor({ deps, target, theme, compact, onClose, openWorkspac
               <Tag t={t} label="Tomorrow" on={due === plusDays(1)} onPress={() => set({ dueText: plusDays(1) })} />
               <Tag t={t} label="Next Monday" on={due === nextMonday} onPress={() => set({ dueText: nextMonday })} />
               <View style={{ width: 170 }}>
-                <Field t={t} plain value={draft.dueText} onChangeText={(dueText) => set({ dueText })} placeholder="No date: type fri, 20 nov or 2026-11-20" accessibilityLabel="Due date" error={dueProblem} />
+                <Field t={t} plain value={draft.dueText} onChangeText={(dueText) => set({ dueText })} placeholder="fri or 2026-11-20" accessibilityLabel="Due date" error={dueProblem} hint={draft.dueText ? null : "Type fri, 20 nov or 2026-11-20"} />
               </View>
               {draft.dueText ? <IconButton t={t} size="sm" icon="X" label="Clear the due date" onPress={() => set({ dueText: "" })} /> : null}
             </View>
@@ -225,7 +231,7 @@ export function CardEditor({ deps, target, theme, compact, onClose, openWorkspac
                   <Tag key={text} t={t} label={label!} on={draft.reminderText === text} onPress={() => set({ reminderText: text! })} />
                 ))}
                 <View style={{ width: 210 }}>
-                  <Field t={t} plain value={draft.reminderText} onChangeText={(reminderText) => set({ reminderText })} placeholder="None: type 45m, 3pm or tomorrow 9am" accessibilityLabel="Reminder" error={reminderProblem} />
+                  <Field t={t} plain value={draft.reminderText} onChangeText={(reminderText) => set({ reminderText })} placeholder="45m or 3pm" accessibilityLabel="Reminder" error={reminderProblem} hint={draft.reminderText ? null : "Type 45m, 3pm or tomorrow 9am"} />
                 </View>
                 {draft.reminderText ? <IconButton t={t} size="sm" icon="X" label="Clear the reminder" onPress={() => set({ reminderText: "" })} /> : null}
               </View>
@@ -235,7 +241,7 @@ export function CardEditor({ deps, target, theme, compact, onClose, openWorkspac
           {task ? (
             <PropertyRow t={t} icon="AlarmClock" label="Reminder">
               {finished ? (
-                <Text style={t.text.meta}>{task.reminder ? "Paused while the card is in Done or archived." : "Move the card out of Done to set a reminder."}</Text>
+                <Text style={t.text.meta}>{task.reminder ? "Paused while the task is in Done or archived." : "Move the task out of Done to set a reminder."}</Text>
               ) : reminderOpen ? (
                 <View style={{ padding: 8, borderWidth: 1, borderColor: t.c.border, borderRadius: t.radius.card, backgroundColor: t.c.surface1 }}>
                   <ReminderPicker deps={deps} target={{ kind: "task", taskId: task.id }} title={task.title} theme={theme} compact={compact} embedded onDone={() => setReminderOpen(false)} />
@@ -293,7 +299,7 @@ export function CardEditor({ deps, target, theme, compact, onClose, openWorkspac
           </View>
           <View style={{ flexDirection: "row", gap: 8 }}>
             <Button t={t} label="Cancel" onPress={onClose} />
-            <Button t={t} variant="primary" label={task ? "Save" : "Add task"} accessibilityLabel="Save" disabled={!canSave} onPress={() => void save()} />
+            <Button t={t} variant="primary" label={task ? "Save" : "Add task"} disabled={!canSave} onPress={() => void save()} />
           </View>
         </View>
         </PopoverHost>

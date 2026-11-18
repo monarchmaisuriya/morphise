@@ -1,13 +1,14 @@
 import type { PluginClientContext, PluginOpenScreenInput, PluginScreenProps } from "@getpaseo/plugin/client";
 import { useSettings } from "@getpaseo/plugin/client";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from "react-native";
 import type { Chats } from "./chats";
 import { type DispatchSettings, dispatchSettings, modeChoices, modelChoices, modelsOf, projectsOf, providerStatus, splitPrompts, titleFromPrompt } from "./dispatch-options";
 import { createValueStore, type ValueStore, useValue } from "./profile-store";
 import { Button, Field, Icon, IconButton, PopoverHost, Segmented, Select, type Tokens, useTokens } from "./ui/kit";
 import type { WorkspaceList } from "./workspaces";
 import { fontSize, radius } from "../shared/design/tokens";
+import { isMac } from "./web";
 
 // Dispatch: several prompts at once, each started as its own new workspace and agent. One row of
 // defaults (project, model, mode, worktree or folder), then numbered prompts that turn into live
@@ -52,7 +53,8 @@ interface Row {
 }
 
 const DEFAULT_SETTINGS: DispatchSettings = { where: "worktree" };
-const COMMAND_HINT = Platform.OS === "web" ? "⌘↵ starts them all" : null;
+// The kit's field sends on Cmd+Enter on macOS and Ctrl+Enter elsewhere (ui/kit.tsx), so the hint names the right key.
+const COMMAND_HINT = Platform.OS !== "web" ? null : isMac() ? "⌘↵ starts them all" : "Ctrl+Enter starts them all";
 
 let nextRowId = 1;
 const newRow = (text = ""): Row => ({ id: nextRowId++, text, status: "draft", workspaceId: null, error: null });
@@ -101,10 +103,7 @@ function PromptRow({ t, row, index, count, running, onChange, onRemove, onSplit,
         </View>
       </View>
       {parts ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={`Split into ${parts.length} prompts`} onPress={() => onSplit(parts)} style={{ flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", marginLeft: 26, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.lg, backgroundColor: t.c.surface2 }}>
-          <Icon name="Split" size={12} color={t.c.foreground} />
-          <Text style={{ fontSize: fontSize.sm, color: t.c.foreground }}>Split into {parts.length} prompts</Text>
-        </Pressable>
+        <Button t={t} variant="secondary" size="sm" icon="Split" label={`Split into ${parts.length} prompts`} onPress={() => onSplit(parts)} style={{ alignSelf: "flex-start", marginLeft: 26 }} />
       ) : null}
       {row.status === "failed" && row.error ? <Text style={[t.text.danger, { marginLeft: 26 }]}>{row.error}</Text> : null}
     </View>
@@ -218,10 +217,10 @@ function Dispatch({ t, deps, openWorkspace, header }: { t: Tokens; deps: Dispatc
   const started = rows.filter((row) => row.status === "started");
   const failed = rows.filter((row) => row.status === "failed");
   const retryable = failed.filter((row) => row.text.trim());
-  const label = running ? "Starting..." : pending.length > 1 ? `Start ${pending.length}` : "Start";
+  const label = running ? "Starting…" : pending.length > 1 ? `Start ${pending.length}` : "Start";
   const problem = !project ? "Open a project in Paseo first; Dispatch starts agents in your projects." : !model && entries !== null && !holding ? "No model is available. Check Settings, Providers in Paseo." : null;
   const status = running
-    ? `Starting ${Math.min(run.done + 1, run.total)} of ${run.total}...`
+    ? `Starting ${Math.min(run.done + 1, run.total)} of ${run.total}…`
     : started.length || failed.length
       ? [started.length ? `${started.length} started` : null, failed.length ? `${failed.length} failed` : null].filter(Boolean).join(" · ")
       : pending.length
@@ -260,7 +259,7 @@ function Dispatch({ t, deps, openWorkspace, header }: { t: Tokens; deps: Dispatc
               <Select t={t} label="Project" placeholder="No project" value={project?.id ?? null} onChange={(id) => remember({ project: id })} options={projects.map((item) => ({ value: item.id, label: item.name, icon: "Folder" }))} />
             </View>
             <View style={{ maxWidth: 240 }}>
-              <Select t={t} label="Model" placeholder={entries === null || holding ? "Loading models..." : "No model"} value={model?.value ?? null} onChange={(value) => remember({ model: value, mode: undefined })} options={models.map((item) => ({ value: item.value, label: item.label, icon: "Bot" }))} />
+              <Select t={t} label="Model" placeholder={entries === null || holding ? "Loading models…" : "No model"} value={model?.value ?? null} onChange={(value) => remember({ model: value, mode: undefined })} options={models.map((item) => ({ value: item.value, label: item.label, icon: "Bot" }))} />
             </View>
             {modes.length ? (
               <View style={{ maxWidth: 180 }}>

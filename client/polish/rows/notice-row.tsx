@@ -2,18 +2,19 @@
 // Morphise adds Copy on errors and Paseo's own notices, and the row's time.
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { copyText, useToast } from "@getpaseo/plugin/client/ui";
-import { Animated, Pressable, Text, View } from "react-native";
+import { Animated, Text, View } from "react-native";
 import type { z } from "zod";
-import { Icon } from "../../ui/kit";
+import { Icon, IconButton, useTokens } from "../../ui/kit";
 import { useRowSetup } from "./look";
 import type { noticeSchema } from "./model";
 import { toneColor, usePulse, useStyles } from "./row";
 
 const clock = (at: Date) => at.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 
-export function NoticeItem({ item, theme, timestamp }: PluginTimelineItemProps<z.output<typeof noticeSchema>>) {
+export function NoticeItem({ item, theme, layout, timestamp }: PluginTimelineItemProps<z.output<typeof noticeSchema>>) {
   const s = useStyles(theme);
   const toast = useToast();
+  const tk = useTokens(theme, layout.compact);
   const { look } = useRowSetup();
   const d = item.data;
   const color = toneColor(theme.colors, d.tone);
@@ -29,9 +30,7 @@ export function NoticeItem({ item, theme, timestamp }: PluginTimelineItemProps<z
           {d.text}
         </Text>
         {time}
-        <Pressable accessibilityRole="button" accessibilityLabel="Copy" hitSlop={6} onPress={() => void copyText(d.text).then(() => toast.show("Copied"), (error: unknown) => toast.error(String(error)))}>
-          <Icon name="Copy" size={12} color={theme.colors.foregroundMuted} />
-        </Pressable>
+        <IconButton t={tk} icon="Copy" label="Copy" size="sm" onPress={() => void copyText(d.text).then(() => toast.show("Copied"), (error: unknown) => toast.error(String(error)))} />
       </View>
     );
   }

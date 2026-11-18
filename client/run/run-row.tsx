@@ -380,7 +380,8 @@ function Header({
   }, [expanded]);
   const status = (
     <Text
-      accessibilityLiveRegion="polite"
+      // Announced when the status words change (Done, Exit 1, Stopped); never while the timer ticks every 100 ms.
+      accessibilityLiveRegion={pres.timerFrom !== null ? "none" : "polite"}
       numberOfLines={1}
       style={{ flexShrink: 0, color: toneColor(pres.tone, colors), fontSize: fontSize.sm, lineHeight: 16, fontVariant: ["tabular-nums"] }}
     >
@@ -388,7 +389,47 @@ function Header({
     </Text>
   );
   const switcherView = steps ? <Switcher steps={steps} colors={colors} compact={compact} newerRunning={newerRunning} onStep={onStep} /> : null;
-  const content = (highlighted: boolean) => (
+  const hover = { onHoverIn: () => setHovered(true), onHoverOut: () => setHovered(false) };
+  // The command line is the fold toggle; the run switcher sits beside it, never inside it, so its buttons are not nested in another.
+  const commandLine = (
+    <>
+      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: toneColor(pres.tone, colors) }} />
+      <Text
+        onLayout={command.onShownLayout}
+        numberOfLines={expanded ? undefined : 1}
+        style={{ flex: 1, minWidth: 0, fontFamily: mono(), fontSize: fontSize.base, lineHeight: 18, fontWeight: "500", color: colors.foreground }}
+      >
+        <Text selectable={false} style={{ color: colors.foregroundMuted, fontWeight: "400" }}>
+          ${" "}
+        </Text>
+        {first}
+      </Text>
+      <Text
+        aria-hidden
+        selectable={false}
+        pointerEvents="none"
+        onLayout={command.onFullLayout}
+        numberOfLines={1}
+        style={{ position: "absolute", left: 0, top: 0, opacity: 0, fontFamily: mono(), fontSize: fontSize.base, lineHeight: 18, fontWeight: "500" }}
+      >{`$ ${first}`}</Text>
+      {rest.length > 0 ? (
+        <Text
+          numberOfLines={1}
+          style={{
+            flexShrink: 0,
+            color: colors.foregroundMuted,
+            fontSize: fontSize.sm,
+            lineHeight: 16,
+            paddingHorizontal: 6,
+            borderRadius: radius.base,
+            backgroundColor: colors.surface2,
+          }}
+        >{`+${rest.length} ${rest.length === 1 ? "line" : "lines"}`}</Text>
+      ) : null}
+    </>
+  );
+  const commandStyle = { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 8 } as const;
+  return (
     <View
       onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
       style={{
@@ -396,68 +437,39 @@ function Header({
         paddingVertical: 8,
         paddingHorizontal: 12,
         minHeight: 36,
-        backgroundColor: highlighted ? withAlpha(colors.surface2, 0.5) : "transparent",
+        backgroundColor: foldable && hovered ? withAlpha(colors.surface2, 0.5) : "transparent",
       }}
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: toneColor(pres.tone, colors) }} />
-        <Text
-          onLayout={command.onShownLayout}
-          numberOfLines={expanded ? undefined : 1}
-          style={{ flex: 1, minWidth: 0, fontFamily: mono(), fontSize: fontSize.base, lineHeight: 18, fontWeight: "500", color: colors.foreground }}
-        >
-          <Text selectable={false} style={{ color: colors.foregroundMuted, fontWeight: "400" }}>
-            ${" "}
-          </Text>
-          {first}
-        </Text>
-        <Text
-          aria-hidden
-          selectable={false}
-          pointerEvents="none"
-          onLayout={command.onFullLayout}
-          numberOfLines={1}
-          style={{ position: "absolute", left: 0, top: 0, opacity: 0, fontFamily: mono(), fontSize: fontSize.base, lineHeight: 18, fontWeight: "500" }}
-        >{`$ ${first}`}</Text>
-        {rest.length > 0 ? (
-          <Text
-            numberOfLines={1}
-            style={{
-              flexShrink: 0,
-              color: colors.foregroundMuted,
-              fontSize: fontSize.sm,
-              lineHeight: 16,
-              paddingHorizontal: 6,
-              borderRadius: radius.base,
-              backgroundColor: colors.surface2,
-            }}
-          >{`+${rest.length} ${rest.length === 1 ? "line" : "lines"}`}</Text>
-        ) : null}
+        {foldable ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${expanded ? "Show less" : "Show more"} output of $ ${first}`}
+            aria-expanded={expanded}
+            onPress={onToggle}
+            {...hover}
+            style={commandStyle}
+          >
+            {commandLine}
+          </Pressable>
+        ) : (
+          <View style={commandStyle}>{commandLine}</View>
+        )}
         {stacked ? null : switcherView}
         {status}
         <IconSwap swapKey={foldable ? "fold" : "none"} size={14}>
           {foldable ? (
-            <Animated.View style={{ transform: [{ rotate: rotate.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "90deg"] }) }] }}>
-              <Icon name="ChevronRight" size={14} color={colors.foregroundMuted} />
-            </Animated.View>
+            // The same toggle for the pointer; keyboards and screen readers use the command line's.
+            <Pressable aria-hidden focusable={false} onPress={onToggle} {...hover}>
+              <Animated.View style={{ transform: [{ rotate: rotate.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "90deg"] }) }] }}>
+                <Icon name="ChevronRight" size={14} color={colors.foregroundMuted} />
+              </Animated.View>
+            </Pressable>
           ) : null}
         </IconSwap>
       </View>
       {stacked && switcherView ? <View style={{ flexDirection: "row", paddingStart: 14 }}>{switcherView}</View> : null}
     </View>
-  );
-  if (!foldable) return content(false);
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={expanded ? "Show less output" : "Show more output"}
-      aria-expanded={expanded}
-      onPress={onToggle}
-      onHoverIn={() => setHovered(true)}
-      onHoverOut={() => setHovered(false)}
-    >
-      {content(hovered)}
-    </Pressable>
   );
 }
 

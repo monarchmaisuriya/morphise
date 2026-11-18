@@ -18,6 +18,11 @@ export interface ChecksDeps {
 
 const ORDER: Record<CheckRun["status"], number> = { failure: 0, cancelled: 1, pending: 2, success: 3, skipped: 4 };
 
+// A check's state as an icon as well as a colour, so passing and failing differ for colour-blind readers too.
+function runIcon(status: CheckRun["status"]): string {
+  return status === "success" ? "CircleCheck" : status === "failure" ? "CircleX" : status === "pending" ? "Clock" : "CircleSlash";
+}
+
 function runColor(t: Tokens, status: CheckRun["status"]): string {
   return status === "success" ? t.c.statusSuccess : status === "failure" ? t.c.statusDanger : status === "pending" ? t.c.statusWarning : t.c.foregroundMuted;
 }
@@ -64,11 +69,14 @@ export function createChecksPanel(deps: ChecksDeps) {
     return (
       <ScrollView style={{ flex: 1, backgroundColor: theme.colors.surface0 }} contentContainerStyle={{ padding: t.inset, gap: 12 }}>
         <Pressable accessibilityRole="link" accessibilityLabel={`Open pull request ${pr.number ?? ""} on GitHub`} onPress={() => void openExternalUrl(pr.url)} style={{ gap: 2 }}>
-          <Text style={{ color: t.c.foreground, fontSize: fontSize.content, fontWeight: "600" }} numberOfLines={2}>
-            {pr.number ? `#${pr.number} ` : ""}
-            {pr.title || "Pull request"}
-          </Text>
-          <Text style={[t.text.meta, { color: stateColor(t, pr) }]}>{pr.state}</Text>
+          <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 6 }}>
+            <Text style={{ flex: 1, color: t.c.foreground, fontSize: fontSize.content, fontWeight: "600" }} numberOfLines={2}>
+              {pr.number ? `#${pr.number} ` : ""}
+              {pr.title || "Pull request"}
+            </Text>
+            <Icon name="ExternalLink" size={12} color={t.c.foregroundMuted} />
+          </View>
+          <Text style={[t.text.meta, { color: stateColor(t, pr) }]}>{pr.state.charAt(0).toUpperCase() + pr.state.slice(1)}</Text>
         </Pressable>
         <View style={{ gap: 6 }}>
           {pr.review ? <Fact t={t} icon={pr.review === "approved" ? "CircleCheck" : pr.review === "changes_requested" ? "CircleAlert" : "Clock"} color={pr.review === "approved" ? t.c.statusSuccess : pr.review === "changes_requested" ? t.c.statusDanger : t.c.statusWarning} text={pr.review === "approved" ? "Approved" : pr.review === "changes_requested" ? "Changes requested" : "Review pending"} /> : null}
@@ -92,7 +100,7 @@ export function createChecksPanel(deps: ChecksDeps) {
               onPress={() => run.url && void openExternalUrl(run.url)}
               style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6, paddingHorizontal: 6, borderRadius: radius.md, backgroundColor: pressed ? t.c.surface2 : "transparent" })}
             >
-              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: runColor(t, run.status) }} />
+              <Icon name={runIcon(run.status)} size={14} color={runColor(t, run.status)} />
               <Text style={{ flex: 1, color: t.c.foreground, fontSize: fontSize.base }} numberOfLines={1}>
                 {run.name}
               </Text>

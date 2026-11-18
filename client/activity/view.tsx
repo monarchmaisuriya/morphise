@@ -11,7 +11,7 @@ import { ACTIVITY_METRICS, type ActivityMetric, type ActivitySummary, activitySu
 import { BLUE, PURPLE, tileColor, withAlpha } from "../ui/hues";
 import { WorkspacePicker } from "../board/workspace-picker";
 import type { ValueStore } from "../profile-store";
-import { Button, Card, Icon, PopoverHost, Segmented, Select, STAT_ROW_GAP, StatTile, type Tokens, useTokens } from "../ui/kit";
+import { Button, Card, Icon, IconButton, PopoverHost, Segmented, Select, STAT_ROW_GAP, StatTile, type Tokens, useTokens } from "../ui/kit";
 import type { WorkspaceList } from "../workspaces";
 import { Terminals } from "./terminals";
 import { fontSize, radius } from "../../shared/design/tokens";
@@ -129,7 +129,8 @@ function Heatmap({ t, summary }: { t: Tokens; summary: ActivitySummary }) {
   const start = dayDate(firstDay).getTime();
   const weeks = Math.ceil(cells.length / 7);
   const gap = 3;
-  const labelColumn = 28;
+  // Wide enough for "Wed" at 12px on one line.
+  const labelColumn = 32;
   const cell = width ? Math.max(9, Math.min(16, Math.floor((width - labelColumn - gap * weeks) / weeks))) : 11;
   const shade = (value: number) => {
     if (value <= 0) return t.c.surface2;
@@ -233,15 +234,21 @@ function Hours({ t, summary }: { t: Tokens; summary: ActivitySummary }) {
   const [picked, setPicked] = useState<number | null>(null);
   const scroll = useRef<ScrollView>(null);
   const max = Math.max(1, ...summary.hourly.map((hour) => hour.values[metric]));
-  const shown = summary.hourly[picked ?? summary.hourly.length - 1];
+  const last = summary.hourly.length - 1;
+  const shown = summary.hourly[picked ?? last];
   const height = 80;
   return (
     <View style={{ gap: 8 }}>
       <MetricPicker t={t} value={metric} onChange={setMetric} label="Metric for the last 168 hours" />
       {shown ? (
-        <Text style={[t.text.meta, { fontVariant: ["tabular-nums"] }]} numberOfLines={1}>
-          {`${hourLabel(shown.hour)}: ${shown.values.sessions} sessions · ${shown.values.prompts} prompts · ${shown.values.skills} skills · ${shown.values.mcp} MCP`}
-        </Text>
+        // The bars are 4px wide, too narrow to tap on a phone, so the hour can also be stepped with these buttons.
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+          <Text style={[t.text.meta, { flex: 1, fontVariant: ["tabular-nums"] }]} numberOfLines={1}>
+            {`${hourLabel(shown.hour)}: ${shown.values.sessions} sessions · ${shown.values.prompts} prompts · ${shown.values.skills} skills · ${shown.values.mcp} MCP`}
+          </Text>
+          <IconButton t={t} size="sm" icon="ChevronLeft" label="Earlier hour" disabled={(picked ?? last) === 0} onPress={() => setPicked(Math.max(0, (picked ?? last) - 1))} />
+          <IconButton t={t} size="sm" icon="ChevronRight" label="Later hour" disabled={(picked ?? last) === last} onPress={() => setPicked(Math.min(last, (picked ?? last) + 1))} />
+        </View>
       ) : null}
       <ScrollView ref={scroll} horizontal showsHorizontalScrollIndicator={false} onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: false })}>
         <View style={{ gap: 4 }}>
@@ -386,7 +393,7 @@ export function ActivityView({ client, theme, compact, workspaces }: { client: P
           <View style={{ flex: 1 }} />
           {load.status === "ready" && load.stale ? (
             <Text style={t.text.danger} numberOfLines={2}>
-              Couldn't refresh: {load.stale}
+              Could not refresh: {load.stale}
             </Text>
           ) : null}
           {summary && (indexing || summary.indexing.errors) ? (

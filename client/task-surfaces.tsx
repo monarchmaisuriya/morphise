@@ -171,7 +171,7 @@ export function createReminderRow(deps: BoardDeps) {
         {item.data.note ? <Text style={[t.text.meta, { marginLeft: 26 }]}>{item.data.note}</Text> : null}
         {open && task ? (
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginLeft: 26 }}>
-            <Button t={t} icon="Check" label="Done" accessibilityLabel="Clear this reminder" onPress={() => run({ kind: "setReminder", id: task.id, reminder: null })} />
+            <Button t={t} icon="AlarmClockOff" label="Clear reminder" onPress={() => run({ kind: "setReminder", id: task.id, reminder: null })} />
             <Button t={t} label="+15m" accessibilityLabel="Remind me again in 15 minutes" onPress={() => run({ kind: "snoozeReminder", id: task.id, at: snoozeTime(task.reminder, 15, new Date()) })} />
             <Button t={t} label="+1h" accessibilityLabel="Remind me again in an hour" onPress={() => run({ kind: "snoozeReminder", id: task.id, at: snoozeTime(task.reminder, 60, new Date()) })} />
             {done ? <Button t={t} variant="ghost" icon="CircleCheck" label={`Move to ${done.name}`} onPress={() => run({ kind: "moveTask", id: task.id, column: done.id })} /> : null}

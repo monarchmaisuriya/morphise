@@ -3,7 +3,7 @@ import { statsSettings } from "../../shared/stats";
 import { activitySettings } from "../../shared/activity";
 import { groupOrderSettings } from "../../shared/project-groups";
 import { showEnabled, showSettings } from "../../shared/show";
-import { SettingsAction, SettingsCard, SettingsRow, SettingsSection, TextInput } from "@getpaseo/plugin/client/ui";
+import { SettingsAction, SettingsCard, SettingsRow, SettingsSection } from "@getpaseo/plugin/client/ui";
 import { type ReactNode, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { AgentTimelineItem, ToolCallItem } from "../polish/agent-types";
@@ -33,7 +33,7 @@ import { presetTitle } from "../../shared/reminders";
 import { useValue } from "../profile-store";
 import { viewPresence } from "../view-presence";
 import { viewStateSettings } from "../../shared/view-state";
-import { ActionFields, ChipRow, type Form, ListEditor, NumberField, SelectField, SwitchField, TextField } from "./fields";
+import { ActionFields, ChipRow, type Form, ICON_HINT, ListEditor, multiline, NumberField, SelectField, StoredSettingStatus, SwitchField, TextField } from "./fields";
 import { parseMetadataText, uniqueId } from "./form-values";
 import { contrast, PRESETS as POLISH_PRESETS } from "../../shared/polish/theme";
 import { PolishLookSettings, PolishRowSettings, polishEditor, UpdateSection } from "./polish-tabs";
@@ -53,40 +53,6 @@ type Preset = Profile["newWorkspace"]["presets"][number];
 type Theme = NonNullable<Profile["theme"]>;
 
 const copy = <Value,>(value: Value): Value => JSON.parse(JSON.stringify(value)) as Value;
-
-// A multi-line text box, padded and labelled like Paseo's own settings rows (16px, 14px text).
-// `parsed` boxes keep their own text (the draft holds a parsed form of it, which would rewrite the
-// text while typing); the others show the draft's value directly.
-function multiline(form: Form, label: string, value: string, onChange: (text: string) => void, error: string | null, minHeight = 96, parsed = false) {
-  const { theme } = form;
-  return (
-    <View style={{ gap: 8, paddingVertical: 12, paddingHorizontal: 16 }}>
-      <Text style={{ color: theme.colors.foreground, fontSize: fontSize.base }}>{label}</Text>
-      <TextInput
-        accessibilityLabel={label}
-        multiline
-        key={parsed ? `${form.inputKey}:${label}` : undefined}
-        {...(parsed ? { defaultValue: value } : { value })}
-        onChangeText={onChange}
-        autoCapitalize="none"
-        autoCorrect={false}
-        style={{
-          minHeight,
-          padding: 8,
-          fontSize: fontSize.sm,
-          lineHeight: 18,
-          color: theme.colors.foreground,
-          backgroundColor: theme.colors.surface1,
-          borderColor: error ? theme.colors.statusDanger : theme.colors.border,
-          borderWidth: 1,
-          borderRadius: radius.md,
-          textAlignVertical: "top",
-        }}
-      />
-      {error ? <Text style={{ color: theme.colors.statusDanger, fontSize: fontSize.sm }}>{error}</Text> : null}
-    </View>
-  );
-}
 
 // ---------- Layouts ----------
 
@@ -108,6 +74,7 @@ export function LayoutsTab(form: Form): ReactNode {
       <ListEditor<Layout>
         form={form}
         title="Layouts"
+        itemName="layout"
         info="Each layout is a whole set of customisations. Prompts are shared by every layout."
         items={document.layouts}
         path="layouts"
@@ -118,10 +85,10 @@ export function LayoutsTab(form: Form): ReactNode {
         renderItem={(layout, index, update) => (
           <>
             <TextField form={form} label="Name" value={layout.name} onChange={(name) => update((item) => void (item.name = name))} error={form.documentError(`layouts.${index}.name`)} />
-            <TextField form={form} label="Id" hint="Lowercase letters, digits and hyphens" value={layout.id} onChange={(id) => update((item) => void (item.id = id))} error={form.documentError(`layouts.${index}.id`)} />
+            <TextField form={form} label="Id" hint="Lowercase letters, digits and hyphens." value={layout.id} onChange={(id) => update((item) => void (item.id = id))} error={form.documentError(`layouts.${index}.id`)} />
             <SettingsAction
               label="Copy this layout"
-              hint="Adds a copy you can change without touching this one"
+              hint="Adds a copy you can change without touching this one."
               actionLabel="Duplicate"
               onPress={() =>
                 form.updateDocument((next) =>
@@ -146,7 +113,7 @@ function StatusOrder({ form }: { form: Form }) {
       [next[index], next[index + by]] = [next[index + by], next[index]];
     });
   const { theme } = form;
-  const t = tokens(theme, false);
+  const t = tokens(theme, form.compact);
   return (
     <View style={{ paddingVertical: 10, paddingHorizontal: 16, gap: 6 }}>
       <View style={{ gap: 2 }}>
@@ -195,7 +162,7 @@ function viewFields(form: Form): { [Key in keyof ViewConfig]-?: ReactNode } {
     enabled: (
       <SwitchField
         label="Use the Morphise sidebar view"
-        hint="Then pick Morphise in Paseo's Settings, Sidebar, Sidebar view"
+        hint="Then pick Morphise in Paseo's Settings, Sidebar, Sidebar view."
         value={view.enabled}
         onChange={(value) => set("enabled", value)}
       />
@@ -203,7 +170,7 @@ function viewFields(form: Form): { [Key in keyof ViewConfig]-?: ReactNode } {
     list: (
       <SelectField
         label="List"
-        hint="Chats shows every chat as its own row, with the same filters"
+        hint="Chats shows every chat as its own row, with the same filters."
         value={view.list}
         options={[
           { value: "workspaces", label: "Workspaces" },
@@ -260,7 +227,7 @@ function viewFields(form: Form): { [Key in keyof ViewConfig]-?: ReactNode } {
       <>
         <SwitchField
           label="Show a few per group, then Show more"
-          hint="Workspaces that need permission or failed always show"
+          hint="Workspaces that need permission or failed always show."
           value={view.rowLimit.enabled}
           onChange={(value) => form.updateProfile((profile) => void (profile.sidebar.view.rowLimit.enabled = value))}
         />
@@ -479,6 +446,7 @@ function reminderFields(form: Form): { [Key in keyof Profile["reminders"]]: Reac
       <ListEditor<number>
         form={form}
         title="Remind me choices"
+        itemName="Remind me choice"
         info="Offered by the Remind me button and the Command Center. 1 minute to 7 days."
         items={reminders.presets}
         path="reminders.presets"
@@ -504,7 +472,7 @@ function reminderFields(form: Form): { [Key in keyof Profile["reminders"]]: Reac
     desktopNotification: (
       <SwitchField
         label="Desktop notification when a reminder is due"
-        hint="Desktop and browser apps; Paseo asks once"
+        hint="Desktop and browser apps; Paseo asks once."
         value={reminders.desktopNotification}
         onChange={(value) => form.updateProfile((profile) => void (profile.reminders.desktopNotification = value))}
       />
@@ -812,8 +780,6 @@ export function ChatTab(form: Form): ReactNode {
               <SwitchField label="Add a recap after each turn" hint="Written into the chat by this host's daemon, so every app sees it." value={chat.recap === true} onChange={(value) => setChat("recap", value ? true : undefined)} />
             </SettingsCard>
           </SettingsSection>
-          <ShowInPaseoSetting />
-          <SessionStatsSetting />
           <SettingsSection title="Phones" info="On iOS and Android.">
             <SettingsCard>
               <SelectField
@@ -829,6 +795,9 @@ export function ChatTab(form: Form): ReactNode {
           </SettingsSection>
         </>
       ) : null}
+      {/* Not about drawing rows, so they stay when Morphise's chat rows are off. */}
+      <ShowInPaseoSetting />
+      <SessionStatsSetting />
       <SettingsSection title="Hidden rows" info="Whole kinds of rows hidden in every chat.">
         <SettingsCard>
           <ChipRow
@@ -920,16 +889,7 @@ function CreditsSection(_props: { form: Form }) {
 function SessionStatsSetting() {
   const stored = useSettings(statsSettings);
   const [failed, setFailed] = useState<string | null>(null);
-  if (stored.status === "invalid" || stored.status === "error") {
-    return (
-      <SettingsSection title="Session stats">
-        <SettingsCard>
-          <SwitchField label="Show session stats" hint={`Couldn't read this setting (${stored.error}). Switch to reset it.`} value={false} onChange={() => void (stored.status === "invalid" ? stored.reset() : stored.reload())} />
-        </SettingsCard>
-      </SettingsSection>
-    );
-  }
-  if (stored.status !== "ready") return null;
+  if (stored.status !== "ready") return <StoredSettingStatus title="Session stats" label="Show session stats" stored={stored} />;
   const set = (patch: Partial<typeof stored.values>) => {
     setFailed(null);
     void stored.save({ ...stored.values, ...patch }, stored.revision).then((ok) => {
@@ -950,17 +910,7 @@ function SessionStatsSetting() {
 function GroupOrderSetting() {
   const stored = useSettings(groupOrderSettings);
   const [failed, setFailed] = useState<string | null>(null);
-  if (stored.status === "invalid" || stored.status === "error") {
-    return (
-      <SettingsSection title="Your groups">
-        <SettingsCard>
-          <SwitchField label="Most recently used group first" hint={`Couldn't read this setting (${stored.error}). Switch to reset it.`} value={false} onChange={() => void (stored.status === "invalid" ? stored.reset() : stored.reload())} />
-          <SwitchField label="Most recently used project first in each group" hint={`Couldn't read this setting (${stored.error}). Switch to reset it.`} value={false} onChange={() => void (stored.status === "invalid" ? stored.reset() : stored.reload())} />
-        </SettingsCard>
-      </SettingsSection>
-    );
-  }
-  if (stored.status !== "ready") return null;
+  if (stored.status !== "ready") return <StoredSettingStatus title="Your groups" label="Your groups order" stored={stored} />;
   const save = (change: Partial<typeof stored.values>) => {
     setFailed(null);
     void stored.save({ ...stored.values, ...change }, stored.revision).then((ok) => {
@@ -992,16 +942,7 @@ function GroupOrderSetting() {
 function ActivityTabSetting() {
   const stored = useSettings(activitySettings);
   const [failed, setFailed] = useState<string | null>(null);
-  if (stored.status === "invalid" || stored.status === "error") {
-    return (
-      <SettingsSection title="Activity">
-        <SettingsCard>
-          <SwitchField label="Show the Activity tab" hint={`Couldn't read this setting (${stored.error}). Switch to reset it.`} value={false} onChange={() => void (stored.status === "invalid" ? stored.reset() : stored.reload())} />
-        </SettingsCard>
-      </SettingsSection>
-    );
-  }
-  if (stored.status !== "ready") return null;
+  if (stored.status !== "ready") return <StoredSettingStatus title="Activity" label="Show the Activity tab" stored={stored} />;
   return (
     <SettingsSection title="Activity" info="A Workbench tab with how agents were used: sessions, prompts, skills, MCP tools and models over time, by provider and project. It counts Claude Code and Codex chats from their own logs on the daemon's computer and keeps the counts (numbers and tool names, no conversation text) in Paseo's plugin cache. Tool calls inside sub-agents are not counted.">
       <SettingsCard>
@@ -1025,26 +966,10 @@ function ActivityTabSetting() {
 function ShowInPaseoSetting() {
   const stored = useSettings(showSettings);
   const [failed, setFailed] = useState<string | null>(null);
-  if (stored.status === "invalid") {
-    // The daemon treats a document it cannot read as off; offer the way back to the default (on).
-    return (
-      <SettingsSection title="Show in Paseo">
-        <SettingsCard>
-          <SwitchField label="Let agents open things in Paseo" hint={`Off: the saved setting is invalid (${stored.error}). Turn it on to reset it.`} value={false} onChange={() => void stored.reset()} />
-        </SettingsCard>
-      </SettingsSection>
-    );
+  if (stored.status !== "ready") {
+    // The daemon treats a document it cannot read as off; Reset is the way back to the default (on).
+    return <StoredSettingStatus title="Show in Paseo" label={stored.status === "invalid" ? "Let agents open things in Paseo (off until fixed)" : "Let agents open things in Paseo (refused until it loads)"} stored={stored} />;
   }
-  if (stored.status === "error") {
-    return (
-      <SettingsSection title="Show in Paseo">
-        <SettingsCard>
-          <SwitchField label="Let agents open things in Paseo" hint={`Couldn't load this setting (${stored.error}); agents are refused until it loads. Switch to reload.`} value={false} onChange={() => void stored.reload()} />
-        </SettingsCard>
-      </SettingsSection>
-    );
-  }
-  if (stored.status !== "ready") return null;
   const set = (on: boolean) => {
     setFailed(null);
     void stored.save(on ? {} : { enabled: false }, stored.revision).then((ok) => {
@@ -1056,7 +981,8 @@ function ShowInPaseoSetting() {
       <SettingsCard>
         <SwitchField
           label="Let agents open things in Paseo"
-          hint={failed ?? "Turning it off stops it at once. Turning it on reaches new chats; reopen a chat (or restart the daemon) for one that is already open. Terminals and workspaces need Morphise's sidebar view selected in Paseo."}
+          error={failed}
+          hint={"Turning it off stops it at once. Turning it on reaches new chats; reopen a chat (or restart the daemon) for one that is already open. Terminals and workspaces need Morphise's sidebar view selected in Paseo."}
           value={showEnabled(stored.values)}
           onChange={set}
         />
@@ -1065,15 +991,20 @@ function ShowInPaseoSetting() {
   );
 }
 
-// The sidebar's look, kept on this device (the same values the sidebar reads): text size, spacing, indent and its
-// branch lines. The sidebar's Display menu keeps only grouping, sorting and three switches.
+// The sidebar's look, kept on this device (the same values the sidebar reads): text size, spacing, indent, branch lines,
+// bold group names, folder icons and background workspaces. The sidebar's Display menu keeps only grouping and sorting.
 function SidebarLookSetting() {
   const stored = useSettings(viewStateSettings);
-  const [textSize, setTextSize] = useDeviceValue(stored, "textSize", null);
-  const [groupSpacing, setGroupSpacing] = useDeviceValue(stored, "groupSpacing", "medium");
-  const [indent, setIndent] = useDeviceValue(stored, "indent", "normal");
-  const [branchLines, setBranchLines] = useDeviceValue(stored, "branchLines", true);
-  const [branchCorners, setBranchCorners] = useDeviceValue(stored, "branchCorners", "rounded");
+  const [textSize, setTextSize, , textSizeFailed] = useDeviceValue(stored, "textSize", null);
+  const [groupSpacing, setGroupSpacing, , groupSpacingFailed] = useDeviceValue(stored, "groupSpacing", "medium");
+  const [indent, setIndent, , indentFailed] = useDeviceValue(stored, "indent", "normal");
+  const [branchLines, setBranchLines, , branchLinesFailed] = useDeviceValue(stored, "branchLines", true);
+  const [branchCorners, setBranchCorners, , branchCornersFailed] = useDeviceValue(stored, "branchCorners", "rounded");
+  const [branchMark, setBranchMark, , branchMarkFailed] = useDeviceValue(stored, "branchMark", "dashed");
+  const [showBackground, setShowBackground, , showBackgroundFailed] = useDeviceValue(stored, "showBackground", false);
+  const [boldGroupNames, setBoldGroupNames, , boldGroupNamesFailed] = useDeviceValue(stored, "boldGroupNames", false);
+  const [showProjectIcons, setShowProjectIcons, , showProjectIconsFailed] = useDeviceValue(stored, "showProjectIcons", true);
+  if (stored.status !== "ready") return <StoredSettingStatus title="Look on this device" label="Sidebar look on this device" stored={stored} />;
   return (
     <SettingsSection title="Look on this device" info="Kept on this device only, so each app can have its own.">
       <SettingsCard>
@@ -1083,6 +1014,7 @@ function SidebarLookSetting() {
           value={textSize === null ? "auto" : (String(textSize) as "11" | "12" | "13" | "14" | "15")}
           options={[{ value: "auto", label: "Auto" }, ...(["11", "12", "13", "14", "15"] as const).map((value) => ({ value, label: `${value} px` }))]}
           onChange={(value) => setTextSize(value === "auto" ? null : Number(value))}
+          error={textSizeFailed}
         />
         <SelectField
           label="Space between groups"
@@ -1095,6 +1027,7 @@ function SidebarLookSetting() {
             { value: "xlarge", label: "Extra large" },
           ]}
           onChange={setGroupSpacing}
+          error={groupSpacingFailed}
         />
         <SelectField
           label="Indent"
@@ -1105,8 +1038,9 @@ function SidebarLookSetting() {
             { value: "wide", label: "Wide" },
           ]}
           onChange={setIndent}
+          error={indentFailed}
         />
-        <SwitchField label="Branch lines" hint="The lines that hang chats and sub-agents off their workspace" value={branchLines} onChange={setBranchLines} />
+        <SwitchField label="Branch lines" hint="The lines that hang chats and sub-agents off their workspace." value={branchLines} onChange={setBranchLines} error={branchLinesFailed} />
         {branchLines ? (
           <SelectField
             label="Line corners"
@@ -1116,8 +1050,23 @@ function SidebarLookSetting() {
               { value: "square", label: "Square" },
             ]}
             onChange={setBranchCorners}
+            error={branchCornersFailed}
           />
         ) : null}
+        <SelectField
+          label="Chat row marks"
+          hint="The status mark on chats and sub-agents under a workspace."
+          value={branchMark}
+          options={[
+            { value: "dashed", label: "Dashed circle" },
+            { value: "dot", label: "Dot" },
+          ]}
+          onChange={setBranchMark}
+          error={branchMarkFailed}
+        />
+        <SwitchField label="Bold group names" value={boldGroupNames} onChange={setBoldGroupNames} error={boldGroupNamesFailed} />
+        <SwitchField label="Folder icons" hint="A coloured project icon beside each project's name." value={showProjectIcons} onChange={setShowProjectIcons} error={showProjectIconsFailed} />
+        <SwitchField label="Show background workspaces" hint="Workspaces an agent runs without a tab, as Paseo's Show background." value={showBackground} onChange={setShowBackground} error={showBackgroundFailed} />
       </SettingsCard>
     </SettingsSection>
   );
@@ -1126,15 +1075,16 @@ function SidebarLookSetting() {
 // How the Workbench's Agents and Tasks views lay out, on this device (the Workbench's device record).
 function WorkbenchLayouts() {
   const stored = useSettings(workbenchSettings);
-  const [agents, setAgents] = useDeviceChoice(stored, "agentsLayout");
-  const [tasks, setTasks] = useDeviceChoice(stored, "tasksLayout");
-  const [nav, setNav] = useDeviceChoice(stored, "workbenchNav");
-  const [openOn, setOpenOn] = useDeviceChoice(stored, "openOn");
-  const [dueOpensOn, setDueOpensOn] = useDeviceChoice(stored, "dueOpensOn");
+  const [agents, setAgents, , agentsFailed] = useDeviceChoice(stored, "agentsLayout");
+  const [tasks, setTasks, , tasksFailed] = useDeviceChoice(stored, "tasksLayout");
+  const [nav, setNav, , navFailed] = useDeviceChoice(stored, "workbenchNav");
+  const [openOn, setOpenOn, , openOnFailed] = useDeviceChoice(stored, "openOn");
+  const [dueOpensOn, setDueOpensOn, , dueOpensOnFailed] = useDeviceChoice(stored, "dueOpensOn");
   const options: { value: ViewLayout; label: string }[] = [
     { value: "list", label: "List, grouped by status" },
     { value: "board", label: "Board, in columns" },
   ];
+  if (stored.status !== "ready") return <StoredSettingStatus title="Workbench" label="Workbench on this device" stored={stored} />;
   return (
     <SettingsSection title="Workbench" info="How the Workbench shows its views and their items, on this device.">
       <SettingsCard>
@@ -1147,6 +1097,7 @@ function WorkbenchLayouts() {
             { value: "rail", label: "A list at the side" },
           ]}
           onChange={setNav}
+          error={navFailed}
         />
         <SelectField<"last" | "needs">
           label="Open the Workbench on"
@@ -1157,6 +1108,7 @@ function WorkbenchLayouts() {
             { value: "needs", label: "What needs you: Agents while one waits, Tasks when something is due" },
           ]}
           onChange={setOpenOn}
+          error={openOnFailed}
         />
         {openOn === "needs" ? (
           <SelectField<"board" | "today">
@@ -1164,14 +1116,15 @@ function WorkbenchLayouts() {
             hint="The Workbench opens on Tasks when a card or reminder is due and no agent waits on you."
             value={dueOpensOn}
             options={[
-              { value: "board", label: "Open cards, no filter" },
+              { value: "board", label: "Open tasks, no filter" },
               { value: "today", label: "Today" },
             ]}
             onChange={setDueOpensOn}
+            error={dueOpensOnFailed}
           />
         ) : null}
-        <SelectField<ViewLayout> label="Agents" value={agents} options={options} onChange={setAgents} />
-        <SelectField<ViewLayout> label="Tasks" value={tasks} options={options} onChange={setTasks} />
+        <SelectField<ViewLayout> label="Agents" value={agents} options={options} onChange={setAgents} error={agentsFailed} />
+        <SelectField<ViewLayout> label="Tasks" value={tasks} options={options} onChange={setTasks} error={tasksFailed} />
       </SettingsCard>
     </SettingsSection>
   );
@@ -1186,7 +1139,7 @@ export function SidebarTab(form: Form): ReactNode {
       <SettingsSection title="Morphise sidebar view" info="These settings apply inside the Morphise sidebar view only.">
         <SettingsCard>{VIEW_SECTIONS.general.map((key) => view[key])}</SettingsCard>
       </SettingsSection>
-      <SettingsSection title="Rows">
+      <SettingsSection title="Rows" info="What each workspace row in the Morphise sidebar view shows.">
         <SettingsCard>{VIEW_SECTIONS.rows.map((key) => view[key])}</SettingsCard>
       </SettingsSection>
       <SidebarLookSetting />
@@ -1194,10 +1147,10 @@ export function SidebarTab(form: Form): ReactNode {
       <SettingsSection title="Chats" info="Chats listed under their workspace, and sub-agents under their chat. Turn chats off to list workspaces only.">
         <SettingsCard>{VIEW_SECTIONS.chats.map((key) => view[key])}</SettingsCard>
       </SettingsSection>
-      <SettingsSection title="Auto-archive">
+      <SettingsSection title="Auto-archive" info="Archives a workspace once it has been marked done for the time below; pinned ones stay. Any open Paseo app with Morphise does it.">
         <SettingsCard>{VIEW_SECTIONS.archive.map((key) => view[key])}</SettingsCard>
       </SettingsSection>
-      <SettingsSection title="Reminders">
+      <SettingsSection title="Reminders" info="Reminders set with Remind me: how many due ones the sidebar lists, and how you hear that one is due.">
         <SettingsCard>
           {VIEW_SECTIONS.reminders.map((key) => view[key])}
           {reminders.sound}
@@ -1327,7 +1280,7 @@ export function LookTab(form: Form): ReactNode {
                 onChange={(value) => form.updateProfile((profile) => void (profile.theme && (profile.theme.appearance = value)))}
               />
               {colorFields(form, theme)}
-              <TextField form={form} label="Sidebar (optional)" hint="Painted while Paseo's items are restyled and this theme is Paseo's theme" placeholder="#1e2227" value={theme.sidebar ?? ""} onChange={(text) => form.updateProfile((profile) => void (profile.theme && (text.trim() ? (profile.theme.sidebar = text.trim()) : delete profile.theme.sidebar)))} error={form.profileError("theme.sidebar")} />
+              <TextField form={form} label="Sidebar (optional)" hint="Painted while Paseo's items are restyled and this theme is Paseo's theme." placeholder="#1e2227" value={theme.sidebar ?? ""} onChange={(text) => form.updateProfile((profile) => void (profile.theme && (text.trim() ? (profile.theme.sidebar = text.trim()) : delete profile.theme.sidebar)))} error={form.profileError("theme.sidebar")} />
               {contrastWarnings(theme.colors).map((warning) => (
                 <Text key={warning} style={{ paddingHorizontal: 16, paddingBottom: 8, fontSize: fontSize.sm, color: form.theme.colors.statusWarning }}>
                   {warning}
@@ -1347,7 +1300,8 @@ export function LookTab(form: Form): ReactNode {
       <ListEditor<string>
         form={form}
         title="Hidden parts"
-        info="Paseo test ids to hide, such as sidebar-help"
+        itemName="hidden part"
+        info="Paseo test ids to hide, such as sidebar-help."
         items={style.hideTestIds}
         path="style.hideTestIds"
         onChange={(ids) => form.updateProfile((profile) => void (profile.style.hideTestIds = ids))}
@@ -1372,6 +1326,8 @@ function rowEditor(form: Form, title: string, which: "headerRows" | "footerRows"
     <ListEditor<Row>
       form={form}
       title={title}
+      itemName={which === "headerRows" ? "sidebar header row" : "sidebar footer row"}
+      info={`Rows at the ${which === "headerRows" ? "top" : "bottom"} of Paseo's sidebar. Each does one thing when pressed.`}
       items={rows}
       path={path}
       onChange={(items) => form.updateProfile((profile) => void (profile.sidebar[which] = items))}
@@ -1380,7 +1336,7 @@ function rowEditor(form: Form, title: string, which: "headerRows" | "footerRows"
       renderItem={(row, index, update) => (
         <>
           <TextField form={form} label="Label" value={row.label} onChange={(label) => update((item) => void (item.label = label))} error={form.profileError(`${path}.${index}.label`)} />
-          <TextField form={form} label="Icon" hint="A Lucide icon name, such as BookOpen" value={row.icon} onChange={(icon) => update((item) => void (item.icon = icon.trim()))} error={form.profileError(`${path}.${index}.icon`)} />
+          <TextField form={form} label="Icon" hint={ICON_HINT} value={row.icon} onChange={(icon) => update((item) => void (item.icon = icon.trim()))} error={form.profileError(`${path}.${index}.icon`)} />
           <TextField form={form} label="Id" value={row.id} onChange={(id) => update((item) => void (item.id = id.trim()))} error={form.profileError(`${path}.${index}.id`)} />
           <ActionFields form={form} action={row.action} onChange={(action) => update((item) => void (item.action = action))} errorAt={(field) => form.profileError(`${path}.${index}.action.${field}`)} />
         </>
@@ -1389,11 +1345,12 @@ function rowEditor(form: Form, title: string, which: "headerRows" | "footerRows"
   );
 }
 
-function buttonEditor(form: Form, title: string, info: string, items: readonly Button[], path: string, write: (profile: Profile, items: Button[]) => void): ReactNode {
+function buttonEditor(form: Form, title: string, itemName: string, info: string, items: readonly Button[], path: string, write: (profile: Profile, items: Button[]) => void): ReactNode {
   return (
     <ListEditor<Button>
       form={form}
       title={title}
+      itemName={itemName}
       info={info}
       items={items}
       path={path}
@@ -1406,7 +1363,7 @@ function buttonEditor(form: Form, title: string, info: string, items: readonly B
           <>
             <TextField form={form} label="Title" value={button.title} onChange={(text) => update((item) => void (item.title = text))} error={at("title")} />
             <TextField form={form} label="Short label (optional)" value={button.label ?? ""} onChange={(text) => update((item) => (text.trim() ? void (item.label = text) : void delete item.label))} error={at("label")} />
-            <TextField form={form} label="Icon" value={button.icon} onChange={(icon) => update((item) => void (item.icon = icon.trim()))} error={at("icon")} />
+            <TextField form={form} label="Icon" hint={ICON_HINT} value={button.icon} onChange={(icon) => update((item) => void (item.icon = icon.trim()))} error={at("icon")} />
             <TextField form={form} label="Id" value={button.id} onChange={(id) => update((item) => void (item.id = id.trim()))} error={at("id")} />
             <SelectField
               label="Pressing it"
@@ -1432,6 +1389,7 @@ function buttonEditor(form: Form, title: string, info: string, items: readonly B
               <ListEditor<MenuEntry>
                 form={form}
                 title="Menu choices"
+                itemName="menu choice"
                 items={button.menu}
                 path={`${path}.${index}.menu`}
                 onChange={(menu) => update((item) => void ((item as { menu: MenuEntry[] }).menu = menu))}
@@ -1462,7 +1420,8 @@ function controlEditor(form: Form): ReactNode {
     <ListEditor<Control>
       form={form}
       title="Message box controls"
-      info="Buttons, switches and pickers in every message box"
+      itemName="message box control"
+      info="Buttons, switches and pickers in every message box."
       items={controls}
       path={path}
       onChange={(items) => form.updateProfile((profile) => void (profile.composer.controls = items))}
@@ -1494,7 +1453,7 @@ function controlEditor(form: Form): ReactNode {
               }
             />
             <TextField form={form} label="Title" value={control.title} onChange={(text) => update((item) => void (item.title = text))} error={at("title")} />
-            <TextField form={form} label="Icon" value={control.icon} onChange={(icon) => update((item) => void (item.icon = icon.trim()))} error={at("icon")} />
+            <TextField form={form} label="Icon" hint={ICON_HINT} value={control.icon} onChange={(icon) => update((item) => void (item.icon = icon.trim()))} error={at("icon")} />
             <TextField form={form} label="Id" value={control.id} onChange={(id) => update((item) => void (item.id = id.trim()))} error={at("id")} />
             {control.kind === "action" ? (
               <ActionFields form={form} action={control.action} onChange={(action) => update((item) => void ((item as { action: Action }).action = action))} errorAt={(field) => at(`action.${field}`)} />
@@ -1517,6 +1476,7 @@ function controlEditor(form: Form): ReactNode {
                 <ListEditor<{ label: string; value: string }>
                   form={form}
                   title="Choices"
+                  itemName="choice"
                   items={control.options}
                   path={`${path}.${index}.options`}
                   onChange={(options) => update((item) => void ((item as { options: typeof options }).options = options))}
@@ -1543,8 +1503,8 @@ export function ButtonsTab(form: Form): ReactNode {
     <>
       {rowEditor(form, "Sidebar header rows", "headerRows")}
       {rowEditor(form, "Sidebar footer rows", "footerRows")}
-      {buttonEditor(form, "Workspace header buttons", "Shown in every workspace's header", form.profile.header.buttons, "header.buttons", (profile, items) => void (profile.header.buttons = items))}
-      {buttonEditor(form, "Message box pills", "Shown above every chat's message box", form.profile.composer.pills, "composer.pills", (profile, items) => void (profile.composer.pills = items))}
+      {buttonEditor(form, "Workspace header buttons", "workspace header button", "Shown in every workspace's header.", form.profile.header.buttons, "header.buttons", (profile, items) => void (profile.header.buttons = items))}
+      {buttonEditor(form, "Message box pills", "message box pill", "Shown above every chat's message box.", form.profile.composer.pills, "composer.pills", (profile, items) => void (profile.composer.pills = items))}
       {controlEditor(form)}
     </>
   );
@@ -1565,7 +1525,8 @@ export function CommandsTab(form: Form): ReactNode {
       <ListEditor<SlashCommand>
         form={form}
         title="Slash commands"
-        info="Typed as /name in a chat's message box"
+        itemName="slash command"
+        info="Typed as /name in a chat's message box."
         items={slashCommands}
         path="slashCommands"
         onChange={(items) => form.updateProfile((profile) => void (profile.slashCommands = items))}
@@ -1586,6 +1547,8 @@ export function CommandsTab(form: Form): ReactNode {
       <ListEditor<CommandItem>
         form={form}
         title="Command Center items"
+        itemName="Command Center item"
+        info="Extra entries in Paseo's Command Center. Each does one thing when chosen."
         items={commandCenter}
         path="commandCenter"
         onChange={(items) => form.updateProfile((profile) => void (profile.commandCenter = items))}
@@ -1596,7 +1559,7 @@ export function CommandsTab(form: Form): ReactNode {
           return (
             <>
               <TextField form={form} label="Title" value={item.title} onChange={(text) => update((next) => void (next.title = text))} error={at("title")} />
-              <TextField form={form} label="Icon" value={item.icon} onChange={(icon) => update((next) => void (next.icon = icon.trim()))} error={at("icon")} />
+              <TextField form={form} label="Icon" hint={ICON_HINT} value={item.icon} onChange={(icon) => update((next) => void (next.icon = icon.trim()))} error={at("icon")} />
               <TextField form={form} label="Id" value={item.id} onChange={(id) => update((next) => void (next.id = id.trim()))} error={at("id")} />
               <TextField
                 form={form}
@@ -1619,6 +1582,8 @@ export function CommandsTab(form: Form): ReactNode {
       <ListEditor<Preset>
         form={form}
         title="New workspace presets"
+        itemName="new workspace preset"
+        info="Choices in a Preset picker on Paseo's new workspace screen. Each sets the isolation and the workspace metadata."
         items={newWorkspace.presets}
         path="newWorkspace.presets"
         onChange={(items) => form.updateProfile((profile) => void (profile.newWorkspace.presets = items))}
@@ -1670,7 +1635,8 @@ export function PromptsTab(form: Form): ReactNode {
     <ListEditor<Prompt>
       form={form}
       title="Prompts"
-      info="Shared by every layout; pick one from the Prompts box in any chat's message box"
+      itemName="prompt"
+      info="Shared by every layout; pick one from the Prompts box in any chat's message box."
       items={prompts}
       path="prompts"
       inDocument

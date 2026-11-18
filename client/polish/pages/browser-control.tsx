@@ -24,11 +24,19 @@ export function BrowserControl({ t }: { t: Tokens }) {
   const remove = useRpc(removeBrowser);
   const [status, setStatus] = useState<BrowserStatus>();
   const [error, setError] = useState<string>();
+  // A press waits for the daemon; until it answers, a spinner takes the button's place so it can't be pressed again.
+  const [pending, setPending] = useState(false);
   // Shown, with Refresh, until a call succeeds; a failed poll stops polling rather than retrying behind the user's back.
   const failed = (e: unknown) => setError(e instanceof Error ? e.message : String(e));
   const done = (next: BrowserStatus) => {
     setError(undefined);
     setStatus(next);
+  };
+  const press = (call: () => Promise<BrowserStatus>) => () => {
+    setPending(true);
+    void call()
+      .then(done, failed)
+      .finally(() => setPending(false));
   };
   useEffect(() => void read({}).then(done, failed), [read]);
   useEffect(() => {
@@ -58,21 +66,23 @@ export function BrowserControl({ t }: { t: Tokens }) {
   const failedText = error ?? (status?.state === "failed" ? hint : null);
   return (
     <SettingsRow label={tr("prefs.browser.label")} hint={failedText ? undefined : hint} error={failedText}>
-      {error ? (
-        <Button t={t} icon="RotateCw" label={tr("prefs.button.refresh")} onPress={() => void read({}).then(done, failed)} />
+      {pending ? (
+        <ActivityIndicator size="small" color={t.c.accent} />
+      ) : error ? (
+        <Button t={t} icon="RotateCw" label={tr("prefs.button.refresh")} onPress={press(() => read({}))} />
       ) : status?.state === "downloading" ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }} accessibilityRole="progressbar" accessibilityValue={percent === undefined ? undefined : { min: 0, max: 100, now: percent }}>
           <ActivityIndicator size="small" color={t.c.accent} />
           {percent !== undefined ? <Text style={[t.text.meta, { fontVariant: ["tabular-nums"] }]}>{`${percent}%`}</Text> : null}
         </View>
       ) : status?.state === "installed" ? (
-        <Button t={t} icon="Trash2" label={tr("prefs.button.remove")} onPress={() => void remove({}).then(done, failed)} />
+        <Button t={t} icon="Trash2" label={tr("prefs.button.remove")} onPress={press(() => remove({}))} />
       ) : status?.state === "missing" || status?.state === "failed" ? (
         <Button
           t={t}
           icon={status.state === "failed" ? "RotateCw" : "ArrowDownToLine"}
           label={status.state === "failed" ? tr("prefs.button.retry") : tr("prefs.button.download")}
-          onPress={() => void install({}).then(done, failed)}
+          onPress={press(() => install({}))}
         />
       ) : null}
     </SettingsRow>

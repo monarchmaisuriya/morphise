@@ -42,6 +42,7 @@ const EN = {
   unsentTimeout: "Reply not sent: the turn ran too long to wait for.",
   unsentError: "Reply not sent: the turn ended with an error. {detail}",
   unsentFailed: "Reply not sent: {detail}",
+  selectionActions: "Selection actions",
 } as const;
 
 type Key = keyof typeof EN;
@@ -86,6 +87,7 @@ const ZH: Record<Key, string> = {
   unsentTimeout: "回复未发送：当前回合运行太久，无法继续等待。",
   unsentError: "回复未发送：当前回合因错误结束。{detail}",
   unsentFailed: "回复未发送：{detail}",
+  selectionActions: "选中内容操作",
 };
 
 export const WORDS: Record<Language, Record<Key, string>> = { en: EN, zh: ZH };

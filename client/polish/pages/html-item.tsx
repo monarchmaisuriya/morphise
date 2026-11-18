@@ -3,7 +3,7 @@ import type { PluginTheme } from "@getpaseo/plugin";
 import { openExternalUrl, type PluginClientContext, useAgent, useRpc, type PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { copyText, useToast } from "@getpaseo/plugin/client/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Modal, Platform, Text, View } from "react-native";
+import { ActivityIndicator, Modal, Platform, Text, View } from "react-native";
 import { inlineImages, keepPage, localImages, openHtml, storedPage } from "../../../shared/polish/html";
 import { readPageImage } from "../../../shared/polish/image";
 import { htmlPage } from "../../../shared/polish/page";
@@ -68,11 +68,22 @@ function StoredHtmlPage({ stored, theme, compact, actions, ...data }: HtmlData &
       alive = false;
     };
   }, [stored, load]);
-  if (html === undefined) return <View style={{ height: limitFrameHeight(lastFrameHeight(data.html, data.heights), limit) }} />;
+  if (html === undefined) return <PageLoading color={theme.colors.foregroundMuted} height={limitFrameHeight(lastFrameHeight(data.html, data.heights), limit)} />;
   if (html === null) {
     return <Text style={{ color: theme.colors.foregroundMuted, fontSize: fontSize.base, paddingVertical: 4 }}>{t("chat.htmlGone", { title: data.title })}</Text>;
   }
   return <HtmlPage {...data} html={html} theme={theme} compact={compact} actions={actions} />;
+}
+
+/** Stands in for a page while it loads, at the height it will take when that is known. */
+function PageLoading({ color, height }: { color: string; height?: number }) {
+  const t = useT();
+  return (
+    <View style={{ height, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 }}>
+      <ActivityIndicator size="small" color={color} />
+      <Text style={{ color, fontSize: fontSize.sm }}>{t("common.loading")}</Text>
+    </View>
+  );
 }
 
 /**
@@ -174,7 +185,7 @@ function HtmlPage({ html, title, heights, agentId, theme, compact, id, actions }
   return (
     <View ref={box}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8, height: compact ? 36 : 28 }}>
-        <Icon name="AppWindow" size={13} color={c.foregroundMuted} />
+        <Icon name="AppWindow" size={14} color={c.foregroundMuted} />
         <Text style={{ flex: 1, minWidth: 0, color: c.foregroundMuted, fontSize: fontSize.sm }} numberOfLines={1}>
           {title}
         </Text>
@@ -182,7 +193,7 @@ function HtmlPage({ html, title, heights, agentId, theme, compact, id, actions }
         <View style={{ flexDirection: "row", gap: 2, opacity: hovered || cannotHover() ? 1 : 0 }}>{[button("Maximize2", t("chat.fullScreen"), () => setFull(true)), ...shared]}</View>
       </View>
       {/* A stand-in at the frame's last size (or the daemon's measured height) while images load, so the chat doesn't move when the page arrives. */}
-      {page === undefined ? <View style={{ height: limitFrameHeight(lastFrameHeight(html, heights), limit) }} /> : <HtmlFrame html={page} id={html} title={title} colors={c} compact={compact} heights={heights} onAsk={onAsk} exporter={exporter} />}
+      {page === undefined ? <PageLoading color={c.foregroundMuted} height={limitFrameHeight(lastFrameHeight(html, heights), limit)} /> : <HtmlFrame html={page} id={html} title={title} colors={c} compact={compact} heights={heights} onAsk={onAsk} exporter={exporter} />}
       {full ? (
         <Modal transparent visible animationType="fade" onRequestClose={() => setFull(false)}>
           <View ref={fullScreen} style={{ flex: 1, backgroundColor: c.surface0 }}>
@@ -233,7 +244,7 @@ export function SavedPageViewer({ id, title, t: tk, onClose }: { id: string; tit
           <IconButton t={tk} icon="X" label={t("chat.closeFullScreen")} onPress={onClose} size="sm" />
         </View>
         <View style={{ flex: 1, paddingVertical: 24, paddingHorizontal: 32 }}>
-          {html === undefined ? null : html === null ? (
+          {html === undefined ? <PageLoading color={colors.foregroundMuted} /> : html === null ? (
             <Text style={{ color: colors.foregroundMuted, fontSize: fontSize.base }}>{t("chat.htmlGone", { title })}</Text>
           ) : Platform.OS === "web" ? (
             <HtmlFrame html={html} title={title} colors={colors} compact={tk.compact} fill onEscape={onClose} />

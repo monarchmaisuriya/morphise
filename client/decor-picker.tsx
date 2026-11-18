@@ -61,6 +61,8 @@ export function DecorPicker({ t, value, onChange, withIcon }: { t: Tokens; value
       onChange({ ...value, color });
     }
   };
+  // Swatches are as big as the icon buttons beside them: finger-sized on touch.
+  const size = t.compact ? 32 : 24;
   const swatch = (color: string | null, name: string) => {
     const on = value.color === color;
     return (
@@ -70,7 +72,7 @@ export function DecorPicker({ t, value, onChange, withIcon }: { t: Tokens; value
         accessibilityState={{ checked: on }}
         accessibilityLabel={`Colour: ${name}`}
         onPress={() => onChange({ ...value, color })}
-        style={{ width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center", borderWidth: on ? 2 : 1, borderColor: on ? t.c.foreground : t.c.border, backgroundColor: color ?? "transparent" }}
+        style={{ width: size, height: size, borderRadius: size / 2, alignItems: "center", justifyContent: "center", borderWidth: on ? 2 : 1, borderColor: on ? t.c.foreground : t.c.border, backgroundColor: color ?? "transparent" }}
       >
         {color === null ? <Icon name="Slash" size={12} color={t.c.foregroundMuted} /> : null}
       </Pressable>
@@ -87,7 +89,7 @@ export function DecorPicker({ t, value, onChange, withIcon }: { t: Tokens; value
           accessibilityState={{ checked: customColor !== null, expanded: customOpen }}
           accessibilityLabel={customColor ? `Colour: custom ${customColor}` : "Colour: custom"}
           onPress={() => setCustomOpen(!customOpen)}
-          style={{ width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center", borderWidth: customColor ? 2 : 1, borderStyle: customColor ? "solid" : "dashed", borderColor: customColor ? t.c.foreground : t.c.border, backgroundColor: customColor ?? "transparent" }}
+          style={{ width: size, height: size, borderRadius: size / 2, alignItems: "center", justifyContent: "center", borderWidth: customColor ? 2 : 1, borderStyle: customColor ? "solid" : "dashed", borderColor: customColor ? t.c.foreground : t.c.border, backgroundColor: customColor ?? "transparent" }}
         >
           {customColor ? null : <Icon name="Plus" size={12} color={t.c.foregroundMuted} />}
         </Pressable>

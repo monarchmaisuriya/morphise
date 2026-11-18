@@ -9,7 +9,7 @@ import { formatDue } from "../shared/time-text";
 import { parseWhen } from "../shared/when";
 import { useValue } from "./profile-store";
 import { type ApplyTaskOperations, type TaskStore, tasksOf } from "./task-store";
-import { Button, Field, Icon, MenuItem, useTokens } from "./ui/kit";
+import { Button, Field, Icon, IconButton, MenuItem, useTokens } from "./ui/kit";
 import { requestNotifications } from "./web";
 
 // What a reminder is about: one chat or one workspace (each through its follow-up task), or one task.
@@ -79,7 +79,8 @@ function choices(presets: readonly number[], now: Date): { label: string; at(fro
 
 // `embedded` fits the picker inside something that frames it (a bordered box, Paseo's popover): it adds no padding of its
 // own, so the frame sets the inset and every part starts on the frame's edge.
-export function ReminderPicker({ deps, target, title, theme, onDone, embedded = false, compact = false }: { deps: PickerDeps; target: ReminderTarget; title: string; theme: PluginTheme; onDone(): void; embedded?: boolean; compact?: boolean }) {
+// `onCancel`: closes an embedded picker without changing anything (the frame around it has no close button of its own).
+export function ReminderPicker({ deps, target, title, theme, onDone, onCancel, embedded = false, compact = false }: { deps: PickerDeps; target: ReminderTarget; title: string; theme: PluginTheme; onDone(): void; onCancel?(): void; embedded?: boolean; compact?: boolean }) {
   const t = useTokens(theme, compact);
   const document = tasksOf(useValue(deps.tasks));
   const current = currentReminder(document, target);
@@ -121,7 +122,16 @@ export function ReminderPicker({ deps, target, title, theme, onDone, embedded = 
 
   return (
     <View style={{ gap: embedded ? 8 : 10, padding: embedded ? 0 : 12, width: embedded ? undefined : 320, maxWidth: "100%" }}>
-      {embedded ? null : (
+      {embedded ? (
+        onCancel ? (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Text style={[t.text.label, { flex: 1 }]} numberOfLines={1}>
+              Remind me about {title}
+            </Text>
+            <IconButton t={t} size="sm" icon="X" label="Close without a reminder" onPress={onCancel} />
+          </View>
+        ) : null
+      ) : (
         <Text style={t.text.heading} numberOfLines={2}>
           Remind me about {title}
         </Text>
@@ -134,7 +144,7 @@ export function ReminderPicker({ deps, target, title, theme, onDone, embedded = 
           </View>
           {current.note ? <Text style={t.text.meta}>{current.note}</Text> : null}
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-            <Button t={t} icon="Check" label="Done" accessibilityLabel="Clear this reminder" disabled={busy} onPress={() => void run(operationFor(target, null))} />
+            <Button t={t} icon="AlarmClockOff" label="Clear reminder" disabled={busy} onPress={() => void run(operationFor(target, null))} />
             <Button t={t} label="+15m" accessibilityLabel="15 minutes later" disabled={busy} onPress={() => void run(againOperation(document, target, 15))} />
             <Button t={t} label="+1h" accessibilityLabel="An hour later" disabled={busy} onPress={() => void run(againOperation(document, target, 60))} />
           </View>

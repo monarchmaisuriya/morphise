@@ -72,6 +72,7 @@ export function Button({
   accessibilityLabel,
   style,
   checked,
+  size = "md",
 }: {
   t: Tokens;
   label?: string;
@@ -83,6 +84,8 @@ export function Button({
   style?: StyleProp<ViewStyle>;
   // Set for a button that is one choice of a set (announced as a radio with its state).
   checked?: boolean;
+  // "sm" is the height of a small IconButton, for a button that sits in a row beside them.
+  size?: "sm" | "md";
 }) {
   const hover = useHover();
   // An icon without words gets its name as a hover tooltip.
@@ -106,9 +109,9 @@ export function Button({
       onHoverOut={hover.onHoverOut}
       style={({ pressed }) => [
         {
-          height: t.control,
-          minWidth: t.control,
-          paddingHorizontal: label ? t.space.md : 0,
+          height: size === "sm" ? (t.compact ? 32 : 24) : t.control,
+          minWidth: size === "sm" ? (t.compact ? 32 : 24) : t.control,
+          paddingHorizontal: label ? (size === "sm" ? t.space.sm : t.space.md) : 0,
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "center",
@@ -123,7 +126,7 @@ export function Button({
       ]}
     >
       {icon ? <Icon name={icon} size={15} color={variant === "ghost" && hover.hovered ? c.foreground : look.fg} /> : null}
-      {label ? <Text style={{ color: look.fg, fontSize: fontSize.base, fontWeight: variant === "primary" ? "600" : "500" }}>{label}</Text> : null}
+      {label ? <Text numberOfLines={1} style={{ flexShrink: 1, color: look.fg, fontSize: fontSize.base, fontWeight: variant === "primary" ? "600" : "500" }}>{label}</Text> : null}
     </Pressable>
   );
 }
@@ -138,6 +141,7 @@ export function IconButton({ t, icon, label, onPress, tone, size = "md", disable
       ref={tooltip}
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled: !!disabled }}
       disabled={disabled}
       onPress={onPress}
       onHoverIn={hover.onHoverIn}
@@ -154,6 +158,32 @@ export function IconButton({ t, icon, label, onPress, tone, size = "md", disable
     >
       <Icon name={icon} size={size === "sm" ? 14 : 16} color={tone ?? (hover.hovered ? t.c.foreground : t.c.foregroundMuted)} />
     </Pressable>
+  );
+}
+
+// An icon button for an action that cannot be undone: the first press arms it (danger colour, `confirmLabel` as its name),
+// a second press within four seconds runs it, and it disarms on its own after that.
+export function ConfirmIconButton({ t, icon = "Trash2", label, confirmLabel, disabled, onConfirm }: { t: Tokens; icon?: string; label: string; confirmLabel: string; disabled?: boolean; onConfirm(): void }) {
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const timer = setTimeout(() => setArmed(false), 4000);
+    return () => clearTimeout(timer);
+  }, [armed]);
+  return (
+    <IconButton
+      t={t}
+      size="sm"
+      icon={icon}
+      tone={armed ? t.c.statusDanger : undefined}
+      label={armed ? confirmLabel : label}
+      disabled={disabled}
+      onPress={() => {
+        if (!armed) return setArmed(true);
+        setArmed(false);
+        onConfirm();
+      }}
+    />
   );
 }
 
@@ -444,7 +474,7 @@ function DropdownSurface({ t, onClose, anchor, bounds, header, children, width =
           justifyContent: upward ? "flex-end" : "flex-start",
         }}
       >
-        <View style={{ flexShrink: 1, padding: 4, gap: 4, borderRadius: t.radius.row + 2, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1, shadowColor: "#000000", shadowOpacity: 0.35, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 12 }}>
+        <View style={{ flexShrink: 1, padding: 4, gap: 4, borderRadius: radius.xl, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1, shadowColor: "#000000", shadowOpacity: 0.35, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 12 }}>
           {header}
           <ScrollView style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled">
             {children}

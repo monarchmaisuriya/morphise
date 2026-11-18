@@ -569,7 +569,7 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
 
   const board =
     list.status === "loading" ? (
-      <Text style={[t.text.meta, { padding: t.inset }]}>Loading agents</Text>
+      <Text style={[t.text.meta, { padding: t.inset }]}>Loading agents…</Text>
     ) : list.status === "error" ? (
       <Text style={[t.text.danger, { padding: t.inset }]}>Could not list the agents: {list.error}</Text>
     ) : onBoard.length === 0 ? (

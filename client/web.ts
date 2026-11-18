@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 
 // The only module that touches the DOM. This plugin typechecks without the DOM library, so it
@@ -204,6 +204,35 @@ export function useTooltip(label: string | undefined, colors: TooltipColors) {
 
 // Whether the main pointer cannot hover (a phone or tablet browser), so hover-only controls must
 // always show. Native apps answer from the platform instead.
+interface FocusTarget {
+  addEventListener(type: "focusin" | "focusout", listener: (event: { target?: unknown; relatedTarget?: unknown }) => void): void;
+  removeEventListener(type: "focusin" | "focusout", listener: (event: { target?: unknown; relatedTarget?: unknown }) => void): void;
+  contains?(node: unknown): boolean;
+}
+
+// Whether keyboard focus is on or inside the element behind `ref` (web only), so buttons a row shows on hover also show to
+// someone tabbing through it. Only keyboard focus (:focus-visible) counts: the desktop app keeps focus on a row after a
+// click, which must not pin its buttons open (the same rule as the stylesheet in polish/web/plugin-views.ts).
+export function useFocusWithin(ref: { current: unknown }): boolean {
+  const [inside, setInside] = useState(false);
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const el = ref.current as FocusTarget | null;
+    if (!el?.addEventListener) return;
+    const focusIn = (event: { target?: unknown }) => setInside(!!(event.target as { matches?(selector: string): boolean } | undefined)?.matches?.(":focus-visible"));
+    const focusOut = (event: { relatedTarget?: unknown }) => {
+      if (!event.relatedTarget || !el.contains?.(event.relatedTarget)) setInside(false);
+    };
+    el.addEventListener("focusin", focusIn);
+    el.addEventListener("focusout", focusOut);
+    return () => {
+      el.removeEventListener("focusin", focusIn);
+      el.removeEventListener("focusout", focusOut);
+    };
+  }, [ref]);
+  return inside;
+}
+
 export function cannotHover(): boolean {
   if (Platform.OS !== "web") return true;
   return globalThis.matchMedia?.("(hover: none)").matches === true;

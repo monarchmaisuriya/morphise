@@ -66,7 +66,7 @@ import { type PickerDeps, ReminderPicker, type ReminderTarget } from "./reminder
 import { followUpTask, snoozeTime, workspaceTask } from "../shared/task-ops";
 import { type ApplyTaskOperations, type TaskStore, tasksOf } from "./task-store";
 import { Button, Dropdown, Field, Icon, IconButton, MenuItem, PopoverHost, Tag, type Tokens, useTokens } from "./ui/kit";
-import { BLUE, DONE_OPACITY, PURPLE, statusColor, tileColor, withAlpha } from "./ui/hues";
+import { DONE_OPACITY, isDarkSurface, PURPLE, statusColor, tileColor, withAlpha } from "./ui/hues";
 import { usePulse } from "./ui/pulse";
 import { StepsCards } from "./steps-card";
 import { DISPATCH_ICON, DISPATCH_SCREEN_ID, screenOpener } from "./dispatch";
@@ -74,7 +74,7 @@ import type { PullRequestInfo, ServiceInfo, WorkspaceInfo } from "./workspaces";
 import { archiveConfirm, atRiskOfArchive, type HostWorkspace, markableDone, useHostAttention, useHostWorkspaces } from "./host-workspaces";
 import { viewPresence } from "./view-presence";
 import { createHoverTracker, type HoverTracker, useHovered } from "./hover-tracker";
-import { afterPointerMoves, cannotHover } from "./web";
+import { afterPointerMoves, cannotHover, useFocusWithin } from "./web";
 import { fontSize, radius } from "../shared/design/tokens";
 
 type ViewConfig = Profile["sidebar"]["view"];
@@ -115,7 +115,7 @@ const toggleSelected = (workspaceKey: string) => {
 function viewStyles(theme: Theme, config: ViewConfig, look: ReturnType<typeof sidebarLook>) {
   const c = theme.colors;
   // "Compact" is Paseo's own 36px row; "comfortable" adds air.
-  const { height, childHeight, textSize, groupGap, rowPad, branchLines, branchRadius } = look;
+  const { height, childHeight, textSize, groupGap, rowPad, branchLines, branchRadius, branchMark } = look;
   // Rows and their chat lines move in by the indent beyond the usual 8.
   const shift = rowPad - 8;
   return {
@@ -124,7 +124,7 @@ function viewStyles(theme: Theme, config: ViewConfig, look: ReturnType<typeof si
     headerDivider: { width: 1, height: 14, marginHorizontal: 4, backgroundColor: c.border },
     tools: { paddingHorizontal: 8, paddingBottom: 6, gap: 6 },
     // More space above a heading than below it: the heading belongs to the rows that follow.
-    heading: { flexDirection: "row" as const, alignItems: "center" as const, gap: 6, minHeight: 28, paddingLeft: 16, paddingRight: 12, marginTop: groupGap },
+    heading: { flexDirection: "row" as const, alignItems: "center" as const, gap: 6, minHeight: TOUCH ? 40 : 28, paddingLeft: 16, paddingRight: 12, marginTop: groupGap },
     headingText: { color: c.foregroundMuted, fontSize: fontSize.sm, flexShrink: 1, fontWeight: look.boldGroups ? ("600" as const) : ("400" as const) },
     count: { color: c.foregroundMuted, fontSize: fontSize.sm, opacity: 0.6 },
     // Paseo's measured columns: tiles and status dots share a 16px slot at x=16; text starts at x=40.
@@ -133,7 +133,7 @@ function viewStyles(theme: Theme, config: ViewConfig, look: ReturnType<typeof si
     tile: { width: 16, height: 16, borderRadius: radius.base, alignItems: "center" as const, justifyContent: "center" as const },
     // This device's "Folder icons": off leaves a project's tile slot empty (its fold chevron still shows on hover).
     projectIcons: look.projectIcons,
-    tileText: { color: "#ffffff", fontSize: fontSize.sm, fontWeight: "600" as const },
+    tileText: { fontSize: fontSize.sm, fontWeight: "600" as const },
     projectText: { color: c.foregroundMuted, fontSize: fontSize.base, flexShrink: 1 },
     row: { minHeight: height, marginHorizontal: 8, paddingLeft: rowPad, paddingRight: 6, borderRadius: radius.lg, flexDirection: "row" as const, alignItems: "center" as const, gap: 2 },
     rowMain: { flex: 1, minWidth: 0, minHeight: height, flexDirection: "row" as const, alignItems: "center" as const, gap: 8 },
@@ -155,9 +155,11 @@ function viewStyles(theme: Theme, config: ViewConfig, look: ReturnType<typeof si
     branch: {
       chat: { x: 23 + shift, to: 32 + shift, middle: childHeight / 2 },
       sub: { x: 39 + shift, to: 52 + shift, middle: childHeight / 2 },
-      more: 14,
+      more: TOUCH ? 20 : 14,
       // The "Branch lines" display setting: off, no piece of line is drawn and rows keep their indent.
       shown: branchLines,
+      // The "Chat row marks" setting: chat and sub-agent rows draw a dashed circle, or the filled dot workspaces use.
+      dashed: branchMark === "dashed",
     },
     slot: { width: 16, alignItems: "center" as const, justifyContent: "center" as const },
     child: { paddingLeft: 24 + shift, minHeight: childHeight },
@@ -175,7 +177,7 @@ function viewStyles(theme: Theme, config: ViewConfig, look: ReturnType<typeof si
     added: { color: c.statusSuccess, fontSize: fontSize.sm },
     removed: { color: c.statusDanger, fontSize: fontSize.sm },
     dot: { width: 7, height: 7, borderRadius: 4 },
-    more: { flexDirection: "row" as const, alignItems: "center" as const, gap: 10, minHeight: 32, marginHorizontal: 8, paddingLeft: 10, borderRadius: radius.lg },
+    more: { flexDirection: "row" as const, alignItems: "center" as const, gap: 10, minHeight: TOUCH ? 40 : 32, marginHorizontal: 8, paddingLeft: 10, borderRadius: radius.lg },
     moreText: { color: c.foregroundMuted, fontSize: textSize },
     bulk: { flexDirection: "row" as const, alignItems: "center" as const, gap: 2, minHeight: 40, paddingLeft: 16, paddingRight: 8, borderTopWidth: 1, borderTopColor: c.border, backgroundColor: c.surface1 },
     empty: { color: c.foregroundMuted, fontSize: textSize, paddingHorizontal: 16, paddingVertical: 12 },
@@ -271,7 +273,8 @@ function useRemindToggle() {
 // a right-click on the web, runs `onLongPress`.
 // `stem`: the x of the line its children hang on (`branch.chat.x` or `branch.sub.x`), when it has children listed; the
 // line then starts under this row's dot (`parentStem`).
-function RowShell({ selected, child, grandchild, twoLine, label, onPress, onLongPress, main, trailing, actions, showActions, disabled, rowRef, onHover, stem, shared }: { selected: boolean; child?: boolean; twoLine?: boolean; label: string; onPress(): void; onLongPress?(): void; main: ReactNode; trailing?: ReactNode; actions?: ReactNode; showActions?: boolean; disabled?: boolean; rowRef?: RefObject<View | null>; onHover?(on: boolean): void; grandchild?: boolean; stem?: number; shared: Shared }) {
+// `checked`: set in selection mode, where the row is a checkbox instead of a button.
+function RowShell({ selected, checked, child, grandchild, twoLine, label, onPress, onLongPress, main, trailing, actions, showActions, disabled, rowRef, onHover, stem, shared }: { selected: boolean; checked?: boolean; child?: boolean; twoLine?: boolean; label: string; onPress(): void; onLongPress?(): void; main: ReactNode; trailing?: ReactNode; actions?: ReactNode; showActions?: boolean; disabled?: boolean; rowRef?: RefObject<View | null>; onHover?(on: boolean): void; grandchild?: boolean; stem?: number; shared: Shared }) {
   const { styles } = shared;
   const key = useId();
   const hovered = useHovered(shared.hover, key);
@@ -279,15 +282,19 @@ function RowShell({ selected, child, grandchild, twoLine, label, onPress, onLong
     onHover?.(hovered);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hovered]);
-  const actionsShown = !!actions && (hovered || showActions || TOUCH);
+  const own = useRef<View>(null);
+  const root = rowRef ?? own;
+  // Keyboard focus inside the row shows its buttons as hover does, so Tab reaches Pin, Archive and the Actions menu.
+  const focused = useFocusWithin(root);
+  const actionsShown = !!actions && (hovered || focused || showActions || TOUCH);
   // Right-click opens the same menu as a long press. React Native Web forwards `onContextMenu`
   // but its Pressable never maps a mouse right-click to `onLongPress`, and React Native's types
   // do not list the prop, so it is passed untyped and on the web only.
   const contextMenu = onLongPress && Platform.OS === "web" ? { onContextMenu: (event: { preventDefault(): void }) => (event.preventDefault(), onLongPress()) } : {};
   return (
     // A plain View, not a Pressable: on web a Pressable becomes a Tab stop even when told not to.
-    <View ref={rowRef} onPointerMove={() => shared.hover.mark(key)} style={[styles.row, child ? styles.child : null, grandchild ? styles.grandchild : null, selected ? styles.selected : hovered ? styles.hovered : null]}>
-      <Pressable accessibilityRole={disabled ? "text" : "button"} accessibilityLabel={label} disabled={disabled} onPress={onPress} onLongPress={onLongPress} style={[styles.rowMain, child || grandchild ? styles.childMain : null, twoLine ? styles.twoLine : null]} {...contextMenu}>
+    <View ref={root} onPointerMove={() => shared.hover.mark(key)} style={[styles.row, child ? styles.child : null, grandchild ? styles.grandchild : null, selected ? styles.selected : hovered ? styles.hovered : null]}>
+      <Pressable accessibilityRole={disabled ? "text" : checked !== undefined ? "checkbox" : "button"} accessibilityState={checked !== undefined ? { checked } : { selected }} accessibilityLabel={label} disabled={disabled} onPress={onPress} onLongPress={onLongPress} style={[styles.rowMain, child || grandchild ? styles.childMain : null, twoLine ? styles.twoLine : null]} {...contextMenu}>
         {main}
         {actionsShown ? null : trailing}
       </Pressable>
@@ -305,12 +312,14 @@ const BRANCH_DOT_OPACITY = 0.7;
 
 // The status mark in the same 16px column as project tiles, as Paseo draws it. Running work pulses.
 // `still`: running work drawn by the rows under this one, which pulse instead.
-// `branch`: the row hangs off a tree line; its dot is dimmed on top of the pulse and the done opacity.
+// `branch`: the row hangs off a tree line; its mark is dimmed on top of the pulse and the done opacity, and is a dashed
+// circle in the same colour unless Chat row marks is set to the dot.
 function StatusMark({ indicator, still = false, branch = false, shared }: { indicator: Indicator; still?: boolean; branch?: boolean; shared: Shared }) {
   const pulse = usePulse(indicator === "running" && !still);
+  const color = statusColor(shared.props.theme.colors, indicator);
   return (
     <View style={[shared.styles.slot, { height: STATUS_LINE, opacity: branch ? BRANCH_DOT_OPACITY : 1 }]}>
-      <Animated.View accessibilityLabel={STATUS_TITLES[indicator]} style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: statusColor(shared.props.theme.colors, indicator), opacity: indicator === "done" ? DONE_OPACITY : pulse }} />
+      <Animated.View accessibilityLabel={STATUS_TITLES[indicator]} style={{ width: 7, height: 7, borderRadius: 4, ...(branch && shared.styles.branch.dashed ? { borderWidth: 1.5, borderStyle: "dashed" as const, borderColor: color } : { backgroundColor: color }), opacity: indicator === "done" ? DONE_OPACITY : pulse }} />
     </View>
   );
 }
@@ -340,7 +349,7 @@ function LoadingRows({ shared }: { shared: Shared }) {
 function MoreRow({ label, spoken, icon, count, child, grandchild, onPress, shared }: { label: string; spoken: string; icon: string; count?: number; child?: boolean; grandchild?: boolean; onPress(): void; shared: Shared }) {
   const { styles, props } = shared;
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={spoken} onPress={onPress} style={[styles.more, child || grandchild ? { paddingLeft: grandchild ? 46 : 26, minHeight: 28 } : null]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={spoken} onPress={onPress} style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [styles.more, child || grandchild ? { paddingLeft: grandchild ? 46 : 26, minHeight: TOUCH ? 40 : 28 } : null, pressed || hovered ? styles.hovered : null]}>
       <Icon name={icon} size={child || grandchild ? 12 : 14} color={props.theme.colors.foregroundMuted} />
       <Text style={styles.moreText}>{label}</Text>
       {count ? <Text style={styles.count}>{count}</Text> : null}
@@ -354,11 +363,15 @@ function linksTasks(shared: Shared, hostId: string): boolean {
   return shared.taskHost !== null && hostId === shared.taskHost;
 }
 
-const OTHER_HOST_HINT = "Other host";
+// Why a row offers no reminders or tasks: its host is not the task document's, or that host is not known yet (it stays
+// unknown if the host list cannot be read), which says nothing about where the row is.
+function unlinkedHint(shared: Shared): string {
+  return shared.taskHost === null ? "Unavailable" : "Other host";
+}
 
 function RemindButton({ chat, label, onPress, shared }: { chat: AgentRef; label: string; onPress(): void; shared: Shared }) {
   const { t, now } = shared;
-  if (!linksTasks(shared, chat.hostId)) return <IconButton t={t} size="sm" icon="AlarmClock" label={`Reminders are for this host's chats only; ${label} is on another host`} disabled onPress={onPress} />;
+  if (!linksTasks(shared, chat.hostId)) return <IconButton t={t} size="sm" icon="AlarmClock" label={shared.taskHost === null ? "Reminders are not available yet" : `Reminders are for this host's chats only; ${label} is on another host`} disabled onPress={onPress} />;
   const reminder = shared.chatReminders.get(chat.id);
   const tone = reminder ? (isDue(reminder, now) ? t.c.statusWarning : t.c.accent) : undefined;
   return <IconButton t={t} size="sm" icon="AlarmClock" tone={tone} label={reminder ? `Reminder for ${label}: ${formatDue(reminder, now)}. Change it` : `Remind me about ${label}`} onPress={onPress} />;
@@ -367,7 +380,7 @@ function RemindButton({ chat, label, onPress, shared }: { chat: AgentRef; label:
 function InlinePicker({ target, title, onDone, shared }: { target: ReminderTarget; title: string; onDone(): void; shared: Shared }) {
   return (
     <View style={{ marginHorizontal: 8, marginTop: 2, marginBottom: 6, padding: 8, borderWidth: 1, borderRadius: radius.lg, borderColor: shared.t.c.border, backgroundColor: shared.t.c.surface1 }}>
-      <ReminderPicker deps={shared.picker} target={target} title={title} theme={shared.props.theme} compact={shared.t.compact} embedded onDone={onDone} />
+      <ReminderPicker deps={shared.picker} target={target} title={title} theme={shared.props.theme} compact={shared.t.compact} embedded onDone={onDone} onCancel={onDone} />
     </View>
   );
 }
@@ -395,7 +408,7 @@ function AgentRow({ reference, sub, subs = [], shared }: { reference: AgentRef; 
         grandchild={sub}
         stem={!sub && listedSubs.size > 0 && !remind.open ? styles.branch.sub.x : undefined}
         selected={props.active.agent?.key === reference.key}
-        label={`Open chat ${chat.name}, ${STATUS_TITLES[indicator]}`}
+        label={`Open chat ${chat.name}, ${STATUS_TITLES[indicator]}${waiting && !sub ? `, ${waiting} sub-agents waiting on you` : ""}`}
         onPress={() => props.navigation.openAgent(reference)}
         onLongPress={linksTasks(shared, reference.hostId) ? remind.toggle : undefined}
         showActions={linksTasks(shared, reference.hostId) && shared.chatReminders.has(reference.id)}
@@ -590,7 +603,7 @@ function BulkBar({ shown, shared }: { shown: ReadonlyMap<string, WorkspaceRef>; 
           label={atRisk ? `Archive? ${atRisk} with local work` : "Archive?"}
           accessibilityLabel={`Press again to archive ${selected.length} workspaces${atRisk ? `; ${atRisk} have uncommitted, unpushed or unknown changes that archiving deletes` : ""}`}
           onPress={archive}
-          style={{ height: 24, paddingHorizontal: 6 }}
+          size="sm"
         />
       ) : (
         <IconButton t={t} size="sm" icon="Archive" label="Archive the selected workspaces" disabled={!selected.length} onPress={archive} />
@@ -681,7 +694,7 @@ function AheadBehind({ ahead, behind, shared }: { ahead: number; behind: number;
   const c = shared.props.theme.colors;
   return (
     <Text style={{ fontSize: fontSize.sm }} accessibilityLabel={`${ahead} commits to push, ${behind} to pull`}>
-      {ahead ? <Text style={{ color: BLUE }}>↑{ahead}</Text> : null}
+      {ahead ? <Text style={{ color: statusColor(c, "running") }}>↑{ahead}</Text> : null}
       {ahead && behind ? " " : null}
       {behind ? <Text style={{ color: c.statusWarning }}>↓{behind}</Text> : null}
     </Text>
@@ -1019,6 +1032,14 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
       {pinIcon}
     </>
   );
+  // A row's label replaces the names of everything inside it, so it also says what the row shows beyond its status.
+  const spoken = [
+    line?.text,
+    pr ? `pull request${pr.number ? ` ${pr.number}` : ""} ${pr.state}${shows.checks && pr.checks !== "none" ? `, ${CHECKS_TEXT[pr.checks]}` : ""}` : null,
+    reminder ? `reminder ${formatDue(reminder, now)}` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
   const time = elapsed ? (
     <View style={{ marginLeft: "auto", height: 20, justifyContent: "center" }}>
       <Text style={[styles.time, { marginLeft: 0 }]}>{elapsed}</Text>
@@ -1032,7 +1053,8 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
           rowRef={rowRef}
           twoLine={twoLine}
           selected={selecting ? picked : selected}
-          label={selecting ? `${picked ? "Deselect" : "Select"} ${workspace.title}` : `Open workspace ${workspace.title}, ${STATUS_TITLES[indicator]}`}
+          checked={selecting ? picked : undefined}
+          label={selecting ? `Select ${workspace.title}` : `Open workspace ${workspace.title}, ${STATUS_TITLES[indicator]}${spoken ? `, ${spoken}` : ""}`}
           onPress={() => (selecting ? toggleSelected(reference.key) : props.navigation.openWorkspace(reference))}
           onLongPress={() => (selecting ? toggleSelected(reference.key) : setMenu("actions"))}
           onHover={hover}
@@ -1044,11 +1066,11 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
             <>
               {config.rowActions.includes("pin") ? <IconButton t={t} size="sm" icon={workspace.pinned ? "PinOff" : "Pin"} tone={workspace.pinned ? c.foreground : undefined} label={workspace.pinned ? `Unpin ${workspace.name}` : `Pin ${workspace.name}`} onPress={togglePin} /> : null}
               {confirmArchive && menu === null ? (
-                <Button t={t} variant="danger" {...archiveConfirm(workspace.name, found)} onPress={archive} style={{ height: 24, paddingHorizontal: 6 }} />
+                <Button t={t} variant="danger" size="sm" {...archiveConfirm(workspace.name, found)} onPress={archive} />
               ) : (
                 <IconButton t={t} size="sm" icon="Archive" label={`Archive ${workspace.name}`} onPress={archive} />
               )}
-              <IconButton t={t} size="sm" icon="EllipsisVertical" label={`Actions for ${workspace.name}`} onPress={() => setMenu(menu ? null : "actions")} />
+              <IconButton t={t} size="sm" icon="Ellipsis" label={`Actions for ${workspace.name}`} onPress={() => setMenu(menu ? null : "actions")} />
             </>
           )}
           shared={shared}
@@ -1060,12 +1082,12 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
       <Dropdown t={t} open={menu !== null} onClose={closeMenu} anchor={rowRef} width={menu === "colour" ? 300 : 250}>
         {menu === "colour" ? (
           <>
-            <MenuItem t={t} icon="ChevronLeft" label="Set colour" onPress={() => setMenu("actions")} />
+            <MenuItem t={t} icon="ChevronLeft" label="Back" hint="Set colour" onPress={() => setMenu("actions")} />
             <DecorPicker t={t} value={workspaceDecor} withIcon={false} onChange={(next) => shared.groups.change((doc) => setDecoration(doc, "workspaces", reference.key, next))} />
           </>
         ) : menu === "labels" ? (
           <>
-            <MenuItem t={t} icon="ChevronLeft" label="Labels" onPress={() => setMenu("actions")} />
+            <MenuItem t={t} icon="ChevronLeft" label="Back" hint="Labels" onPress={() => setMenu("actions")} />
             {[...new Set([...shared.labels, ...workspace.labels])].sort().map((label) => (
               <MenuItem key={label} t={t} role="checkbox" icon="Tag" label={label} checked={workspace.labels.includes(label)} onPress={() => setLabel(label, !workspace.labels.includes(label))} />
             ))}
@@ -1086,7 +1108,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
               t={t}
               icon="AlarmClock"
               label={ownReminder ? "Change reminder" : "Remind me"}
-              hint={!linked ? OTHER_HOST_HINT : ownReminder ? formatDue(ownReminder, now) : undefined}
+              hint={!linked ? unlinkedHint(shared) : ownReminder ? formatDue(ownReminder, now) : undefined}
               disabled={!linked}
               onPress={() => {
                 closeMenu();
@@ -1098,12 +1120,12 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
             {markedDone ? <MenuItem t={t} icon="RotateCcw" label="Mark as not done" onPress={() => setMark(null)} /> : markable && indicator !== "done" ? <MenuItem t={t} icon="CircleCheck" label="Mark as done" onPress={() => setMark("done")} /> : null}
             {markedUnread ? <MenuItem t={t} icon="MailOpen" label="Mark as read" onPress={() => setMark(null)} /> : markable && indicator !== "attention" ? <MenuItem t={t} icon="Mail" label="Mark as unread" onPress={() => setMark("unread")} /> : null}
             {/* A workspace belongs to one task, so one that has it says so instead. */}
-            <MenuItem t={t} icon="ListPlus" label="Add task" hint={!linked ? OTHER_HOST_HINT : ownTask ? "Has a task" : undefined} disabled={!linked || ownTask !== null} onPress={addTask} />
+            <MenuItem t={t} icon="ListPlus" label="Add task" hint={!linked ? unlinkedHint(shared) : ownTask ? "Has a task" : undefined} disabled={!linked || ownTask !== null} onPress={addTask} />
             <MenuItem
               t={t}
               icon="ListChecks"
               label="Select"
-              hint="for bulk actions"
+              hint="For bulk actions"
               onPress={() => {
                 closeMenu();
                 viewUi.set({ ...viewUi.get(), selecting: true, selected: [reference.key] });
@@ -1194,6 +1216,7 @@ function GroupHeading({ title, count, collapsed, onToggle, shared }: { title: st
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityState={{ expanded: !collapsed }}
       accessibilityLabel={`${collapsed ? "Expand" : "Collapse"} ${title}, ${count} ${count === 1 ? "item" : "items"}`}
       onPress={onToggle}
       style={styles.heading}
@@ -1210,15 +1233,15 @@ function GroupHeading({ title, count, collapsed, onToggle, shared }: { title: st
 }
 
 // One of the user's groups ("Your groups"): its name, count and fold chevron, and a menu to rename it, move it up
-// or down, or delete it (its projects then show under Ungrouped; a group with projects asks for a second press).
+// or down, or delete it (its projects then show under Ungrouped; a group with projects asks to confirm first).
 // Ungrouped has no menu.
 function UserGroupHeading({ group, index, count, collapsed, onToggle, shared }: { group: NestedGroup<{ key: string }>; index: number; count: number; collapsed: boolean; onToggle(): void; shared: Shared }) {
   const { styles, config, props, t } = shared;
   const key = useId();
   const hovered = useHovered(shared.hover, key);
   const anchor = useRef<View>(null);
-  const [menu, setMenu] = useState<"actions" | "decor" | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const focused = useFocusWithin(anchor);
+  const [menu, setMenu] = useState<"actions" | "decor" | "delete" | null>(null);
   const id = group.groupId;
   const renamingId = useValue(renamingGroup);
   const renaming = id !== null && renamingId === id;
@@ -1232,10 +1255,7 @@ function UserGroupHeading({ group, index, count, collapsed, onToggle, shared }: 
   // Ungrouped stays last, so it cannot be dragged.
   const groupDrag = id !== null && !renaming ? shared.drag?.groups ?? null : null;
   const dragHandlers = useCardDragHandlers("", id ?? "", groupDrag);
-  const close = () => {
-    setMenu(null);
-    setConfirmDelete(false);
-  };
+  const close = () => setMenu(null);
   const decor: Decoration = (id ? shared.groups.doc.decorations.groups[id] : undefined) ?? { color: null, icon: null };
   const finishRename = () => {
     if (renamingGroup.get() !== id) return;
@@ -1244,7 +1264,7 @@ function UserGroupHeading({ group, index, count, collapsed, onToggle, shared }: 
   };
   const remove = () => {
     if (!id) return;
-    if (projects > 0 && !confirmDelete) return setConfirmDelete(true);
+    if (projects > 0 && menu !== "delete") return setMenu("delete");
     close();
     shared.groups.change((doc) => deleteGroup(doc, id));
   };
@@ -1261,11 +1281,12 @@ function UserGroupHeading({ group, index, count, collapsed, onToggle, shared }: 
       ) : (
         <Pressable
           accessibilityRole="button"
+          accessibilityState={{ expanded: !collapsed }}
           accessibilityLabel={`${collapsed ? "Expand" : "Collapse"} ${group.title}, ${count} ${count === 1 ? "item" : "items"}`}
           accessibilityHint={groupDrag ? "Drag to move the group" : undefined}
           onPress={onToggle}
           onLongPress={groupDrag && TOUCH && id ? () => groupDrag.arm(id) : undefined}
-          style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6, minHeight: 28 }}
+          style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6, minHeight: TOUCH ? 40 : 28 }}
         >
           {decor.icon ? (
             <DecorIcon icon={decor.icon} color={decor.color ?? props.theme.colors.foregroundMuted} size={12} />
@@ -1281,12 +1302,21 @@ function UserGroupHeading({ group, index, count, collapsed, onToggle, shared }: 
           <Icon name={collapsed ? "ChevronRight" : "ChevronDown"} size={12} color={props.theme.colors.foregroundMuted} />
         </Pressable>
       )}
-      {id !== null && !renaming && (hovered || TOUCH || menu) ? <IconButton t={t} size="sm" icon="Ellipsis" label={`Actions for the group ${group.title}`} onPress={() => (menu ? close() : setMenu("actions"))} /> : null}
+      {id !== null && !renaming && (hovered || focused || TOUCH || menu) ? <IconButton t={t} size="sm" icon="Ellipsis" label={`Actions for the group ${group.title}`} onPress={() => (menu ? close() : setMenu("actions"))} /> : null}
       {id !== null ? (
         <Dropdown t={t} open={menu !== null} onClose={close} anchor={anchor} width={menu === "decor" ? 300 : 260}>
-          {menu === "decor" ? (
+          {menu === "delete" ? (
+            <View style={{ padding: 8, gap: 8 }}>
+              <Text style={[t.text.body, { fontWeight: "600" }]}>Delete {group.title}?</Text>
+              <Text style={t.text.small}>
+                Its {projects} {projects === 1 ? "project moves" : "projects move"} to Ungrouped. No project or workspace is removed.
+              </Text>
+              <MenuItem t={t} icon="Trash2" tone={t.c.statusDanger} label={`Delete ${group.title}`} onPress={remove} />
+              <MenuItem t={t} icon="X" label="Cancel" onPress={() => setMenu("actions")} />
+            </View>
+          ) : menu === "decor" ? (
             <>
-              <MenuItem t={t} icon="ChevronLeft" label="Colour and icon" onPress={() => setMenu("actions")} />
+              <MenuItem t={t} icon="ChevronLeft" label="Back" hint="Colour and icon" onPress={() => setMenu("actions")} />
               <DecorPicker t={t} value={decor} withIcon onChange={(next) => shared.groups.change((doc) => setDecoration(doc, "groups", id, next))} />
             </>
           ) : (
@@ -1307,7 +1337,7 @@ function UserGroupHeading({ group, index, count, collapsed, onToggle, shared }: 
             </>
           )}
           <MenuItem t={t} icon="Palette" label="Colour and icon" onPress={() => setMenu("decor")} />
-          <MenuItem t={t} icon="Trash2" tone={t.c.statusDanger} label={confirmDelete ? `Delete: its ${projects} ${projects === 1 ? "project moves" : "projects move"} to Ungrouped` : "Delete group"} onPress={remove} />
+          <MenuItem t={t} icon="Trash2" tone={t.c.statusDanger} label={projects > 0 ? "Delete group…" : "Delete group"} onPress={remove} />
           </>
           )}
         </Dropdown>
@@ -1346,6 +1376,7 @@ function ProjectHeading({ title, first, projectRef = null, count, collapsed, onT
   const hovered = useHovered(shared.hover, key);
   const chevron = collapsed || hovered;
   const anchor = useRef<View>(null);
+  const focused = useFocusWithin(anchor);
   const [menu, setMenu] = useState<"actions" | "move" | "decor" | "remove" | null>(null);
   const toast = useToast();
   const [removing, setRemoving] = useState(false);
@@ -1380,6 +1411,7 @@ function ProjectHeading({ title, first, projectRef = null, count, collapsed, onT
     <View ref={anchor} onPointerMove={() => shared.hover.mark(key)} style={[styles.project, hovered ? styles.hovered : null]} {...dragHandlers}>
       <Pressable
         accessibilityRole="button"
+        accessibilityState={{ expanded: !collapsed }}
         accessibilityLabel={`${collapsed ? "Expand" : "Collapse"} ${title}, ${count} ${count === 1 ? "workspace" : "workspaces"}`}
         accessibilityHint={projectDrag ? "Drag to move it to another group" : undefined}
         onPress={onToggle}
@@ -1399,7 +1431,7 @@ function ProjectHeading({ title, first, projectRef = null, count, collapsed, onT
             </View>
           ) : (
             <View style={[styles.tile, { backgroundColor: decor.color ?? tileColor(title) }]}>
-              <Text style={styles.tileText}>{title.trim().charAt(0).toUpperCase() || "?"}</Text>
+              <Text style={[styles.tileText, { color: isDarkSurface(decor.color ?? tileColor(title)) ? "#ffffff" : "#18181b" }]}>{title.trim().charAt(0).toUpperCase() || "?"}</Text>
             </View>
           )
         )}
@@ -1409,8 +1441,8 @@ function ProjectHeading({ title, first, projectRef = null, count, collapsed, onT
         {config.counts && (hovered || collapsed || TOUCH) ? <Text style={styles.count}>{count}</Text> : null}
         <View style={{ flex: 1 }} />
       </Pressable>
-      {project && (hovered || TOUCH) ? <IconButton t={t} size="sm" icon="Plus" label={`New workspace in ${title}`} onPress={() => props.navigation.openProject(project)} /> : null}
-      {custom && (hovered || TOUCH || menu) ? <IconButton t={t} size="sm" icon="Ellipsis" label={`Actions for the project ${title}`} onPress={() => setMenu(menu ? null : "actions")} /> : null}
+      {project && (hovered || focused || TOUCH) ? <IconButton t={t} size="sm" icon="Plus" label={`New workspace in ${title}`} onPress={() => props.navigation.openProject(project)} /> : null}
+      {custom && (hovered || focused || TOUCH || menu) ? <IconButton t={t} size="sm" icon="Ellipsis" label={`Actions for the project ${title}`} onPress={() => setMenu(menu ? null : "actions")} /> : null}
       {custom ? (
         <Dropdown t={t} open={menu !== null} onClose={() => setMenu(null)} anchor={anchor} width={menu === "decor" ? 300 : 260}>
           {menu === "remove" && project ? (
@@ -1424,12 +1456,12 @@ function ProjectHeading({ title, first, projectRef = null, count, collapsed, onT
             </View>
           ) : menu === "decor" && project ? (
             <>
-              <MenuItem t={t} icon="ChevronLeft" label="Colour and icon" onPress={() => setMenu("actions")} />
+              <MenuItem t={t} icon="ChevronLeft" label="Back" hint="Colour and icon" onPress={() => setMenu("actions")} />
               <DecorPicker t={t} value={decor} withIcon onChange={(next) => shared.groups.change((doc) => setDecoration(doc, "projects", project.key, next))} />
             </>
           ) : menu === "move" ? (
             <>
-              <MenuItem t={t} icon="ChevronLeft" label="Move to group" onPress={() => setMenu("actions")} />
+              <MenuItem t={t} icon="ChevronLeft" label="Back" hint="Move to group" onPress={() => setMenu("actions")} />
               {shared.groups.doc.groups.map((group) => (
                 <MenuItem key={group.id} t={t} role="radio" icon="Folder" label={group.name} checked={group.id === currentGroup} onPress={() => moveTo(group.id)} />
               ))}
@@ -1533,6 +1565,9 @@ interface FilterMenuProps {
   shared: Shared;
 }
 
+// The quick toggles' names, shared by the Filter menu and the tags that show them on.
+const TOGGLE_LABELS = { hideDone: "Hide done", changedOnly: "With changed lines", pinnedOnly: "Pinned" } as const;
+
 // Statuses, projects and quick toggles; each choice applies at once and is kept on this device.
 function FilterMenu({ state, save, projects, shared }: FilterMenuProps) {
   const { t, props, config } = shared;
@@ -1548,17 +1583,17 @@ function FilterMenu({ state, save, projects, shared }: FilterMenuProps) {
   return (
     <>
       <MenuSection title="Status" shared={shared}>
-        <MenuItem t={t} role="checkbox" icon="Hand" label="Needs me" hint="permission or failed" checked={needsMe} onPress={() => save({ statusFilter: needsMe ? [] : [...NEEDS_ME] })} />
+        <MenuItem t={t} role="checkbox" icon="Hand" label="Needs me" hint="Permission or failed" checked={needsMe} onPress={() => save({ statusFilter: needsMe ? [] : [...NEEDS_ME] })} />
         {INDICATORS.map((indicator) => (
           <MenuItem key={indicator} t={t} role="checkbox" dot={statusColor(props.theme.colors, indicator)} label={STATUS_TITLES[indicator]} checked={statuses.includes(indicator)} onPress={() => toggleStatus(indicator)} />
         ))}
       </MenuSection>
-      <MenuSection title="Show only" shared={shared}>
-        <MenuItem t={t} role="checkbox" icon="EyeOff" label="Hide done" checked={state.hideDone} onPress={() => save({ hideDone: !state.hideDone })} />
+      <MenuSection title="Filter" shared={shared}>
+        <MenuItem t={t} role="checkbox" icon="EyeOff" label={TOGGLE_LABELS.hideDone} checked={state.hideDone} onPress={() => save({ hideDone: !state.hideDone })} />
         {config.list === "workspaces" ? (
           <>
-            <MenuItem t={t} role="checkbox" icon="FileDiff" label="With changed lines" checked={state.changedOnly} onPress={() => save({ changedOnly: !state.changedOnly })} />
-            <MenuItem t={t} role="checkbox" icon="Pin" label="Pinned" checked={state.pinnedOnly} onPress={() => save({ pinnedOnly: !state.pinnedOnly })} />
+            <MenuItem t={t} role="checkbox" icon="FileDiff" label={TOGGLE_LABELS.changedOnly} checked={state.changedOnly} onPress={() => save({ changedOnly: !state.changedOnly })} />
+            <MenuItem t={t} role="checkbox" icon="Pin" label={TOGGLE_LABELS.pinnedOnly} checked={state.pinnedOnly} onPress={() => save({ pinnedOnly: !state.pinnedOnly })} />
           </>
         ) : null}
       </MenuSection>
@@ -1570,7 +1605,7 @@ function FilterMenu({ state, save, projects, shared }: FilterMenuProps) {
         </MenuSection>
       ) : null}
       <View style={{ borderTopWidth: 1, borderTopColor: t.c.border, paddingTop: 4 }}>
-        <MenuItem t={t} icon="X" label="Clear filters" onPress={() => save({ statusFilter: [], projectFilter: [], hideDone: false, changedOnly: false, pinnedOnly: false })} />
+        <MenuItem t={t} icon="X" label="Clear filters" disabled={!(statuses.length || state.projectFilter.length || state.hideDone || state.changedOnly || state.pinnedOnly)} onPress={() => save({ statusFilter: [], projectFilter: [], hideDone: false, changedOnly: false, pinnedOnly: false })} />
       </View>
     </>
   );
@@ -1585,11 +1620,11 @@ function ViewMenuHeader({ t, openSettings }: { t: Tokens; openSettings(): void }
   );
 }
 
-// The Display menu: how the list is grouped and sorted, and three look switches, in the same one-line rows as the Filter
-// menu. Everything else (rows, row height, chats under workspaces, text size, spacing, indent, branch lines) lives in
+// The Display menu: how the list is grouped and sorted, in the same one-line rows as the Filter menu. Everything else
+// (rows, row height, chats under workspaces, text size, spacing, indent, branch lines, what rows show) lives in
 // Settings, Sidebar, one press away: that row is pinned above the list (`ViewMenuHeader`), so it never scrolls out of
 // sight. Group and sort are saved to the active layout so every app shows the same list.
-function ViewMenu({ update, state, saveState, shared }: { update(patch: Partial<ViewConfig>): void; state: ViewState; saveState(next: Partial<ViewState>): void; shared: Shared }) {
+function ViewMenu({ update, shared }: { update(patch: Partial<ViewConfig>): void; shared: Shared }) {
   const { t, config } = shared;
   // Choosing the current value writes nothing, so an unchanged option never adds a key an older version cannot read.
   const choices = <Value extends string>(title: string, current: Value, options: readonly (readonly [Value, string])[], apply: (value: Value) => void) => (
@@ -1603,12 +1638,6 @@ function ViewMenu({ update, state, saveState, shared }: { update(patch: Partial<
     <>
       {choices("Group by", config.groupBy, [["project", "Project"], ["custom", "Your groups"], ["status", "Status"], ["activity", "Last used"], ["label", "Label"], ["none", "None"]] as const, (groupBy) => update({ groupBy }))}
       {choices("Sort by", config.orderBy, [["activity", "Last prompt"], ["created", "Created"], ["status", "Status"], ["name", "Name"], ["statusChanged", "Status change"], ["changes", "Changed lines"]] as const, (orderBy) => update({ orderBy }))}
-      {/* Kept on this device. */}
-      <MenuSection title="Show" shared={shared}>
-        {config.list === "workspaces" ? <MenuItem t={t} role="checkbox" icon="EyeOff" label="Background workspaces" checked={state.showBackground} onPress={() => saveState({ showBackground: !state.showBackground })} /> : null}
-        <MenuItem t={t} role="checkbox" icon="Bold" label="Bold group names" checked={state.boldGroupNames} onPress={() => saveState({ boldGroupNames: !state.boldGroupNames })} />
-        {config.list === "workspaces" ? <MenuItem t={t} role="checkbox" icon="Folder" label="Folder icons" checked={state.showProjectIcons} onPress={() => saveState({ showProjectIcons: !state.showProjectIcons })} /> : null}
-      </MenuSection>
     </>
   );
 }
@@ -2039,9 +2068,9 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     const activeTags = [
       ...(needsMeOn(filter.statuses) ? [{ key: "needs", label: "Needs me", color: props.theme.colors.statusWarning, remove: () => saveState({ statusFilter: [] }) }] : filter.statuses.map((indicator) => ({ key: indicator, label: STATUS_TITLES[indicator], color: statusColor(props.theme.colors, indicator), remove: () => saveState({ statusFilter: state.statusFilter.filter((item) => item !== indicator) }) }))),
       ...(filter.projects ?? []).map((key) => ({ key, label: projects.find((project) => project.key === key)?.title ?? "Project", color: tileColor(projects.find((project) => project.key === key)?.title ?? ""), remove: () => saveState({ projectFilter: state.projectFilter.filter((item) => item !== key) }) })),
-      ...(filter.hideDone ? [{ key: "hideDone", label: "Done hidden", color: undefined, remove: () => saveState({ hideDone: false }) }] : []),
-      ...(filter.changedOnly ? [{ key: "changed", label: "Changed", color: undefined, remove: () => saveState({ changedOnly: false }) }] : []),
-      ...(filter.pinnedOnly ? [{ key: "pinned", label: "Pinned", color: undefined, remove: () => saveState({ pinnedOnly: false }) }] : []),
+      ...(filter.hideDone ? [{ key: "hideDone", label: TOGGLE_LABELS.hideDone, color: undefined, remove: () => saveState({ hideDone: false }) }] : []),
+      ...(filter.changedOnly ? [{ key: "changed", label: TOGGLE_LABELS.changedOnly, color: undefined, remove: () => saveState({ changedOnly: false }) }] : []),
+      ...(filter.pinnedOnly ? [{ key: "pinned", label: TOGGLE_LABELS.pinnedOnly, color: undefined, remove: () => saveState({ pinnedOnly: false }) }] : []),
     ];
 
     // One group of rows with its heading, Show more and Show less. The heading follows the group's key.
@@ -2161,7 +2190,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
           {stepsCards && steps.position === "bottom" ? stepsCards : null}
           {ui.selecting && config.list === "workspaces" ? <BulkBar shown={new Map(sections.flatMap((section) => section.items.map((item) => [item.key, item as WorkspaceRef] as const)))} shared={shared} /> : null}
           <Dropdown t={t} open={menu !== null} onClose={() => setMenu(null)} anchor={headerRef} width={420} maxHeight={560} header={menu === "view" ? <ViewMenuHeader t={t} openSettings={() => (setMenu(null), deps.openSidebarSettings())} /> : undefined}>
-            {menu === "filter" ? <FilterMenu state={state} save={saveState} projects={projects} shared={shared} /> : <ViewMenu update={updateView} state={state} saveState={saveState} shared={shared} />}
+            {menu === "filter" ? <FilterMenu state={state} save={saveState} projects={projects} shared={shared} /> : <ViewMenu update={updateView} shared={shared} />}
           </Dropdown>
         </View>
         </PopoverHost>

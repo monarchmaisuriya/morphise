@@ -6,7 +6,8 @@ import { type AgentsBoardSettings, agentsBoardSettings, applyDensity, type Board
 import { AgentCard, type CardFacts } from "../agents-board/card";
 import { AgentRow } from "../agents-board/list";
 import { tokens } from "../ui/kit";
-import { ChipRow, type Form, SelectField, SwitchField, TextField } from "./fields";
+import { ChipRow, multiline, SelectField, type SettingsLook, StoredSettingStatus, SwitchField, TextField } from "./fields";
+import { PreviewWidth } from "./previews";
 import { DEFAULT_TITLE_PROMPT, type TitleSettings, titleSettings } from "../../shared/agent-titles";
 import { AUTOSAVE_DELAY_MS } from "./autosave";
 import { createPendingSave } from "./pending-save";
@@ -96,9 +97,9 @@ function useBoardSettings() {
   return { stored, values: draft ?? saved, change, failed };
 }
 
-function AgentsBoardSettingsForm({ form }: { form: Form }) {
+function AgentsBoardSettingsForm({ form }: { form: SettingsLook }) {
   const { stored, values, change, failed } = useBoardSettings();
-  const t = tokens(form.theme, false);
+  const t = tokens(form.theme, form.compact);
   if (stored.status === "loading") return <Loading />;
   if (stored.status === "error" || stored.status === "invalid" || !values) {
     const invalid = stored.status === "invalid";
@@ -113,7 +114,6 @@ function AgentsBoardSettingsForm({ form }: { form: Form }) {
   }
   const set = (next: Partial<AgentsBoardSettings>) => change({ ...values, ...next });
   const board = (next: Partial<AgentsBoardSettings["board"]>) => set({ board: { ...values.board, ...next } });
-  const card = effectiveCard(values, false);
   const densityOptions = [...DENSITY_PRESETS, ...(values.density === "custom" ? (["custom"] as const) : [])].map((density) => ({ value: density, label: DENSITY_TITLES[density] }));
   return (
     <View style={{ gap: 12 }}>
@@ -124,18 +124,28 @@ function AgentsBoardSettingsForm({ form }: { form: Form }) {
       </SettingsSection>
       {values.enabled ? (
         <>
-          <SettingsSection title="Preview" info="A sample agent, drawn as the list and the board draw it on desktop and web.">
-            <View style={{ gap: 12 }}>
-              <View style={{ width: 640, maxWidth: "100%", borderRadius: t.radius.card, overflow: "hidden", backgroundColor: t.c.surface0, borderWidth: 1, borderColor: t.c.border }}>
-                {/* The row draws its own top divider; the frame's border stands in for it. */}
-                <View style={{ marginTop: -1 }}>
-                <AgentRow t={t} facts={sampleFacts()} card={card} now={new Date()} live={SAMPLE_LIVE} selected={false} focused={false} buttons={{ open: () => {}, stop: () => {} }} onPress={() => {}} onMenu={() => {}} />
-                </View>
-              </View>
-              <View style={{ width: 320, maxWidth: "100%", padding: 12, borderRadius: t.radius.panel, backgroundColor: t.c.surface0, borderWidth: 1, borderColor: t.c.border }}>
-                <AgentCard t={t} facts={sampleFacts()} card={card} now={new Date()} live={SAMPLE_LIVE} selected={false} focused={false} buttons={{ open: () => {}, stop: () => {} }} onPress={() => {}} onMenu={null} />
-              </View>
-            </View>
+          <SettingsSection title="Preview" info="A sample agent, drawn as the list and the board draw it.">
+            <SettingsCard>
+              <PreviewWidth theme={form.theme} compact={form.compact}>
+                {(compact) => {
+                  const look = tokens(form.theme, compact);
+                  const card = effectiveCard(values, compact);
+                  return (
+                    <View style={{ gap: 12, padding: 16 }}>
+                      <View style={{ width: 640, maxWidth: "100%", borderRadius: look.radius.card, overflow: "hidden", backgroundColor: look.c.surface0, borderWidth: 1, borderColor: look.c.border }}>
+                        {/* The row draws its own top divider; the frame's border stands in for it. */}
+                        <View style={{ marginTop: -1 }}>
+                          <AgentRow t={look} facts={sampleFacts()} card={card} now={new Date()} live={SAMPLE_LIVE} selected={false} focused={false} buttons={{ open: () => {}, stop: () => {} }} onPress={() => {}} onMenu={() => {}} />
+                        </View>
+                      </View>
+                      <View style={{ width: 320, maxWidth: "100%", padding: 12, borderRadius: look.radius.panel, backgroundColor: look.c.surface0, borderWidth: 1, borderColor: look.c.border }}>
+                        <AgentCard t={look} facts={sampleFacts()} card={card} now={new Date()} live={SAMPLE_LIVE} selected={false} focused={false} buttons={{ open: () => {}, stop: () => {} }} onPress={() => {}} onMenu={null} />
+                      </View>
+                    </View>
+                  );
+                }}
+              </PreviewWidth>
+            </SettingsCard>
           </SettingsSection>
           <SettingsSection title="Cards" info="Each part shows only when Paseo gives its value. Plan reads the agent's latest to-do list from its recent history.">
             <SettingsCard>
@@ -144,7 +154,7 @@ function AgentsBoardSettingsForm({ form }: { form: Form }) {
               {values.card.labels ? <SelectField<LabelLimit> label="Labels shown" hint="The rest fold into +N." value={values.card.labelLimit} options={[{ value: "1", label: "1" }, { value: "2", label: "2" }, { value: "3", label: "3" }, { value: "all", label: "All" }]} onChange={(limit) => change(setCardSetting(values, "labelLimit", limit))} /> : null}
             </SettingsCard>
           </SettingsSection>
-          <SettingsSection title="List and lanes">
+          <SettingsSection title="List and lanes" info="Which agents the list and the board lanes hold, and how wide the lanes are.">
             <SettingsCard>
               <SelectField<DoneWindow> label="Done and Archived show" value={values.board.doneWindow} options={[{ value: "24h", label: "The last 24 hours" }, { value: "7d", label: "The last 7 days" }, { value: "all", label: "Everything" }]} onChange={(doneWindow) => board({ doneWindow })} />
               <SelectField<LaneWidth> label="Lane width" hint="Desktop and web; phones show one lane at a time." value={values.board.laneWidth} options={[{ value: "narrow", label: "Narrow" }, { value: "default", label: "Default" }, { value: "wide", label: "Wide" }]} onChange={(laneWidth) => board({ laneWidth })} />
@@ -153,7 +163,7 @@ function AgentsBoardSettingsForm({ form }: { form: Form }) {
               <SwitchField label="Show groups with no agents" hint="The list shows every status, an empty one as a folded header at 0, and the filter menus list Paseo's other labels, projects and workspaces, at 0." value={values.board.showEmptyGroups} onChange={(showEmptyGroups) => board({ showEmptyGroups })} />
             </SettingsCard>
           </SettingsSection>
-          <SettingsSection title="Phone">
+          <SettingsSection title="Phone" info="On iOS and Android.">
             <SettingsCard>
               <SwitchField label="Minimal cards on phones" hint="Phones draw the Minimal card, whatever the card density above." value={values.phone.minimalCards} onChange={(minimalCards) => set({ phone: { minimalCards } })} />
             </SettingsCard>
@@ -168,12 +178,12 @@ function AgentsBoardSettingsForm({ form }: { form: Form }) {
 // "Generate a title" on an agent: which provider and model write it, and what they are asked.
 // Saved 600 ms after the last keystroke, or at once on leaving the tab, against the revision it
 // was read at.
-function TitleSettingsForm({ form }: { form: Form }) {
+function TitleSettingsForm({ form }: { form: SettingsLook }) {
   const stored = useSettings(titleSettings);
   const [draft, setDraft] = useState<TitleSettings | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [pending] = useState(() => createPendingSave(AUTOSAVE_DELAY_MS));
-  const t = tokens(form.theme, false);
+  const t = tokens(form.theme, form.compact);
   // Declared first: React runs a component's cleanups in order, so leaving saves the waiting
   // edit before the effect below cancels it.
   useEffect(() => () => pending.flush(), [pending]);
@@ -190,7 +200,7 @@ function TitleSettingsForm({ form }: { form: Form }) {
     return () => pending.cancel();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft, stored.status, stored.saving]);
-  if (stored.status !== "ready") return null;
+  if (stored.status !== "ready") return <StoredSettingStatus title="Generate a title" label="Title settings" stored={stored} />;
   const values = draft ?? stored.values;
   const set = (patch: Partial<TitleSettings>) => {
     setFailed(null);
@@ -201,14 +211,15 @@ function TitleSettingsForm({ form }: { form: Form }) {
       <SettingsCard>
         <TextField form={form} label="Provider" hint="Empty: the chat's own provider. Otherwise a provider id such as claude or codex." placeholder="The chat's own" value={values.provider} error={null} onChange={(provider) => set({ provider: provider.trim() })} />
         <TextField form={form} label="Model" hint="Empty: the chat's own model (or the provider's default when a provider is named). A small, fast model is enough." placeholder="The chat's own" value={values.model} error={null} onChange={(model) => set({ model: model.trim() })} />
-        <TextField form={form} label="Instructions" hint="Empty puts back the default." placeholder={DEFAULT_TITLE_PROMPT} value={values.prompt === DEFAULT_TITLE_PROMPT ? "" : values.prompt} error={null} onChange={(prompt) => set({ prompt: prompt.trim() || DEFAULT_TITLE_PROMPT })} />
+        {/* Starts with the default written out; the box keeps its own text, so trimming the saved copy never moves the cursor. */}
+        {multiline(form, "Instructions (empty puts back the default)", values.prompt, (prompt) => set({ prompt: prompt.trim() || DEFAULT_TITLE_PROMPT }), null, 120, true)}
       </SettingsCard>
       {failed ? <Text style={t.text.danger}>Not saved: {failed}</Text> : null}
     </SettingsSection>
   );
 }
 
-export function AgentsBoardTab(form: Form): ReactNode {
+export function AgentsBoardTab(form: SettingsLook): ReactNode {
   return (
     <View style={{ gap: 12 }}>
       <AgentsBoardSettingsForm form={form} />

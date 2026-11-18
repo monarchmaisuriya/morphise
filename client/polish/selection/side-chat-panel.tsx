@@ -6,6 +6,7 @@ import { type ComponentRef, useCallback, useEffect, useMemo, useRef, useState } 
 import { type NativeSyntheticEvent, Platform, Text, type TextInputKeyPressEventData, View } from "react-native";
 import { Button, useTokens } from "../../ui/kit";
 import { useLanguage } from "../i18n";
+import { Prose } from "../rows/prose";
 import { readTurns } from "./actions";
 import { type ChatTurn, splitBlocks } from "./format";
 import { say } from "./strings";
@@ -31,6 +32,7 @@ function SideChatBody({ agentId, theme, compact, navigation }: { agentId: string
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [focused, setFocused] = useState(false);
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
 
   // History, then a refetch at most every REFETCH_MS while the side agent streams. The projected
@@ -103,7 +105,8 @@ function SideChatBody({ agentId, theme, compact, navigation }: { agentId: string
       code: { color: c.foreground, fontFamily: MONO, fontSize: fontSize.sm, lineHeight: 17, padding: t.space.sm, borderRadius: t.radius.control, backgroundColor: c.surface1 },
       error: { ...t.text.danger, paddingHorizontal: pad },
       composer: { flexDirection: "row" as const, alignItems: "flex-end" as const, gap: t.space.sm, padding: pad, borderTopWidth: 1, borderTopColor: c.border },
-      input: { flex: 1, minHeight: 38, maxHeight: 160, paddingHorizontal: 10, paddingVertical: t.space.sm, borderWidth: 1, borderRadius: t.radius.row, borderColor: c.border, backgroundColor: c.surface1, color: c.foreground, fontSize: fontSize.base },
+      // Drawn as kit Field draws a field (its radius, height and focus border); Field has no way to pass Enter through to send.
+      input: { flex: 1, minHeight: t.control, maxHeight: 160, paddingHorizontal: 10, paddingVertical: t.space.sm, borderWidth: 1, borderRadius: t.radius.control, borderColor: c.border, backgroundColor: c.surface1, color: c.foreground, fontSize: fontSize.base },
     };
   }, [t, compact]);
 
@@ -144,11 +147,16 @@ function SideChatBody({ agentId, theme, compact, navigation }: { agentId: string
         {turns === null ? <Text style={t.text.meta}>{say("loading")}</Text> : null}
         {turns?.map((turn, index) => (
           <View key={index} style={turn.role === "user" ? styles.userTurn : styles.assistantTurn}>
-            {splitBlocks(turn.text).map((block, blockIndex) => (
-              <Text key={blockIndex} selectable style={block.kind === "code" ? styles.code : block.kind === "quote" ? styles.quote : styles.text}>
-                {block.text}
-              </Text>
-            ))}
+            {/* Replies are Markdown, drawn as they are in the chat; the reader's own words stay as typed. */}
+            {turn.role === "user" ? (
+              splitBlocks(turn.text).map((block, blockIndex) => (
+                <Text key={blockIndex} selectable style={block.kind === "code" ? styles.code : block.kind === "quote" ? styles.quote : styles.text}>
+                  {block.text}
+                </Text>
+              ))
+            ) : (
+              <Prose text={turn.text} />
+            )}
           </View>
         ))}
       </ScrollView>
@@ -162,9 +170,13 @@ function SideChatBody({ agentId, theme, compact, navigation }: { agentId: string
           onKeyPress={onKeyPress}
           placeholder={say("followUp")}
           placeholderTextColor={t.c.foregroundMuted}
+          accessibilityLabel={say("followUp")}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           multiline
           editable={!sending}
-          style={styles.input}
+          // The border shows focus; on the web the input's own outline would draw a second ring inside it.
+          style={[styles.input, focused ? { borderColor: t.c.accent } : null, Platform.OS === "web" ? { outlineWidth: 0 } : null]}
         />
         <Button t={t} variant="primary" label={say("send")} accessibilityLabel={say("sendFollowUp")} disabled={!draft.trim() || sending} onPress={() => void send()} />
       </View>
