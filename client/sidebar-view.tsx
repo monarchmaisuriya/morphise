@@ -1474,7 +1474,8 @@ function ProjectHeading({ title, first, projectRef = null, count, collapsed, onT
             </>
           ) : (
             <>
-              <MenuItem t={t} icon="FolderInput" label="Move to group" expanded={false} onPress={() => setMenu("move")} />
+              {/* Groups arrange the list only while it is grouped by your groups. */}
+              {custom ? <MenuItem t={t} icon="FolderInput" label="Move to group" expanded={false} onPress={() => setMenu("move")} /> : null}
               <MenuItem t={t} icon="Palette" label="Colour and icon" onPress={() => setMenu("decor")} />
               <MenuItem
                 t={t}

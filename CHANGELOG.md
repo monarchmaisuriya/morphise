@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.44.2 - 2026-11-19
+
+- **Move to group only where it applies:** a project's menu offers "Move to group" only while the sidebar is grouped by Your groups, the one grouping groups arrange; in every other grouping the menu keeps Colour and icon, New workspace, Copy path and Remove project.
+
 ## 0.44.1 - 2026-11-19
 
 - **No priority is an outlined bar:** a task with no priority shows the same short bar as the other priorities, outlined in grey instead of filled, so every priority mark has the same height.
