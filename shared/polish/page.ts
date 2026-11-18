@@ -16,7 +16,7 @@ export interface HtmlColors {
   statusDanger: string;
 }
 
-const isLight = (hex: string) => {
+export const isLight = (hex: string) => {
   const m = /^#([0-9a-f]{6})/i.exec(hex);
   if (!m) return false;
   const n = parseInt(m[1]!, 16);
@@ -50,14 +50,23 @@ const KIT = [
   "*,*::before,*::after{box-sizing:border-box}",
   "html{background:transparent;color:var(--fg);font:14px/1.5 var(--font);-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%;scrollbar-width:none}",
   "html::-webkit-scrollbar{display:none}body{margin:0}",
-  "h1,h2,h3,h4{margin:0;line-height:1.3;font-weight:600}h1{font-size:20px}h2{font-size:16px}h3,h4{font-size:14px}p{margin:0}",
+  "h1,h2,h3,h4{margin:0;line-height:1.3;font-weight:600;text-wrap:balance}h1{font-size:20px}h2{font-size:16px}h3,h4{font-size:14px}p{margin:0;text-wrap:pretty}",
+  // Readable at any width: long words and links wrap, lines stay under about 75 characters, pictures and a page's own drawings shrink to fit.
+  // Table cells only break a word that can't fit, and numbers and headings never wrap, so a wide table keeps its columns and scrolls in its box.
+  "p,li,dd,figcaption,blockquote{overflow-wrap:anywhere}td,th{overflow-wrap:break-word}th,td.num{white-space:nowrap}p,li{max-width:75ch}img{max-width:100%;height:auto}svg:not(.mk-svg){max-width:100%;height:auto}",
+  "a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}",
+  "details{border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}details>:not(summary){margin:0 12px 12px}",
+  "summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:var(--radius);font-weight:500}summary::-webkit-details-marker{display:none}",
+  "summary::before{content:'';width:6px;height:6px;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);transform:rotate(-45deg);transition:transform .15s ease-out;flex:none}details[open]>summary::before{transform:rotate(45deg)}summary:hover{background:color-mix(in srgb,var(--fg) 5%,transparent)}",
   "code,kbd,pre,samp{font-family:var(--mono);font-size:12.5px}",
   ":not(pre)>code,kbd{padding:1px 5px;border-radius:4px;background:var(--surface);border:1px solid var(--border)}",
   "pre{margin:0;padding:12px;overflow:auto;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border)}",
   ".stack{display:flex;flex-direction:column;gap:12px}.row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}",
   ".grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}",
   ".card{padding:16px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border)}",
-  ".stat .label{color:var(--muted);font-size:12px}.stat .value{font-size:22px;font-weight:600;line-height:1.3;font-variant-numeric:tabular-nums}",
+  // A stat is a tile of its own (label, then value, both from the left); inside a card it is just its text, so cards never nest.
+  ".stat{display:flex;flex-direction:column;gap:4px;min-width:0;padding:12px 14px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border)}.card.stat{padding:16px}.card .stat{padding:0;background:none;border:0}",
+  ".stat .label{color:var(--muted);font-size:12px}.stat .value{font-size:22px;font-weight:600;line-height:1.3;font-variant-numeric:tabular-nums;text-align:left}",
   ".muted{color:var(--muted)}.small{font-size:12px}",
   ".chip{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:999px;font-size:12px;background:var(--surface);border:1px solid var(--border)}",
   "button{font:inherit;font-size:13px;color:var(--fg);padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:var(--surface);cursor:pointer;transition:border-color .15s ease-out,background-color .15s ease-out}",

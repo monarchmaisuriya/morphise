@@ -3,12 +3,12 @@ import type { PluginTheme } from "@getpaseo/plugin";
 import { openExternalUrl, type PluginClientContext, useAgent, useRpc, type PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { copyText, useToast } from "@getpaseo/plugin/client/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Modal, Platform, Pressable, Text, View } from "react-native";
+import { Modal, Platform, Text, View } from "react-native";
 import { inlineImages, keepPage, localImages, openHtml, storedPage } from "../../../shared/polish/html";
 import { readPageImage } from "../../../shared/polish/image";
 import { htmlPage } from "../../../shared/polish/page";
-import { Icon } from "../../ui/kit";
-import { downloadFile } from "../../web";
+import { Icon, IconButton, type Tokens, useTokens } from "../../ui/kit";
+import { cannotHover, downloadFile } from "../../web";
 import type { PolishContext } from "../context";
 import { appendToComposer } from "../selection/actions";
 import { useReplaced } from "./replaced";
@@ -43,14 +43,15 @@ export function createHtmlItem(actions: PageActions) {
 }
 
 /** A page an agent published with html_render. Native apps can't run its scripts in a frame, so they name it instead. */
-export function HtmlItem({ item, theme, agentId, actions = null }: PluginTimelineItemProps<HtmlData> & { actions?: ChatPageActions | null }) {
+export function HtmlItem({ item, theme, layout, agentId, actions = null }: PluginTimelineItemProps<HtmlData> & { actions?: ChatPageActions | null }) {
   const t = useT();
-  if (Platform.OS === "web") return item.data.stored === undefined ? <HtmlPage {...item.data} agentId={agentId} theme={theme} actions={actions} /> : <StoredHtmlPage {...item.data} agentId={agentId} theme={theme} actions={actions} />;
+  const compact = layout?.compact ?? false;
+  if (Platform.OS === "web") return item.data.stored === undefined ? <HtmlPage {...item.data} agentId={agentId} theme={theme} compact={compact} actions={actions} /> : <StoredHtmlPage {...item.data} agentId={agentId} theme={theme} compact={compact} actions={actions} />;
   return <Text style={{ color: theme.colors.foregroundMuted, fontSize: 13, paddingVertical: 4 }}>{t("chat.htmlNative", { title: item.data.title })}</Text>;
 }
 
 /** A page Paseo cut to fit the timeline, loaded whole from where html_render stored it. */
-function StoredHtmlPage({ stored, theme, actions, ...data }: HtmlData & { agentId: string; theme: PluginTheme; actions: ChatPageActions | null }) {
+function StoredHtmlPage({ stored, theme, compact, actions, ...data }: HtmlData & { agentId: string; theme: PluginTheme; compact: boolean; actions: ChatPageActions | null }) {
   const t = useT();
   const load = useRpc(storedPage);
   const [html, setHtml] = useState<string | null>();
@@ -70,7 +71,7 @@ function StoredHtmlPage({ stored, theme, actions, ...data }: HtmlData & { agentI
   if (html === null) {
     return <Text style={{ color: theme.colors.foregroundMuted, fontSize: 13, paddingVertical: 4 }}>{t("chat.htmlGone", { title: data.title })}</Text>;
   }
-  return <HtmlPage {...data} html={html} theme={theme} actions={actions} />;
+  return <HtmlPage {...data} html={html} theme={theme} compact={compact} actions={actions} />;
 }
 
 /**
@@ -95,10 +96,15 @@ function useInlinedImages(html: string, agentId: string) {
   return done?.source === html ? done.html : undefined;
 }
 
-/** The page in the chat, with full screen, open in browser and copy on hover. Full screen is a second frame, so the page starts over there. */
-function HtmlPage({ html, title, heights, agentId, theme, id, actions }: HtmlData & { agentId: string; theme: PluginTheme; actions: ChatPageActions | null }) {
+/**
+ * The page in the chat, under a strip with its title and its buttons (full screen, save, download, open in browser, copy), each with a tooltip.
+ * The strip is always there and the buttons only fade in on hover, so they never cover the page or move it. Full screen is a second frame, so
+ * the page starts over there.
+ */
+function HtmlPage({ html, title, heights, agentId, theme, compact, id, actions }: HtmlData & { agentId: string; theme: PluginTheme; compact: boolean; actions: ChatPageActions | null }) {
   const page = useInlinedImages(html, agentId);
   const c = theme.colors;
+  const tk = useTokens(theme, compact);
   const t = useT();
   const css = useHtmlTheme(c);
   const save = useRpc(openHtml);
@@ -144,17 +150,7 @@ function HtmlPage({ html, title, heights, agentId, theme, id, actions }: HtmlDat
     if (!actions) return toast.show(t("chat.toast.askInChat"));
     void appendToComposer(actions.composers, agentId, text).catch((error: unknown) => toast.error(error instanceof Error ? error.message : String(error)));
   };
-  const button = (icon: string, label: string, onPress: () => void) => (
-    <Pressable
-      key={icon}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      onPress={onPress}
-      style={({ hovered: on, pressed }: { hovered?: boolean; pressed: boolean }) => ({ width: 26, height: 26, borderRadius: 6, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: c.border, backgroundColor: on || pressed ? c.surface2 : c.surface1 })}
-    >
-      <Icon name={icon} size={14} color={c.foregroundMuted} />
-    </Pressable>
-  );
+  const button = (icon: string, label: string, onPress: () => void) => <IconButton key={icon} t={tk} icon={icon} label={label} onPress={onPress} size="sm" />;
   const shared = [
     ...(actions && id ? [button("BookmarkPlus", t("chat.savePage"), () => savePage(id, actions))] : []),
     button("Download", t("chat.downloadHtml"), downloadHtml),
@@ -176,12 +172,16 @@ function HtmlPage({ html, title, heights, agentId, theme, id, actions }: HtmlDat
   }
   return (
     <View ref={box}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, height: compact ? 36 : 28 }}>
+        <Icon name="AppWindow" size={13} color={c.foregroundMuted} />
+        <Text style={{ flex: 1, minWidth: 0, color: c.foregroundMuted, fontSize: 12 }} numberOfLines={1}>
+          {title}
+        </Text>
+        {/* Hidden, not removed, off hover: the buttons keep their place, so showing them never moves what is under the pointer. */}
+        <View style={{ flexDirection: "row", gap: 2, opacity: hovered || cannotHover() ? 1 : 0 }}>{[button("Maximize2", t("chat.fullScreen"), () => setFull(true)), ...shared]}</View>
+      </View>
       {/* A stand-in at the frame's last size (or the daemon's measured height) while images load, so the chat doesn't move when the page arrives. */}
       {page === undefined ? <View style={{ height: limitFrameHeight(lastFrameHeight(html, heights), limit) }} /> : <HtmlFrame html={page} id={html} title={title} colors={c} heights={heights} onAsk={onAsk} exporter={exporter} />}
-      {/* Hidden, not removed, off hover: the buttons stay where the pointer may land, so showing them never moves what is under it. */}
-      <View pointerEvents="box-none" style={{ position: "absolute", top: 6, right: 6, flexDirection: "row", gap: 4, opacity: hovered ? 1 : 0 }}>
-        {[button("Maximize2", t("chat.fullScreen"), () => setFull(true)), ...shared]}
-      </View>
       {full ? (
         <Modal transparent visible animationType="fade" onRequestClose={() => setFull(false)}>
           <View ref={fullScreen} style={{ flex: 1, backgroundColor: c.surface0 }}>
@@ -205,7 +205,8 @@ function HtmlPage({ html, title, heights, agentId, theme, id, actions }: HtmlDat
  * A page saved to the Workbench's Bookmarks, full window: loaded from the copy the daemon keeps for the bookmark. Web and desktop only, as
  * pages are in the chat; a page that's gone says so.
  */
-export function SavedPageViewer({ id, title, colors, onClose }: { id: string; title: string; colors: PluginTheme["colors"]; onClose(): void }) {
+export function SavedPageViewer({ id, title, t: tk, onClose }: { id: string; title: string; t: Tokens; onClose(): void }) {
+  const colors = tk.c;
   const t = useT();
   const load = useRpc(storedPage);
   const [html, setHtml] = useState<string | null>();
@@ -228,9 +229,7 @@ export function SavedPageViewer({ id, title, colors, onClose }: { id: string; ti
           <Text style={{ flex: 1, color: colors.foreground, fontSize: 13, fontWeight: "500" }} numberOfLines={1}>
             {title}
           </Text>
-          <Pressable accessibilityRole="button" accessibilityLabel={t("chat.closeFullScreen")} onPress={onClose} style={{ width: 26, height: 26, borderRadius: 6, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface1 }}>
-            <Icon name="X" size={14} color={colors.foregroundMuted} />
-          </Pressable>
+          <IconButton t={tk} icon="X" label={t("chat.closeFullScreen")} onPress={onClose} size="sm" />
         </View>
         <View style={{ flex: 1, paddingVertical: 24, paddingHorizontal: 32 }}>
           {html === undefined ? null : html === null ? (

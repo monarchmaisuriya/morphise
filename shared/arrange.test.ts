@@ -12,6 +12,7 @@ import {
   emptyProjectsToList,
   orderGroupsByLastUsed,
   orderProjectsByLastUsed,
+  underOwnProject,
   byLastUsed,
   orderGroups,
 } from "./arrange";
@@ -374,5 +375,18 @@ describe("orderProjectsByLastUsed", () => {
   it("keeps a project's several sections together and in their order (the Chats view lists one per workspace)", () => {
     const nested = [group("a", [section("p1", "workspace:w1"), section("p1", "workspace:w2"), section("p2", "workspace:w3")])];
     expect(keys(orderProjectsByLastUsed(nested, ["p2", "p1"]))).toEqual([["workspace:w3", "workspace:w1", "workspace:w2"]]);
+  });
+});
+
+describe("underOwnProject", () => {
+  it("is true where rows sit under their project's heading: grouped by project or by your groups", () => {
+    expect(underOwnProject({ groupBy: "project", pinnedFirst: false }, false)).toBe(true);
+    expect(underOwnProject({ groupBy: "custom", pinnedFirst: false }, false)).toBe(true);
+  });
+  it("is false for other groupings, and for a pinned row listed apart under Pinned", () => {
+    for (const groupBy of ["label", "status", "activity", "none"] as const) expect(underOwnProject({ groupBy, pinnedFirst: false }, false)).toBe(false);
+    expect(underOwnProject({ groupBy: "custom", pinnedFirst: true }, true)).toBe(false);
+    expect(underOwnProject({ groupBy: "project", pinnedFirst: true }, true)).toBe(false);
+    expect(underOwnProject({ groupBy: "custom", pinnedFirst: true }, false)).toBe(true);
   });
 });

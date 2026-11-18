@@ -80,6 +80,7 @@ interface TipTarget {
   removeEventListener?(type: string, listener: () => void): void;
   getBoundingClientRect(): { top: number; bottom: number; left: number; width: number };
   contains?(node: unknown): boolean;
+  closest?(selector: string): { appendChild(node: TipElement): unknown } | null;
   isConnected?: boolean;
 }
 declare const window: {
@@ -137,7 +138,9 @@ function showTooltip(target: TipTarget, label: string, colors: TooltipColors) {
     overflow: "hidden",
     textOverflow: "ellipsis",
   });
-  (document as unknown as { body: { appendChild(node: TipElement): unknown } }).body.appendChild(element);
+  // Inside the open popover that holds the button (full screen, a saved page): a popover sits in the top layer, which nothing in the body
+  // can paint above, whatever its z-index.
+  (target.closest?.(":popover-open") ?? (document as unknown as { body: { appendChild(node: TipElement): unknown } }).body).appendChild(element);
   const anchor = target.getBoundingClientRect();
   const size = element.getBoundingClientRect();
   // Above the button, or below it when there is no room; kept inside the window.

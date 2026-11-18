@@ -67,7 +67,7 @@ function BookmarkCard({ bookmark, t, workspaces, open, remove }: { bookmark: Boo
       ) : (
         <Markdown>{bookmark.excerpt}</Markdown>
       )}
-      {viewing && bookmark.page ? <SavedPageViewer id={bookmark.page.id} title={bookmark.page.title} colors={t.c} onClose={() => setViewing(false)} /> : null}
+      {viewing && bookmark.page ? <SavedPageViewer id={bookmark.page.id} title={bookmark.page.title} t={t} onClose={() => setViewing(false)} /> : null}
     </View>
   );
 }

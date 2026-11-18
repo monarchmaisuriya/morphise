@@ -51,6 +51,13 @@ export function workspaceName(workspace: Pick<ArrangeWorkspace, "name" | "title"
   return workspace.title ?? workspace.name;
 }
 
+// Whether a workspace row sits under its own project's heading (grouped by project, or by the user's groups, whose sections are
+// projects), so it need not name its project again. A pinned row listed apart under Pinned does not.
+export function underOwnProject(config: Pick<View, "groupBy" | "pinnedFirst">, pinned: boolean): boolean {
+  if (config.groupBy !== "project" && config.groupBy !== "custom") return false;
+  return !(pinned && config.pinnedFirst);
+}
+
 // Archived workspaces never show; background ones only when the view's "Show background" is on.
 export function isVisible(workspace: ArrangeWorkspace, showBackground = false): boolean {
   return workspace.archivingAt === null && (showBackground || !workspace.background);

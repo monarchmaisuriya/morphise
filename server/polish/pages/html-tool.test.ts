@@ -111,6 +111,13 @@ describe("the html_render MCP server", () => {
     const chartsGuide = (await ask(20, "tools/call", { name: "html_guide", arguments: { topic: "charts" } })).result;
     expect(chartsGuide.isError).toBe(false);
     expect(chartsGuide.content[0].text).toMatch(/Morphise\.chart/);
+    // What the kit now does on its own, and what the agent should still do.
+    expect(chartsGuide.content[0].text).toMatch(/tooltip/i);
+    expect(chartsGuide.content[0].text).toMatch(/24 characters/);
+    const interactiveGuide = (await ask(22, "tools/call", { name: "html_guide", arguments: { topic: "interactive" } })).result;
+    expect(interactiveGuide.content[0].text).toMatch(/data-tip/);
+    expect(tools[0]!.description).toMatch(/\.stat is a tile/);
+    expect(tools[0]!.description).toMatch(/\.num right-aligns numbers in table cells/);
     const unknownGuide = (await ask(21, "tools/call", { name: "html_guide", arguments: { topic: "poems" } })).result;
     expect(unknownGuide.isError).toBe(true);
     expect(unknownGuide.content[0].text).toMatch(/charts, tables, diagrams, images, interactive, mockups/);

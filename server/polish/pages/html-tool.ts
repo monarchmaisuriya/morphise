@@ -45,7 +45,7 @@ Page
 - Content sets the height. Never use vh units or height:100% on html or body; give charts and canvases fixed pixel heights.
 
 Theme
-CSS variables that follow the user's theme live; use only them for color: --fg, --muted, --bg, --surface, --border, --accent, --accent-fg, --success, --warning, --danger, --chart-1 to --chart-6, --radius, --font, --mono. Built-in classes: .stack, .row, .grid, .card, .stat > .label + .value, .chip, .muted, .small, .num, .scroll; buttons (.primary), inputs, selects, range sliders, tables, code and kbd are styled.
+CSS variables that follow the user's theme live; use only them for color: --fg, --muted, --bg, --surface, --border, --accent, --accent-fg, --success, --warning, --danger, --chart-1 to --chart-6, --radius, --font, --mono. Built-in classes: .stack, .row, .grid, .card, .stat (.stat is a tile: a .label then a .value), .chip, .muted, .small, .num (.num right-aligns numbers in table cells; elsewhere it only lines digits up), .scroll; buttons (.primary), inputs, selects, range sliders, tables, details, links, code and kbd are styled. data-tip="…" on any element gives it a themed hover and focus hint. Charts, tables and galleries are interactive and fit the width on their own: tooltips, keyboard, legend toggles, tables that scroll sideways in their box.
 
 The tool lays the page out at 700 and 360px before showing it; when it finds script errors, overlapping or cut-off text, overflow or a moving height, it shows nothing and returns them for you to fix.`;
 

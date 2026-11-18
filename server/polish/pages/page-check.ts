@@ -6,6 +6,7 @@ import { join } from "node:path";
 import type { Readable, Writable } from "node:stream";
 import { inlineImages, localImages } from "../../../shared/polish/html";
 import { htmlPage, themeCss } from "../../../shared/polish/page";
+import { chartPalette } from "../../../shared/polish/palette";
 import { openInFolder } from "../media/image";
 import { headlessShell } from "./headless-shell";
 
@@ -18,7 +19,7 @@ const SHOT_MAX_HEIGHT = 1600;
 const THEME = themeCss(
   { surface0: "#1e1f22", surface1: "#2b2d31", border: "#3f4147", foreground: "#e6e6e6", foregroundMuted: "#9a9ca3", accent: "#5b8cff", accentForeground: "#ffffff", statusSuccess: "#3fb950", statusWarning: "#d29922", statusDanger: "#f85149" },
   { sans: '-apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif', mono: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" },
-  ["#5b8cff", "#3fb950", "#d29922", "#f85149", "#a371f7", "#39c5cf"],
+  chartPalette("#1e1f22"),
 );
 const TIMEOUT_MS = 15_000;
 
@@ -27,6 +28,7 @@ interface Layout {
   overlaps: string[];
   cut: string[];
   truncated: string[];
+  cramped: string[];
 }
 
 /**
@@ -43,8 +45,8 @@ export interface PageCheck {
 // The page's height as the boot script reports it to the chat.
 const HEIGHT = `(() => { const root = document.documentElement; return Math.ceil(root.scrollHeight > root.clientHeight ? root.scrollHeight : root.getBoundingClientRect().height); })()`;
 // Runs in the page: what a reader would see wrong, as short descriptions.
-const MEASURE = `(() => {
-  const W = innerWidth, out = { wide: [], overlaps: [], cut: [], truncated: [] }, root = document.documentElement;
+export const MEASURE = `(() => {
+  const W = innerWidth, out = { wide: [], overlaps: [], cut: [], truncated: [], cramped: [] }, root = document.documentElement;
   const name = (el) => "<" + el.tagName.toLowerCase() + (el.id ? "#" + el.id : "") + (typeof el.className === "string" && el.className.trim() ? "." + el.className.trim().split(/\\s+/).join(".") : "") + ">";
   const quote = (text) => JSON.stringify(text.trim().replace(/\\s+/g, " ").slice(0, 40));
   if (root.scrollWidth > W + 1) {
@@ -85,6 +87,23 @@ const MEASURE = `(() => {
     if (!svg || out.cut.length >= 3) continue;
     const frame = svg.getBoundingClientRect();
     if (box.left < frame.left - 1 || box.right > frame.right + 1 || box.top < frame.top - 1 || box.bottom > frame.bottom + 1) out.cut.push(quote(node.data));
+  }
+  // Text closer than 4px to the left or right inner edge of the box it sits in (the nearest element with a background or a side border). Only
+  // fully visible text counts (a table scrolled sideways in its box is fine), and top-level text at the page edge is not in a box.
+  const boxOf = (el) => {
+    for (let p = el; p && p !== document.body && p !== root; p = p.parentElement) {
+      const st = getComputedStyle(p), bg = st.backgroundColor;
+      if ((bg && bg !== "transparent" && !/,\\s*0\\)$/.test(bg)) || parseFloat(st.borderLeftWidth) > 0 || parseFloat(st.borderRightWidth) > 0) return { p, st };
+    }
+    return null;
+  };
+  for (const { box, seen, node, el } of boxes) {
+    if (out.cramped.length >= 3) break;
+    if (el instanceof SVGElement || seen.width < box.width - 1) continue;
+    const owner = boxOf(el);
+    if (!owner) continue;
+    const frame = owner.p.getBoundingClientRect(), left = frame.left + parseFloat(owner.st.borderLeftWidth), right = frame.right - parseFloat(owner.st.borderRightWidth);
+    if (box.left - left < 3.5 || right - box.right < 3.5) out.cramped.push(quote(node.data));
   }
   const seen = boxes.filter((b) => b.seen.width > 1 && b.seen.height > 1);
   outer: for (let i = 0; i < seen.length; i++) {
@@ -287,6 +306,7 @@ export function checkPage(html: string, folder: string | undefined): Promise<Pag
       if (layout.cut.length) add(`text is cut off at the edge of its SVG: ${layout.cut.join(", ")}`);
       if (layout.truncated.length) add(`text is cut off with an ellipsis; let it wrap or give it room: ${layout.truncated.join(", ")}`);
       if (layout.wide.length) add(`the page is wider than the column: ${layout.wide.join(", ")}`);
+      if (layout.cramped.length) add(`text is cramped against the side of its box; give the box padding (a .card or .stat has it): ${layout.cramped.join(", ")}`);
     }
     for (const [finding, widths] of found) problems.push(`At ${widths.join(" and ")}px wide, ${finding}`);
     const low = Math.min(...result.samples);

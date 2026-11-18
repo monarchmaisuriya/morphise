@@ -2,6 +2,16 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.40.0 - 2026-11-18
+
+HTML pages in chats are readable, interactive and fit any width, on pages already in your chats too.
+
+- **Charts you can read:** hover, tap or arrow-key a bar, point or slice for a tooltip with every series' value; the rest dims, and line charts show a guide line. Legend items hide and show a series (each keeps its colour). Labels wrap to two lines instead of being cut at a fixed length, bars stop at 48px wide (28px tall), single-series bars show their values, and charts use a palette checked for colour-blind readers and contrast.
+- **The whole page, not just charts:** KPI tiles (`.stat`) are padded tiles with the value under its label; `.num` right-aligns only in table cells. Wide tables scroll sideways in their own box, rows highlight on hover and sortable headers work from the keyboard. Long words and links wrap, lines stay under about 75 characters, pictures and a page's own SVGs shrink to fit, links and collapsible `details` are styled, gallery pictures open larger on click, and any element with `data-tip` gets the same themed hint.
+- **The page's buttons:** full screen, save, download, open and copy sit in a strip above the page with its title, so they never cover it, and each has a tooltip, in full screen and Bookmarks too.
+- **Agents are told:** `html_guide` and the tool text describe what is now built in; the layout check also reports text crammed against the side of its card or tile.
+- **Sidebar:** workspace rows under "Your groups" no longer repeat their project's name (a pinned row listed under Pinned keeps it).
+
 ## 0.39.0 - 2026-11-18
 
 - **Most recently used project first in each group:** a new switch in Settings, Sidebar, Your groups (off unless you turn it on). Inside each of your groups, the project whose workspace you used last goes to the top, ranked the same way as "Most recently used group first". Ungrouped keeps following Display. While it is on, dragging a project inside its own group does nothing (no drop line), and dragging it into another group still moves it there. An older Morphise ignores the switch.

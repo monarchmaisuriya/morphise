@@ -22,10 +22,11 @@ Use the built-in helper instead of drawing axes yourself: it sizes to the page, 
   </script>
 
 - One chart per element. Up to 6 series; a donut takes one series, one value per label.
-- Values are numbers; leave a gap with null. Keep labels short (a long label is shortened with an ellipsis).
+- Built in, nothing to add: a tooltip with every series' value on hover, tap and the arrow keys; the hovered mark lit and the rest dimmed; legend items that hide and show a series; labels that wrap to two lines; values on single-series bars.
+- Values are numbers; leave a gap with null. Keep labels under about 24 characters: longer ones wrap, and past two lines they are shortened (the tooltip still shows them whole).
 - Put the title and a one-line takeaway in HTML above the chart (h2, p.muted), not inside it.
 - Several charts: a .grid of .card elements, each with an h3 and its chart.
-- A KPI row: .grid of .stat cards (.label, .value), with a sparkline under each value if a trend matters.
+- A KPI row: a .grid of .stat tiles, each a .label then a .value (no .num on them; a .stat is already a tile, so don't wrap it in a .card), with a sparkline under each value if a trend matters. Give each value its context in the label ("Refund rate, last 30 days"), not a bare number.
 - Morphise.chart(...) returns { update(spec) } to redraw with new data (a slider or a select), without changing the height.`;
 
 const TABLES = `# Tables
@@ -37,6 +38,7 @@ Plain <table> is already styled (numbers right-aligned with td.num). Add class "
   </table>
 
 - Numbers sort as numbers ($, %, commas and k/M suffixes are understood).
+- A table wider than the chat scrolls sideways in its own box on its own; rows highlight on hover; sortable headers also sort with Enter or Space.
 - Over about 15 rows, wrap the table in <div class="scroll" style="max-height:360px"> so the page height stays fixed.
 - A table your script adds after the page loads: call Morphise.sortable(table) on it.
 - For a small comparison (2 to 4 items), cards in a .grid read better than a table.`;
@@ -54,11 +56,14 @@ const IMAGES = `# Images
     <figure><img src="/abs/b.png" alt="After"><figcaption>After</figcaption></figure>
   </div>
 
-- Before and after: two figures in a gallery, same size. Always set alt text.`;
+- Before and after: two figures in a gallery, same size. Always set alt text.
+- A gallery picture opens larger over its gallery on click or Enter (with its caption), and closes on click or Escape; nothing to add.`;
 
 const INTERACTIVE = `# Interactive pages
 - Controls (sliders, selects, buttons) go in a .row above or below the content, in HTML. Readouts are single lines with tabular numbers.
 - Nothing may change the page's height: reserve space for every state (fixed or min-height areas).
+- Hints: give any element data-tip="what it means" (an abbreviation, an icon button, a number's definition); it shows in the page's themed tooltip on hover, focus and tap. Don't use the title attribute for this.
+- Secondary detail (method, sources, raw numbers) goes in <details><summary>…</summary>…</details>, which is styled and opens in place; open it by default only if the reader needs it first.
 - Morphise.ask("text") puts a follow-up into the user's message box when they click something; it never sends. Call it only from a click handler, with a short question the user would ask next, e.g. a button "Drill into Q3" → Morphise.ask("Break Q3 down by week"). It does nothing in a downloaded page.
 - Simulations: size the canvas by devicePixelRatio, offer Play, Pause, Reset, draw a meaningful first frame, pause while off-screen (IntersectionObserver), and respect prefers-reduced-motion.
 - Charts that follow a control: keep the object Morphise.chart returns and call its update(spec).`;
@@ -66,7 +71,8 @@ const INTERACTIVE = `# Interactive pages
 const MOCKUPS = `# Mock-ups
 - Build from the kit: .stack, .row, .grid, .card, .stat (.label, .value), .chip, .muted, .small; buttons (.primary for the main action), inputs, selects and tables are styled.
 - Use the theme variables only (--fg, --muted, --bg, --surface, --border, --accent, --accent-fg, --success, --warning, --danger, --chart-1..6), so the mock-up follows light and dark themes.
-- Keep it to what the question needs: one screen, real-looking but short text, no lorem ipsum.`;
+- Keep it to what the question needs: one screen, real-looking but short text, no lorem ipsum.
+- Readable at a glance: headings in order (h2 under h1, h3 under h2); numbered section labels only for real steps; related things close and groups apart; text kept off box edges (a .card or .stat already pads it); no one-word last lines in headings (the kit balances them).`;
 
 export const GUIDES: Record<GuideTopic, string> = { charts: CHARTS, tables: TABLES, diagrams: DIAGRAMS, images: IMAGES, interactive: INTERACTIVE, mockups: MOCKUPS };
 

@@ -3,7 +3,7 @@ import { openExternalUrl } from "@getpaseo/plugin/client";
 import { createElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Platform } from "react-native";
 import { htmlPage, themeCss, type HtmlColors } from "../../../../shared/polish/page";
-import { seriesFrom } from "../../web/color";
+import { chartPalette } from "../../../../shared/polish/palette";
 import { readHostAppearance } from "../../web/host";
 import { showAsPopover } from "../../web/popover";
 import { usePrefs } from "../../prefs";
@@ -63,7 +63,7 @@ const MONO = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
 export function useHtmlTheme(colors: HtmlColors) {
   return useMemo(() => {
     const a = readHostAppearance();
-    return themeCss(colors, { sans: a.uiFont ? `${a.uiFont}, ${SANS}` : SANS, mono: a.monoFont ? `${a.monoFont}, ${MONO}` : MONO }, seriesFrom(colors.accent));
+    return themeCss(colors, { sans: a.uiFont ? `${a.uiFont}, ${SANS}` : SANS, mono: a.monoFont ? `${a.monoFont}, ${MONO}` : MONO }, chartPalette(colors.surface0));
   }, [colors]);
 }
 

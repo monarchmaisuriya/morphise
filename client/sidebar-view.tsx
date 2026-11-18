@@ -37,6 +37,7 @@ import {
   byLastUsed,
   orderGroupsByLastUsed,
   orderProjectsByLastUsed,
+  underOwnProject,
   orderGroups,
   STATUS_TITLES,
   workspaceName,
@@ -957,14 +958,14 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   if (shows.branch && info && (info.ahead || info.behind)) details.push(<AheadBehind key="sync" ahead={info.ahead ?? 0} behind={info.behind ?? 0} shared={shared} />);
   // The project tag's icon and text take the project's chosen colour, or its automatic one.
   const projectColor = shared.groups.doc.decorations.projects[workspace.projectKey]?.color ?? tileColor(workspace.project);
-  if (shows.project && config.groupBy !== "project") details.push(<Meta key="project" icon="Folder" color={projectColor} text={workspace.project} shared={shared} />);
+  if (shows.project && !underOwnProject(config, workspace.pinned)) details.push(<Meta key="project" icon="Folder" color={projectColor} text={workspace.project} shared={shared} />);
   if (shows.host && host && shared.hosts.length > 1) details.push(<Meta key="host" icon="Server" text={host} shared={shared} />);
   if (shows.diff && changes) details.push(<DiffText key="diff" diff={changes} shared={shared} />);
   if (shows.services && info?.services.length) details.push(<ServicesMeta key="services" services={info.services} shared={shared} />);
   if (shows.labels && workspace.labels.length) details.push(<LabelsMeta key="labels" labels={workspace.labels} shared={shared} />);
   if (reminder) details.push(<Meta key="reminder" icon="AlarmClock" color={isDue(reminder, now) ? c.statusWarning : undefined} text={formatDue(reminder, now)} shared={shared} />);
   // A two-line row with nothing else to say names its branch, then its project.
-  const fallback = twoLine && !line && details.length === 0 ? (workspace.branch && config.titleSource !== "branch" ? workspace.branch : config.groupBy !== "project" ? workspace.project : null) : null;
+  const fallback = twoLine && !line && details.length === 0 ? (workspace.branch && config.titleSource !== "branch" ? workspace.branch : !underOwnProject(config, workspace.pinned) ? workspace.project : null) : null;
   const lead = line ? (
     <Text key="status" style={[styles.meta, line.tone === "warning" ? { color: c.statusWarning } : line.tone === "danger" ? { color: c.statusDanger } : null]} numberOfLines={1}>
       {line.text}
