@@ -449,35 +449,3 @@ export function Scroll({ children, nowrap = false }: { children: ReactNode; nowr
   );
 }
 
-/** Markdown an agent wrote, read as paragraphs: **bold** and `code` drawn, "- " items bulleted; the rest of Markdown is left to Paseo. */
-export function Prose({ theme, text, color }: { theme: PluginTheme; text: string; color?: string }) {
-  const s = useStyles(theme);
-  const c = theme.colors;
-  return (
-    <View style={{ gap: 10 }}>
-      {text
-        .trim()
-        .split(/\n\s*\n/)
-        .map((para, i) => (
-          <Text key={i} style={[s.prose, color ? { color } : null]} selectable>
-            {para
-              .replace(/^(\s*)[-*] /gm, "$1• ")
-              .split(/(\*\*[^*\n]+\*\*|`[^`\n]+`)/)
-              .map((part, j) =>
-                part.startsWith("**") && part.endsWith("**") && part.length > 4 ? (
-                  <Text key={j} style={{ color: c.foreground, fontWeight: "600" }}>
-                    {part.slice(2, -2)}
-                  </Text>
-                ) : part.startsWith("`") && part.endsWith("`") && part.length > 2 ? (
-                  <Text key={j} style={[s.mono, { color: c.foreground }]}>
-                    {part.slice(1, -1)}
-                  </Text>
-                ) : (
-                  part
-                ),
-              )}
-          </Text>
-        ))}
-    </View>
-  );
-}

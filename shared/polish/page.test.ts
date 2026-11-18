@@ -4,6 +4,11 @@ import { htmlPage } from "./page";
 const POLICY = /^<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="([^"]+)">/;
 
 describe("the document a published page runs in", () => {
+  it("sizes tables to their content (up to the page width), so a short table is not spread across a wide chat", () => {
+    const page = htmlPage("<table><tr><td>a</td></tr></table>", "");
+    expect(page).toMatch(/table\{border-collapse:collapse;width:auto;max-width:100%/);
+    expect(page).not.toMatch(/table\{border-collapse:collapse;width:100%/);
+  });
   it("opens with a policy that blocks fetches, form posts and remote images, allowing https scripts, styles, fonts and blob workers", () => {
     const policy = POLICY.exec(htmlPage("<p>hi</p>", ":root{}"))?.[1];
     expect(policy?.split("; ")).toEqual(

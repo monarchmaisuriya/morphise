@@ -17,7 +17,8 @@ import { gutterDigits } from "./diff";
 import { useRowSetup } from "./look";
 import { detailBody, shownTarget, type ToolData, type ToolDetailData } from "./model";
 import { numberedLines, striped } from "./preview-lines";
-import { alpha, CodeLine, Expand, PMONO, Prose, Row, Scroll, type Styles, toneColor, useDisclosure, useEnter, useIndent, useSpacing, useStyles } from "./row";
+import { Prose } from "./prose";
+import { alpha, CodeLine, Expand, PMONO, Row, Scroll, type Styles, toneColor, useDisclosure, useEnter, useIndent, useSpacing, useStyles } from "./row";
 
 /** Rows inside an open merged run sit flush in its list, without the timeline spacing. */
 export type Nestable = { nested?: boolean };
@@ -202,7 +203,7 @@ export function ToolDetail({ data, theme, preview = false }: { data: ToolDetailD
     case "prose":
       return (
         <View style={s.ruled}>
-          <Prose theme={theme} text={data.text} />
+          <Prose text={data.text} />
         </View>
       );
     case "text":

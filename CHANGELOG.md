@@ -2,6 +2,12 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.41.1 - 2026-11-18
+
+- **Fix: rows showing "Plugin timeline item unavailable."** Turn recaps (and any of Morphise's chat rows) could show this for good when a chat drew before Morphise's settings arrived, or during a Chat setting change. Paseo remembers that a row had no renderer and does not look again, so Morphise now registers all of its row renderers once, the moment it starts, whatever the settings; settings only decide which rows exist.
+- **Fix: raw markdown in folded replies.** A reply folded into merged steps (with Paseo's Collapse turns), a tool row's text and a plan were drawn by Morphise's own partial markdown, so headings showed as "##" and lists as "•". They now use Paseo's own markdown renderer, the same as a reply.
+- **Fix: stretched tables in pages.** Tables in HTML pages size to their content instead of always filling the chat's width, so columns stay close to their headings in a wide chat; a table wider than the chat still scrolls in its own box.
+
 ## 0.41.0 - 2026-11-18
 
 Animated explainers: when an agent explains how something works over time, it can show a page you play, pause and step through.

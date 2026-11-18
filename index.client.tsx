@@ -24,7 +24,9 @@ import { registerMedia } from "./client/polish/media.register";
 import { registerPages } from "./client/polish/pages.register";
 import { registerSelection } from "./client/polish/selection.register";
 import { registerWeb } from "./client/polish/web.register";
+import { registerRenderers } from "./client/renderers";
 import { registerRun } from "./client/run/register";
+import { stepsOptions } from "./shared/steps";
 import { chimeWav } from "./client/chime";
 import { type AttentionList, reduceAttention } from "./client/attention";
 import { ANSWER_TAIL, bookmarkLastAnswer, bookmarkPage, bookmarkPassage, createBookmarkStore, createBookmarkWriter } from "./client/bookmark-store";
@@ -201,6 +203,8 @@ export default function contribute(client: PluginClientContext) {
     openTask: (taskId) => client.openScreen({ screenId: WORKBENCH_SCREEN_ID, params: taskLinkParams(taskId, nextLinkToken()) }),
     reminderSettings: () => profileOf(store.get()).reminders,
   };
+  // Row renderers first and synchronously, before any setting arrives (client/renderers.ts says why).
+  const stopRenderers = registerRenderers(client, { tasks: surfaces, steps: () => stepsOptions(profileOf(store.get()).sidebar.view.steps) });
   const reconciler = createReconciler(createSections(client, deps, surfaces, switchLayout), (list) => problems.set(list));
   // The parts ported from Chat Polish and Quote (see NOTICE.md); each follows the profile's chat
   // settings through client/polish/prefs.ts, fed by the "chat.polish" section.
@@ -463,6 +467,7 @@ export default function contribute(client: PluginClientContext) {
     reconciler.dispose();
     stopPolish.forEach((stop) => stop());
     stopRun();
+    stopRenderers();
     unfollowLocale();
   };
 }

@@ -4,7 +4,7 @@ import { polishPrefs } from "../../../shared/polish/prefs";
 import type { RowActions } from "../../chat-rows";
 import { setPrefs } from "../prefs";
 import { currentRowSetup } from "./look";
-import { registerChatRows } from "./register";
+import { registerChatRows, registerRowRenderers } from "./register";
 import { noteShownAgent } from "./steps";
 
 // The transformers as Paseo would call them; the row components are not drawn here.
@@ -38,7 +38,7 @@ const call = (detail: Record<string, unknown>, status = "completed", extra: Reco
 function register(chat: ChatSettings | undefined, hidden: string[] = [], stepsInChat = false) {
   setPrefs(polishPrefs(chat));
   const fake = fakeClient();
-  const stop = registerChatRows(fake.client, actions, { chat, hidden, stepsInChat, steps: () => ({}) as never });
+  const stop = registerChatRows(fake.client, actions, { chat, hidden, stepsInChat });
   const run = (itemType: string, item: unknown, phase: "streaming" | "complete" = "complete") => fake.transformers.get(itemType)?.({ item, phase });
   return { ...fake, stop, run };
 }
@@ -102,8 +102,23 @@ describe("chat rows in the timeline", () => {
     stop();
     const card = register({ toolCalls: "cards" }, [], true);
     expect(card.run("todo", { type: "todo", items: [{ text: "a", completed: true }] })?.items[0]).toMatchObject({ kind: "steps-card", data: { steps: [{ text: "a", status: "completed" }] } });
-    expect(card.renderers).toContain("steps-card");
     card.stop();
+  });
+
+  it("registers no renderers itself, so a Chat setting change never leaves a drawn row without one", () => {
+    for (const stepsInChat of [false, true]) {
+      const { renderers, stop } = register({ toolCalls: "cards", notices: true }, [], stepsInChat);
+      expect(renderers).toEqual([]);
+      stop();
+    }
+  });
+
+  it("registers every chat row renderer at once, whatever the settings (registerRowRenderers)", () => {
+    const fake = fakeClient();
+    const stop = registerRowRenderers(fake.client, () => ({}) as never);
+    expect([...fake.renderers].sort()).toEqual(["polish-notice", "polish-plan", "polish-steps", "polish-thought", "polish-todo", "polish-tool", "steps-card"]);
+    stop();
+    expect(fake.renderers).toEqual([]);
   });
 
   it("never redraws prompts, and replies only as image rows", () => {
@@ -144,7 +159,7 @@ describe("chat rows in the timeline", () => {
           },
         },
       } as unknown as Parameters<typeof registerChatRows>[0];
-      const stop = registerChatRows(client, actions, { chat: { toolCalls: "cards" }, hidden: [], stepsInChat: false, steps: () => ({}) as never });
+      const stop = registerChatRows(client, actions, { chat: { toolCalls: "cards" }, hidden: [], stepsInChat: false });
       // Each tick Paseo draws every mounted chat; a merged row that wasn't drawn before mounts, and after the pass its effect notes its
       // agent (StepsItem's useEffect), as React runs effects after the commit.
       const drawn = new Map<string, Set<string>>();

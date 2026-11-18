@@ -41,7 +41,6 @@ export interface ChatRowsInput {
   hidden: readonly string[];
   // The steps card drawn in the chat in place of todo updates.
   stepsInChat: boolean;
-  steps: () => StepsOptions;
 }
 
 // Round-trip through JSON so optional fields left undefined never reach the host as non-JSON.
@@ -61,6 +60,25 @@ function stopFollowing() {
   followed.clear();
   forgetFrozenAgents();
   shown.length = 0;
+}
+
+/**
+ * The renderers of every row the transformers above can make, registered once when Morphise starts, whatever the settings. Paseo keeps
+ * its renderers in an array it changes in place and caches a row's renderer lookup against that array, so a row drawn before its renderer
+ * is registered (or while it is removed for a setting change) shows "Plugin timeline item unavailable" for good. Settings change which
+ * rows the transformers make, never which renderers exist. `steps`: the steps card's options when it draws.
+ */
+export function registerRowRenderers(client: PluginClientContext, steps: () => StepsOptions): () => void {
+  const removers = [
+    client.addTimelineRenderer({ kind: TOOL_ROW_KIND, version: 1, schema: toolSchema, Component: ToolItem }),
+    client.addTimelineRenderer({ kind: THOUGHT_ROW_KIND, version: 1, schema: thoughtSchema, Component: ThoughtItem }),
+    client.addTimelineRenderer({ kind: STEPS_ROW_KIND, version: 1, schema: stepsSchema, Component: StepsItem }),
+    client.addTimelineRenderer({ kind: PLAN_ROW_KIND, version: 1, schema: planSchema, Component: PlanItem }),
+    client.addTimelineRenderer({ kind: TODO_ROW_KIND, version: 1, schema: todoSchema, Component: TodoItem }),
+    client.addTimelineRenderer({ kind: NOTICE_ROW_KIND, version: 1, schema: noticeSchema, Component: NoticeItem }),
+    client.addTimelineRenderer({ kind: CHAT_STEPS_KIND, version: 1, schema: chatStepsSchema, Component: createChatStepsRow(client.paseo, steps) }),
+  ];
+  return () => removers.forEach((remove) => void remove());
 }
 
 export function registerChatRows(client: PluginClientContext, actions: RowActions, input: ChatRowsInput): () => void {
@@ -215,23 +233,12 @@ export function registerChatRows(client: PluginClientContext, actions: RowAction
     () => {},
   );
 
-  const renderers = [
-    client.addTimelineRenderer({ kind: TOOL_ROW_KIND, version: 1, schema: toolSchema, Component: ToolItem }),
-    client.addTimelineRenderer({ kind: THOUGHT_ROW_KIND, version: 1, schema: thoughtSchema, Component: ThoughtItem }),
-    client.addTimelineRenderer({ kind: STEPS_ROW_KIND, version: 1, schema: stepsSchema, Component: StepsItem }),
-    client.addTimelineRenderer({ kind: PLAN_ROW_KIND, version: 1, schema: planSchema, Component: PlanItem }),
-    client.addTimelineRenderer({ kind: TODO_ROW_KIND, version: 1, schema: todoSchema, Component: TodoItem }),
-    client.addTimelineRenderer({ kind: NOTICE_ROW_KIND, version: 1, schema: noticeSchema, Component: NoticeItem }),
-    ...(view.stepsInChat ? [client.addTimelineRenderer({ kind: CHAT_STEPS_KIND, version: 1, schema: chatStepsSchema, Component: createChatStepsRow(client.paseo, input.steps) })] : []),
-  ];
-
   return () => {
     registrations--;
     clearTimeout(staleTimer);
     unsubscribePrefs();
     unwatchHost();
     removeTransformers();
-    renderers.forEach((remove) => void remove());
     onStaleSteps(() => {});
     onUnplacedStep(() => {});
     onShownAgent(() => {});

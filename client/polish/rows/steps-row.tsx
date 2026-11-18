@@ -1,6 +1,5 @@
 // Ported from Chat Polish (lthieu96/paseo-chat-polish, MIT, see NOTICE.md): client/views.tsx (StepsItem, MergedSteps)
 // An image-only reply inside a run opens to its pictures, drawn by the media part (the run hides that reply's own image row).
-import type { PluginTheme } from "@getpaseo/plugin";
 import { useAgent, type PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { View } from "react-native";
@@ -10,7 +9,8 @@ import { useLanguage, useT } from "../i18n";
 import type { ImagesRow } from "../media/image-rows";
 import { ImagesItem } from "../media/views";
 import { imageOnly, toolData, type stepsSchema, type ToolData } from "./model";
-import { alpha, Expand, FadeIn, Prose, Row, useDisclosure, useIndent, useSpacing, useSteady } from "./row";
+import { Prose } from "./prose";
+import { alpha, Expand, FadeIn, Row, useDisclosure, useIndent, useSpacing, useSteady } from "./row";
 import { changesOfTodo, noteShownAgent, runOf, runVersion, stepKey, stepSummary, subscribeRun } from "./steps";
 import { ThoughtItem } from "./thought-row";
 import { changeWords, TodoSteps } from "./todo-row";
@@ -36,9 +36,9 @@ export function StepsItem(props: PluginTimelineItemProps<z.output<typeof stepsSc
 }
 
 /** A reply Collapse turns folded into a run. */
-const ReplyStep = ({ theme, text }: { theme: PluginTheme; text: string }) => (
+const ReplyStep = ({ text }: { text: string }) => (
   <View style={{ paddingVertical: 8 }}>
-    <Prose theme={theme} text={text} color={theme.colors.foreground} />
+    <Prose text={text} />
   </View>
 );
 
@@ -78,7 +78,7 @@ export function MergedSteps(props: PluginTimelineItemProps<unknown> & { steps: S
     return images ? (
       <ImageStep key={stepKey(step)} {...props} images={images} />
     ) : (
-      <ReplyStep key={stepKey(step)} theme={theme} text={step.text} />
+      <ReplyStep key={stepKey(step)} text={step.text} />
     );
   };
   // The step in progress, or between steps of a run the agent is still adding to, the one just done (not the summary, which would flash).

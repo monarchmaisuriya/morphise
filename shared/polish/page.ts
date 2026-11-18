@@ -74,7 +74,7 @@ const KIT = [
   "button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}button.primary:hover{filter:brightness(1.08)}",
   "input,select,textarea{font:inherit;font-size:13px;color:var(--fg);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:5px 8px}",
   "input[type=range],input[type=checkbox],input[type=radio]{accent-color:var(--accent);padding:0}",
-  "table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}th,td{padding:6px 10px;text-align:left;border-bottom:1px solid var(--border)}",
+  "table{border-collapse:collapse;width:auto;max-width:100%;font-variant-numeric:tabular-nums}th,td{padding:6px 10px;text-align:left;border-bottom:1px solid var(--border)}",
   "th{color:var(--muted);font-weight:500;font-size:12px}",
   ":focus-visible{outline:2px solid var(--accent);outline-offset:-2px}",
 ].join("");

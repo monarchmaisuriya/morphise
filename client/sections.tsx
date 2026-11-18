@@ -7,12 +7,10 @@ import { createComposerControl, createPresetField } from "./composer-surfaces";
 import type { Directory } from "./directory";
 import type { Section } from "./reconciler";
 import { type ActionDeps, type ActionTarget, runAction } from "./run-action";
-import { reminderRowSchema } from "../shared/reminder-contracts";
 import { presetTitle, reminderAt } from "../shared/reminders";
 import { createWorkspaceTasksPanel } from "./board/board";
 import {
   createChatPopover,
-  createReminderRow,
   runRemindCommand,
   runTaskCommand,
   type SurfaceDeps,
@@ -23,11 +21,11 @@ import { createChecksPanel } from "./checks-panel";
 import { createDispatchScreen, DISPATCH_ICON, DISPATCH_SCREEN_ID } from "./dispatch";
 import { createWorkbenchScreen, createWorkbenchSidebarItem, WORKBENCH_SCREEN_ID, LEGACY_SCREENS } from "./workbench";
 import { createSidebarView } from "./sidebar-view";
-import { RecapRow, recapRowSchema, type RowActions } from "./chat-rows";
+import type { RowActions } from "./chat-rows";
 import { registerChatRows } from "./polish/rows/register";
 import { createDetailsPanel, DETAILS_PANEL_ID, detailsStore } from "./details-panel";
 import { readImage, revealFile } from "../shared/files";
-import { lastTurnMarkdown, TURN_RECAP_KIND } from "../shared/chat-view";
+import { lastTurnMarkdown } from "../shared/chat-view";
 import { stepsOptions } from "../shared/steps";
 import { applyStyleSheet } from "./web";
 import { jumpToPrompt } from "./polish/web/prompts";
@@ -212,7 +210,7 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
       register({ profile }, track) {
         const steps = stepsOptions(profile.sidebar.view.steps);
         const stepsInChat = profile.sidebar.view.stepsCard !== false && steps.position === "chat";
-        track(registerChatRows(client, rowActions, { chat: profile.chat, hidden: profile.timeline.hide, stepsInChat, steps: () => steps }));
+        track(registerChatRows(client, rowActions, { chat: profile.chat, hidden: profile.timeline.hide, stepsInChat }));
       },
     },
     {
@@ -259,15 +257,6 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
       },
     },
     {
-      // Registered once and never again: recaps already in a chat keep drawing whatever the Chat
-      // settings do (turned off, changed, or a section above failing).
-      name: "chat.recap",
-      key: () => "always",
-      register(_input, track) {
-        track(client.addTimelineRenderer({ kind: TURN_RECAP_KIND, version: 1, schema: recapRowSchema, Component: RecapRow }));
-      },
-    },
-    {
       name: "tasks.surfaces",
       key: () => "always",
       register(_input, track) {
@@ -309,7 +298,6 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
             onSelect: ({ openScreen }) => openScreen({ screenId: DISPATCH_SCREEN_ID }),
           }),
         );
-        track(client.addTimelineRenderer({ kind: "reminder", version: 1, schema: reminderRowSchema, Component: createReminderRow(tasks) }));
         const global = [
           { id: "morphise-tasks", title: "Open Workbench: tasks", tab: "board" },
           { id: "morphise-tasks-today", title: "Open Workbench: today's tasks and reminders", tab: "today" },

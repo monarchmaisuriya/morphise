@@ -7,6 +7,7 @@ import { Icon } from "../../ui/kit";
 import { useT } from "../i18n";
 import { useRowSetup } from "./look";
 import type { planSchema } from "./model";
+import { Prose } from "./prose";
 import { SQUIRCLE_CARD, useDisclosure, useStyles } from "./row";
 
 export function PlanItem({ item, theme }: PluginTimelineItemProps<z.output<typeof planSchema>>) {
@@ -25,9 +26,7 @@ export function PlanItem({ item, theme }: PluginTimelineItemProps<z.output<typeo
         {steps ? <Text style={[s.meta, { marginLeft: 0 }]}>{t("chat.planSteps", { n: steps })}</Text> : null}
       </View>
       <View style={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: long ? 6 : 14, maxHeight: long && !open ? 320 : undefined, overflow: "hidden" }}>
-        <Text style={[s.prose, { color: theme.colors.foreground, lineHeight: Math.round(s.prose.fontSize * 1.5) }]} selectable>
-          {text}
-        </Text>
+        <Prose text={text} />
       </View>
       {long ? (
         <Pressable accessibilityRole="button" onPress={toggle} style={s.more}>
