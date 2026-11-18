@@ -3,7 +3,7 @@ import { isDarkSurface, PRIORITY_YELLOWS } from "../ui/hues";
 
 // How each priority reads and looks; P1 is the most urgent. Every priority is a short bar (PriorityMark), told apart by
 // its colour (priorityColor).
-export type PriorityMarkKind = "bar" | "dashed";
+export type PriorityMarkKind = "bar" | "outline";
 export const PRIORITY = {
   1: { name: "Urgent", mark: "bar" },
   2: { name: "High", mark: "bar" },
@@ -11,8 +11,8 @@ export const PRIORITY = {
   4: { name: "Low", mark: "bar" },
 } as const satisfies Record<number, { name: string; mark: PriorityMarkKind }>;
 
-// A task with no priority still gets a mark, a dashed ring, so every card and row has one in the same place.
-export const NO_PRIORITY = { name: "No priority", mark: "dashed" } as const;
+// A task with no priority still gets a mark, the bar outlined, so every card and row has one in the same place.
+export const NO_PRIORITY = { name: "No priority", mark: "outline" } as const;
 
 export function priorityOf(priority: number | null): { name: string; mark: PriorityMarkKind } {
   return priority === 1 || priority === 2 || priority === 3 || priority === 4 ? PRIORITY[priority] : NO_PRIORITY;

@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.44.1 - 2026-11-19
+
+- **No priority is an outlined bar:** a task with no priority shows the same short bar as the other priorities, outlined in grey instead of filled, so every priority mark has the same height.
+- **Activity columns end level:** on wide screens the two columns under the rankings stretch to the taller one, and the shorter column's last card (Insights or Most used) spreads its tiles or rows over the extra height instead of leaving empty space below it.
+
 ## 0.44.0 - 2026-11-19
 
 - **Priority marks are short bars:** Urgent, High, Medium and Low show a short bar in their colour (red, amber, yellow, grey) on cards, list rows and the priority picker; a task with no priority keeps its dashed ring.

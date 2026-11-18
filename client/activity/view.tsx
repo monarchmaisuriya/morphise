@@ -340,7 +340,8 @@ const INSIGHT_ICONS: Record<string, string> = {
 function Insights({ t, summary, side }: { t: Tokens; summary: ActivitySummary; side: boolean }) {
   return (
     <Card t={t} title="Insights" icon="Lightbulb" side={side}>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+      {/* When the card is stretched to its column's height, the tile rows share the extra height. */}
+      <View style={{ flexGrow: 1, flexDirection: "row", flexWrap: "wrap", alignContent: "stretch", gap: 8 }}>
         {summary.insights.map((row) => (
           <View key={row.label} style={{ flexBasis: "47%", flexGrow: 1, flexDirection: "row", alignItems: "center", gap: 10, padding: 10, borderRadius: radius.lg, backgroundColor: t.c.surface1 }}>
             <View style={{ width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: withAlpha(BLUE, 0.16) ?? t.c.surface2 }}>
@@ -370,9 +371,12 @@ function TopLists({ t, summary, side }: { t: Tokens; summary: ActivitySummary; s
     <Card t={t} title="Most used" icon="ListOrdered" side={side}>
       <Segmented<"skills" | "mcp" | "models"> t={t} label="Show skills, MCP tools or models" value={kind} onChange={setKind} options={[{ value: "skills", label: "Skills" }, { value: "mcp", label: "MCP tools" }, { value: "models", label: "Models" }]} />
       {rows.length ? null : <Text style={t.text.small}>{kind === "skills" ? "No skills used yet." : kind === "mcp" ? "No MCP tools used yet." : "No prompts counted yet."}</Text>}
-      {rows.map((row, index) => (
-        <RankRow key={row.name} t={t} rank={index + 1} label={row.name} value={row.count} share={row.count / total} max={max} color={PURPLE} detail={row.detail && row.detail !== "prompts" ? row.detail : null} />
-      ))}
+      {/* When the card is stretched to its column's height, the rows spread over it. */}
+      <View style={{ flexGrow: 1, justifyContent: "space-between", gap: 12 }}>
+        {rows.map((row, index) => (
+          <RankRow key={row.name} t={t} rank={index + 1} label={row.name} value={row.count} share={row.count / total} max={max} color={PURPLE} detail={row.detail && row.detail !== "prompts" ? row.detail : null} />
+        ))}
+      </View>
     </Card>
   );
 }
@@ -438,15 +442,16 @@ export function ActivityView({ client, theme, compact, workspaces }: { client: P
                 </Card>
               </View>
               {wide ? (
-                // Two columns that stack on their own, so a short card is never stretched into a padded box beside a tall one.
-                <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
+                // Two columns that stack on their own and end level: the taller column sets the height, and the other's
+                // last card grows to meet it, spreading its own rows or tiles rather than leaving empty space.
+                <View style={{ flexDirection: "row", gap: 12 }}>
                   <View style={{ flex: 1, minWidth: 0, gap: 12 }}>
                     <Ranking t={t} title="Providers" icon="Cpu" rows={summary.rankings.providers} side={false} />
-                    <Insights t={t} summary={summary} side={false} />
+                    <Insights t={t} summary={summary} side />
                   </View>
                   <View style={{ flex: 1, minWidth: 0, gap: 12 }}>
                     <Ranking t={t} title="Projects" icon="Folder" rows={summary.rankings.projects} side={false} />
-                    <TopLists t={t} summary={summary} side={false} />
+                    <TopLists t={t} summary={summary} side />
                   </View>
                 </View>
               ) : (
