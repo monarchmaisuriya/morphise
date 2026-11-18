@@ -2,6 +2,15 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.41.0 - 2026-11-18
+
+Animated explainers: when an agent explains how something works over time, it can show a page you play, pause and step through.
+
+- **Morphise.player:** a page kit helper that plays scenes with captions under one row of controls: play and pause, previous and next scene, a scrubber over the whole animation, the scene count and speed (1×, 2×, 0.5×), each with a tooltip, and Space and the arrow keys on the focused player. Scenes can draw on plain elements, an SVG or a canvas.
+- **Behaves in a chat:** the page height never changes while it plays; it pauses when scrolled out of view or when the window is hidden and resumes only if it was playing; it starts paused, and never starts on its own for readers who prefer less motion; Cmd/Ctrl+K and Escape still reach the chat. Stepping back, scrubbing and resizing always show the right picture.
+- **Agents are told to use it:** "how something works step by step or over time" is now one of the cases where agents draw a page, and `html_guide` has an `explainers` topic with rules and a worked example. The interactive topic points simulations to the player instead of hand-built play buttons.
+- **Checked before it shows:** the layout check steps through every scene at 700 and 360px and reports a player whose page height changes between scenes.
+
 ## 0.40.0 - 2026-11-18
 
 HTML pages in chats are readable, interactive and fit any width, on pages already in your chats too.

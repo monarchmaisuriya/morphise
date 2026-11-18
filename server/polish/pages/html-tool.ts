@@ -26,6 +26,7 @@ const WHEN_TO_DRAW = `Draw a page without being asked whenever it would be clear
 - Structure: a plan, architecture, dependency map or timeline. A diagram on a page; a plain flowchart, sequence, state, class or ER diagram goes in a \`\`\`mermaid block in your reply instead, which the chat draws.
 - Interfaces: a UI or layout to show or change. A mock-up, before and after when something changes.
 - Results: a review, report, audit, test run or summary of many items. A page with the key facts first.
+- Processes: how something works step by step or over time (an algorithm, a request's path, a protocol, a lifecycle, a physical process). An animated explainer with Morphise.player: scenes with captions, and play, pause and step controls the reader drives.
 - Always when the user asks to draw, chart, plot, visualize, illustrate, simulate, animate or mock up something, in any language.
 Keep text for a direct fact, a yes or no, a short explanation, code or a command; never add a page only to decorate an answer.`;
 
@@ -36,7 +37,7 @@ const DESCRIPTION = `Show a finished HTML page inline in this chat, above your r
 When to use it
 ${WHEN_TO_DRAW}
 
-Before building one, call ${HTML_GUIDE_TOOL} with the kind of page (charts, tables, diagrams, images, interactive, mockups) for its helpers and rules.
+Before building one, call ${HTML_GUIDE_TOOL} with the kind of page (${GUIDE_TOPICS.join(", ")}) for its helpers and rules.
 
 Page
 - One self-contained HTML document with inline <style> and <script>. Prefer the built-in helpers (Morphise.chart, table.sortable, .gallery) and inline SVG; load a library from an https CDN only when it saves real work.
@@ -89,7 +90,7 @@ const TOOL = {
 };
 const GUIDE = {
   name: HTML_GUIDE_TOOL,
-  description: `The helpers and rules for one kind of page, to read before building it with ${HTML_TOOL}: charts, tables, diagrams, images, interactive or mockups.`,
+  description: `The helpers and rules for one kind of page, to read before building it with ${HTML_TOOL}: ${GUIDE_TOPICS.slice(0, -1).join(", ")} or ${GUIDE_TOPICS.at(-1)}.`,
   inputSchema: { type: "object", properties: { topic: { type: "string", enum: [...GUIDE_TOPICS], description: "The kind of page" } }, required: ["topic"] },
   annotations: { title: "Page guide", readOnlyHint: true },
 };

@@ -68,7 +68,8 @@ describe("the html_render MCP server", () => {
     expect(config.systemPrompt).toMatch(/^Base\n\n# HTML pages\nYou have an html_render tool/);
     // Proactive: agents draw without being asked when a page is clearer, for each kind of content, and keep text for short answers.
     expect(config.systemPrompt).toMatch(/When to use it\nDraw a page without being asked whenever it would be clearer than text/);
-    for (const kind of ["Choices:", "Numbers:", "Structure:", "Interfaces:", "Results:"]) expect(config.systemPrompt).toContain(`- ${kind}`);
+    for (const kind of ["Choices:", "Numbers:", "Structure:", "Interfaces:", "Results:", "Processes:"]) expect(config.systemPrompt).toContain(`- ${kind}`);
+    expect(config.systemPrompt).toMatch(/Processes:[^\n]*Morphise\.player/);
     expect(config.systemPrompt).toMatch(/Keep text for a direct fact/);
     expect(config.systemPrompt).not.toMatch(/clearly helps/);
     // No headless browser in this cache: nothing to preview pages in.
@@ -104,6 +105,12 @@ describe("the html_render MCP server", () => {
     expect((await post({ jsonrpc: "2.0", method: "notifications/initialized" })).status).toBe(202);
     const tools = (await ask(2, "tools/list")).result.tools;
     expect(tools.map((listed) => listed.name)).toEqual(["html_render", "html_guide"]);
+    // Every guide topic is offered in both descriptions, explainers included.
+    for (const topic of ["charts", "tables", "diagrams", "images", "interactive", "mockups", "explainers"]) {
+      expect(tools[0]!.description).toContain(topic);
+      expect(tools[1]!.description).toContain(topic);
+    }
+    expect(tools[0]!.description).toMatch(/Processes:[^\n]*Morphise\.player/);
     expect(tools[0]!.description).toMatch(/call html_guide with the kind of page/);
     // The same guidance reaches chats created before a change, since this description is read live from the tool server.
     expect(tools[0]!.description).toMatch(/When to use it\nDraw a page without being asked whenever it would be clearer than text/);
@@ -116,11 +123,16 @@ describe("the html_render MCP server", () => {
     expect(chartsGuide.content[0].text).toMatch(/24 characters/);
     const interactiveGuide = (await ask(22, "tools/call", { name: "html_guide", arguments: { topic: "interactive" } })).result;
     expect(interactiveGuide.content[0].text).toMatch(/data-tip/);
+    expect(interactiveGuide.content[0].text).toMatch(/Morphise\.player/);
+    const explainersGuide = (await ask(23, "tools/call", { name: "html_guide", arguments: { topic: "explainers" } })).result;
+    expect(explainersGuide.isError).toBe(false);
+    expect(explainersGuide.content[0].text).toMatch(/Morphise\.player/);
+    expect(explainersGuide.content[0].text).toMatch(/p = 0/);
     expect(tools[0]!.description).toMatch(/\.stat is a tile/);
     expect(tools[0]!.description).toMatch(/\.num right-aligns numbers in table cells/);
     const unknownGuide = (await ask(21, "tools/call", { name: "html_guide", arguments: { topic: "poems" } })).result;
     expect(unknownGuide.isError).toBe(true);
-    expect(unknownGuide.content[0].text).toMatch(/charts, tables, diagrams, images, interactive, mockups/);
+    expect(unknownGuide.content[0].text).toMatch(/charts, tables, diagrams, images, interactive, mockups, explainers/);
     expect((await ask(3, "tools/call", { name: "html_render", arguments: { title: "t", html: "<style>.a{height:100vh}</style>" } })).result.isError).toBe(true);
     // An agent created while the browser was installed can still call html_preview: it reports what html_render would reject, and never publishes.
     const previewed = (await ask(3, "tools/call", { name: "html_preview", arguments: { html: "<style>.a{height:100vh}</style>" } })).result;

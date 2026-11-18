@@ -5,7 +5,7 @@
 // can run it without a DOM. A lasting contract for pages already in chats: later versions only add to the API (Morphise.version); how
 // things look may improve.
 
-export const KIT_VERSION = 2;
+export const KIT_VERSION = 3;
 
 export const KIT_CSS = [
   // Numbers line up by digit everywhere; only table cells right-align them.
@@ -32,6 +32,16 @@ export const KIT_CSS = [
   ".gallery{position:relative}.gallery img{cursor:zoom-in}.gallery img:focus-visible{outline:2px solid var(--accent);outline-offset:2px}",
   ".mk-zoom{position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:8px;background:var(--bg);border-radius:var(--radius);cursor:zoom-out;outline:none}",
   ".mk-zoom img{width:auto;max-width:100%;max-height:calc(100% - 28px);aspect-ratio:auto;object-fit:contain;border:0;background:none}",
+  // The player: a fixed stage, a caption of exactly two lines and one row of fixed-width controls with a scrubber that takes the rest.
+  ".mk-player{display:flex;flex-direction:column;gap:8px;border-radius:var(--radius);outline:none}.mk-player:focus-visible{outline:2px solid var(--accent);outline-offset:4px}",
+  ".mk-stage{position:relative;overflow:hidden;width:100%;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border)}.mk-stage>svg,.mk-stage>canvas{position:absolute;left:0;top:0}",
+  ".mk-caption{height:2.9em;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;font-size:13px;line-height:1.45;overflow-wrap:anywhere}.mk-caption.mk-error{color:var(--danger)}",
+  ".mk-player-bar{display:flex;flex-wrap:nowrap;align-items:center;gap:4px;height:36px}",
+  ".mk-player-bar button{all:unset;box-sizing:border-box;flex:none;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;color:var(--fg);cursor:pointer}",
+  ".mk-player-bar button:hover{background:color-mix(in srgb,var(--fg) 8%,transparent)}.mk-player-bar button:focus-visible{outline:2px solid var(--accent)}",
+  ".mk-player-bar .mk-play{background:var(--accent);color:var(--accent-fg)}.mk-player-bar .mk-play:hover{background:var(--accent);filter:brightness(1.08)}",
+  ".mk-player-bar input[type=range]{flex:1;min-width:48px;margin:0 6px;padding:0}.mk-count{flex:none;min-width:6ch;text-align:center;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}",
+  ".mk-player-bar .mk-speed{width:5ch;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}",
   "@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}",
 ].join("");
 
@@ -86,6 +96,17 @@ function mkTipPlace(anchor, tip, room) {
   var top = anchor.top - tip.height - 8 >= 0 ? anchor.top - tip.height - 8 : anchor.bottom + 8;
   return { left: Math.round(left), top: Math.round(Math.max(0, Math.min(top, room.height - tip.height))) };
 }
+// A player's timeline: the scene at time t (ms from the start) and its progress 0..1; scenes shorter than 300ms count as 300ms, so
+// nothing flickers past. -1 for no scenes.
+function mkSceneDurations(durations) { return durations.map(function (d) { return Math.max(300, d || 0); }); }
+function mkSceneAt(durations, t) {
+  var d = mkSceneDurations(durations), acc = 0;
+  if (!d.length) return { index: -1, p: 0 };
+  if (!(t > 0)) return { index: 0, p: 0 };
+  for (var i = 0; i < d.length; i++) { if (t < acc + d[i]) return { index: i, p: (t - acc) / d[i] }; acc += d[i]; }
+  return { index: d.length - 1, p: 1 };
+}
+function mkSceneStart(durations, index) { var d = mkSceneDurations(durations), acc = 0; for (var i = 0; i < Math.min(index, d.length); i++) acc += d[i]; return acc; }
 function mkParseNumber(text) {
   var t = String(text).replace(/[,\\s$€£¥%]/g, "");
   var m = /^(-?\\d*\\.?\\d+)([kKmMbB])?$/.exec(t);
@@ -383,6 +404,139 @@ document.addEventListener("focusout", function (e) { var el = mkTipFor(e.target)
 document.addEventListener("click", function (e) { var img = e.target && e.target.closest && e.target.closest(".gallery img"); if (img && !img.closest(".mk-zoom")) mkZoom(img); });
 document.addEventListener("keydown", function (e) { var img = e.target && e.target.closest && e.target.closest(".gallery img"); if (img && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); mkZoom(img); } });
 
+// The animation player (Morphise.player): a stage of fixed height, a caption of two lines and one row of controls, so the page never changes
+// height. Every frame is one full pass: scenes before the current one drawn at p = 1, the current one at its progress, later ones at p = 0;
+// a scene's draw sets the state for its p, so any position (playing, stepped, scrubbed, resized) looks right. It plays only while asked
+// to and on screen, and never on its own for readers who prefer reduced motion.
+var mkPlayIcons = {
+  play: "<svg viewBox='0 0 16 16' width='14' height='14' aria-hidden='true'><path d='M4 2.5v11l9-5.5z' fill='currentColor'/></svg>",
+  pause: "<svg viewBox='0 0 16 16' width='14' height='14' aria-hidden='true'><path d='M4 2.5h3v11H4zM9 2.5h3v11H9z' fill='currentColor'/></svg>",
+  prev: "<svg viewBox='0 0 16 16' width='14' height='14' aria-hidden='true'><path d='M3 2.5h2v11H3zM13 2.5v11L6 8z' fill='currentColor'/></svg>",
+  next: "<svg viewBox='0 0 16 16' width='14' height='14' aria-hidden='true'><path d='M11 2.5h2v11h-2zM3 2.5v11L10 8z' fill='currentColor'/></svg>"
+};
+var mkPlayers = window.__mkPlayers = [];
+function mkPlayer(target, spec) {
+  var root = typeof target === "string" ? document.querySelector(target) : target;
+  if (!root) throw new Error("Morphise.player: no element " + target);
+  spec = spec || {};
+  var all = spec.scenes || [], scenes = all.slice(0, 20);
+  if (all.length > 20) console.warn("Morphise.player: only the first 20 of " + all.length + " scenes play");
+  var durations = scenes.map(function (sc) { return typeof sc.duration === "number" ? sc.duration : 2500; }), total = mkSceneStart(durations, scenes.length);
+  var reduced = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  root.classList.add("mk-player"); root.innerHTML = ""; root.tabIndex = 0; root.setAttribute("role", "group");
+  var el = document.createElement("div"); el.className = "mk-stage"; el.style.height = Math.max(160, Math.min(640, spec.height || 320)) + "px"; root.appendChild(el);
+  var caption = document.createElement("div"); caption.className = "mk-caption"; caption.setAttribute("aria-live", "polite"); root.appendChild(caption);
+  var bar = document.createElement("div"); bar.className = "mk-player-bar"; root.appendChild(bar);
+  function control(cls, icon, label) { var b = document.createElement("button"); b.type = "button"; b.className = cls; b.innerHTML = icon; b.setAttribute("aria-label", label); b.setAttribute("data-tip", label); bar.appendChild(b); return b; }
+  var prevBtn = control("mk-prev", mkPlayIcons.prev, "Previous scene (Left arrow)"), playBtn = control("mk-play", mkPlayIcons.play, "Play (Space)"), nextBtn = control("mk-next", mkPlayIcons.next, "Next scene (Right arrow)");
+  var scrub = document.createElement("input"); scrub.type = "range"; scrub.min = "0"; scrub.max = String(total); scrub.step = "1"; scrub.value = "0"; scrub.setAttribute("aria-label", "Position in the animation"); scrub.setAttribute("data-tip", "Drag to move through the animation"); bar.appendChild(scrub);
+  var count = document.createElement("span"); count.className = "mk-count"; bar.appendChild(count);
+  var speeds = [1, 2, 0.5], speedAt = 0, speedBtn = control("mk-speed", "1×", "Speed");
+
+  var svgEl = null, canvasEl = null, ctx = null;
+  var stage = {
+    el: el, width: 0, height: 0,
+    svg: function () { if (!svgEl) { svgEl = mkEl("svg", { "class": "mk-svg", "aria-hidden": "true" }, el); fit(); } return svgEl; },
+    canvas: function () { if (!ctx) { canvasEl = document.createElement("canvas"); canvasEl.setAttribute("aria-hidden", "true"); el.appendChild(canvasEl); ctx = canvasEl.getContext("2d"); fit(); } return ctx; },
+    ease: function (p) { p = Math.max(0, Math.min(1, p)); return p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; },
+    lerp: function (a, b, p) { return a + (b - a) * Math.max(0, Math.min(1, p)); }
+  };
+  function fit() {
+    stage.width = el.clientWidth; stage.height = el.clientHeight;
+    if (svgEl) { svgEl.setAttribute("width", stage.width); svgEl.setAttribute("height", stage.height); svgEl.setAttribute("viewBox", "0 0 " + stage.width + " " + stage.height); }
+    if (canvasEl) { var r = window.devicePixelRatio || 1; canvasEl.width = Math.max(1, Math.round(stage.width * r)); canvasEl.height = Math.max(1, Math.round(stage.height * r)); canvasEl.style.width = stage.width + "px"; canvasEl.style.height = stage.height + "px"; ctx.setTransform(r, 0, 0, r, 0, 0); }
+  }
+
+  var t = 0, pinned = -1, playing = false, wanted = false, visible = true, hidden = false, failed = false, started = false, raf = 0, last = 0, shownIndex = -1;
+  function position() { return pinned >= 0 ? { index: pinned, p: 1 } : mkSceneAt(durations, t); }
+  function fail(e) { failed = true; setPlaying(false); caption.classList.add("mk-error"); caption.textContent = "Player error: " + (e && e.message ? e.message : String(e)); setTimeout(function () { throw e; }); }
+  function pass() {
+    if (failed || !scenes.length) return;
+    var at = position();
+    try {
+      if (ctx) { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvasEl.width, canvasEl.height); ctx.restore(); }
+      for (var i = 0; i < scenes.length; i++) if (typeof scenes[i].draw === "function") scenes[i].draw(stage, i < at.index ? 1 : i === at.index ? at.p : 0);
+    } catch (e) { return fail(e); }
+    scrub.value = String(pinned >= 0 ? mkSceneStart(durations, pinned + 1) : t);
+    if (at.index !== shownIndex) {
+      shownIndex = at.index;
+      var text = scenes[at.index].caption || "";
+      caption.textContent = text; count.textContent = (at.index + 1) + " / " + scenes.length; count.setAttribute("data-tip", text || "Scene " + (at.index + 1));
+      root.setAttribute("aria-label", "Animation: " + (scenes[0].caption || "") + ", scene " + (at.index + 1) + " of " + scenes.length);
+    }
+  }
+  function frame(now) {
+    raf = 0;
+    if (!playing) return;
+    if (last) t += (now - last) * speeds[speedAt];
+    last = now;
+    if (t >= total) { if (spec.loop) t = t % total; else { t = total; pass(); return setPlaying(false); } }
+    pass();
+    raf = requestAnimationFrame(frame);
+  }
+  function setPlaying(on) {
+    playing = on; last = 0;
+    if (on && !raf) raf = requestAnimationFrame(frame);
+    if (!on && raf) { cancelAnimationFrame(raf); raf = 0; }
+    playBtn.innerHTML = on ? mkPlayIcons.pause : mkPlayIcons.play;
+    var label = on ? "Pause (Space)" : "Play (Space)"; playBtn.setAttribute("aria-label", label); playBtn.setAttribute("data-tip", label);
+    root.classList.toggle("mk-playing", on);
+  }
+  function play() {
+    if (failed || !scenes.length) return;
+    // From the start of the scene on screen: after stepping to a scene (shown complete), Play animates it again, then goes on.
+    if (pinned >= 0) { t = mkSceneStart(durations, pinned); pinned = -1; }
+    if (t >= total) t = 0;
+    wanted = true;
+    if (visible && !hidden) setPlaying(true);
+  }
+  function pause() { wanted = false; setPlaying(false); }
+  // A scene: while playing, from its start; while paused, shown complete.
+  function go(i) {
+    if (!scenes.length) return;
+    i = Math.max(0, Math.min(scenes.length - 1, i | 0));
+    if (playing) { pinned = -1; t = mkSceneStart(durations, i); } else pinned = i;
+    pass();
+  }
+  prevBtn.addEventListener("click", function () { go(position().index - 1); });
+  nextBtn.addEventListener("click", function () { go(position().index + 1); });
+  playBtn.addEventListener("click", function () { if (playing) pause(); else play(); });
+  speedBtn.addEventListener("click", function () { speedAt = (speedAt + 1) % speeds.length; speedBtn.textContent = speeds[speedAt] + "×"; last = 0; });
+  scrub.addEventListener("input", function () { pinned = -1; t = Math.max(0, Math.min(total, Number(scrub.value) || 0)); last = 0; pass(); });
+  // Keys only on the player itself (its buttons and scrubber keep their own) and without Meta, Ctrl or Alt (so Cmd/Ctrl+K reaches the chat).
+  root.addEventListener("keydown", function (e) {
+    if (e.target !== root || e.metaKey || e.ctrlKey || e.altKey) return;
+    var k = e.key;
+    if (k === " ") { if (playing) pause(); else play(); }
+    else if (k === "ArrowLeft") go(position().index - 1);
+    else if (k === "ArrowRight") go(position().index + 1);
+    else if (k === "Home") go(0);
+    else if (k === "End") go(scenes.length - 1);
+    else return;
+    e.preventDefault();
+  });
+  // Off screen (under a quarter showing) or in a hidden window it stops drawing, and comes back only if it was playing.
+  if (window.IntersectionObserver) new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      var r = entry.intersectionRatio;
+      if (r < 0.25 && visible) { visible = false; setPlaying(false); }
+      else if (r >= 0.5) {
+        if (!visible) { visible = true; if (wanted && !hidden) setPlaying(true); }
+        if (spec.autoplay && !started && !reduced) { started = true; play(); }
+      }
+    });
+  }, { threshold: [0, 0.25, 0.5, 1] }).observe(root);
+  document.addEventListener("visibilitychange", function () { hidden = document.visibilityState === "hidden"; if (hidden) setPlaying(false); else if (wanted && visible) setPlaying(true); });
+  if (window.ResizeObserver) new ResizeObserver(function () { if (el.clientWidth !== stage.width || el.clientHeight !== stage.height) { fit(); pass(); } }).observe(el);
+
+  try { fit(); if (typeof spec.setup === "function") spec.setup(stage); fit(); } catch (e) { fail(e); }
+  if (!scenes.length) { caption.textContent = ""; count.textContent = "0 / 0"; }
+  pass();
+  var api = { play: play, pause: pause, go: go };
+  mkPlayers.push(api);
+  return api;
+}
+
 // The page's largest SVG (the chart, not an icon), with its computed colours and fonts inlined.
 function mkExportSvg() {
   var svg = null, best = 0;
@@ -399,6 +553,7 @@ window.Morphise = {
   version: ${KIT_VERSION},
   chart: mkChart,
   sortable: mkSortable,
+  player: mkPlayer,
   tip: function (el, text) { if (el && el.setAttribute) el.setAttribute("data-tip", String(text)); },
   ask: function (text) { if (parent === window) return; parent.postMessage({ type: "cp-html-ask", text: String(text).slice(0, 2000) }, "*"); }
 };

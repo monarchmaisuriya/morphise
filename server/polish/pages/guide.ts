@@ -2,7 +2,7 @@
 // the instructions every chat carries stay short (as Claude's own visuals load a module per kind). The helpers they
 // describe are in shared/polish/page-kit.ts.
 
-export const GUIDE_TOPICS = ["charts", "tables", "diagrams", "images", "interactive", "mockups"] as const;
+export const GUIDE_TOPICS = ["charts", "tables", "diagrams", "images", "interactive", "mockups", "explainers"] as const;
 export type GuideTopic = (typeof GUIDE_TOPICS)[number];
 
 const CHARTS = `# Charts
@@ -65,7 +65,7 @@ const INTERACTIVE = `# Interactive pages
 - Hints: give any element data-tip="what it means" (an abbreviation, an icon button, a number's definition); it shows in the page's themed tooltip on hover, focus and tap. Don't use the title attribute for this.
 - Secondary detail (method, sources, raw numbers) goes in <details><summary>…</summary>…</details>, which is styled and opens in place; open it by default only if the reader needs it first.
 - Morphise.ask("text") puts a follow-up into the user's message box when they click something; it never sends. Call it only from a click handler, with a short question the user would ask next, e.g. a button "Drill into Q3" → Morphise.ask("Break Q3 down by week"). It does nothing in a downloaded page.
-- Simulations: size the canvas by devicePixelRatio, offer Play, Pause, Reset, draw a meaningful first frame, pause while off-screen (IntersectionObserver), and respect prefers-reduced-motion.
+- Anything that plays (an explainer, a simulation, an algorithm in motion): use Morphise.player (html_guide "explainers"), which gives play, pause, step, scrub and speed controls, keeps the height fixed and pauses off screen. Don't build your own play buttons or animation loop.
 - Charts that follow a control: keep the object Morphise.chart returns and call its update(spec).`;
 
 const MOCKUPS = `# Mock-ups
@@ -74,7 +74,52 @@ const MOCKUPS = `# Mock-ups
 - Keep it to what the question needs: one screen, real-looking but short text, no lorem ipsum.
 - Readable at a glance: headings in order (h2 under h1, h3 under h2); numbered section labels only for real steps; related things close and groups apart; text kept off box edges (a .card or .stat already pads it); no one-word last lines in headings (the kit balances them).`;
 
-export const GUIDES: Record<GuideTopic, string> = { charts: CHARTS, tables: TABLES, diagrams: DIAGRAMS, images: IMAGES, interactive: INTERACTIVE, mockups: MOCKUPS };
+const EXPLAINERS = `# Explainers (animations you can play)
+Show how something works over time as scenes the reader plays, pauses, steps and scrubs. The built-in player gives the controls, captions, keyboard, a fixed height and pausing off screen; you only draw each scene.
+
+  <div id="how"></div>
+  <script>
+    var boxes = {};
+    Morphise.player("#how", {
+      height: 280,                       // stage height in px (160 to 640); the page never grows
+      setup: function (stage) {          // once: build what the scenes move
+        ["Client", "Server"].forEach(function (name) {
+          var b = document.createElement("div"); b.className = "chip"; b.textContent = name;
+          b.style.position = "absolute"; b.style.top = "45%"; stage.el.appendChild(b); boxes[name] = b;
+        });
+      },
+      scenes: [
+        { caption: "The client and the server are idle.", draw: function (stage, p) {
+            boxes.Client.style.left = stage.width * 0.1 + "px"; boxes.Server.style.left = stage.width * 0.7 + "px"; } },
+        { caption: "The client sends a request.", duration: 2000, draw: function (stage, p) {
+            var svg = stage.svg(), line = svg.querySelector("line") || svg.appendChild(document.createElementNS("http://www.w3.org/2000/svg", "line"));
+            var y = stage.height * 0.65, x0 = stage.width * 0.15, x1 = stage.width * 0.72;
+            line.setAttribute("stroke", "var(--chart-1)"); line.setAttribute("stroke-width", 3);
+            line.setAttribute("x1", x0); line.setAttribute("y1", y); line.setAttribute("y2", y);
+            line.setAttribute("x2", stage.lerp(x0, x1, stage.ease(p)));
+            line.style.display = p > 0 ? "" : "none"; } }
+      ]
+    });
+  </script>
+
+The drawing rule, which makes stepping and scrubbing work: every frame, each scene's draw(stage, p) is called in order, earlier scenes with p = 1, the current one with its progress, later ones with p = 0. So:
+- p = 0 means your scene's change is not applied, p = 1 fully applied. Set the state for p (position, opacity, display), never add to what is there, and hide what your scene adds when p = 0.
+- Build elements in setup, or once and reuse them (as the line above). stage.canvas() is cleared before every frame, so a canvas scene redraws all of its picture each time.
+- Compute positions from stage.width and stage.height; they change with the chat's width.
+
+stage gives: el (the stage box; add your own elements), width, height, svg() (one SVG over the stage), canvas() (a 2D context, sharp on any screen), ease(p) and lerp(a, b, p).
+
+Scenes:
+- 3 to 8 scenes, one idea each, in the order things happen. The first scene already shows the setting; nothing starts empty.
+- A caption per scene, under about 100 characters, saying what changes ("The server asks the database"), not "Step 3".
+- duration in ms (default 2500); give a busy scene more time.
+- Use the theme variables (--fg, --muted, --border, --chart-1 to --chart-6) so it follows light and dark themes. No sound.
+- Canvas for many moving things (particles, a simulation); SVG or plain elements for a few labelled ones.
+
+Options: autoplay: true starts it when it first comes into view (never for readers who prefer less motion); loop: true starts over at the end. The returned object has play(), pause() and go(sceneIndex).
+Interaction: for a game-like explainer, add your own click or key listeners to stage.el (keys work while the player has focus).`;
+
+export const GUIDES: Record<GuideTopic, string> = { charts: CHARTS, tables: TABLES, diagrams: DIAGRAMS, images: IMAGES, interactive: INTERACTIVE, mockups: MOCKUPS, explainers: EXPLAINERS };
 
 export function guideText(topic: unknown): { text: string; known: boolean } {
   const known = typeof topic === "string" && (GUIDE_TOPICS as readonly string[]).includes(topic);

@@ -234,6 +234,11 @@ async function inspect(html: string, executable: string, folder: string | undefi
     await page("Page.enable");
     const resize = (width: number) => page("Emulation.setDeviceMetricsOverride", { width, height: 900, deviceScaleFactor: 1, mobile: false });
     const height = async () => (await page<{ result: { value: number } }>("Runtime.evaluate", { expression: HEIGHT, returnByValue: true })).result.value;
+    // The page's height at every scene of every player (Morphise.player), stepped with go(i): no animation frames needed. Back to the
+    // first scene after, so the screenshot shows where a reader starts.
+    const sceneHeights = async () =>
+      (await page<{ result: { value: number[] } }>("Runtime.evaluate", { expression: `(() => { const players = window.__mkPlayers || [], out = []; for (const player of players) { for (let i = 0; i < 20; i++) { player.go(i); out.push(${HEIGHT}); } player.go(0); } return out; })()`, returnByValue: true })).result.value;
+    const scenes = new Map<number, number[]>();
     const measure = async (width: number) => {
       await resize(width);
       await sleep(400);
@@ -253,6 +258,7 @@ async function inspect(html: string, executable: string, folder: string | undefi
       samples.push(await height());
     }
     heights.set(WIDTHS[0], Math.max(...samples));
+    scenes.set(WIDTHS[0], await sceneHeights());
     const { data: screenshot } = await page<{ data: string }>("Page.captureScreenshot", {
       format: "png",
       clip: { x: 0, y: 0, width: WIDTHS[0], height: Math.max(1, Math.min(samples.at(-1)!, SHOT_MAX_HEIGHT)), scale: 1 },
@@ -261,13 +267,14 @@ async function inspect(html: string, executable: string, folder: string | undefi
     for (const width of WIDTHS.slice(1)) {
       layouts.push([width, await measure(width)]);
       heights.set(width, await height());
+      scenes.set(width, await sceneHeights());
     }
     for (const width of MORE_WIDTHS) {
       await resize(width);
       await sleep(150);
       heights.set(width, await height());
     }
-    return { errors, logs, layouts, samples, heights: [...heights].sort(([a], [b]) => a - b), screenshot };
+    return { errors, logs, layouts, samples, scenes: [...scenes], heights: [...heights].sort(([a], [b]) => a - b), screenshot };
   } catch (error) {
     if (hung) return HUNG;
     throw error;
@@ -312,6 +319,11 @@ export function checkPage(html: string, folder: string | undefined): Promise<Pag
     const low = Math.min(...result.samples);
     const high = Math.max(...result.samples);
     if (high - low > 24) problems.push(`The page's height changes while it runs (${low} to ${high}px); reserve the space up front`);
+    for (const [width, steps] of result.scenes) {
+      if (!steps.length) continue;
+      const least = Math.min(...steps), most = Math.max(...steps);
+      if (most - least > 2) problems.push(`At ${width}px wide, the page's height changes from scene to scene in its player (${least} to ${most}px); keep everything a scene adds inside the stage`);
+    }
     return { problems, console: result.logs, heights: result.heights, screenshot: result.screenshot };
   };
   const next = queue.then(run, run).catch((error: unknown) => (console.warn("[morphise] couldn't check an html_render page", error), undefined));
