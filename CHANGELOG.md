@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.43.1 - 2026-11-19
+
+- **Fix: mermaid diagrams shown as source when a label starts with an @.** A flowchart label such as `[@mention in any workspace]`, `[ops@example.com]` or `-->|@user approves|` made the whole diagram fail, because mermaid 11 (which Paseo ships) reads "word@" as an edge id even inside a label; Pele failed the same way. Morphise now quotes such labels before either renderer draws them, which mermaid draws the same. This is temporary: it comes out once Paseo moves to mermaid 12, which reads them.
+
 ## 0.43.0 - 2026-11-18
 
 - **Dashed marks on chat rows:** chat and sub-agent rows under a workspace show a dashed circle in the parent's colour, at the same size; workspace rows keep their filled dot. Settings, Sidebar, Look on this device, "Chat row marks" picks the dashed circle or the dot, per device.

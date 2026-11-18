@@ -114,3 +114,50 @@ describe("the redraw card", () => {
     expect(listeners.size).toBe(0);
   });
 });
+
+describe("labels with an @ in Paseo's diagram frames", () => {
+  const DOC = "<!doctype html><html><head><meta charset=\"utf-8\"></head><body><script>__PASEO_MERMAID_RUNTIME_RECEIVE__</script></body></html>";
+  // A frame in Paseo's chat, and the theming installed with Pele off.
+  function frameWith(restyle: boolean) {
+    const proto = {
+      setAttribute(this: { attrs: Record<string, string> }, name: string, value: string) {
+        this.attrs[name] = value;
+      },
+    };
+    vi.stubGlobal("HTMLIFrameElement", { prototype: proto });
+    vi.stubGlobal("document", { querySelectorAll: () => [], addEventListener: () => {}, removeEventListener: () => {} });
+    const frame = Object.assign(Object.create(proto) as typeof proto, { attrs: {} as Record<string, string> });
+    const cleanup = themeMermaid(() => restyle, { render: vi.fn(async () => null), on: () => false });
+    return { frame, cleanup };
+  }
+  const injected = (doc: string) => /<head>.*?<script>([\s\S]*?)<\/script>/.exec(doc)?.[1] ?? "";
+
+  it("get a script that runs first, with the restyle on or off, added once however often the frame reloads", () => {
+    for (const restyle of [true, false]) {
+      const { frame, cleanup } = frameWith(restyle);
+      frame.setAttribute("srcdoc", DOC);
+      expect(injected(frame.attrs.srcdoc)).toContain("__PASEO_MERMAID_RUNTIME_RECEIVE__");
+      frame.setAttribute("srcdoc", frame.attrs.srcdoc);
+      expect(frame.attrs.srcdoc.split("<script>").length).toBe(DOC.split("<script>").length + 1);
+      cleanup();
+    }
+  });
+
+  it("are drawn quoted, and the reply carries the source Paseo sent, which is how Paseo matches it", () => {
+    const { frame, cleanup } = frameWith(true);
+    frame.setAttribute("srcdoc", DOC);
+    cleanup();
+    // The script's world: the frame's window, Paseo's runtime and the chat that sent the request.
+    const host = { postMessage: vi.fn() };
+    const frameListeners: Array<(event: unknown) => void> = [];
+    const win: Record<string, unknown> = { parent: host, __PASEO_MERMAID_RUNTIME_RECEIVE__: vi.fn() };
+    new Function("window", "addEventListener", injected(frame.attrs.srcdoc))(win, (_: string, listener: (event: unknown) => void) => frameListeners.push(listener));
+    const stop = vi.fn();
+    const source = "flowchart LR\n  F[@mention] --> G";
+    frameListeners[0]({ source: host, data: { type: "render", revision: 2, source, colorScheme: "dark" }, stopImmediatePropagation: stop });
+    expect(stop).toHaveBeenCalled();
+    expect(win.__PASEO_MERMAID_RUNTIME_RECEIVE__).toHaveBeenCalledWith({ type: "render", revision: 2, source: 'flowchart LR\n  F["@mention"] --> G', colorScheme: "dark" });
+    (win.parent as { postMessage(message: unknown, origin: string): void }).postMessage({ type: "rendered", revision: 2, source: 'flowchart LR\n  F["@mention"] --> G' }, "*");
+    expect(host.postMessage).toHaveBeenCalledWith({ type: "rendered", revision: 2, source }, "*");
+  });
+});

@@ -1,5 +1,6 @@
 // Ported from Chat Polish (lthieu96/paseo-chat-polish, MIT, see NOTICE.md): client/web/mermaid.ts
 // Mermaid diagrams: Paseo's mermaid themed in the app's colors, Pele drawing in its place, and the redraw button.
+import { quoteAtLabels } from "../../../shared/polish/diagram";
 import { t } from "../i18n";
 import { darker, isDark, mix, seriesFrom } from "./color";
 import type { DomElement, KeyEvent, MessageListener, WebDocument } from "./dom";
@@ -34,6 +35,26 @@ const MERMAID_CSS = [
   ".edgeLabel, .edgeLabel p, .edgeLabel rect { border-radius: 4px; }",
 ].join(" ");
 const DIAGRAM_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif';
+// Runs first in Paseo's diagram frame: hands each render request to Paseo's runtime with its @-labels quoted (see
+// quoteAtLabels), and puts the source Paseo sent back into the reply, since Paseo keeps a drawing only when its source matches.
+// ponytail: leans on the frame taking requests through __PASEO_MERMAID_RUNTIME_RECEIVE__ and replying through
+// window.parent.postMessage; if Paseo changes either, labels with an @ fail again as they do without Morphise.
+const LABEL_FIX = `<script>(() => {
+  const quote = ${quoteAtLabels.toString()};
+  const host = window.parent;
+  const sent = new Map();
+  addEventListener("message", (event) => {
+    const receive = window.__PASEO_MERMAID_RUNTIME_RECEIVE__;
+    const data = event.data;
+    if (event.source !== host || typeof receive !== "function" || !data || data.type !== "render" || typeof data.source !== "string") return;
+    event.stopImmediatePropagation();
+    const source = quote(data.source);
+    if (source !== data.source) sent.set(source, data.source);
+    receive({ ...data, source });
+  }, true);
+  window.parent = { postMessage: (message, origin) => host.postMessage(message && sent.has(message.source) ? { ...message, source: sent.get(message.source) } : message, origin) };
+})();<\/script>`;
+const withLabelFix = (doc: string) => (doc.includes(LABEL_FIX) ? doc : doc.replace(/<head[^>]*>/i, (head) => head + LABEL_FIX));
 let mermaidTheme = "";
 let rethemeMermaid: (() => void) | undefined;
 let claimDiagram: ((viewport: DomElement, source: string) => Promise<boolean>) | undefined;
@@ -203,6 +224,8 @@ export function themeMermaid(enabled: () => boolean, pele?: PeleDiagrams) {
         mermaidDocs.set(this, value);
         value = PELE_DOC;
       } else if (mermaidTheme && enabled()) value = value.replace(MERMAID_THEME, () => mermaidTheme);
+      // With the restyle on or off: a correctness fix, not a look.
+      if (value !== PELE_DOC && value.includes("__PASEO_MERMAID_RUNTIME_RECEIVE__")) value = withLabelFix(value);
     }
     inherited.call(this, name, value);
   };

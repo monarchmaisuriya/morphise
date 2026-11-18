@@ -1,5 +1,5 @@
 // Ported from Chat Polish (lthieu96/paseo-chat-polish, MIT, see NOTICE.md): server/diagram.ts
-import { escapeTags } from "../../../shared/polish/diagram";
+import { escapeTags, quoteAtLabels } from "../../../shared/polish/diagram";
 import { optionalDependency } from "./plugin-require";
 
 // The part of Pele's API used here (loaded at run time; its types are not imported).
@@ -19,7 +19,7 @@ export async function renderDiagramSvg({ source }: { source: string }) {
   const pele = await loadPele();
   if (!pele) return null;
   try {
-    const r = pele.render(escapeTags(source), { fontFamily: FONT, fontSize: 13, responsive: false, links: false, images: false });
+    const r = pele.render(escapeTags(quoteAtLabels(source)), { fontFamily: FONT, fontSize: 13, responsive: false, links: false, images: false });
     return { svg: r.svg, width: Math.ceil(r.width), height: Math.ceil(r.height) };
   } catch (error) {
     if (error instanceof pele.PeleError) return null;

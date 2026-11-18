@@ -14,3 +14,30 @@ export const renderDiagram = defineRpc({
  * drop a tag. Leaves the <br>/<i> tags mermaid allows, arrows ("<-->", "<|--") and stereotypes ("<<interface>>").
  */
 export const escapeTags = (source: string) => source.replace(/(?<!<)<(?!\/?(?:br|i)\s*\/?>)(\/?[a-z][^<>\n]*)>(?!>)/gi, "#lt;$1#gt;");
+
+/**
+ * Quotes a flowchart's node and piped edge labels that contain an @. Mermaid 11 reads "word@" as an edge id (`e1@-->`)
+ * even inside a label, so "[@mention]" or "[ops@example.com]" fails the whole diagram; Pele does too. Mermaid 12 reads
+ * them, and draws a quoted label the same. Self-contained (builtins only), because Paseo's diagram frame runs a copy made
+ * from this function's text (client/polish/web/mermaid.ts).
+ * Scaffold: remove once Paseo ships mermaid 12 or later; on 2026-11-19 it asked for ^11.16.0 (packages/app/package.json).
+ */
+export function quoteAtLabels(source: string): string {
+  const lines = source.split("\n");
+  let first = 0;
+  if (lines[0]?.trim() === "---") {
+    first = 1;
+    while (first < lines.length && lines[first].trim() !== "---") first++;
+    first++;
+  }
+  while (first < lines.length && (!lines[first].trim() || lines[first].trim().startsWith("%%"))) first++;
+  if (!/^(?:flowchart|graph)\b/.test(lines[first]?.trim() ?? "")) return source;
+  const closing: Record<string, string> = { "(((": ")))", "((": "))", "([": "])", "[[": "]]", "[(": ")]", "{{": "}}", "[": "]", "(": ")", "{": "}" };
+  const node = /([A-Za-z0-9_]+)(\(\(\(|\(\(|\(\[|\[\[|\[\(|\{\{|\[|\(|\{)([^"\n[\](){}|]*@[^"\n[\](){}|]*)(\)\)\)|\)\)|\]\)|\]\]|\)\]|\}\}|\]|\)|\})/g;
+  const edge = /\|([^"\n|]*@[^"\n|]*)\|/g;
+  return lines
+    .map((line, index) =>
+      index <= first ? line : line.replace(node, (all, id, open, text, close) => (closing[open] === close ? `${id}${open}"${text}"${close}` : all)).replace(edge, (_all, text) => `|"${text}"|`),
+    )
+    .join("\n");
+}

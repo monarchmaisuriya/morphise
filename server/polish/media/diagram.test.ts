@@ -12,6 +12,11 @@ describe("diagram RPC", () => {
     expect(drawn!.height).toBeGreaterThan(0);
   });
 
+  it("draws a label that starts with an @, which mermaid 11's grammar (and Pele's) reads as an edge id", async () => {
+    const drawn = await renderDiagramSvg({ source: "flowchart LR\n  F[@mention in any workspace] --> G[Look up token by workspace]" });
+    expect(drawn?.svg).toContain("@mention in any workspace");
+  });
+
   it("gives null for source Pele can't read, so the chat shows the source", async () => {
     expect(await renderDiagramSvg({ source: "notADiagram at all" })).toBeNull();
   });
