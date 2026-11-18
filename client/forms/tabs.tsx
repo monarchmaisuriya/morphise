@@ -23,7 +23,7 @@ import { statusColor } from "../ui/hues";
 import { STATUS_TITLES } from "../../shared/arrange";
 import { DEFAULT_CHAT_ROWS, DEFAULT_REMINDER_ROWS, rowShows } from "../../shared/row-meta";
 import { VIEW_SECTIONS } from "./view-sections";
-import { useDeviceChoice, workbenchSettings } from "../device-choices";
+import { useDeviceChoice, useDeviceValue, workbenchSettings } from "../device-choices";
 import type { ViewLayout } from "../../shared/agents-board";
 import { DEFAULT_DONE_SECONDS, type StepsSettings, stepsOptions } from "../../shared/steps";
 import type { Layout, Prompt } from "../../shared/document";
@@ -1065,6 +1065,64 @@ function ShowInPaseoSetting() {
   );
 }
 
+// The sidebar's look, kept on this device (the same values the sidebar reads): text size, spacing, indent and its
+// branch lines. The sidebar's Display menu keeps only grouping, sorting and three switches.
+function SidebarLookSetting() {
+  const stored = useSettings(viewStateSettings);
+  const [textSize, setTextSize] = useDeviceValue(stored, "textSize", null);
+  const [groupSpacing, setGroupSpacing] = useDeviceValue(stored, "groupSpacing", "medium");
+  const [indent, setIndent] = useDeviceValue(stored, "indent", "normal");
+  const [branchLines, setBranchLines] = useDeviceValue(stored, "branchLines", true);
+  const [branchCorners, setBranchCorners] = useDeviceValue(stored, "branchCorners", "rounded");
+  return (
+    <SettingsSection title="Look on this device" info="Kept on this device only, so each app can have its own.">
+      <SettingsCard>
+        <SelectField<"auto" | "11" | "12" | "13" | "14" | "15">
+          label="Text size"
+          hint="Auto follows the row height."
+          value={textSize === null ? "auto" : (String(textSize) as "11" | "12" | "13" | "14" | "15")}
+          options={[{ value: "auto", label: "Auto" }, ...(["11", "12", "13", "14", "15"] as const).map((value) => ({ value, label: `${value} px` }))]}
+          onChange={(value) => setTextSize(value === "auto" ? null : Number(value))}
+        />
+        <SelectField
+          label="Space between groups"
+          value={groupSpacing}
+          options={[
+            { value: "none", label: "None" },
+            { value: "small", label: "Small" },
+            { value: "medium", label: "Medium" },
+            { value: "large", label: "Large" },
+            { value: "xlarge", label: "Extra large" },
+          ]}
+          onChange={setGroupSpacing}
+        />
+        <SelectField
+          label="Indent"
+          value={indent}
+          options={[
+            { value: "narrow", label: "Narrow" },
+            { value: "normal", label: "Normal" },
+            { value: "wide", label: "Wide" },
+          ]}
+          onChange={setIndent}
+        />
+        <SwitchField label="Branch lines" hint="The lines that hang chats and sub-agents off their workspace" value={branchLines} onChange={setBranchLines} />
+        {branchLines ? (
+          <SelectField
+            label="Line corners"
+            value={branchCorners}
+            options={[
+              { value: "rounded", label: "Rounded" },
+              { value: "square", label: "Square" },
+            ]}
+            onChange={setBranchCorners}
+          />
+        ) : null}
+      </SettingsCard>
+    </SettingsSection>
+  );
+}
+
 // How the Workbench's Agents and Tasks views lay out, on this device (the Workbench's device record).
 function WorkbenchLayouts() {
   const stored = useSettings(workbenchSettings);
@@ -1131,6 +1189,7 @@ export function SidebarTab(form: Form): ReactNode {
       <SettingsSection title="Rows">
         <SettingsCard>{VIEW_SECTIONS.rows.map((key) => view[key])}</SettingsCard>
       </SettingsSection>
+      <SidebarLookSetting />
       <GroupOrderSetting />
       <SettingsSection title="Chats" info="Chats listed under their workspace, and sub-agents under their chat. Turn chats off to list workspaces only.">
         <SettingsCard>{VIEW_SECTIONS.chats.map((key) => view[key])}</SettingsCard>

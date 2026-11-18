@@ -2,6 +2,12 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.42.2 - 2026-11-18
+
+- **A tidier Display menu:** the sidebar's Display menu lists Group by and Sort by as one-line choices (as the Filter menu does), then Show (background workspaces, bold group names, folder icons), with All sidebar settings pinned at the top so it never scrolls away.
+- **Look settings moved to Settings:** Text size, Space between groups, Indent, Branch lines and Line corners are in Settings, Sidebar, under "Look on this device"; Rows, Row height and Chats under workspaces were already there. Each is still kept per device.
+- **Fix: a sidebar change could undo a setting saved elsewhere.** The sidebar now saves only what it changed, merged into the newest saved values, so a look setting changed in Settings (or another window) is kept.
+
 ## 0.42.1 - 2026-11-18
 
 - **Branch lines option:** the sidebar's Display menu has "Branch lines" to turn off the lines that hang chats and sub-agents off their workspace (rows keep their indent), and "Line corners" to make the last line's corner rounded or square. Both default to today's look and are kept per device.

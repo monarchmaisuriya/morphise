@@ -439,7 +439,8 @@ describe("merged steps performance", () => {
     expect(active).toBe(1);
   });
 
-  it("live history evicts old turns, restores their rows, and preserves the active turn", async () => {
+  // 1,600 timeline items: this checks behaviour at that size, not speed, so it gets time for a busy machine instead of the 5 s default.
+  it("live history evicts old turns, restores their rows, and preserves the active turn", { timeout: 30_000 }, async () => {
     const first = shell("evicted-first");
     const second = shell("evicted-second");
     const live = await follow([prompt("go"), first, second, reply("done")], "history-bound");

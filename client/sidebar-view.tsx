@@ -65,7 +65,7 @@ import { type AlertEntry, remindersOf } from "./reminder-alerts";
 import { type PickerDeps, ReminderPicker, type ReminderTarget } from "./reminder-picker";
 import { followUpTask, snoozeTime, workspaceTask } from "../shared/task-ops";
 import { type ApplyTaskOperations, type TaskStore, tasksOf } from "./task-store";
-import { Button, Dropdown, Field, Icon, IconButton, MenuItem, PopoverHost, Segmented, Tag, type Tokens, useTokens } from "./ui/kit";
+import { Button, Dropdown, Field, Icon, IconButton, MenuItem, PopoverHost, Tag, type Tokens, useTokens } from "./ui/kit";
 import { BLUE, DONE_OPACITY, PURPLE, statusColor, tileColor, withAlpha } from "./ui/hues";
 import { usePulse } from "./ui/pulse";
 import { StepsCards } from "./steps-card";
@@ -1576,42 +1576,40 @@ function FilterMenu({ state, save, projects, shared }: FilterMenuProps) {
   );
 }
 
-// The Display menu: the few view choices people change often, each as one row of choices you see at once, plus
-// Show background (kept on this device, as Paseo keeps it). Everything else (row height, how many per group,
-// chats and sub-agents under each row, the details rows show, auto-archive) lives in Settings, Sidebar, one press
-// away. View choices are saved to the active layout so every app shows the same list.
-function ViewMenu({ update, state, saveState, shared, openSettings }: { update(patch: Partial<ViewConfig>): void; state: ViewState; saveState(next: Partial<ViewState>): void; shared: Shared; openSettings(): void }) {
-  const { t, config } = shared;
-  // Choosing the current value writes nothing, so an unchanged option never adds a key an older version cannot read.
-  const row = <Value extends string>(title: string, current: Value, options: readonly (readonly [Value, string])[], apply: (value: Value) => void) => (
-    <View style={{ gap: 6 }}>
-      <Text style={shared.styles.meta}>{title}</Text>
-      <Segmented<Value> t={t} label={title} value={current} options={options.map(([value, label]) => ({ value, label }))} onChange={(value) => value !== current && apply(value)} />
+// The Display menu's way to every other sidebar setting, above its list so it stays in sight however long the list.
+function ViewMenuHeader({ t, openSettings }: { t: Tokens; openSettings(): void }) {
+  return (
+    <View style={{ borderBottomWidth: 1, borderBottomColor: t.c.border, paddingBottom: 4 }}>
+      <MenuItem t={t} icon="Settings2" label="All sidebar settings" onPress={openSettings} />
     </View>
   );
-  const chatsFor = config.showAgents ? config.agentsFor ?? "active" : "off";
+}
+
+// The Display menu: how the list is grouped and sorted, and three look switches, in the same one-line rows as the Filter
+// menu. Everything else (rows, row height, chats under workspaces, text size, spacing, indent, branch lines) lives in
+// Settings, Sidebar, one press away: that row is pinned above the list (`ViewMenuHeader`), so it never scrolls out of
+// sight. Group and sort are saved to the active layout so every app shows the same list.
+function ViewMenu({ update, state, saveState, shared }: { update(patch: Partial<ViewConfig>): void; state: ViewState; saveState(next: Partial<ViewState>): void; shared: Shared }) {
+  const { t, config } = shared;
+  // Choosing the current value writes nothing, so an unchanged option never adds a key an older version cannot read.
+  const choices = <Value extends string>(title: string, current: Value, options: readonly (readonly [Value, string])[], apply: (value: Value) => void) => (
+    <MenuSection title={title} shared={shared}>
+      {options.map(([value, label]) => (
+        <MenuItem key={value} t={t} role="radio" label={label} checked={value === current} onPress={() => value !== current && apply(value)} />
+      ))}
+    </MenuSection>
+  );
   return (
-    <View style={{ padding: 12, gap: 14 }}>
-      {row("Group by", config.groupBy, [["project", "Project"], ["custom", "Your groups"], ["status", "Status"], ["activity", "Last used"], ["label", "Label"], ["none", "None"]] as const, (groupBy) => update({ groupBy }))}
-      {row("Sort by", config.orderBy, [["activity", "Last prompt"], ["created", "Created"], ["status", "Status"], ["name", "Name"], ["statusChanged", "Status change"], ["changes", "Changed lines"]] as const, (orderBy) => update({ orderBy }))}
-      {row("Rows", config.rowStyle ?? "two-line", [["two-line", "Two lines"], ["one-line", "One line"]] as const, (rowStyle) => update({ rowStyle }))}
-      {config.list === "workspaces" ? row("Chats under workspaces", chatsFor, [["off", "None"], ["active", "Open workspace"], ["all", "Every workspace"]] as const, (value) => update(value === "off" ? { showAgents: false } : { showAgents: true, agentsFor: value })) : null}
-      {row("Row height", config.density, [["compact", "Compact"], ["comfortable", "Comfortable"], ["spacious", "Spacious"]] as const, (density) => update({ density }))}
-      {/* The rest of the look is kept on this device. */}
-      {row("Text size", state.textSize === null ? "auto" : (String(state.textSize) as "11" | "12" | "13" | "14" | "15"), [["auto", "Auto"], ["11", "11"], ["12", "12"], ["13", "13"], ["14", "14"], ["15", "15"]] as const, (size) => saveState({ textSize: size === "auto" ? null : Number(size) }))}
-      {row("Space between groups", state.groupSpacing, [["none", "None"], ["small", "Small"], ["medium", "Medium"], ["large", "Large"], ["xlarge", "Extra large"]] as const, (groupSpacing) => saveState({ groupSpacing }))}
-      {row("Indent", state.indent, [["narrow", "Narrow"], ["normal", "Normal"], ["wide", "Wide"]] as const, (indent) => saveState({ indent }))}
-      <View style={{ height: 1, backgroundColor: t.c.border, marginHorizontal: -12 }} />
-      <View style={{ marginHorizontal: -8, marginVertical: -6 }}>
-        {config.list === "workspaces" ? <MenuItem t={t} role="checkbox" icon="EyeOff" label="Show background workspaces" checked={state.showBackground} onPress={() => saveState({ showBackground: !state.showBackground })} /> : null}
+    <>
+      {choices("Group by", config.groupBy, [["project", "Project"], ["custom", "Your groups"], ["status", "Status"], ["activity", "Last used"], ["label", "Label"], ["none", "None"]] as const, (groupBy) => update({ groupBy }))}
+      {choices("Sort by", config.orderBy, [["activity", "Last prompt"], ["created", "Created"], ["status", "Status"], ["name", "Name"], ["statusChanged", "Status change"], ["changes", "Changed lines"]] as const, (orderBy) => update({ orderBy }))}
+      {/* Kept on this device. */}
+      <MenuSection title="Show" shared={shared}>
+        {config.list === "workspaces" ? <MenuItem t={t} role="checkbox" icon="EyeOff" label="Background workspaces" checked={state.showBackground} onPress={() => saveState({ showBackground: !state.showBackground })} /> : null}
         <MenuItem t={t} role="checkbox" icon="Bold" label="Bold group names" checked={state.boldGroupNames} onPress={() => saveState({ boldGroupNames: !state.boldGroupNames })} />
-        {/* Only the workspaces list hangs chats off lines; the corners choice sits under its checkbox, so turning lines on adds it below the pointer. */}
-        {config.list === "workspaces" ? <MenuItem t={t} role="checkbox" icon="ListTree" label="Branch lines" checked={state.branchLines} onPress={() => saveState({ branchLines: !state.branchLines })} /> : null}
-        {config.list === "workspaces" && state.branchLines ? <View style={{ paddingHorizontal: 8, paddingBottom: 6 }}>{row("Line corners", state.branchCorners, [["rounded", "Rounded"], ["square", "Square"]] as const, (branchCorners) => saveState({ branchCorners }))}</View> : null}
         {config.list === "workspaces" ? <MenuItem t={t} role="checkbox" icon="Folder" label="Folder icons" checked={state.showProjectIcons} onPress={() => saveState({ showProjectIcons: !state.showProjectIcons })} /> : null}
-        <MenuItem t={t} icon="Settings2" label="All sidebar settings" onPress={openSettings} />
-      </View>
-    </View>
+      </MenuSection>
+    </>
   );
 }
 
@@ -1824,11 +1822,15 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     // Rows show times, so the clock ticks every minute.
     const now = useReminderClock(reminders.map((entry) => entry.reminder), true);
     const viewState = useSettings(viewStateSettings);
-    // The latest view change not saved yet. Each tap builds on it and one save runs at a time,
-    // against the newest revision, so a quick second tap is neither refused nor lost.
-    const [unsaved, setUnsaved] = useState<ViewState | null>(null);
+    // The view changes not saved yet, as only the fields changed here. Each tap adds to them and one save runs at a time,
+    // merged into the newest stored values, so a quick second tap is neither refused nor lost, and a value another
+    // screen saved meanwhile (Settings, Sidebar, Look on this device) is kept rather than overwritten by an old copy.
+    const [unsaved, setUnsaved] = useState<Partial<ViewState> | null>(null);
     const viewSaving = useRef(false);
-    const state = unsaved ?? (viewState.status === "ready" ? viewState.values : DEFAULT_VIEW_STATE);
+    // A save refused at this revision waits for the next one (another screen saved first) instead of looping.
+    const refusedAt = useRef<string | null>(null);
+    const stored = viewState.status === "ready" ? viewState.values : DEFAULT_VIEW_STATE;
+    const state = unsaved ? { ...stored, ...unsaved } : stored;
     const look = sidebarLook(state, config.density, TOUCH);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     const styles = useMemo(() => viewStyles(props.theme, config, look), [props.theme, ...Object.values(look)]);
@@ -1868,7 +1870,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     const viewRef = useRef<View>(null);
     const saveState = (next: Partial<ViewState>) => {
       if (viewState.status !== "ready") return;
-      setUnsaved((current) => ({ ...(current ?? viewState.values), ...next }));
+      setUnsaved((current) => ({ ...current, ...next }));
     };
     // Tells the settings screen that Paseo is showing this view: for this session, and saved for this device, so a plugin
     // reload (an update) doesn't bring back the "still showing its own sidebar" note while Settings hides the sidebar.
@@ -1879,16 +1881,24 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [viewState.status, shownSaved]);
     useEffect(() => {
-      if (!unsaved || viewState.status !== "ready" || viewSaving.current) return;
+      if (!unsaved || viewState.status !== "ready" || viewSaving.current || refusedAt.current === viewState.revision) return;
       viewSaving.current = true;
-      void viewState.save(unsaved, viewState.revision).then((saved) => {
+      const revision = viewState.revision;
+      void viewState.save({ ...viewState.values, ...unsaved }, revision).then((saved) => {
         viewSaving.current = false;
+        if (!saved) {
+          // Kept and tried again on the next revision; the same refusal twice in a row is said once.
+          if (refusedAt.current === null) toast.error("Could not remember this view change on this device");
+          refusedAt.current = revision;
+          setUnsaved((current) => current && { ...current });
+          return;
+        }
+        refusedAt.current = null;
         // A change made while this one saved is copied so this effect runs again and saves it.
         setUnsaved((current) => (current === unsaved ? null : current && { ...current }));
-        if (!saved) toast.error("Could not remember this view change on this device");
       });
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [unsaved, viewState.status]);
+    }, [unsaved, viewState.status, viewState.status === "ready" ? viewState.revision : null]);
 
     const on = config.filterBar;
     const filter: Filter = {
@@ -2150,8 +2160,8 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
           <DragGhost drag={groupDrag.value}>{(groupId) => <DragPill title={draggable.find((group) => group.groupId === groupId)?.title ?? "Group"} shared={shared} />}</DragGhost>
           {stepsCards && steps.position === "bottom" ? stepsCards : null}
           {ui.selecting && config.list === "workspaces" ? <BulkBar shown={new Map(sections.flatMap((section) => section.items.map((item) => [item.key, item as WorkspaceRef] as const)))} shared={shared} /> : null}
-          <Dropdown t={t} open={menu !== null} onClose={() => setMenu(null)} anchor={headerRef} width={420} maxHeight={560}>
-            {menu === "filter" ? <FilterMenu state={state} save={saveState} projects={projects} shared={shared} /> : <ViewMenu update={updateView} state={state} saveState={saveState} shared={shared} openSettings={() => (setMenu(null), deps.openSidebarSettings())} />}
+          <Dropdown t={t} open={menu !== null} onClose={() => setMenu(null)} anchor={headerRef} width={420} maxHeight={560} header={menu === "view" ? <ViewMenuHeader t={t} openSettings={() => (setMenu(null), deps.openSidebarSettings())} /> : undefined}>
+            {menu === "filter" ? <FilterMenu state={state} save={saveState} projects={projects} shared={shared} /> : <ViewMenu update={updateView} state={state} saveState={saveState} shared={shared} />}
           </Dropdown>
         </View>
         </PopoverHost>
