@@ -11,6 +11,7 @@ import {
   nestInGroups,
   emptyProjectsToList,
   orderGroupsByLastUsed,
+  orderProjectsByLastUsed,
   byLastUsed,
   orderGroups,
 } from "./arrange";
@@ -347,5 +348,31 @@ describe("orderGroupsByLastUsed", () => {
   it("orders workspaces by last prompt, else creation, newest first", () => {
     const list = [{ lastPromptAt: null, createdAt: "2026-11-10T00:00:00Z" }, { lastPromptAt: "2026-11-12T00:00:00Z", createdAt: "2026-11-01T00:00:00Z" }, { lastPromptAt: null, createdAt: null }];
     expect([...list].sort(byLastUsed)).toEqual([list[1], list[0], list[2]]);
+  });
+});
+
+describe("orderProjectsByLastUsed", () => {
+  const section = (project: string, key = `project:${project}`) => ({ key, title: key, items: [], project });
+  const group = (id: string | null, sections: ReturnType<typeof section>[]) => ({ key: id ? `group:${id}` : "ungrouped", groupId: id, title: id ?? "Ungrouped", sections });
+  const keys = (nested: readonly { sections: readonly { key: string }[] }[]) => nested.map((entry) => entry.sections.map((item) => item.key));
+
+  it("puts the most recently used project first inside each group, unranked projects after in saved order", () => {
+    const nested = [group("a", [section("p1"), section("p2"), section("p9"), section("p3"), section("p8")]), group("b", [section("p4"), section("p5")])];
+    expect(keys(orderProjectsByLastUsed(nested, ["p5", "p3", "p1", "p2", "p4"]))).toEqual([
+      ["project:p3", "project:p1", "project:p2", "project:p9", "project:p8"],
+      ["project:p5", "project:p4"],
+    ]);
+  });
+
+  it("leaves Ungrouped and the order of the groups themselves as they are", () => {
+    const nested = [group("a", [section("p1"), section("p2")]), group(null, [section("p3"), section("p4")])];
+    const ordered = orderProjectsByLastUsed(nested, ["p4", "p2", "p3", "p1"]);
+    expect(ordered.map((entry) => entry.groupId)).toEqual(["a", null]);
+    expect(keys(ordered)).toEqual([["project:p2", "project:p1"], ["project:p3", "project:p4"]]);
+  });
+
+  it("keeps a project's several sections together and in their order (the Chats view lists one per workspace)", () => {
+    const nested = [group("a", [section("p1", "workspace:w1"), section("p1", "workspace:w2"), section("p2", "workspace:w3")])];
+    expect(keys(orderProjectsByLastUsed(nested, ["p2", "p1"]))).toEqual([["workspace:w3", "workspace:w1", "workspace:w2"]]);
   });
 });

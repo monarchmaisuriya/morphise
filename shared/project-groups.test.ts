@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   createGroup,
   deleteGroup,
   dropGroup,
   dropProject,
+  dropProjectWhileAutoOrdered,
+  groupOrderSettings,
   DECOR_COLORS,
   DECOR_ICONS,
   EMPTY_PROJECT_GROUPS,
@@ -231,5 +234,39 @@ describe("custom colours", () => {
     const color = parseHexColor("abcdef");
     expect(color).not.toBeNull();
     expect(() => setDecoration(twoGroups(), "projects", "prj_1", { color, icon: null })).not.toThrow();
+  });
+});
+
+describe("group order settings", () => {
+  it("leaves projects in their saved order unless asked, and keeps groups by last use", () => {
+    expect(groupOrderSettings.schema.parse({})).toEqual({ lastUsedFirst: true, projectsLastUsedFirst: false });
+  });
+
+  it("reads under an older Morphise, which knows only lastUsedFirst and drops the newer field", () => {
+    const older = z.object({ lastUsedFirst: z.boolean().default(true) });
+    expect(older.parse({ lastUsedFirst: false, projectsLastUsedFirst: true })).toEqual({ lastUsedFirst: false });
+  });
+});
+
+describe("dropProjectWhileAutoOrdered", () => {
+  it("changes nothing when a project is dropped in the group it is already in", () => {
+    const doc = twoGroups();
+    expect(dropProjectWhileAutoOrdered(doc, "p2", "gwork")).toBe(doc);
+  });
+
+  it("changes nothing when an ungrouped project is dropped in Ungrouped", () => {
+    const doc = twoGroups();
+    expect(dropProjectWhileAutoOrdered(doc, "p7", null)).toBe(doc);
+  });
+
+  it("moves a project dropped in another group to the end of that group", () => {
+    expect(named(dropProjectWhileAutoOrdered(twoGroups(), "p1", "gside"))).toEqual([
+      ["gwork", "Work", ["p2"]],
+      ["gside", "Side", ["p3", "p1"]],
+    ]);
+  });
+
+  it("takes a project out of its group when dropped in Ungrouped", () => {
+    expect(projectGroupMap(dropProjectWhileAutoOrdered(twoGroups(), "p3", null)).has("p3")).toBe(false);
   });
 });

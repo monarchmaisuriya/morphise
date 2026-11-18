@@ -954,11 +954,18 @@ function GroupOrderSetting() {
       <SettingsSection title="Your groups">
         <SettingsCard>
           <SwitchField label="Most recently used group first" hint={`Couldn't read this setting (${stored.error}). Switch to reset it.`} value={false} onChange={() => void (stored.status === "invalid" ? stored.reset() : stored.reload())} />
+          <SwitchField label="Most recently used project first in each group" hint={`Couldn't read this setting (${stored.error}). Switch to reset it.`} value={false} onChange={() => void (stored.status === "invalid" ? stored.reset() : stored.reload())} />
         </SettingsCard>
       </SettingsSection>
     );
   }
   if (stored.status !== "ready") return null;
+  const save = (change: Partial<typeof stored.values>) => {
+    setFailed(null);
+    void stored.save({ ...stored.values, ...change }, stored.revision).then((ok) => {
+      if (!ok) setFailed(stored.saveError ?? "Another app saved this setting at the same moment; try again");
+    });
+  };
   return (
     <SettingsSection title="Your groups" info="When the sidebar view is grouped by Your groups (Display, Group by).">
       <SettingsCard>
@@ -966,13 +973,14 @@ function GroupOrderSetting() {
           label="Most recently used group first"
           hint="The group whose workspace you used last goes to the top; Ungrouped stays last. Turn off to order groups yourself by dragging or Move up and Move down."
           value={stored.values.lastUsedFirst}
-          onChange={(lastUsedFirst) => {
-            setFailed(null);
-            void stored.save({ ...stored.values, lastUsedFirst }, stored.revision).then((ok) => {
-              if (!ok) setFailed(stored.saveError ?? "Another app saved this setting at the same moment; try again");
-            });
-          }}
+          onChange={(lastUsedFirst) => save({ lastUsedFirst })}
           error={failed}
+        />
+        <SwitchField
+          label="Most recently used project first in each group"
+          hint="Inside each of your groups, the project whose workspace you used last goes to the top; Ungrouped follows Display. While on, dragging a project only moves it to another group. Turn off to order projects yourself by dragging."
+          value={stored.values.projectsLastUsedFirst}
+          onChange={(projectsLastUsedFirst) => save({ projectsLastUsedFirst })}
         />
       </SettingsCard>
     </SettingsSection>

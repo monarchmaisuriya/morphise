@@ -36,11 +36,12 @@ import {
   emptyProjectsToList,
   byLastUsed,
   orderGroupsByLastUsed,
+  orderProjectsByLastUsed,
   orderGroups,
   STATUS_TITLES,
   workspaceName,
 } from "../shared/arrange";
-import { createGroup, type Decoration, deleteGroup, dropGroup, dropProject, EMPTY_PROJECT_GROUPS, groupOrderSettings, moveGroup, moveProject, newGroupId, type ProjectGroups, projectGroupsSettings, renameGroup, setDecoration } from "../shared/project-groups";
+import { createGroup, type Decoration, deleteGroup, dropGroup, dropProject, dropProjectWhileAutoOrdered, EMPTY_PROJECT_GROUPS, groupOrderSettings, moveGroup, moveProject, newGroupId, type ProjectGroups, projectGroupsSettings, renameGroup, setDecoration } from "../shared/project-groups";
 import { DecorIcon, DecorPicker } from "./decor-picker";
 import { openChat } from "./stats/session-stats";
 import type { RemoveProjectResult } from "../shared/project-actions";
@@ -1676,14 +1677,16 @@ function withMark(workspace: PluginWorkspaceSnapshot, infoOf: Shared["infoOf"]):
 }
 
 // Project keys, most recently used first (by their most recently used shown workspace), and how to order "Your groups"
-// with them: by last use while Settings, Sidebar asks for it (the default), else in the saved order.
-function useRecentProjects(showBackground: boolean): { keys: readonly string[]; on: boolean } {
+// with them: groups by last use while Settings, Sidebar asks for it (the default), else in the saved order; projects
+// inside each group by last use only once that setting is read and on (`projects`).
+function useRecentProjects(showBackground: boolean): { keys: readonly string[]; on: boolean; projects: boolean } {
   const order = useSettings(groupOrderSettings);
   const keys = useWorkspaces({ where: (workspace) => isVisible(workspace, showBackground), orderBy: byLastUsed, groupBy: (workspace) => ({ key: workspace.project.key }) }).map((group) => group.key);
-  return { keys, on: order.status !== "ready" || order.values.lastUsedFirst };
+  return { keys, on: order.status !== "ready" || order.values.lastUsedFirst, projects: order.status === "ready" && order.values.projectsLastUsedFirst };
 }
-function orderUserGroups<Ref>(nested: NestedGroup<Ref>[], recent: { keys: readonly string[]; on: boolean }): NestedGroup<Ref>[] {
-  return recent.on ? orderGroupsByLastUsed(nested, recent.keys) : nested;
+function orderUserGroups<Ref>(nested: NestedGroup<Ref>[], recent: { keys: readonly string[]; on: boolean; projects: boolean }): NestedGroup<Ref>[] {
+  const inner = recent.projects ? orderProjectsByLastUsed(nested, recent.keys) : nested;
+  return recent.on ? orderGroupsByLastUsed(inner, recent.keys) : inner;
 }
 
 function workspaceRows(config: ViewConfig) {
@@ -1897,6 +1900,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     const groupsDoc = groupsState.status === "ready" ? groupsState.values : EMPTY_PROJECT_GROUPS;
     const groupOrder = useSettings(groupOrderSettings);
     const groupsByLastUsed = groupOrder.status !== "ready" || groupOrder.values.lastUsedFirst;
+    const projectsByLastUsed = groupOrder.status === "ready" && groupOrder.values.projectsLastUsedFirst;
     const source = useRows(filter, props, state.showBackground, infoOf, groupsDoc);
     const changeGroups = (operation: (doc: ProjectGroups) => ProjectGroups) => void deps.changeGroups(operation).catch(report(toast, "change your groups"));
     // "Your groups" in the workspace list: projects drag between groups (each group a column, each project a card), and
@@ -1904,7 +1908,10 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     const draggable = config.list === "workspaces" && source.nested !== null ? source.nested : [];
     const projectDrag = useBoardDrag(
       draggable.map((group) => ({ column: { id: group.groupId ?? UNGROUPED_DROP }, lanes: [{ key: "", tasks: group.sections.map((section) => ({ id: section.project })) }] })),
-      (projectKey, target) => changeGroups((doc) => dropProject(doc, projectKey, { group: target.column === UNGROUPED_DROP ? null : target.column, before: target.before })),
+      (projectKey, target) => {
+        const group = target.column === UNGROUPED_DROP ? null : target.column;
+        changeGroups((doc) => (projectsByLastUsed ? dropProjectWhileAutoOrdered(doc, projectKey, group) : dropProject(doc, projectKey, { group, before: target.before })));
+      },
       false,
       "vertical",
       0,
@@ -1929,7 +1936,12 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
       groupDrag.root.current = view;
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
-    const projectTarget = projectDrag.value.state?.target ?? null;
+    // While projects are ordered by last use, a drop in the project's own group does nothing, so no drop line shows
+    // there; in another group the project goes to the end, so the line shows at the end.
+    const liftedProject = projectDrag.value.state?.taskId ?? null;
+    const liftedFrom = draggable.find((group) => group.sections.some((section) => section.project === liftedProject))?.groupId ?? UNGROUPED_DROP;
+    const draggedTo = projectDrag.value.state?.target ?? null;
+    const projectTarget = !projectsByLastUsed || !draggedTo ? draggedTo : draggedTo.column === liftedFrom ? null : { ...draggedTo, before: null };
     const groupTarget = groupDrag.value.state?.target ?? null;
     const ready = useValue(deps.workspacesReady);
     const taskHost = useValue(deps.taskHost);

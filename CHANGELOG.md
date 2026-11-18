@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.39.0 - 2026-11-18
+
+- **Most recently used project first in each group:** a new switch in Settings, Sidebar, Your groups (off unless you turn it on). Inside each of your groups, the project whose workspace you used last goes to the top, ranked the same way as "Most recently used group first". Ungrouped keeps following Display. While it is on, dragging a project inside its own group does nothing (no drop line), and dragging it into another group still moves it there. An older Morphise ignores the switch.
+
 ## 0.38.9 - 2026-11-17
 
 - **Slimmer chat rows in the sidebar:** chats and sub-agents under a workspace are 8 px shorter than the workspace row (28 px at Compact, 32 at Comfortable, 36 at Spacious; 40 on touch screens), so the open chat's highlight hugs its line. They were meant to be shorter already, but their clickable area kept a full row's height. The tree lines still meet each dot.

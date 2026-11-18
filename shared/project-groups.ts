@@ -64,7 +64,9 @@ export const projectGroupsSettings = defineSettings({ id: "project-groups", scop
 
 // How "Your groups" are ordered (Settings, Sidebar): the group used most recently first (the default), or the order
 // the user set by dragging and Move up / Move down. Its own document, so older Morphise versions ignore it.
-export const groupOrderSettings = defineSettings({ id: "project-group-order", scope: "host", version: 1, schema: z.object({ lastUsedFirst: z.boolean().default(true) }) });
+// `projectsLastUsedFirst`: inside each group, the most recently used project first (off unless asked for). Older
+// Morphise versions drop the field when they read the document, so they keep the saved order.
+export const groupOrderSettings = defineSettings({ id: "project-group-order", scope: "host", version: 1, schema: z.object({ lastUsedFirst: z.boolean().default(true), projectsLastUsedFirst: z.boolean().default(false) }) });
 
 function indexOfGroup(doc: ProjectGroups, groupId: string): number {
   const index = doc.groups.findIndex((group) => group.id === groupId);
@@ -123,6 +125,13 @@ export function dropProject(doc: ProjectGroups, projectKey: string, target: { gr
   const saved = doc.groups.find((group) => group.id === target.group)?.projects.filter((key) => key !== projectKey) ?? [];
   const at = target.before === null ? -1 : saved.indexOf(target.before);
   return moveProject(doc, projectKey, target.group, at < 0 ? saved.length : at);
+}
+
+// A project dropped while projects are ordered by last use: a drop in the group it is already in changes nothing (the
+// shown position is not its saved one, so saving it would surprise later); a drop in another group moves it to the end.
+export function dropProjectWhileAutoOrdered(doc: ProjectGroups, projectKey: string, group: string | null): ProjectGroups {
+  const current = doc.groups.find((entry) => entry.projects.includes(projectKey))?.id ?? null;
+  return current === group ? doc : moveProject(doc, projectKey, group, Number.MAX_SAFE_INTEGER);
 }
 
 // A group dropped before another (`null`, or Ungrouped, for last).

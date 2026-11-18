@@ -202,6 +202,15 @@ export function orderGroupsByLastUsed<Ref>(nested: readonly NestedGroup<Ref>[], 
   return [...own.map((group, index) => ({ group, index, best: best(group) })).sort((a, b) => a.best - b.best || a.index - b.index).map((entry) => entry.group), ...ungrouped];
 }
 
+// Inside each of the user's groups, the most recently used project first (`recentProjects`: project keys, most recent
+// first); projects not ranked keep their saved order after the rest. Ungrouped keeps the view's order. The sort is
+// stable, so a project's several sections (one per workspace in the Chats view) stay together and in order.
+export function orderProjectsByLastUsed<Ref>(nested: readonly NestedGroup<Ref>[], recentProjects: readonly string[]): NestedGroup<Ref>[] {
+  const rank = new Map(recentProjects.map((key, index) => [key, index] as const));
+  const of = (section: InnerSection<Ref>) => rank.get(section.project) ?? Infinity;
+  return nested.map((group) => (group.groupId === null ? group : { ...group, sections: [...group.sections].sort((left, right) => of(left) - of(right) || 0) }));
+}
+
 // project key.
 export interface InnerSection<Ref> {
   key: string;
