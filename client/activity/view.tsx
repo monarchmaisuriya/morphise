@@ -325,6 +325,16 @@ const INSIGHT_ICONS: Record<string, string> = {
   "Coding share": "Code",
   "Multi-turn share": "MessagesSquare",
   "Average session": "Timer",
+  "Peak hour": "Clock",
+  "Current streak": "TrendingUp",
+  "Prompts per active day": "MessageSquare",
+  "Longest session": "Hourglass",
+  "Commands run": "SquareTerminal",
+  "Files edited": "FilePen",
+  "Files read": "FileSearch",
+  "MCP failure rate": "PlugZap",
+  "Tools tried": "Wrench",
+  "Models used": "Brain",
 };
 
 function Insights({ t, summary, side }: { t: Tokens; summary: ActivitySummary; side: boolean }) {
@@ -427,14 +437,26 @@ export function ActivityView({ client, theme, compact, workspaces }: { client: P
                   <Hours t={t} summary={summary} />
                 </Card>
               </View>
-              <View style={{ flexDirection: wide ? "row" : "column", gap: 12 }}>
-                <Ranking t={t} title="Providers" icon="Cpu" rows={summary.rankings.providers} side={wide} />
-                <Ranking t={t} title="Projects" icon="Folder" rows={summary.rankings.projects} side={wide} />
-              </View>
-              <View style={{ flexDirection: wide ? "row" : "column", gap: 12 }}>
-                <Insights t={t} summary={summary} side={wide} />
-                <TopLists t={t} summary={summary} side={wide} />
-              </View>
+              {wide ? (
+                // Two columns that stack on their own, so a short card is never stretched into a padded box beside a tall one.
+                <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
+                  <View style={{ flex: 1, minWidth: 0, gap: 12 }}>
+                    <Ranking t={t} title="Providers" icon="Cpu" rows={summary.rankings.providers} side={false} />
+                    <Insights t={t} summary={summary} side={false} />
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0, gap: 12 }}>
+                    <Ranking t={t} title="Projects" icon="Folder" rows={summary.rankings.projects} side={false} />
+                    <TopLists t={t} summary={summary} side={false} />
+                  </View>
+                </View>
+              ) : (
+                <View style={{ gap: 12 }}>
+                  <Ranking t={t} title="Providers" icon="Cpu" rows={summary.rankings.providers} side={false} />
+                  <Ranking t={t} title="Projects" icon="Folder" rows={summary.rankings.projects} side={false} />
+                  <Insights t={t} summary={summary} side={false} />
+                  <TopLists t={t} summary={summary} side={false} />
+                </View>
+              )}
             </>
           )
         ) : null}

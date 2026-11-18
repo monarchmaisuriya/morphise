@@ -1,14 +1,14 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { isDarkSurface, PRIORITY_YELLOWS } from "../ui/hues";
 
-// How each priority reads and looks; P1 is the most urgent. Every priority is a dot (PriorityMark), told apart by its
-// colour (priorityColor) and fill: solid for Urgent, High and Medium, hollow for Low.
-export type PriorityMarkKind = "solid" | "hollow" | "dashed";
+// How each priority reads and looks; P1 is the most urgent. Every priority is a short bar (PriorityMark), told apart by
+// its colour (priorityColor).
+export type PriorityMarkKind = "bar" | "dashed";
 export const PRIORITY = {
-  1: { name: "Urgent", mark: "solid" },
-  2: { name: "High", mark: "solid" },
-  3: { name: "Medium", mark: "solid" },
-  4: { name: "Low", mark: "hollow" },
+  1: { name: "Urgent", mark: "bar" },
+  2: { name: "High", mark: "bar" },
+  3: { name: "Medium", mark: "bar" },
+  4: { name: "Low", mark: "bar" },
 } as const satisfies Record<number, { name: string; mark: PriorityMarkKind }>;
 
 // A task with no priority still gets a mark, a dashed ring, so every card and row has one in the same place.

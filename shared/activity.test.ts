@@ -49,8 +49,8 @@ describe("summarize", () => {
 
   it("works out the insights", () => {
     const summary = run([
-      agent("2026-11-14T04:00:00Z", activity([["2026-11-14T04:00:00Z", { p: 1 }], ["2026-11-14T04:15:00Z", { p: 1 }], ["2026-11-15T04:00:00Z", { k: 1 }]], { coding: true })),
-      agent("2026-11-16T04:00:00Z", activity([["2026-11-16T04:00:00Z", { p: 1 }]]), { workspaceId: "w2" }),
+      agent("2026-11-14T04:00:00Z", activity([["2026-11-14T04:00:00Z", { p: 1, models: { "m-1": 1 } }], ["2026-11-14T04:15:00Z", { p: 1 }], ["2026-11-15T04:00:00Z", { k: 1 }]], { coding: true, skills: { review: { count: 1, failures: 0, lastAt: 0 } } })),
+      agent("2026-11-16T04:00:00Z", activity([["2026-11-16T04:00:00Z", { p: 1, x: 1200, r: 5, w: 2, models: { "m-2": 1 } }]], { mcp: { "notion.search": { count: 4, failures: 1, lastAt: 0 } } }), { workspaceId: "w2" }),
     ]);
     const value = (label: string) => summary.insights.find((row) => row.label === label)?.value;
     expect(value("Active days")).toBe("3");
@@ -61,6 +61,23 @@ describe("summarize", () => {
     // Sessions: 30m (two slots), 15m, 15m.
     expect(value("Average session")).toBe("20m");
     expect(value("Busiest day")).toBe("2026-11-14 (2)");
+    // Every slot is 09:30 or 09:45 local; the 14th to the 16th are active and today (the 17th) not yet.
+    expect(value("Peak hour")).toBe("09:00-10:00");
+    expect(value("Current streak")).toBe("3 days");
+    expect(value("Prompts per active day")).toBe("1");
+    expect(value("Longest session")).toBe("30m");
+    expect(value("Commands run")).toBe("1,200");
+    expect(value("Files edited")).toBe("2");
+    expect(value("Files read")).toBe("5");
+    expect(value("MCP failure rate")).toBe("25%");
+    expect(value("Tools tried")).toBe("2");
+    expect(value("Models used")).toBe("2");
+    expect(summary.insights.map((row) => row.label)).toEqual([
+      "Active days", "Busiest day", "Longest streak", "Peak weekday", "Workspaces", "Coding share", "Multi-turn share", "Average session",
+      "Peak hour", "Current streak", "Prompts per active day", "Longest session",
+      "Commands run", "Files edited", "Files read", "MCP failure rate",
+      "Tools tried", "Models used",
+    ]);
   });
 
   it("ranks providers and projects, and lists the top skills, MCP tools and models", () => {
@@ -77,6 +94,8 @@ describe("summarize", () => {
     const summary = run([]);
     expect(summary.kpis[0].value).toBe("0");
     expect(summary.insights.find((row) => row.label === "Average session")?.value).toBe("None");
+    expect(summary.insights.find((row) => row.label === "Peak hour")?.value).toBe("None");
+    expect(summary.insights.find((row) => row.label === "MCP failure rate")?.value).toBe("None");
     expect(summary.top.skills).toEqual([]);
   });
 });

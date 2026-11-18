@@ -2,6 +2,12 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.44.0 - 2026-11-19
+
+- **Priority marks are short bars:** Urgent, High, Medium and Low show a short bar in their colour (red, amber, yellow, grey) on cards, list rows and the priority picker; a task with no priority keeps its dashed ring.
+- **More insights on the Activity tab:** ten more tiles from the logs already counted: peak hour, current streak, prompts per active day, longest session, commands run, files edited, files read, MCP failure rate, tools tried and models used. On wide screens Providers and Insights stack in one column and Projects and Most used in the other, so no card is stretched into an empty box.
+- **A project's menu in every grouping:** the ⋯ at the end of a project heading (Move to group, Colour and icon, New workspace, Copy path, Remove project) now shows whatever the sidebar is grouped by, not only with Your groups, and a right-click or long press on the heading opens it too.
+
 ## 0.43.1 - 2026-11-19
 
 - **Fix: mermaid diagrams shown as source when a label starts with an @.** A flowchart label such as `[@mention in any workspace]`, `[ops@example.com]` or `-->|@user approves|` made the whole diagram fail, because mermaid 11 (which Paseo ships) reads "word@" as an edge id even inside a label; Pele failed the same way. Morphise now quotes such labels before either renderer draws them, which mermaid draws the same. This is temporary: it comes out once Paseo moves to mermaid 12, which reads them.

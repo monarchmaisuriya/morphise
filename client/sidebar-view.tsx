@@ -1407,6 +1407,10 @@ function ProjectHeading({ title, first, projectRef = null, count, collapsed, onT
     setMenu(null);
     if (project) shared.groups.change((doc) => moveProject(doc, project.key, groupId, Number.MAX_SAFE_INTEGER));
   };
+  // The project's menu, in every grouping: from its ⋯ button, a right-click, or a long press (which instead picks the
+  // project up to drag while grouped by your groups on a touch screen). Right-click is passed untyped, as in RowShell.
+  const openMenu = project ? () => setMenu("actions") : undefined;
+  const contextMenu = openMenu && Platform.OS === "web" ? { onContextMenu: (event: { preventDefault(): void }) => (event.preventDefault(), openMenu()) } : {};
   return (
     <View ref={anchor} onPointerMove={() => shared.hover.mark(key)} style={[styles.project, hovered ? styles.hovered : null]} {...dragHandlers}>
       <Pressable
@@ -1415,8 +1419,9 @@ function ProjectHeading({ title, first, projectRef = null, count, collapsed, onT
         accessibilityLabel={`${collapsed ? "Expand" : "Collapse"} ${title}, ${count} ${count === 1 ? "workspace" : "workspaces"}`}
         accessibilityHint={projectDrag ? "Drag to move it to another group" : undefined}
         onPress={onToggle}
-        onLongPress={projectDrag && TOUCH && project ? () => projectDrag.arm(project.key) : undefined}
+        onLongPress={projectDrag && TOUCH && project ? () => projectDrag.arm(project.key) : openMenu}
         style={styles.projectMain}
+        {...contextMenu}
       >
         {chevron ? (
           <View style={styles.tile}>
@@ -1442,8 +1447,8 @@ function ProjectHeading({ title, first, projectRef = null, count, collapsed, onT
         <View style={{ flex: 1 }} />
       </Pressable>
       {project && (hovered || focused || TOUCH) ? <IconButton t={t} size="sm" icon="Plus" label={`New workspace in ${title}`} onPress={() => props.navigation.openProject(project)} /> : null}
-      {custom && (hovered || focused || TOUCH || menu) ? <IconButton t={t} size="sm" icon="Ellipsis" label={`Actions for the project ${title}`} onPress={() => setMenu(menu ? null : "actions")} /> : null}
-      {custom ? (
+      {project && (hovered || focused || TOUCH || menu) ? <IconButton t={t} size="sm" icon="Ellipsis" label={`Actions for the project ${title}`} onPress={() => setMenu(menu ? null : "actions")} /> : null}
+      {project ? (
         <Dropdown t={t} open={menu !== null} onClose={() => setMenu(null)} anchor={anchor} width={menu === "decor" ? 300 : 260}>
           {menu === "remove" && project ? (
             <View style={{ padding: 8, gap: 8 }}>

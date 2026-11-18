@@ -177,6 +177,17 @@ export function summarize(agents: readonly ActivityAgent[], options: { now: numb
   let multiTurn = 0;
   let sessionCount = 0;
   let sessionMinutes = 0;
+  let longestSession = 0;
+  const endSession = (minutes: number) => {
+    sessionCount++;
+    sessionMinutes += minutes;
+    longestSession = Math.max(longestSession, minutes);
+  };
+  // Prompts, skills and MCP calls by local hour of day (0 to 23), and the tools' work across every chat.
+  const byHourOfDay = new Map<number, number>();
+  let commands = 0;
+  let filesRead = 0;
+  let filesEdited = 0;
 
   const rank = (map: Map<string, MetricValues>, key: string) => {
     let values = map.get(key);
@@ -220,6 +231,10 @@ export function summarize(agents: readonly ActivityAgent[], options: { now: numb
       const day = localDay(ms, offsetMs);
       bump(perDay, day, counts.p + counts.k + counts.m);
       bump(promptsPerDay, day, counts.p);
+      if (counts.p + counts.k + counts.m > 0) bump(byHourOfDay, Math.floor(((ms + offsetMs) % DAY_MS) / HOUR_MS), counts.p + counts.k + counts.m);
+      commands += counts.x;
+      filesRead += counts.r;
+      filesEdited += counts.w;
       agentPrompts += counts.p;
       const sw = week(day);
       if (sw >= 0) {
@@ -240,18 +255,12 @@ export function summarize(agents: readonly ActivityAgent[], options: { now: numb
       for (const [model, n] of Object.entries(counts.models ?? {})) bump(models, model, n);
       // A session is a run of slots with no gap of 30 minutes or more.
       if (last === null || slot - last > IDLE_GAP_SLOTS) {
-        if (runStart !== null && last !== null) {
-          sessionCount++;
-          sessionMinutes += ((last - runStart + 1) * SLOT_MS) / 60000;
-        }
+        if (runStart !== null && last !== null) endSession(((last - runStart + 1) * SLOT_MS) / 60000);
         runStart = slot;
       }
       last = slot;
     }
-    if (runStart !== null && last !== null) {
-      sessionCount++;
-      sessionMinutes += ((last - runStart + 1) * SLOT_MS) / 60000;
-    }
+    if (runStart !== null && last !== null) endSession(((last - runStart + 1) * SLOT_MS) / 60000);
     if (agentPrompts >= 2) multiTurn++;
     for (const [name, use] of Object.entries(activity.skills)) bump(skills, name, use.count);
     for (const [name, use] of Object.entries(activity.mcp)) {
@@ -297,6 +306,16 @@ export function summarize(agents: readonly ActivityAgent[], options: { now: numb
   const byWeekday = new Map<string, number>();
   for (const [day, value] of perDay) if (value > 0) bump(byWeekday, WEEKDAYS[weekday(day)], value);
   const peak = leader(byWeekday);
+  const peakHour = leader(byHourOfDay);
+  const clock = (hour: number) => `${String(hour % 24).padStart(2, "0")}:00`;
+  // The run of active days that ends today, or yesterday while today has nothing yet.
+  const activeSet = new Set(activeDays);
+  let current = 0;
+  for (let day = activeSet.has(today) ? today : today - 1; activeSet.has(day); day--) current++;
+  const allPrompts = [...promptsPerDay.values()].reduce((a, b) => a + b, 0);
+  const mcpCalls = [...mcp.values()].reduce((a, b) => a + b, 0);
+  const mcpFailed = [...mcpFailures.values()].reduce((a, b) => a + b, 0);
+  const whole = (n: number) => n.toLocaleString("en-US");
   const insights: ActivitySummary["insights"] = [
     { label: "Active days", value: String(activeDays.length) },
     { label: "Busiest day", value: busiest && busiest[1] > 0 ? `${dayLabel(Number(busiest[0]))} (${busiest[1]})` : "None" },
@@ -306,6 +325,16 @@ export function summarize(agents: readonly ActivityAgent[], options: { now: numb
     { label: "Coding share", value: percent(coding, active) },
     { label: "Multi-turn share", value: percent(multiTurn, agents.filter((agent) => agent.activity && chatPrompts(agent.activity) > 0).length) },
     { label: "Average session", value: sessionCount ? formatMinutes(sessionMinutes / sessionCount) : "None" },
+    { label: "Peak hour", value: peakHour ? `${clock(peakHour[0])}-${clock(peakHour[0] + 1)}` : "None" },
+    { label: "Current streak", value: `${current} ${current === 1 ? "day" : "days"}` },
+    { label: "Prompts per active day", value: activeDays.length ? whole(Math.round(allPrompts / activeDays.length)) : "0" },
+    { label: "Longest session", value: sessionCount ? formatMinutes(longestSession) : "None" },
+    { label: "Commands run", value: whole(commands) },
+    { label: "Files edited", value: whole(filesEdited) },
+    { label: "Files read", value: whole(filesRead) },
+    { label: "MCP failure rate", value: mcpCalls ? percent(mcpFailed, mcpCalls) : "None" },
+    { label: "Tools tried", value: whole(skills.size + mcp.size) },
+    { label: "Models used", value: whole(models.size) },
   ];
 
   const ranked = (map: Map<string, MetricValues>) => [...map].map(([key, values]) => ({ key, label: key, values })).sort((a, b) => b.values.sessions - a.values.sessions || a.key.localeCompare(b.key));

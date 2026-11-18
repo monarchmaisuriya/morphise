@@ -6,8 +6,8 @@ describe("priorityOf", () => {
     expect(priorityOf(null)).toEqual({ name: "No priority", mark: "dashed" });
   });
 
-  it("draws every priority as one dot: solid for Urgent, High and Medium, hollow for Low, dashed for none", () => {
-    expect([1, 2, 3, 4, null].map((priority) => priorityOf(priority).mark)).toEqual(["solid", "solid", "solid", "hollow", "dashed"]);
+  it("draws every priority as a short bar in its colour, and no priority as a dashed ring", () => {
+    expect([1, 2, 3, 4, null].map((priority) => priorityOf(priority).mark)).toEqual(["bar", "bar", "bar", "bar", "dashed"]);
     expect(priorityOf(1).name).toBe("Urgent");
   });
 });
