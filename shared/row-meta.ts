@@ -43,9 +43,11 @@ export type LineTone = "warning" | "danger" | "muted";
 
 // The muted second line's lead: what needs the user first, then what is happening, then the
 // latest chat's title when it says more than the row's own name.
-export function statusLine(indicator: Indicator, latestChat: string | null, rowName: string): { text: string; tone: LineTone } | null {
+export function statusLine(indicator: Indicator, latestChat: string | null, rowName: string, chatsListed = false): { text: string; tone: LineTone } | null {
   if (indicator === "needs_input") return { text: "Waiting for your permission", tone: "warning" };
   if (indicator === "failed") return { text: "Failed", tone: "danger" };
+  // The row's chats are listed under it: their titles are there already.
+  if (chatsListed) return indicator === "running" ? { text: "Working", tone: "muted" } : null;
   if (indicator === "running") return { text: latestChat && latestChat !== rowName ? `Working · ${latestChat}` : "Working", tone: "muted" };
   if (latestChat && latestChat !== rowName) return { text: latestChat, tone: "muted" };
   return null;

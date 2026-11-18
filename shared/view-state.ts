@@ -1,6 +1,7 @@
 import { defineSettings } from "@getpaseo/plugin";
 import { z } from "zod";
 import { INDICATORS } from "./profile";
+import { radius } from "./design/tokens";
 
 // How the sidebar view looks on this device only: which groups are folded, which statuses the
 // filter chips keep. Device settings live in the app, not on the daemon.
@@ -24,6 +25,9 @@ export const viewStateSettings = defineSettings({
     indent: z.enum(["narrow", "normal", "wide"]).default("normal"),
     boldGroupNames: z.boolean().default(false),
     showProjectIcons: z.boolean().default(true),
+    // The lines that hang chats and sub-agents off their workspace, and whether the last one's corner is rounded or square.
+    branchLines: z.boolean().default(true),
+    branchCorners: z.enum(["rounded", "square"]).default("rounded"),
     // Morphise's sidebar view has been on screen on this device. Paseo tells plugins nothing about which sidebar view it
     // shows, and a plugin reload forgets what this session saw, so Settings' "still showing its own sidebar" note reads this.
     viewShown: z.boolean().default(false),
@@ -48,5 +52,7 @@ export function sidebarLook(look: ViewState, density: "compact" | "comfortable" 
     rowPad: ROW_PAD[look.indent],
     boldGroups: look.boldGroupNames,
     projectIcons: look.showProjectIcons,
+    branchLines: look.branchLines,
+    branchRadius: look.branchCorners === "square" ? 0 : radius.md,
   };
 }

@@ -115,7 +115,7 @@ const toggleSelected = (workspaceKey: string) => {
 function viewStyles(theme: Theme, config: ViewConfig, look: ReturnType<typeof sidebarLook>) {
   const c = theme.colors;
   // "Compact" is Paseo's own 36px row; "comfortable" adds air.
-  const { height, childHeight, textSize, groupGap, rowPad } = look;
+  const { height, childHeight, textSize, groupGap, rowPad, branchLines, branchRadius } = look;
   // Rows and their chat lines move in by the indent beyond the usual 8.
   const shift = rowPad - 8;
   return {
@@ -148,7 +148,7 @@ function viewStyles(theme: Theme, config: ViewConfig, look: ReturnType<typeof si
     meta: { color: c.foregroundMuted, fontSize: fontSize.sm, flexShrink: 1 },
     // Chats hang off a thin line under their workspace's status mark, sub-agents off one under their chat's.
     branchDown: { position: "absolute" as const, top: 0, bottom: 0, width: 1, backgroundColor: c.border },
-    branchTurn: { position: "absolute" as const, top: 0, borderLeftWidth: 1, borderBottomWidth: 1, borderBottomLeftRadius: 6, borderColor: c.border },
+    branchTurn: { position: "absolute" as const, top: 0, borderLeftWidth: 1, borderBottomWidth: 1, borderBottomLeftRadius: branchRadius, borderColor: c.border },
     branchTee: { position: "absolute" as const, height: 1, backgroundColor: c.border },
     // Where each kind of row's line sits: x of the line, x where the row's status slot starts, and the row's middle
     // (every chat and sub-agent row is `childHeight` tall, set by `child` and `childMain`).
@@ -156,6 +156,8 @@ function viewStyles(theme: Theme, config: ViewConfig, look: ReturnType<typeof si
       chat: { x: 23 + shift, to: 32 + shift, middle: childHeight / 2 },
       sub: { x: 39 + shift, to: 52 + shift, middle: childHeight / 2 },
       more: 14,
+      // The "Branch lines" display setting: off, no piece of line is drawn and rows keep their indent.
+      shown: branchLines,
     },
     slot: { width: 16, alignItems: "center" as const, justifyContent: "center" as const },
     child: { paddingLeft: 24 + shift, minHeight: childHeight },
@@ -167,16 +169,16 @@ function viewStyles(theme: Theme, config: ViewConfig, look: ReturnType<typeof si
     selected: { backgroundColor: withAlpha(c.surface2, 0.7) ?? c.surface2 },
     hovered: { backgroundColor: c.surface1 },
     label: { color: c.foreground, fontSize: textSize, flexShrink: 1 },
-    childLabel: { color: c.foregroundMuted, fontSize: fontSize.base, flexShrink: 1 },
+    childLabel: { color: c.foregroundMuted, fontSize: textSize, flexShrink: 1 },
     secondary: { color: c.foregroundMuted, fontSize: fontSize.sm, flexShrink: 1, opacity: 0.75 },
     time: { color: c.foregroundMuted, fontSize: fontSize.sm, opacity: 0.7, marginLeft: "auto" as const },
     added: { color: c.statusSuccess, fontSize: fontSize.sm },
     removed: { color: c.statusDanger, fontSize: fontSize.sm },
     dot: { width: 7, height: 7, borderRadius: 4 },
     more: { flexDirection: "row" as const, alignItems: "center" as const, gap: 10, minHeight: 32, marginHorizontal: 8, paddingLeft: 10, borderRadius: radius.lg },
-    moreText: { color: c.foregroundMuted, fontSize: fontSize.base },
+    moreText: { color: c.foregroundMuted, fontSize: textSize },
     bulk: { flexDirection: "row" as const, alignItems: "center" as const, gap: 2, minHeight: 40, paddingLeft: 16, paddingRight: 8, borderTopWidth: 1, borderTopColor: c.border, backgroundColor: c.surface1 },
-    empty: { color: c.foregroundMuted, fontSize: fontSize.base, paddingHorizontal: 16, paddingVertical: 12 },
+    empty: { color: c.foregroundMuted, fontSize: textSize, paddingHorizontal: 16, paddingVertical: 12 },
   };
 }
 
@@ -290,7 +292,7 @@ function RowShell({ selected, child, grandchild, twoLine, label, onPress, onLong
         {actionsShown ? null : trailing}
       </Pressable>
       {actionsShown ? <View style={[styles.actions, twoLine ? styles.actionsTwoLine : null]}>{actions}</View> : null}
-      {stem !== undefined ? <View pointerEvents="none" style={[styles.branchDown, parentStem({ x: stem, inset: styles.row.marginHorizontal, dotFromTop: twoLine ? styles.twoLine.paddingVertical + STATUS_LINE / 2 : null })]} /> : null}
+      {stem !== undefined && styles.branch.shown ? <View pointerEvents="none" style={[styles.branchDown, parentStem({ x: stem, inset: styles.row.marginHorizontal, dotFromTop: twoLine ? styles.twoLine.paddingVertical + STATUS_LINE / 2 : null })]} /> : null}
     </View>
   );
 }
@@ -340,7 +342,7 @@ function MoreRow({ label, spoken, icon, count, child, grandchild, onPress, share
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={spoken} onPress={onPress} style={[styles.more, child || grandchild ? { paddingLeft: grandchild ? 46 : 26, minHeight: 28 } : null]}>
       <Icon name={icon} size={child || grandchild ? 12 : 14} color={props.theme.colors.foregroundMuted} />
-      <Text style={[styles.moreText, child || grandchild ? { fontSize: fontSize.base } : null]}>{label}</Text>
+      <Text style={styles.moreText}>{label}</Text>
       {count ? <Text style={styles.count}>{count}</Text> : null}
     </Pressable>
   );
@@ -421,14 +423,14 @@ function AgentRow({ reference, sub, subs = [], shared }: { reference: AgentRef; 
 }
 
 // One row (with what hangs under it) on its parent's line. Drawn after the row, so the open row's highlight never hides
-// the line: every row's line reaches its status slot, the last with a rounded corner, the rest with a tee
+// the line: every row's line reaches its status slot, the last with a corner (rounded or square, per Line corners), the rest with a tee
 // (`branchSegments`).
 function Branch({ x, to, middle, last, children, shared }: { x: number; to: number; middle: number; last: boolean; children: ReactNode; shared: Shared }) {
   const { styles } = shared;
   return (
     <View>
       {children}
-      {branchSegments({ x, to, middle }, last).map((segment) => (
+      {(styles.branch.shown ? branchSegments({ x, to, middle }, last) : []).map((segment) => (
         <View
           key={segment.kind}
           pointerEvents="none"
@@ -864,6 +866,9 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   const markedDone = applies && mark.kind === "done" && workspace.indicator !== "done";
   const markedUnread = applies && mark.kind === "unread" && workspace.indicator !== "attention";
   const chatsShown = config.showAgents && ((config.agentsFor ?? "active") === "all" || isOpen) && listsChats(config.singleChat, chats, config.showSubAgents === false ? new Map() : tree.children, shared.listing);
+  // The chats listed under this row; the second line leaves out the latest chat's title only when that chat is among them.
+  const listedKeys = chatsShown ? listedChatKeys(reference.key, { top: chats, children: config.showSubAgents === false ? new Map() : tree.children }, shared.listing) : null;
+  const latestListed = !!listedKeys && !!tree.top[0] && listedKeys.has(tree.top[0].key);
   // Exactly one row is highlighted: the open chat or sub-agent when it is listed here, else the
   // workspace. `openChat` is the listed chat that holds it, and stays listed past the limit.
   const openChat = chatsShown ? owningRowKey({ top: chats, children: tree.children }, props.active.agent?.key ?? null, config.showSubAgents !== false) : null;
@@ -947,7 +952,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   const pr = shows.pullRequest ? info?.pullRequest ?? null : null;
   const changes = workspace.diff && workspace.diff.additions + workspace.diff.deletions > 0 ? workspace.diff : null;
   const twoLine = config.rowStyle !== "one-line";
-  const line = twoLine ? statusLine(indicator, latestChat, workspace.title) : null;
+  const line = twoLine ? statusLine(indicator, latestChat, workspace.title, latestListed) : null;
 
   // Second-line details, in Paseo's Display order. A row inside its project group never repeats
   // the project's name; the host shows only when there is more than one.
@@ -986,7 +991,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
       <Icon name={picked ? "SquareCheck" : "Square"} size={14} color={picked ? c.accent : c.foregroundMuted} />
     </View>
   ) : (
-    <StatusMark indicator={indicator} still={chatsShown && runningShownBelow(running, listedChatKeys(reference.key, { top: chats, children: shared.config.showSubAgents === false ? new Map() : tree.children }, shared.listing))} shared={shared} />
+    <StatusMark indicator={indicator} still={!!listedKeys && runningShownBelow(running, listedKeys)} shared={shared} />
   );
   const main = twoLine ? (
     <>
@@ -1600,6 +1605,9 @@ function ViewMenu({ update, state, saveState, shared, openSettings }: { update(p
       <View style={{ marginHorizontal: -8, marginVertical: -6 }}>
         {config.list === "workspaces" ? <MenuItem t={t} role="checkbox" icon="EyeOff" label="Show background workspaces" checked={state.showBackground} onPress={() => saveState({ showBackground: !state.showBackground })} /> : null}
         <MenuItem t={t} role="checkbox" icon="Bold" label="Bold group names" checked={state.boldGroupNames} onPress={() => saveState({ boldGroupNames: !state.boldGroupNames })} />
+        {/* Only the workspaces list hangs chats off lines; the corners choice sits under its checkbox, so turning lines on adds it below the pointer. */}
+        {config.list === "workspaces" ? <MenuItem t={t} role="checkbox" icon="ListTree" label="Branch lines" checked={state.branchLines} onPress={() => saveState({ branchLines: !state.branchLines })} /> : null}
+        {config.list === "workspaces" && state.branchLines ? <View style={{ paddingHorizontal: 8, paddingBottom: 6 }}>{row("Line corners", state.branchCorners, [["rounded", "Rounded"], ["square", "Square"]] as const, (branchCorners) => saveState({ branchCorners }))}</View> : null}
         {config.list === "workspaces" ? <MenuItem t={t} role="checkbox" icon="Folder" label="Folder icons" checked={state.showProjectIcons} onPress={() => saveState({ showProjectIcons: !state.showProjectIcons })} /> : null}
         <MenuItem t={t} icon="Settings2" label="All sidebar settings" onPress={openSettings} />
       </View>

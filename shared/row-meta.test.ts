@@ -34,6 +34,12 @@ describe("statusLine", () => {
     expect(statusLine("done", "Row", "Row")).toBeNull();
     expect(statusLine("attention", null, "Row")).toBeNull();
   });
+  it("leaves out the latest chat when the row's chats are listed under it, so its title is not shown twice", () => {
+    expect(statusLine("running", "Scan logs", "Row", true)).toEqual({ text: "Working", tone: "muted" });
+    expect(statusLine("done", "Scan logs", "Row", true)).toBeNull();
+    expect(statusLine("needs_input", "Scan logs", "Row", true)).toEqual({ text: "Waiting for your permission", tone: "warning" });
+    expect(statusLine("failed", "Scan logs", "Row", true)).toEqual({ text: "Failed", tone: "danger" });
+  });
 });
 
 describe("owningRowKey", () => {

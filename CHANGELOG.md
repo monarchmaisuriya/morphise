@@ -2,6 +2,12 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.42.1 - 2026-11-18
+
+- **Branch lines option:** the sidebar's Display menu has "Branch lines" to turn off the lines that hang chats and sub-agents off their workspace (rows keep their indent), and "Line corners" to make the last line's corner rounded or square. Both default to today's look and are kept per device.
+- **Fix: chats larger than their workspace.** Chat and sub-agent rows, and Show more / Show less rows, follow the sidebar's Text size like workspace rows; since 0.42.0 they were fixed at 14px, larger than a compact workspace row.
+- **Fix: a chat's title shown twice.** A workspace whose latest chat is listed under it no longer repeats that chat's title on its second line ("Working" stays while it runs).
+
 ## 0.42.0 - 2026-11-18
 
 One look everywhere: HTML pages and Morphise's own screens use Paseo's own sizes and styles, so everything in a chat looks like one app.
