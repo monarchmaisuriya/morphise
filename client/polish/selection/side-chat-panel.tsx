@@ -9,6 +9,7 @@ import { useLanguage } from "../i18n";
 import { readTurns } from "./actions";
 import { type ChatTurn, splitBlocks } from "./format";
 import { say } from "./strings";
+import { fontSize } from "../../../shared/design/tokens";
 
 const MONO = Platform.select({ web: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", ios: "Menlo", default: "monospace" });
 /** How often the turns are refetched while the side agent streams. */
@@ -93,16 +94,16 @@ function SideChatBody({ agentId, theme, compact, navigation }: { agentId: string
     return {
       screen: { flex: 1, backgroundColor: c.surface0 },
       header: { flexDirection: "row" as const, alignItems: "center" as const, gap: t.space.sm, paddingHorizontal: pad, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.border },
-      title: { ...t.text.heading, flex: 1, fontSize: 13 },
+      title: { ...t.text.heading, flex: 1, fontSize: fontSize.base },
       listContent: { padding: pad, gap: 14 },
       userTurn: { alignSelf: "flex-end" as const, maxWidth: "92%" as const, padding: 10, borderRadius: t.radius.card, gap: 6, backgroundColor: c.surface2 },
       assistantTurn: { gap: t.space.sm },
-      text: { color: c.foreground, fontSize: 13, lineHeight: 19 },
-      quote: { color: c.foregroundMuted, fontSize: 13, lineHeight: 19, paddingLeft: 9, borderLeftWidth: 2, borderLeftColor: c.border },
-      code: { color: c.foreground, fontFamily: MONO, fontSize: 12, lineHeight: 17, padding: t.space.sm, borderRadius: t.radius.control, backgroundColor: c.surface1 },
+      text: { color: c.foreground, fontSize: fontSize.base, lineHeight: 19 },
+      quote: { color: c.foregroundMuted, fontSize: fontSize.base, lineHeight: 19, paddingLeft: 9, borderLeftWidth: 2, borderLeftColor: c.border },
+      code: { color: c.foreground, fontFamily: MONO, fontSize: fontSize.sm, lineHeight: 17, padding: t.space.sm, borderRadius: t.radius.control, backgroundColor: c.surface1 },
       error: { ...t.text.danger, paddingHorizontal: pad },
       composer: { flexDirection: "row" as const, alignItems: "flex-end" as const, gap: t.space.sm, padding: pad, borderTopWidth: 1, borderTopColor: c.border },
-      input: { flex: 1, minHeight: 38, maxHeight: 160, paddingHorizontal: 10, paddingVertical: t.space.sm, borderWidth: 1, borderRadius: t.radius.row, borderColor: c.border, backgroundColor: c.surface1, color: c.foreground, fontSize: 13 },
+      input: { flex: 1, minHeight: 38, maxHeight: 160, paddingHorizontal: 10, paddingVertical: t.space.sm, borderWidth: 1, borderRadius: t.radius.row, borderColor: c.border, backgroundColor: c.surface1, color: c.foreground, fontSize: fontSize.base },
     };
   }, [t, compact]);
 

@@ -14,6 +14,7 @@ import { RichSample } from "./rich-sample";
 import { PREVIEW_IMAGES } from "./samples";
 import { SelectionBarMock } from "./selection-bar-mock";
 import { DiagramSample } from "./web/diagram-sample";
+import { radius } from "../../../shared/design/tokens";
 
 export function MessagesPreview({ theme, prefs, chat, compact = false }: { theme: PluginTheme; prefs: Prefs; chat: ChatSettings | undefined; compact?: boolean }) {
   const restyled = prefs.nativeStyle === "design";
@@ -27,7 +28,7 @@ export function MessagesPreview({ theme, prefs, chat, compact = false }: { theme
           <PromptBubble theme={theme} clamp={promptClampLines(chat)} />
           <RichSample theme={theme} rt={shownRichText(prefs)} diagram={diagram} />
           {prefs.images === "native" ? (
-            <Image accessibilityLabel={PREVIEW_IMAGES[0]!.alt} source={{ uri: PREVIEW_IMAGES[0]!.url }} style={{ width: "100%", aspectRatio: 16 / 10, borderRadius: 8 }} resizeMode="cover" />
+            <Image accessibilityLabel={PREVIEW_IMAGES[0]!.alt} source={{ uri: PREVIEW_IMAGES[0]!.url }} style={{ width: "100%", aspectRatio: 16 / 10, borderRadius: radius.lg }} resizeMode="cover" />
           ) : (
             <ImagesItem {...rowProps(theme, compact, IMAGES_ROW_KIND, { images: PREVIEW_IMAGES })} />
           )}

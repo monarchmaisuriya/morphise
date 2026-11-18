@@ -17,6 +17,7 @@ import type { Tone } from "../../shared/run/view";
 import { Icon } from "../ui/kit";
 import { useTooltip } from "../web";
 import type { ThemeColors } from "./palette";
+import { fontSize } from "../../shared/design/tokens";
 
 // Read at render time, not import time. The native driver can't run on web,
 // and web is the only place filter blur renders.
@@ -199,7 +200,7 @@ export function Button({
   const foreground =
     tone === "primary" ? colors.accentForeground : tone === "danger-filled" ? colors.surface0 : colors.foreground;
   const height = compact ? 36 : 28;
-  const labelStyle = { color: foreground, fontSize: 12, lineHeight: 16, fontWeight: filled ? ("600" as const) : ("500" as const) };
+  const labelStyle = { color: foreground, fontSize: fontSize.sm, lineHeight: 16, fontWeight: filled ? ("600" as const) : ("500" as const) };
   const showLabel = !iconOnly || filled;
   // An icon without words gets its name as a hover tooltip.
   const tooltip = useTooltip(showLabel ? undefined : label, colors);

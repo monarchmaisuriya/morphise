@@ -5,6 +5,7 @@ import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { useEffect, useState } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
 import { Button, Icon, type Tokens } from "../ui/kit";
+import { fontSize, radius } from "../../shared/design/tokens";
 
 type PaseoTerminal = Awaited<ReturnType<PluginClientContext["paseo"]["terminals"]["list"]>>["entries"][number];
 
@@ -67,8 +68,8 @@ function Row({ client, t, terminal, onClosed }: { client: PluginClientContext; t
         )}
       </View>
       {open ? (
-        <View style={{ padding: 8, borderRadius: 6, backgroundColor: t.c.surface1 }}>
-          {lines === null ? <Text style={t.text.small}>Reading…</Text> : lines.length ? lines.map((line, index) => <Text key={index} style={{ color: t.c.foreground, fontSize: 11, fontFamily: MONO }} numberOfLines={1}>{line}</Text>) : <Text style={t.text.small}>Nothing printed yet.</Text>}
+        <View style={{ padding: 8, borderRadius: radius.md, backgroundColor: t.c.surface1 }}>
+          {lines === null ? <Text style={t.text.small}>Reading…</Text> : lines.length ? lines.map((line, index) => <Text key={index} style={{ color: t.c.foreground, fontSize: fontSize.sm, fontFamily: MONO }} numberOfLines={1}>{line}</Text>) : <Text style={t.text.small}>Nothing printed yet.</Text>}
         </View>
       ) : null}
       {error ? <Text style={t.text.danger}>{error}</Text> : null}

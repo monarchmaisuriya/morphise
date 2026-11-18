@@ -16,6 +16,7 @@ import { WorkspacePicker } from "./workspace-picker";
 import { NO_PRIORITY, PRIORITY, priorityColor } from "./styles";
 import { PriorityMark } from "./priority-mark";
 import { workspaceTask } from "../../shared/task-ops";
+import { fontSize } from "../../shared/design/tokens";
 
 export type EditorTarget = { kind: "existing"; taskId: string } | { kind: "new"; column: string; workspaceId: string | null };
 
@@ -178,7 +179,7 @@ export function CardEditor({ deps, target, theme, compact, onClose, openWorkspac
       <Modal.Content contentContainerStyle={{ gap: 16, paddingBottom: 20 }}>
         <PopoverHost>
         <View style={{ gap: 4 }}>
-          <Field t={t} bare value={draft.title} onChangeText={(title) => set({ title })} placeholder="Task title" accessibilityLabel="Title" autoFocus={!task} textStyle={{ fontSize: 20, fontWeight: "600" }} />
+          <Field t={t} bare value={draft.title} onChangeText={(title) => set({ title })} placeholder="Task title" accessibilityLabel="Title" autoFocus={!task} textStyle={{ fontSize: fontSize["2xl"], fontWeight: "600" }} />
           <Field t={t} bare multiline value={draft.description} onChangeText={(description) => set({ description })} placeholder="Add a description…" accessibilityLabel="Description" />
         </View>
 
@@ -241,7 +242,7 @@ export function CardEditor({ deps, target, theme, compact, onClose, openWorkspac
                 </View>
               ) : (
                 <Pressable accessibilityRole="button" accessibilityLabel={task.reminder ? `Reminder ${formatDue(task.reminder, now)}. Change it` : "Set a reminder"} onPress={() => setReminderOpen(true)} style={{ alignSelf: "flex-start", height: t.control, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 8, borderRadius: t.radius.control, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1 }}>
-                  <Text style={{ color: task.reminder ? t.c.foreground : t.c.foregroundMuted, fontSize: 13 }}>{task.reminder ? formatDue(task.reminder, now) : "Set a reminder"}</Text>
+                  <Text style={{ color: task.reminder ? t.c.foreground : t.c.foregroundMuted, fontSize: fontSize.base }}>{task.reminder ? formatDue(task.reminder, now) : "Set a reminder"}</Text>
                   <Icon name="ChevronDown" size={14} color={t.c.foregroundMuted} />
                 </Pressable>
               )}

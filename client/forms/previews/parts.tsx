@@ -2,6 +2,7 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { Platform, Text } from "react-native";
+import { fontSize } from "../../../shared/design/tokens";
 
 const PREVIEW_TIME = new Date(0);
 
@@ -19,5 +20,5 @@ export function rowProps<Data>(theme: PluginTheme, compact: boolean, kind: strin
 export const PREVIEW_FRAME = { padding: 16 } as const;
 
 export function PreviewNote({ theme, text }: { theme: PluginTheme; text: string }) {
-  return <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12, lineHeight: 17 }}>{text}</Text>;
+  return <Text style={{ color: theme.colors.foregroundMuted, fontSize: fontSize.sm, lineHeight: 17 }}>{text}</Text>;
 }

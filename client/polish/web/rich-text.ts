@@ -112,7 +112,7 @@ ${RT("table", "d")} ${md("table")} > div > div > div:not(:last-child) { border-r
 ${RT("code", "b")} ${md("pre")} { border-width: 0 !important; }
 ${RT("code", "b")} button[aria-label="Copy code"] { opacity: 0.35; transition: opacity 120ms; }
 ${RT("code", "b")} ${md("pre")}:hover button[aria-label="Copy code"] { opacity: 1; }
-${RT("code", "b")} ${md("pre")}${LANG}::before { content: attr(data-paseo-markdown-language); position: absolute; top: 11px; right: 38px; font-family: var(--cp-mono); font-size: 11px; line-height: 16px; color: var(--cp-muted); opacity: 0.6; transition: opacity 120ms; }
+${RT("code", "b")} ${md("pre")}${LANG}::before { content: attr(data-paseo-markdown-language); position: absolute; top: 11px; right: 38px; font-family: var(--cp-mono); font-size: 12px; line-height: 16px; color: var(--cp-muted); opacity: 0.6; transition: opacity 120ms; }
 ${RT("code", "b")} ${md("pre")}${LANG}:hover::before { opacity: 1; }
 ${RT("code", "b")} ${md("pre")}${LANG}:has(> [data-morphise-run])::before { right: 62px; }
 ${RT("code", "c")} ${md("pre")} { background: transparent !important; }
@@ -136,7 +136,7 @@ ${RT("list", "c")} ${MARK}::before { content: "\\00B7"; font-size: var(--cp-cont
 ${RT("list", "c")} ${md("li")} { margin-bottom: 2px !important; }
 
 ${TASK} > ${MARK} { position: relative !important; font-size: 0 !important; width: 14px !important; }
-${TASK} > ${MARK}::before { content: ""; position: absolute; left: 0; top: calc(var(--cp-content) * 0.8 - 7px); width: 14px; height: 14px; box-sizing: border-box; border: 1.5px solid var(--cp-muted); border-radius: 3px; }
+${TASK} > ${MARK}::before { content: ""; position: absolute; left: 0; top: calc(var(--cp-content) * 0.8 - 7px); width: 14px; height: 14px; box-sizing: border-box; border: 1.5px solid var(--cp-muted); border-radius: 4px; }
 ${TASK}[data-cp-task="done"] > ${MARK}::before { background: var(--cp-accent); border-color: var(--cp-accent); }
 ${TASK}[data-cp-task="done"] > ${MARK}::after { content: ""; position: absolute; left: 2px; top: calc(var(--cp-content) * 0.8 - 5px); width: 10px; height: 10px; background: var(--cp-accent-fg); -webkit-mask: ${CHECK_MASK} center / contain no-repeat; mask: ${CHECK_MASK} center / contain no-repeat; }
 :root[data-cp-rt-list="b"] ${TASK_ITEM} > ${MARK}::before { border-radius: 999px; }
@@ -151,10 +151,10 @@ ${MSG} ${CALLOUT}[data-cp-callout="tip"] { --cp-tone: var(--cp-ok); --cp-icon: $
 ${MSG} ${CALLOUT}::before { content: ""; position: absolute; left: 13px; top: 13px; width: 14px; height: 14px; background: var(--cp-tone); -webkit-mask: var(--cp-icon) center / contain no-repeat; mask: var(--cp-icon) center / contain no-repeat; }
 ${MSG} ${CALLOUT} span { font-style: normal !important; color: var(--cp-fg) !important; }
 ${MSG} ${CALLOUT} [data-cp-callout-mark] { font-size: 0 !important; }
-${MSG} ${CALLOUT} [data-cp-callout-mark]::after { content: attr(data-cp-callout-mark); font-size: 13px; font-weight: 600; color: var(--cp-tone); }
+${MSG} ${CALLOUT} [data-cp-callout-mark]::after { content: attr(data-cp-callout-mark); font-size: 14px; font-weight: 600; color: var(--cp-tone); }
 ${RT("callout", "b")} ${CALLOUT} { background: transparent !important; border-radius: 0 !important; border-left: 2px solid var(--cp-tone) !important; padding: 2px 0 2px 14px !important; }
 ${RT("callout", "b")} ${CALLOUT}::before { display: none; }
-${RT("callout", "b")} ${CALLOUT} [data-cp-callout-mark]::after { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+${RT("callout", "b")} ${CALLOUT} [data-cp-callout-mark]::after { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
 ${RT("callout", "c")} ${CALLOUT} { background: transparent !important; border-radius: 0 !important; padding: 0 0 0 24px !important; }
 ${RT("callout", "c")} ${CALLOUT}::before { left: 0; top: calc(var(--cp-content) * 0.8 - 7px); }
 ${RT("callout", "c")} ${CALLOUT} [data-cp-callout-mark] + span { display: none !important; }
@@ -197,7 +197,7 @@ ${RT("list", "b")} .enrm-text ol > li::marker { content: counter(list-item) ") "
 ${RT("list", "c")} .enrm-text li::marker { content: "\\00B7  "; font-weight: 700; color: var(--cp-muted); }
 ${RT("list", "c")} .enrm-text li:not(:last-child) { margin-bottom: 2px !important; }
 
-${TASK_BOX} { appearance: none !important; position: relative !important; flex: none; box-sizing: border-box !important; border: 1.5px solid var(--cp-muted) !important; border-radius: 3px !important; margin: 0 10px 0 0 !important; vertical-align: -2px !important; }
+${TASK_BOX} { appearance: none !important; position: relative !important; flex: none; box-sizing: border-box !important; border: 1.5px solid var(--cp-muted) !important; border-radius: 4px !important; margin: 0 10px 0 0 !important; vertical-align: -2px !important; }
 ${TASK_BOX}:checked { background: var(--cp-accent) !important; border-color: var(--cp-accent) !important; }
 ${TASK_BOX}:checked::after { content: ""; position: absolute; inset: 1px; background: var(--cp-accent-fg); -webkit-mask: ${CHECK_MASK} center / contain no-repeat; mask: ${CHECK_MASK} center / contain no-repeat; }
 :root[data-cp-rt-list="b"] ${TASK_BOX} { border-radius: 999px !important; }
@@ -210,12 +210,12 @@ ${ADMONITION}[data-cp-callout="tip"] { --cp-tone: var(--cp-ok); --cp-icon: ${TIP
 ${ADMONITION}[data-cp-callout="warning"] { --cp-tone: var(--cp-warn); --cp-icon: ${ALERT_MASK}; }
 ${ADMONITION}[data-cp-callout="caution"] { --cp-tone: var(--colors-status-danger); --cp-icon: ${CAUTION_MASK}; }
 ${ADMONITION} p { color: var(--cp-fg) !important; }
-${ADMONITION} [data-cp-callout-head] { margin-bottom: 2px !important; font-size: 13px !important; font-weight: 600 !important; line-height: 1.6 !important; color: var(--cp-tone) !important; }
+${ADMONITION} [data-cp-callout-head] { margin-bottom: 2px !important; font-size: 14px !important; font-weight: 600 !important; line-height: 1.6 !important; color: var(--cp-tone) !important; }
 /* Paseo's markdown library draws Octicons; the svg box stays as the slot and shows the plugin's Lucide icon instead. */
 ${ADMONITION} [data-cp-callout-head] svg { position: absolute; left: 13px; top: 13px; width: 14px; height: 14px; background: var(--cp-tone); -webkit-mask: var(--cp-icon) center / contain no-repeat; mask: var(--cp-icon) center / contain no-repeat; }
 ${ADMONITION} [data-cp-callout-head] svg > * { display: none; }
 ${RT("callout", "b")} .enrm-admonition { background: transparent !important; border-radius: 0 !important; border-inline-start: 2px solid var(--cp-tone) !important; padding: 2px 0 2px 14px !important; }
-${RT("callout", "b")} .enrm-admonition [data-cp-callout-head] { font-size: 11px !important; text-transform: uppercase; letter-spacing: 0.06em; }
+${RT("callout", "b")} .enrm-admonition [data-cp-callout-head] { font-size: 12px !important; text-transform: uppercase; letter-spacing: 0.06em; }
 ${RT("callout", "b")} .enrm-admonition [data-cp-callout-head] svg { display: none; }
 ${RT("callout", "c")} .enrm-admonition { background: transparent !important; border-radius: 0 !important; padding: 0 0 0 24px !important; }
 ${RT("callout", "c")} .enrm-admonition [data-cp-callout-head] { display: inline !important; }

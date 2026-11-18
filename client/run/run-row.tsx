@@ -30,6 +30,7 @@ import { OutputWell } from "./output";
 import { PasteButton } from "./paste";
 import { makePalette, withAlpha, type ThemeColors } from "./palette";
 import { Button, IconSwap, PressScale, mono, nativeDriver, toneColor, useReducedMotion, type ButtonTone } from "./ui";
+import { fontSize, radius } from "../../shared/design/tokens";
 
 const NOTE_ICON: Record<NoteIcon, string> = {
   eye: "Eye",
@@ -171,12 +172,12 @@ export function RunRowView({ agentId, item, theme, layout, timestamp }: PluginTi
   if (shownUnderBlock) {
     if (runCard === "hidden") return null;
     return (
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 4, paddingStart: 12, paddingEnd: 4, borderRadius: 10, borderWidth: 1, borderColor: withAlpha(colors.border, 0.7) }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 4, paddingStart: 12, paddingEnd: 4, borderRadius: radius.lg, borderWidth: 1, borderColor: withAlpha(colors.border, 0.7) }}>
         <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: toneColor(pres.tone, colors) }} />
-        <Text style={{ flex: 1, minWidth: 0, fontFamily: mono(), fontSize: 12, color: colors.foregroundMuted }} numberOfLines={1}>
+        <Text style={{ flex: 1, minWidth: 0, fontFamily: mono(), fontSize: fontSize.sm, color: colors.foregroundMuted }} numberOfLines={1}>
           {`$ ${row.command.split("\n")[0]}`}
         </Text>
-        <Text style={{ flexShrink: 0, fontSize: 12, color: toneColor(pres.tone, colors), fontVariant: ["tabular-nums"] }} numberOfLines={1}>
+        <Text style={{ flexShrink: 0, fontSize: fontSize.sm, color: toneColor(pres.tone, colors), fontVariant: ["tabular-nums"] }} numberOfLines={1}>
           {statusText(pres) || "Running"}
         </Text>
         <Button
@@ -234,7 +235,7 @@ export function RunRowView({ agentId, item, theme, layout, timestamp }: PluginTi
               paddingHorizontal: 12,
             }}
           >
-            <Text selectable style={{ fontFamily: mono(), fontSize: 12, lineHeight: 18, color: colors.foreground }}>
+            <Text selectable style={{ fontFamily: mono(), fontSize: fontSize.sm, lineHeight: 18, color: colors.foreground }}>
               {pres.well.text}
             </Text>
           </View>
@@ -305,7 +306,7 @@ function Card({
     <View
       testID="morphise-run"
       onLayout={onLayout}
-      style={{ borderRadius: 10, backgroundColor: colors.surface1, overflow: "hidden", borderWidth: 1, borderColor: withAlpha(colors.border, 0.7) }}
+      style={{ borderRadius: radius.lg, backgroundColor: colors.surface1, overflow: "hidden", borderWidth: 1, borderColor: withAlpha(colors.border, 0.7) }}
     >
       {running && !showingEarlierRun ? (
         reduced ? (
@@ -334,7 +335,7 @@ function Card({
           left: 0,
           right: 0,
           bottom: 0,
-          borderRadius: 10,
+          borderRadius: radius.lg,
           borderWidth: 1,
           borderColor: toneColor(tone, colors),
           opacity: flash,
@@ -381,7 +382,7 @@ function Header({
     <Text
       accessibilityLiveRegion="polite"
       numberOfLines={1}
-      style={{ flexShrink: 0, color: toneColor(pres.tone, colors), fontSize: 12, lineHeight: 16, fontVariant: ["tabular-nums"] }}
+      style={{ flexShrink: 0, color: toneColor(pres.tone, colors), fontSize: fontSize.sm, lineHeight: 16, fontVariant: ["tabular-nums"] }}
     >
       {pres.timerFrom !== null ? <Elapsed from={pres.timerFrom} prefix={pres.label ? `${pres.label} · ` : ""} /> : statusText(pres)}
     </Text>
@@ -403,7 +404,7 @@ function Header({
         <Text
           onLayout={command.onShownLayout}
           numberOfLines={expanded ? undefined : 1}
-          style={{ flex: 1, minWidth: 0, fontFamily: mono(), fontSize: 13, lineHeight: 18, fontWeight: "500", color: colors.foreground }}
+          style={{ flex: 1, minWidth: 0, fontFamily: mono(), fontSize: fontSize.base, lineHeight: 18, fontWeight: "500", color: colors.foreground }}
         >
           <Text selectable={false} style={{ color: colors.foregroundMuted, fontWeight: "400" }}>
             ${" "}
@@ -416,7 +417,7 @@ function Header({
           pointerEvents="none"
           onLayout={command.onFullLayout}
           numberOfLines={1}
-          style={{ position: "absolute", left: 0, top: 0, opacity: 0, fontFamily: mono(), fontSize: 13, lineHeight: 18, fontWeight: "500" }}
+          style={{ position: "absolute", left: 0, top: 0, opacity: 0, fontFamily: mono(), fontSize: fontSize.base, lineHeight: 18, fontWeight: "500" }}
         >{`$ ${first}`}</Text>
         {rest.length > 0 ? (
           <Text
@@ -424,10 +425,10 @@ function Header({
             style={{
               flexShrink: 0,
               color: colors.foregroundMuted,
-              fontSize: 11,
+              fontSize: fontSize.sm,
               lineHeight: 16,
               paddingHorizontal: 6,
-              borderRadius: 4,
+              borderRadius: radius.base,
               backgroundColor: colors.surface2,
             }}
           >{`+${rest.length} ${rest.length === 1 ? "line" : "lines"}`}</Text>
@@ -483,7 +484,7 @@ function Switcher({
       style={({ hovered }) => ({
         width: size,
         height: size,
-        borderRadius: 6,
+        borderRadius: radius.md,
         alignItems: "center",
         justifyContent: "center",
         backgroundColor: hovered && to !== null ? colors.surface2 : "transparent",
@@ -504,7 +505,7 @@ function Switcher({
       <Text
         accessibilityLiveRegion="polite"
         numberOfLines={1}
-        style={{ color: colors.foregroundMuted, fontSize: 12, lineHeight: 16, fontVariant: ["tabular-nums"] }}
+        style={{ color: colors.foregroundMuted, fontSize: fontSize.sm, lineHeight: 16, fontVariant: ["tabular-nums"] }}
       >
         {steps.label}
       </Text>
@@ -597,7 +598,7 @@ function Footer({ pres, colors, compact, actions }: { pres: Presentation; colors
               <Icon name={NOTE_ICON[note.icon]} size={12} color={colors.foregroundMuted} />
               <Text
                 numberOfLines={compact ? 2 : 1}
-                style={{ color: colors.foregroundMuted, fontSize: 12, lineHeight: 16, flexShrink: 1, fontVariant: ["tabular-nums"] }}
+                style={{ color: colors.foregroundMuted, fontSize: fontSize.sm, lineHeight: 16, flexShrink: 1, fontVariant: ["tabular-nums"] }}
               >
                 {note.text}
               </Text>
@@ -611,7 +612,7 @@ function Footer({ pres, colors, compact, actions }: { pres: Presentation; colors
           <View style={{ paddingTop: 3 }}>
             <Icon name="Info" size={12} color={colors.foregroundMuted} />
           </View>
-          <Text style={{ color: colors.foregroundMuted, fontSize: 12, lineHeight: 18, flexShrink: 1 }}>{pres.hint}</Text>
+          <Text style={{ color: colors.foregroundMuted, fontSize: fontSize.sm, lineHeight: 18, flexShrink: 1 }}>{pres.hint}</Text>
         </View>
       ) : null}
     </View>

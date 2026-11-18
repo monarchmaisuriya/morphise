@@ -15,6 +15,7 @@ import { type Chats, chatForWorkspace } from "../chats";
 import { createValueStore, type ValueStore, useValue } from "../profile-store";
 import { createStatsCache } from "./cache";
 import { Button, Card, Icon, STAT_ROW_GAP, StatTile, Tag, type Tokens, useTokens } from "../ui/kit";
+import { radius } from "../../shared/design/tokens";
 
 export const STATS_PANEL_ID = "stats";
 const REFRESH_MS = 2000;
@@ -177,7 +178,7 @@ export function StatsTiles({ t, result, wide = false, children }: { t: Tokens; r
         <View style={{ flexDirection: "row", flexWrap: "wrap", columnGap: 12, rowGap: 4 }}>
           {parts.map((part) => (
             <View key={part.key} style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-              <View style={{ width: 7, height: 7, borderRadius: 2, backgroundColor: partColor[part.key] }} />
+              <View style={{ width: 7, height: 7, borderRadius: radius.sm, backgroundColor: partColor[part.key] }} />
               <Text style={[t.text.small, { color: t.c.foregroundMuted }]}>{part.label}</Text>
               <Text style={[t.text.small, { color: t.c.foreground, fontVariant: ["tabular-nums"] }]}>{formatTokens(part.tokens)}</Text>
             </View>
@@ -213,7 +214,7 @@ export function StatsTiles({ t, result, wide = false, children }: { t: Tokens; r
     <View style={{ gap: 12 }}>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
         {chips.map(([label, value, alert]) => (
-          <View key={label} style={{ flexDirection: "row", alignItems: "center", gap: 5, height: 24, paddingHorizontal: 8, borderRadius: 6, backgroundColor: t.c.surface1 }}>
+          <View key={label} style={{ flexDirection: "row", alignItems: "center", gap: 5, height: 24, paddingHorizontal: 8, borderRadius: radius.md, backgroundColor: t.c.surface1 }}>
             <Text style={[t.text.small, { color: t.c.foregroundMuted }]}>{label}</Text>
             <Text style={[t.text.small, { color: t.c.foreground, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>{value}</Text>
             {alert ? <Text style={[t.text.small, { color: t.c.statusDanger }]}>{alert}</Text> : null}
@@ -231,7 +232,7 @@ export function StatsTiles({ t, result, wide = false, children }: { t: Tokens; r
       <View style={{ gap: 8 }}>
         {parts.map((part) => (
           <View key={part.key} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: partColor[part.key] }} />
+            <View style={{ width: 8, height: 8, borderRadius: radius.sm, backgroundColor: partColor[part.key] }} />
             <Text style={[t.text.body, { flex: 1, color: t.c.foregroundMuted }]}>{part.label}</Text>
             <Text style={[t.text.small, { fontVariant: ["tabular-nums"] }]}>{`${Math.round(part.share * 1000) / 10}%`}</Text>
             <Text style={[t.text.body, { minWidth: 64, textAlign: "right", fontWeight: "600", fontVariant: ["tabular-nums"] }]}>{formatTokens(part.tokens)}</Text>
@@ -241,7 +242,7 @@ export function StatsTiles({ t, result, wide = false, children }: { t: Tokens; r
     );
     const timeRow = (label: string, ms: number, share: number, color: string) => (
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-        <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: color }} />
+        <View style={{ width: 8, height: 8, borderRadius: radius.sm, backgroundColor: color }} />
         <Text style={[t.text.body, { flex: 1, color: t.c.foregroundMuted }]}>{label}</Text>
         <Text style={[t.text.small, { fontVariant: ["tabular-nums"] }]}>{`${Math.round(share * 100)}%`}</Text>
         <Text style={[t.text.body, { minWidth: 64, textAlign: "right", fontWeight: "600", fontVariant: ["tabular-nums"] }]}>{formatDuration(ms)}</Text>
@@ -281,7 +282,7 @@ export function StatsTiles({ t, result, wide = false, children }: { t: Tokens; r
         <Card t={t} title="Tools" icon="Wrench">
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
             {chips.map(([label, value, alert]) => (
-              <View key={label} style={{ flexDirection: "row", alignItems: "center", gap: 5, height: 26, paddingHorizontal: 10, borderRadius: 6, backgroundColor: t.c.surface1 }}>
+              <View key={label} style={{ flexDirection: "row", alignItems: "center", gap: 5, height: 26, paddingHorizontal: 10, borderRadius: radius.md, backgroundColor: t.c.surface1 }}>
                 <Text style={[t.text.small, { color: t.c.foregroundMuted }]}>{label}</Text>
                 <Text style={[t.text.small, { color: t.c.foreground, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>{value}</Text>
                 {alert ? <Text style={[t.text.small, { color: t.c.statusDanger }]}>{alert}</Text> : null}
@@ -340,7 +341,7 @@ function StatsGlance({ t, result }: { t: Tokens; result: StatsReadResult | null 
         <View style={{ flexDirection: "row", gap: 12 }}>
           {topTokenParts(stats, 2).map((part) => (
             <View key={part.key} style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-              <View style={{ width: 7, height: 7, borderRadius: 2, backgroundColor: partColor[part.key] }} />
+              <View style={{ width: 7, height: 7, borderRadius: radius.sm, backgroundColor: partColor[part.key] }} />
               <Text style={[t.text.small, { color: t.c.foregroundMuted }]}>{part.label}</Text>
               <Text style={[t.text.small, { color: t.c.foreground, fontVariant: ["tabular-nums"] }]}>{formatTokens(part.tokens)}</Text>
             </View>
@@ -411,7 +412,7 @@ function TurnsCard({ t, turns, wide }: { t: Tokens; turns: readonly TurnReading[
           const on = turn.turn === shown.turn;
           return (
             <Pressable key={turn.turn} accessibilityRole="button" accessibilityLabel={`Turn ${turn.turn}: ${formatTokens(total)} tokens, took ${formatDuration(turn.endAt > turn.startAt ? turn.endAt - turn.startAt : null)}`} onPress={() => setPicked(turn.turn)} style={{ flex: 1, maxWidth: 28, height, justifyContent: "flex-end" }}>
-              <View style={{ height: Math.max(2, (total / max) * height), borderRadius: 2, overflow: "hidden", opacity: on ? 1 : 0.55, flexDirection: "column-reverse", backgroundColor: t.c.surface2 }}>
+              <View style={{ height: Math.max(2, (total / max) * height), borderRadius: radius.sm, overflow: "hidden", opacity: on ? 1 : 0.55, flexDirection: "column-reverse", backgroundColor: t.c.surface2 }}>
                 {tokenParts(turn).map((part) => (part.share > 0 ? <View key={part.key} style={{ height: `${part.share * 100}%`, minHeight: 1, backgroundColor: partColor[part.key] }} /> : null))}
               </View>
             </Pressable>
@@ -428,7 +429,7 @@ function TurnsCard({ t, turns, wide }: { t: Tokens; turns: readonly TurnReading[
           ))}
         </View>
         {visible.map((row) => (
-          <Pressable key={row.turn} accessibilityRole="button" accessibilityLabel={`Turn ${row.turn}, ${row.tokens} tokens, took ${row.took}`} onPress={() => setPicked(row.turn)} style={{ flexDirection: "row", gap: 8, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: row.turn === shown.turn ? t.c.surface1 : undefined }}>
+          <Pressable key={row.turn} accessibilityRole="button" accessibilityLabel={`Turn ${row.turn}, ${row.tokens} tokens, took ${row.took}`} onPress={() => setPicked(row.turn)} style={{ flexDirection: "row", gap: 8, paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.md, backgroundColor: row.turn === shown.turn ? t.c.surface1 : undefined }}>
             <Text style={[t.text.body, { width: 56, fontVariant: ["tabular-nums"] }]}>{row.turn}</Text>
             {columns.map(([label, value]) => (
               <Text key={label} style={cell} numberOfLines={1}>

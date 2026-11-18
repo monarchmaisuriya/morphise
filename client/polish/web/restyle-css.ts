@@ -114,9 +114,9 @@ ${LOADERS}
 /* Queued messages: a dashed "not sent yet" row with a clock and label, quiet 26px icon actions; send-now keeps the accent. */
 [data-cp-part="queued"] { min-height: 36px !important; padding: 0 6px 0 12px !important; gap: 8px !important; align-items: center !important; box-sizing: border-box !important; border: 1px dashed var(--cp-rule) !important; border-radius: 12px !important; background-color: transparent !important; }
 [data-cp-part="queued"]::before { content: ""; order: -2; flex-shrink: 0; width: 13px; height: 13px; background-color: var(--cp-muted); -webkit-mask: ${CLOCK_MASK} center / contain no-repeat; mask: ${CLOCK_MASK} center / contain no-repeat; }
-[data-cp-part="queued"]::after { content: "Queued"; order: -1; flex-shrink: 0; font-size: 11px; color: var(--cp-muted); }
+[data-cp-part="queued"]::after { content: "Queued"; order: -1; flex-shrink: 0; font-size: 12px; color: var(--cp-muted); }
 :root[data-cp-lang="zh"] [data-cp-part="queued"]::after { content: "已排队"; }
-[data-cp-part="queued"] > div:first-child { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 13px !important; color: var(--cp-fg) !important; }
+[data-cp-part="queued"] > div:first-child { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px !important; color: var(--cp-fg) !important; }
 [data-cp-part="queued"] > div:last-child { gap: 0 !important; align-items: center !important; }
 /* The actions are matched by position (edit, then send-now): Paseo builds differ in their tags and labels. */
 [data-cp-part="queued"] > div:last-child > * { width: 26px !important; height: 26px !important; min-width: 0 !important; border: 0 !important; border-radius: 8px !important; background-color: transparent !important; box-shadow: none !important; }
@@ -154,7 +154,7 @@ ${IN_SURFACE} :is(button, [role="button"], [role="menuitem"], [role="option"], a
 :root:is(.light, .pluginLight) ${IN_SURFACE} :is(button, [role="button"], [role="menuitem"], [role="option"], a[href]):not(:disabled):not([aria-disabled="true"]):is(:hover, :focus-visible, [aria-selected="true"]) { background-color: color-mix(in srgb, var(--cp-raised), var(--cp-fg) 8%) !important; }
 /* The composer's track panels (subagents, tasks) light a row on a child inset 4px; the fill goes there, not on the full-width row, or both show. */
 :root ${TRACK_PANEL} [role="menuitem"]:not(:disabled):not([aria-disabled="true"]):is(:hover, :focus-visible, [aria-selected="true"]) { background-color: transparent !important; }
-${TRACK_PANEL} [role="menuitem"] > div { border-radius: 11px !important; }
+${TRACK_PANEL} [role="menuitem"] > div { border-radius: 12px !important; }
 @supports (corner-shape: squircle) { ${TRACK_PANEL} [role="menuitem"] > div { corner-shape: squircle; } }
 ${TRACK_PANEL} [role="menuitem"]:is(:hover, :focus-visible) > div { background-color: color-mix(in srgb, var(--cp-control), var(--cp-fg) 12%) !important; }
 :root:is(.light, .pluginLight) ${TRACK_PANEL} [role="menuitem"]:is(:hover, :focus-visible) > div { background-color: color-mix(in srgb, var(--cp-raised), var(--cp-fg) 8%) !important; }
@@ -168,7 +168,7 @@ ${TRACK_PANEL} [role="menuitem"]:is(:hover, :focus-visible) > div { background-c
 [data-cp-part="ws-card"] > :first-child { min-height: 0 !important; padding: 8px 8px 6px !important; }
 [data-cp-part="ws-card"] > :empty { min-height: 0 !important; height: 1px !important; margin: 4px 0 !important; padding: 0 !important; background-color: var(--cp-rule, var(--colors-border)) !important; }
 [data-cp-part="ws-card"] svg { width: 14px !important; height: 14px !important; flex-shrink: 0; }
-[data-cp-part="ws-card"] [dir] { font-size: 13px !important; line-height: 18px !important; }
+[data-cp-part="ws-card"] [dir] { font-size: 14px !important; line-height: 18px !important; }
 [data-cp-part="ws-card"] > :first-child [dir] { font-weight: 600 !important; color: var(--cp-fg) !important; }
 /* Between sessions only the newest card shows, gliding from the last one (watchHoverCards). */
 [data-cp-gone] { visibility: hidden !important; }
@@ -193,8 +193,8 @@ ${TRACK_PANEL} [role="menuitem"]:is(:hover, :focus-visible) > div { background-c
 [data-testid="combobox-desktop-container"]:not([${TAG}]) > div:first-child > div { padding: 4px 12px !important; }
 [data-testid="combobox-desktop-container"]:not([${TAG}]) > div:nth-child(2) button { min-height: 28px !important; margin: 0 4px !important; padding: 0 8px !important; }
 /* Picker rows sit 4px inside a 12px card with a 1px border: 12 - 1 - 4 = 7px keeps their corners concentric with the card's. */
-[data-testid="combobox-desktop-container"]:not([${TAG}="models"]) button { border-radius: 7px !important; }
-:is(:is([data-testid="combobox-desktop-container"]:not([${TAG}]) > div:nth-child(2) button, [data-cp-part="menu"] [role="menuitem"]) > div:nth-child(2), [data-testid="command-center-panel"] button > div > div:first-child > div:nth-child(2)) > :first-child { font-size: 13px !important; font-weight: 500 !important; }
+[data-testid="combobox-desktop-container"]:not([${TAG}="models"]) button { border-radius: 8px !important; }
+:is(:is([data-testid="combobox-desktop-container"]:not([${TAG}]) > div:nth-child(2) button, [data-cp-part="menu"] [role="menuitem"]) > div:nth-child(2), [data-testid="command-center-panel"] button > div > div:first-child > div:nth-child(2)) > :first-child { font-size: 14px !important; font-weight: 500 !important; }
 
 /* Pin the bottom while the chat follows output. Paseo scrolls to the bottom a frame after a row grows (streaming text, a tool call
    finishing), so one frame painted with the bottom cut off: the jitter. With every child but the last (its bottom inset) out of
@@ -215,19 +215,19 @@ ${SLASH} > div { background-color: var(--cp-raised, var(--colors-surface1)) !imp
 ${SLASH} > div > div { background-color: transparent !important; border-width: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
 ${SLASH} > div[data-cp-glide] { transition: height ${SLASH_GLIDE_MS}ms cubic-bezier(0.2, 0.8, 0.2, 1) !important; }
 [data-cp-part="slash-list"] > div > div { padding: 0 !important; }
-[data-cp-part="slash-list"] > div > div > div { min-height: 32px !important; padding: 0 10px !important; border-radius: 11px !important; }
+[data-cp-part="slash-list"] > div > div > div { min-height: 32px !important; padding: 0 10px !important; border-radius: 12px !important; }
 @supports (corner-shape: squircle) {
   ${SLASH} > div { border-radius: 28px !important; corner-shape: squircle; }
   [data-cp-part="slash-list"] > div > div > div { border-radius: 18px !important; corner-shape: squircle; }
 }
-[data-cp-part="slash-list"] > div > div > div > div > :first-child { font-size: 13px !important; font-weight: 500 !important; color: var(--cp-fg, var(--colors-foreground)) !important; }
+[data-cp-part="slash-list"] > div > div > div > div > :first-child { font-size: 14px !important; font-weight: 500 !important; color: var(--cp-fg, var(--colors-foreground)) !important; }
 [data-cp-part="slash-detail"] { display: grid !important; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 8px; row-gap: 4px; margin-top: 4px !important; padding: 10px 10px 8px !important; border-top: 1px solid var(--cp-rule, var(--colors-border)) !important; }
 [data-cp-part="slash-detail"] > :first-child { grid-area: 1 / 1; font-family: var(--cp-mono, ui-monospace, monospace) !important; font-size: 12px !important; color: var(--cp-accent, var(--colors-accent-bright)) !important; }
 /* Skill descriptions run to paragraphs; three lines, like the row above shows one. */
 [data-cp-part="slash-detail"] > :nth-child(2) { grid-area: 2 / 1 / 3 / 3; margin-top: 0 !important; font-size: 12px !important; line-height: 1.45 !important; display: -webkit-box !important; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden !important; }
-[data-cp-part="slash-detail"] > :nth-child(3) { grid-area: 1 / 2; justify-self: start; max-width: 100%; margin-top: 0 !important; padding: 1px 5px !important; border: 1px solid var(--cp-rule, var(--colors-border)) !important; border-radius: 4px !important; background-color: var(--cp-sunken, var(--colors-surface0)) !important; font-family: var(--cp-mono, ui-monospace, monospace) !important; font-size: 11px !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
+[data-cp-part="slash-detail"] > :nth-child(3) { grid-area: 1 / 2; justify-self: start; max-width: 100%; margin-top: 0 !important; padding: 1px 5px !important; border: 1px solid var(--cp-rule, var(--colors-border)) !important; border-radius: 4px !important; background-color: var(--cp-sunken, var(--colors-surface0)) !important; font-family: var(--cp-mono, ui-monospace, monospace) !important; font-size: 12px !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
 ${CHIP} { height: 24px !important; padding: 0 7px !important; border-radius: 8px !important; }
-[data-cp-part="chip"] * { font-size: 13px !important; font-weight: 500 !important; }
+[data-cp-part="chip"] * { font-size: 14px !important; font-weight: 500 !important; }
 [data-cp-part="chip"] > div > div:last-child:nth-child(3) { display: none !important; }
 ${CHIP}:hover { background-color: var(--cp-control) !important; }
 [data-testid="message-input-root"] ${COMPOSER_BUTTON} { width: 26px !important; min-width: 26px !important; height: 26px !important; border-radius: 8px !important; }
@@ -242,7 +242,7 @@ button[aria-label="Stop agent"] svg { width: 11px !important; height: 11px !impo
 [data-testid="parent-agent-callout"] { border-radius: 12px !important; border-color: var(--cp-rule) !important; padding: 8px 8px 8px 14px !important; }
 @supports (corner-shape: squircle) { [data-testid="parent-agent-callout"] { border-radius: 28px !important; corner-shape: squircle; } }
 [data-testid="parent-agent-callout-open"] { height: 28px !important; min-height: 28px !important; padding: 0 12px !important; border-radius: 8px !important; background-color: transparent !important; border: 1px solid var(--cp-rule) !important; }
-[data-testid="parent-agent-callout-open"] [dir] { font-size: 13px !important; font-weight: 500 !important; }
+[data-testid="parent-agent-callout-open"] [dir] { font-size: 14px !important; font-weight: 500 !important; }
 /* Scroll to bottom: a 36px floating control like the plugin's surfaces (rule border, lifted fill), not Paseo's 48px disc. Its margin keeps
    it centered in the 48px box Paseo positions. */
 [data-testid="scroll-to-bottom-button"] { width: 36px !important; height: 36px !important; margin: 6px !important; border: 1px solid var(--cp-rule) !important; background-color: var(--cp-control) !important; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3) !important; transition: background-color 120ms ease-out; }
@@ -255,7 +255,7 @@ button[aria-label="Stop agent"] svg { width: 11px !important; height: 11px !impo
 [role="tooltip"] > [dir] { font-size: 12px !important; line-height: 16px !important; }
 /* Timeline sync failed: the card shape of permission prompts, its text at the chat's secondary size; Retry is a secondary button (SECONDARY). */
 [data-testid="agent-timeline-sync-error"] { padding: 6px 6px 6px 14px !important; gap: 12px !important; border-radius: 12px !important; }
-[data-testid="agent-timeline-sync-error"] > [dir] { font-size: 13px !important; }
+[data-testid="agent-timeline-sync-error"] > [dir] { font-size: 14px !important; }
 
 ${PERMISSION}, ${QUESTION} { padding: 12px 14px !important; border-color: var(--cp-rule) !important; border-radius: 12px !important; }
 ${PERMISSION} > div:first-child, [data-testid="question-form-current-question"] { font-weight: 500 !important; color: var(--cp-fg) !important; }
@@ -267,7 +267,7 @@ ${QUESTION} [role="radio"] > div > div:nth-child(2) > :first-child .enrm-text > 
 [data-testid="permission-request-question"] { font-size: 12px !important; margin: 0 !important; }
 ${PERMISSION} > div:last-child, ${QUESTION} > div:last-child, ${PLAN} > div:last-child > div:last-child { justify-content: flex-end !important; }
 :is([data-cp-part="primary"], [data-cp-part="secondary"]) { height: 28px !important; padding: 0 12px !important; border-radius: 8px !important; justify-content: center !important; }
-[data-cp-part="primary"] *, [data-cp-part="secondary"] * { font-size: 13px !important; font-weight: 500 !important; }
+[data-cp-part="primary"] *, [data-cp-part="secondary"] * { font-size: 14px !important; font-weight: 500 !important; }
 [data-cp-part="secondary"] { background-color: transparent !important; border-color: var(--cp-rule) !important; }
 [data-cp-part="primary"] { background-color: var(--cp-accent) !important; border-color: var(--cp-accent) !important; }
 [data-cp-part="primary"] * { color: var(--cp-accent-fg) !important; font-weight: 600 !important; }
@@ -291,7 +291,7 @@ ${PLAN} > div:last-child { padding: 10px 16px 12px !important; border-top: 1px s
 
 [data-testid^="chat-outline-tick-"][aria-selected="true"] > div { background-color: var(--cp-accent) !important; }
 [data-testid="chat-outline-preview"] { background-color: var(--cp-raised) !important; border-radius: 12px !important; box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45) !important; }
-[data-cp-part="outline-preview"] * { font-size: 13px !important; }
+[data-cp-part="outline-preview"] * { font-size: 14px !important; }
 /* Between ticks, a copy of the last preview glides to the hovered tick until Paseo's next one takes over (ghostOutlinePreview). */
 [data-testid="chat-outline-preview"][data-cp-ghost] { pointer-events: none; animation: none !important; transition: transform 100ms cubic-bezier(0.33, 1, 0.68, 1), opacity 100ms ease-out !important; }
 [data-cp-ghost="out"] { opacity: 0; }
@@ -307,7 +307,7 @@ ${PLAN} > div:last-child { padding: 10px 16px 12px !important; border-top: 1px s
 /* Context window hover card: caps label, big percent with a bar (from data-cp-pct), plan pill, rounded limit bars, footer under a hairline. */
 ${CTX} { padding: 14px !important; gap: 14px !important; border-radius: 12px !important; border: 1px solid var(--cp-rule) !important; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3) !important; }
 ${CTX_HEAD} { display: grid !important; grid-template-columns: auto 1fr; column-gap: 6px; row-gap: 6px; align-items: baseline; }
-${CTX_HEAD} > :nth-child(1) { grid-column: 1 / -1; font-size: 11px !important; font-weight: 600 !important; letter-spacing: 0.06em; text-transform: uppercase; color: var(--cp-muted) !important; }
+${CTX_HEAD} > :nth-child(1) { grid-column: 1 / -1; font-size: 12px !important; font-weight: 600 !important; letter-spacing: 0.06em; text-transform: uppercase; color: var(--cp-muted) !important; }
 ${CTX_HEAD} > :nth-child(2) { grid-column: 1; grid-row: 2; }
 ${CTX_HEAD} > [data-cp-pct] { font-size: 0 !important; }
 ${CTX_HEAD} > [data-cp-pct]::before { content: attr(data-cp-pct) "%"; margin-right: 6px; font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--cp-fg); }
@@ -318,9 +318,9 @@ ${CTX_HEAD}[data-cp-level]::after { content: ""; grid-column: 1 / -1; grid-row: 
 ${CTX_HEAD}[data-cp-level="high"]::after { background: linear-gradient(to right, var(--cp-warn) var(--cp-pct), var(--cp-control) 0); }
 ${CTX_HEAD} > :nth-child(4) { grid-column: 1 / -1; grid-row: 4; font-size: 12px !important; color: var(--cp-muted) !important; }
 ${CTX} > div:nth-child(2) { background-color: var(--cp-rule) !important; }
-${USAGE} > div:first-child > div:nth-child(2) { font-size: 13px !important; font-weight: 500 !important; color: var(--cp-fg) !important; }
+${USAGE} > div:first-child > div:nth-child(2) { font-size: 14px !important; font-weight: 500 !important; color: var(--cp-fg) !important; }
 ${USAGE} > div:first-child > div:nth-child(3) { background-color: transparent !important; border: 1px solid var(--cp-rule) !important; padding: 0 7px !important; }
-[data-cp-part="usage-plan"] > div { font-size: 11px !important; }
+[data-cp-part="usage-plan"] > div { font-size: 12px !important; }
 ${USAGE} > div:nth-child(2) { gap: 10px !important; }
 ${LIMIT} { margin: 0 !important; padding: 0 !important; }
 [data-cp-part="limit-body"] { gap: 6px !important; }
@@ -331,7 +331,7 @@ ${USAGE} > div:nth-child(3) { padding-top: 12px !important; border-top: 1px soli
 [data-cp-compact] { margin: -6px -6px 0; }
 [data-cp-compact] > button { display: flex; flex: 1; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border: 0; border-radius: 8px; background: transparent; color: var(--cp-fg); font: inherit; font-size: 12px; font-weight: 500; text-align: left; cursor: pointer; }
 [data-cp-compact] > button:hover { background-color: var(--cp-control); }
-[data-cp-compact] > button > span:last-child { margin-left: auto; font-size: 11px; font-weight: 400; color: var(--cp-muted); }
+[data-cp-compact] > button > span:last-child { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--cp-muted); }
 [data-cp-compact][data-cp-level="high"] > button { color: var(--cp-warn); }
 [data-cp-compact] > button[disabled] { opacity: 0.6; cursor: default; }
 [data-cp-compact] svg { width: 13px; height: 13px; flex-shrink: 0; }
@@ -433,8 +433,8 @@ ${SUMMARY_ICON}:not([data-cp-chev])::before { content: ""; position: absolute; l
 [data-cp-part="badge-body"] > div { gap: 0 !important; }
 [data-cp-part="tool-section"] { padding: 9px 12px !important; gap: 4px !important; border-color: var(--cp-rule) !important; }
 [data-cp-part="tool-section"]:last-child { border-bottom-width: 0 !important; }
-[data-cp-part="tool-section"] > [dir]:first-child { font-size: 10px !important; font-weight: 600 !important; letter-spacing: 0.8px; text-transform: uppercase; color: var(--cp-muted) !important; }
-[data-cp-part="tool-section"] > [dir]:last-child { font-size: 13px !important; }
+[data-cp-part="tool-section"] > [dir]:first-child { font-size: 12px !important; font-weight: 600 !important; letter-spacing: 0.8px; text-transform: uppercase; color: var(--cp-muted) !important; }
+[data-cp-part="tool-section"] > [dir]:last-child { font-size: 14px !important; }
 /* Long values scroll inside, as the plugin's block does past 320px. */
 [data-cp-part="tool-section"] > div:not([dir]) { gap: 4px !important; max-height: 320px; overflow: auto; }
 [data-cp-part="tool-section"] > div:not([dir]) > div { gap: 12px !important; }
@@ -475,10 +475,10 @@ ${BUBBLE} > button > [dir] { font-size: 12px !important; font-weight: 500 !impor
 [data-cp-part="att-images"] > :only-child { width: 240px !important; height: 160px !important; }
 [data-cp-part="att-images"] > *:hover { filter: brightness(1.08); }
 [data-cp-part="att-images"] > * > div, [data-cp-part="att-images"] > * > div > * { width: 100% !important; height: 100% !important; }
-[data-cp-part="att-files"] > * { border-radius: 10px !important; border: 1px solid var(--cp-rule) !important; }
+[data-cp-part="att-files"] > * { border-radius: 8px !important; border: 1px solid var(--cp-rule) !important; }
 [data-cp-part="att-files"] > * > div { height: 48px !important; max-width: 280px !important; padding: 0 14px 0 8px !important; gap: 10px !important; background-color: var(--cp-raised) !important; }
 [data-cp-part="att-icon"] { width: 32px !important; height: 32px !important; border-radius: 8px; background-color: var(--cp-control); }
-[data-cp-part="att-files"] > * > div > :last-child > :first-child { font-size: 13px !important; font-weight: 500 !important; color: var(--cp-fg) !important; }
+[data-cp-part="att-files"] > * > div > :last-child > :first-child { font-size: 14px !important; font-weight: 500 !important; color: var(--cp-fg) !important; }
 [data-cp-part="att-files"] > * > div > :last-child > :last-child { font-size: 12px !important; color: var(--cp-muted) !important; }
 /* Density (Prefs.density) and faded row strength (Prefs.steps) as variables the rules below read; views.tsx matches them (TIGHT, QUIET). */
 :root { --cp-d-item: 6px; --cp-d-pad: 4px; --cp-d-row-top: 2px; --cp-d-row-bottom: -8px; --cp-d-footer: 16px; --cp-d-prompt: 8px; --cp-d-li: 6px; --cp-quiet: 0.45; }

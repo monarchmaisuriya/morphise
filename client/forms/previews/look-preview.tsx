@@ -15,6 +15,7 @@ import { PreviewNote, PREVIEW_FRAME } from "./parts";
 import { SAMPLE_CODE } from "./samples";
 import { IconSetRow } from "./web/icon-set-row";
 import { LoaderTile } from "./web/loader-tile";
+import { fontSize, radius } from "../../../shared/design/tokens";
 
 const ICONS = ["Folder", "GitBranch", "Terminal", "Search", "Settings", "MessageSquare"] as const;
 const SIDEBAR_ROWS = ["Auth middleware", "Billing fix", "Docs pass"];
@@ -29,7 +30,7 @@ function Working({ theme, prefs }: { theme: PluginTheme; prefs: Prefs }) {
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
       {LoaderTile ? <LoaderTile loader={prefs.loader} size={prefs.loaderSize} tint={loaderTint(prefs.loaderColor, c)} /> : <Icon name="Loader" size={14} color={loaderTint(prefs.loaderColor, c)} />}
-      <Text style={{ color: c.foregroundMuted, fontSize: 11 }}>{`${say(`prefs.loader.${prefs.loader}` as MessageKey)} · 12s`}</Text>
+      <Text style={{ color: c.foregroundMuted, fontSize: fontSize.sm }}>{`${say(`prefs.loader.${prefs.loader}` as MessageKey)} · 12s`}</Text>
     </View>
   );
 }
@@ -44,8 +45,8 @@ function MockWindow({ theme, sidebar, prefs, compact }: { theme: PluginTheme; si
   const panel: ReactNode = (
     <View style={{ flex: 1, backgroundColor: c.surface0, ...(floating ? { margin: gap, marginLeft: 0, borderRadius: prefs.floatingRadius, borderWidth: 1, borderColor: c.border, overflow: "hidden" } : null) }}>
       <View style={{ height: 28, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border }}>
-        <Text style={{ color: c.foreground, fontSize: 11, fontWeight: "500" }}>Auth middleware</Text>
-        <Text style={{ color: c.foregroundMuted, fontSize: 10 }}>paseo-api</Text>
+        <Text style={{ color: c.foreground, fontSize: fontSize.sm, fontWeight: "500" }}>Auth middleware</Text>
+        <Text style={{ color: c.foregroundMuted, fontSize: fontSize.sm }}>paseo-api</Text>
       </View>
       <View style={{ flex: 1, paddingVertical: 10, alignItems: "center" }}>
         <View accessibilityLabel="Chat column" style={{ width: `${Math.round(share * 100)}%`, paddingHorizontal: 8, gap: 7, borderLeftWidth: 1, borderRightWidth: 1, borderColor: c.surface2 }}>
@@ -59,11 +60,11 @@ function MockWindow({ theme, sidebar, prefs, compact }: { theme: PluginTheme; si
     </View>
   );
   return (
-    <View style={{ height: compact ? 170 : 190, flexDirection: "row", borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: c.border, overflow: "hidden", backgroundColor: floating ? sidebar : c.surface0 }}>
+    <View style={{ height: compact ? 170 : 190, flexDirection: "row", borderRadius: radius.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: c.border, overflow: "hidden", backgroundColor: floating ? sidebar : c.surface0 }}>
       <View style={{ width: compact ? 88 : 128, paddingTop: 10, paddingHorizontal: 8, gap: 4, backgroundColor: sidebar, borderRightWidth: style === "paseo" ? 1 : 0, borderRightColor: c.border, ...(floating ? { marginRight: gap } : null) }}>
         {SIDEBAR_ROWS.map((name, index) => (
-          <View key={name} style={{ height: 22, justifyContent: "center", paddingHorizontal: 6, borderRadius: 6, backgroundColor: index === 0 ? c.surface1 : "transparent" }}>
-            <Text style={{ color: index === 0 ? c.foreground : c.foregroundMuted, fontSize: 11 }} numberOfLines={1}>
+          <View key={name} style={{ height: 22, justifyContent: "center", paddingHorizontal: 6, borderRadius: radius.md, backgroundColor: index === 0 ? c.surface1 : "transparent" }}>
+            <Text style={{ color: index === 0 ? c.foreground : c.foregroundMuted, fontSize: fontSize.sm }} numberOfLines={1}>
               {name}
             </Text>
           </View>
@@ -103,7 +104,7 @@ export function LookPreview({ theme, prefs, profileTheme, compact = false }: { t
         {restyled ? null : <PreviewNote theme={theme} text="Window, reply width, working indicator and icon set apply while Restyle Paseo is on." />}
         {restyled && !LoaderTile ? <PreviewNote theme={theme} text="The working indicator runs here on desktop and web." /> : null}
         <MockWindow theme={shown} sidebar={sidebar} prefs={prefs} compact={compact} />
-        <View style={{ gap: 12, padding: 12, borderRadius: 10, backgroundColor: c.surface0, borderWidth: StyleSheet.hairlineWidth, borderColor: c.border }}>
+        <View style={{ gap: 12, padding: 12, borderRadius: radius.lg, backgroundColor: c.surface0, borderWidth: StyleSheet.hairlineWidth, borderColor: c.border }}>
           {swapped === null ? (
             <View style={{ flexDirection: "row", gap: 14 }}>
               {ICONS.map((name) => (

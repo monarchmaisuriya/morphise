@@ -10,6 +10,7 @@ import { Icon, IconButton, type Tokens } from "../ui/kit";
 import { agentAgo, agentFields, type CardButtons, type CardFacts, ProjectTile, STATUS_WORDS, StopButton, subtasksText } from "./card";
 import type { CardLive } from "./data";
 import { onRightClick, reveal } from "./web";
+import { fontSize } from "../../shared/design/tokens";
 
 // One agent in the Agents view's list, as agent overviews draw it (Claude Code, GitHub): a status icon, the title
 // and, on the same line, what the agent asks, does or failed on (else its first prompt); quiet facts at the right.
@@ -52,7 +53,7 @@ export function AgentRow({ t, facts, card, now, live, selected, focused, buttons
       title={headline.title}
       detail={
         detail ? (
-          <Text style={{ fontSize: 12, color: lineTone, flex: 1, minWidth: 0 }} numberOfLines={1}>
+          <Text style={{ fontSize: fontSize.sm, color: lineTone, flex: 1, minWidth: 0 }} numberOfLines={1}>
             {detail}
           </Text>
         ) : undefined
@@ -82,7 +83,7 @@ export function AgentRow({ t, facts, card, now, live, selected, focused, buttons
           {pullRequest ? <Fact t={t} icon="GitPullRequest" text={pullRequest} /> : null}
           {model ? <Fact t={t} text={model} /> : null}
           {time ? (
-            <Text style={{ fontSize: 12, color: t.c.foregroundMuted, minWidth: 52, textAlign: "right", fontVariant: ["tabular-nums"] }} numberOfLines={1}>
+            <Text style={{ fontSize: fontSize.sm, color: t.c.foregroundMuted, minWidth: 52, textAlign: "right", fontVariant: ["tabular-nums"] }} numberOfLines={1}>
               {time}
             </Text>
           ) : null}

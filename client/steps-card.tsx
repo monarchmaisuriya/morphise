@@ -9,6 +9,7 @@ import { createValueStore, useValue, type ValueStore } from "./profile-store";
 import { Icon, IconButton, type Tokens, useTokens } from "./ui/kit";
 import { usePulse } from "./ui/pulse";
 import { alpha, Expand, Row, useIndent, useSpacing, useStyles } from "./polish/rows/row";
+import { fontSize, radius } from "../shared/design/tokens";
 
 type Paseo = ReturnType<typeof usePaseo>;
 
@@ -149,7 +150,7 @@ function StepRow({ step, t }: { step: Step; t: Tokens }) {
           <Icon name="Circle" size={13} color={c.foregroundMuted} />
         )}
       </View>
-      <Text style={{ flex: 1, fontSize: 12, lineHeight: 18, color: step.status === "completed" ? c.foregroundMuted : c.foreground, textDecorationLine: step.status === "completed" ? "line-through" : "none" }} numberOfLines={2}>
+      <Text style={{ flex: 1, fontSize: fontSize.sm, lineHeight: 18, color: step.status === "completed" ? c.foregroundMuted : c.foreground, textDecorationLine: step.status === "completed" ? "line-through" : "none" }} numberOfLines={2}>
         {step.text}
       </Text>
     </View>
@@ -254,19 +255,19 @@ export function StepsCardView({ plan, t, options, title = null, inline = false, 
   const { rows, more } = inline ? { rows: steps, more: 0 } : listedSteps(steps, options);
   const listShown = !folded && (mode === "plan" || inline);
   return (
-    <View accessibilityLabel={`Steps${title ? ` of ${title}` : ""}, ${done} of ${total} done`} style={{ marginHorizontal: inline ? 0 : 8, marginVertical: inline ? 6 : 3, padding: inline ? 12 : 8, gap: 4, borderRadius: inline ? 12 : 10, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1 }}>
+    <View accessibilityLabel={`Steps${title ? ` of ${title}` : ""}, ${done} of ${total} done`} style={{ marginHorizontal: inline ? 0 : 8, marginVertical: inline ? 6 : 3, padding: inline ? 12 : 8, gap: 4, borderRadius: inline ? radius.xl : radius.lg, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1 }}>
       {title ? (
-        <Text style={{ fontSize: 11, color: t.c.foregroundMuted }} numberOfLines={1}>
+        <Text style={{ fontSize: fontSize.sm, color: t.c.foregroundMuted }} numberOfLines={1}>
           {title}
         </Text>
       ) : null}
       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
         <Pressable accessibilityRole="button" accessibilityState={{ expanded: listShown }} accessibilityLabel={folded ? "Show the steps" : "Hide the step list"} onPress={() => setFolded(!folded)} style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 6, minHeight: 22 }}>
           <Icon name={mode === "done" ? "CircleCheck" : "ListChecks"} size={13} color={mode === "done" ? t.c.statusSuccess : t.c.foregroundMuted} />
-          <Text style={{ fontSize: 12, fontWeight: "600", color: t.c.foreground }}>{mode === "done" ? `All ${total} done` : "Steps"}</Text>
-          {mode === "plan" ? <Text style={{ fontSize: 12, color: t.c.foregroundMuted }}>{`${done}/${total}`}</Text> : null}
+          <Text style={{ fontSize: fontSize.sm, fontWeight: "600", color: t.c.foreground }}>{mode === "done" ? `All ${total} done` : "Steps"}</Text>
+          {mode === "plan" ? <Text style={{ fontSize: fontSize.sm, color: t.c.foregroundMuted }}>{`${done}/${total}`}</Text> : null}
           {mode === "plan" && folded && current ? (
-            <Text style={{ flex: 1, fontSize: 12, color: t.c.foregroundMuted }} numberOfLines={1}>
+            <Text style={{ flex: 1, fontSize: fontSize.sm, color: t.c.foregroundMuted }} numberOfLines={1}>
               {current.text}
             </Text>
           ) : null}
@@ -281,7 +282,7 @@ export function StepsCardView({ plan, t, options, title = null, inline = false, 
           {rows.map((step, index) => (
             <StepRow key={`${index}:${step.text}`} step={step} t={t} />
           ))}
-          {more > 0 ? <Text style={{ fontSize: 11, color: t.c.foregroundMuted, paddingLeft: 22, paddingTop: 2 }}>{`${more} more`}</Text> : null}
+          {more > 0 ? <Text style={{ fontSize: fontSize.sm, color: t.c.foregroundMuted, paddingLeft: 22, paddingTop: 2 }}>{`${more} more`}</Text> : null}
         </ScrollView>
       ) : null}
     </View>

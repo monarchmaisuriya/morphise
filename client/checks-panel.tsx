@@ -6,6 +6,7 @@ import { type ValueStore, useValue } from "./profile-store";
 import { Button, Icon, type Tokens, useTokens } from "./ui/kit";
 import { PURPLE } from "./ui/hues";
 import type { CheckRun, PullRequestInfo, WorkspaceList } from "./workspaces";
+import { fontSize, radius } from "../shared/design/tokens";
 
 // A workspace's pull request at a glance: its state, review, merge conflicts and every check, with
 // "Ask the agent to fix" putting a message naming what failed into the open chat's message box.
@@ -29,7 +30,7 @@ function Fact({ t, icon, color, text }: { t: Tokens; icon: string; color: string
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
       <Icon name={icon} size={13} color={color} />
-      <Text style={{ color: t.c.foreground, fontSize: 13 }}>{text}</Text>
+      <Text style={{ color: t.c.foreground, fontSize: fontSize.base }}>{text}</Text>
     </View>
   );
 }
@@ -63,7 +64,7 @@ export function createChecksPanel(deps: ChecksDeps) {
     return (
       <ScrollView style={{ flex: 1, backgroundColor: theme.colors.surface0 }} contentContainerStyle={{ padding: t.inset, gap: 12 }}>
         <Pressable accessibilityRole="link" accessibilityLabel={`Open pull request ${pr.number ?? ""} on GitHub`} onPress={() => void openExternalUrl(pr.url)} style={{ gap: 2 }}>
-          <Text style={{ color: t.c.foreground, fontSize: 15, fontWeight: "600" }} numberOfLines={2}>
+          <Text style={{ color: t.c.foreground, fontSize: fontSize.content, fontWeight: "600" }} numberOfLines={2}>
             {pr.number ? `#${pr.number} ` : ""}
             {pr.title || "Pull request"}
           </Text>
@@ -89,10 +90,10 @@ export function createChecksPanel(deps: ChecksDeps) {
               accessibilityLabel={`${run.name}, ${run.status}${run.url ? ", open its page" : ""}`}
               disabled={!run.url}
               onPress={() => run.url && void openExternalUrl(run.url)}
-              style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6, paddingHorizontal: 6, borderRadius: 6, backgroundColor: pressed ? t.c.surface2 : "transparent" })}
+              style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6, paddingHorizontal: 6, borderRadius: radius.md, backgroundColor: pressed ? t.c.surface2 : "transparent" })}
             >
               <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: runColor(t, run.status) }} />
-              <Text style={{ flex: 1, color: t.c.foreground, fontSize: 13 }} numberOfLines={1}>
+              <Text style={{ flex: 1, color: t.c.foreground, fontSize: fontSize.base }} numberOfLines={1}>
                 {run.name}
               </Text>
               {run.workflow ? <Text style={t.text.meta} numberOfLines={1}>{run.workflow}</Text> : null}

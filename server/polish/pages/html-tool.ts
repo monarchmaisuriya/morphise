@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { Script } from "node:vm";
 import { HTML_GUIDE_TOOL, HTML_PREVIEW_TOOL, HTML_SERVER, HTML_TOOL, heightsLine, localImages, pageIdLine, replacesLine } from "../../../shared/polish/html";
 import { GUIDE_TOPICS, guideText } from "./guide";
-import { PAGE_POLICY } from "../../../shared/polish/page";
+import { PAGE_POLICY, unbalancedStyles } from "../../../shared/polish/page";
 import { ImageTooLarge, openInFolder } from "../media/image";
 import { folderOfToken } from "./agent-folders";
 import { headlessShell } from "./headless-shell";
@@ -46,9 +46,10 @@ Page
 - Content sets the height. Never use vh units or height:100% on html or body; give charts and canvases fixed pixel heights.
 
 Theme
-CSS variables that follow the user's theme live; use only them for color: --fg, --muted, --bg, --surface, --border, --accent, --accent-fg, --success, --warning, --danger, --chart-1 to --chart-6, --radius, --font, --mono. Built-in classes: .stack, .row, .grid, .card, .stat (.stat is a tile: a .label then a .value), .chip, .muted, .small, .num (.num right-aligns numbers in table cells; elsewhere it only lines digits up), .scroll; buttons (.primary), inputs, selects, range sliders, tables, details, links, code and kbd are styled. data-tip="…" on any element gives it a themed hover and focus hint. Charts, tables and galleries are interactive and fit the width on their own: tooltips, keyboard, legend toggles, tables that scroll sideways in their box.
+CSS variables that follow the user's theme live; use only them for color: --fg, --muted, --bg, --surface, --surface-2, --border, --accent, --accent-fg, --success, --warning, --danger, --chart-1 to --chart-6, --radius, --font, --mono. Built-in classes: .stack, .row, .grid, .card, .stat (.stat is a tile: a .label then a .value), .chip, .muted, .small, .num (.num right-aligns numbers in table cells; elsewhere it only lines digits up), .scroll; buttons (.primary), inputs, selects, range sliders, tables, details, links, code and kbd are styled. data-tip="…" on any element gives it a themed hover and focus hint. Charts, tables and galleries are interactive and fit the width on their own: tooltips, keyboard, legend toggles, tables that scroll sideways in their box.
+Don't style text, headings, links, lists, quotes, code, tables, chips, cards, stats, buttons or inputs: the kit draws them like the chat's own replies, and a page's own styles for them are ignored. Write CSS only for layout (grid, flex, widths, positions, hiding) and for drawings (SVG, canvas). Status words in tables are plain text; use .chip.good, .warn, .bad or .info elsewhere. Show a selected button or tab with aria-pressed or aria-selected. A cell's inline background (a heatmap) is kept.
 
-The tool lays the page out at 700 and 360px before showing it; when it finds script errors, overlapping or cut-off text, overflow or a moving height, it shows nothing and returns them for you to fix.`;
+The tool lays the page out at 700 and 360px before showing it; when it finds script errors, overlapping or cut-off text, overflow, a moving height or styles that restyle what the kit draws, it shows nothing and returns them for you to fix.`;
 
 /**
  * Added to a new agent's system prompt while pages are on: when to draw one, and the layout rules, since a description can load late and the
@@ -146,6 +147,49 @@ async function imageError(html: string, folder: string | undefined) {
   return large ? `${large} is over 12 MB; use a smaller image.` : undefined;
 }
 
+// What the kit draws (./page.ts KIT_LOOK) and the inline styles that would restyle it: an inline style outranks every rule, so these are
+// the one way a page's own look could still win. Layout (grid, sizes, positions) and drawings' own colours are the page's to set.
+const KIT_DRAWN = /^(?:table|thead|tbody|tfoot|tr|th|td|h[1-6]|button|input|select|textarea)$/;
+const KIT_CLASSES = /(?:^|\s)(?:chip|card|stat)(?:\s|$)/;
+const LOOK_PROPERTY = /^(?:color|background(?:-[a-z-]+)?|border(?:-[a-z-]+)?|font(?:-[a-z-]+)?|padding(?:-[a-z-]+)?)$/;
+// Text the browser never reads as markup: comments, scripts, the kit-free bodies of templates and text areas, and style blocks (checked apart).
+const NOT_MARKUP = /<!--[\s\S]*?(?:-->|$)|<(script|style|template|textarea)\b[^>]*>[\s\S]*?(?:<\/\1\s*>|$)/gi;
+const STYLE_TEXT = /<!--[\s\S]*?(?:-->|$)|<(script|template|textarea)\b[^>]*>[\s\S]*?(?:<\/\1\s*>|$)|<style\b[^>]*>([\s\S]*?)(?:<\/style\s*>|$)/gi;
+const TAG = /<(\/?)([a-zA-Z][\w-]*)\b((?:[^>"']|"[^"]*"|'[^']*')*)>/g;
+const attribute = (attrs: string, name: string) => new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, "i").exec(attrs)?.slice(1).find((v) => v !== undefined);
+
+/**
+ * Problems with a page restyling what the kit draws, which html_render rejects unless forced: !important (it beats the kit from the
+ * page's own layer), an inline look on a table, heading, chip, card, stat or control, or on anything inside a table cell (status words in
+ * tables are plain text), and a style block whose braces don't balance (it can't go in the page's layer). A cell's own background stays.
+ */
+export function ownLookProblems(html: string): string[] {
+  const problems: string[] = [];
+  const important = [...html.matchAll(STYLE_TEXT)].map((m) => m[2]).filter((css): css is string => css !== undefined).map((css) => css.replace(/\/\*[\s\S]*?\*\//g, "")).find((css) => /!\s*important/i.test(css));
+  const markup = html.replace(NOT_MARKUP, "");
+  let cells = 0;
+  const looks: string[] = [];
+  let inlineImportant = false;
+  for (const [, closing, rawName, attrs] of markup.matchAll(TAG)) {
+    const name = rawName!.toLowerCase();
+    if (/^(?:td|th)$/.test(name)) cells = closing ? Math.max(0, cells - 1) : cells + 1;
+    else if (/^(?:tr|tbody|thead|tfoot|table)$/.test(name)) cells = 0;
+    if (closing) continue;
+    const style = attribute(attrs!, "style");
+    if (!style) continue;
+    if (/!\s*important/i.test(style)) inlineImportant = true;
+    const cls = attribute(attrs!, "class") ?? "";
+    const inCell = cells > 0 && !/^(?:td|th)$/.test(name);
+    if (!(KIT_DRAWN.test(name) || KIT_CLASSES.test(cls) || inCell)) continue;
+    const props = style.split(";").map((d) => d.split(":")[0]!.trim().toLowerCase()).filter((p) => LOOK_PROPERTY.test(p) && !(/^(?:td|th)$/.test(name) && /^background/.test(p)));
+    if (props.length && looks.length < 3) looks.push(`<${name}${cls ? ` class="${cls}"` : ""}>${inCell ? " (in a table cell)" : ""} sets ${props.join(", ")}`);
+  }
+  if (important || inlineImportant) problems.push(`The page's CSS uses !important${important ? ` (${important.trim().slice(0, 60)})` : " in a style attribute"}; the kit draws text, tables and controls like the chat, so remove it.`);
+  for (const look of looks) problems.push(`${look}; the kit draws tables, headings, chips, cards, stats and controls like the chat and keeps cell text plain, so drop it (layout such as width or grid is fine).`);
+  for (const css of unbalancedStyles(html).slice(0, 1)) problems.push(`A <style> block has unbalanced braces (${css.trim().slice(0, 60)}); fix the CSS.`);
+  return problems;
+}
+
 /** Who is calling the tools: the working folder its token was issued for, or none for a chat holding the shared token (created before per-agent tokens). */
 interface Caller {
   folder: string | undefined;
@@ -184,11 +228,16 @@ export async function mcpAnswer(m: RpcMessage, caller: Caller) {
   const problem = (vh && `The page uses a viewport height unit (${vh}). Let content set the height, or use fixed pixel heights.`) || scriptError(html) || (await imageError(html, caller.folder));
   // The chat still shows the page's images inside its folder; the agent should know nothing here looked at them.
   const unread = !caller.folder && localImages(html).length > 0 && "Local images were not checked for this chat; a new chat can preview them.";
-  if (preview) return result(previewAnswer(problem, await checkPage(html, caller.folder), unread || undefined));
+  // Forceable, and found from the source, so they hold whether or not the layout check can run.
+  const looks = ownLookProblems(html);
+  if (preview) return result(previewAnswer(problem, await checkPage(html, caller.folder), unread || undefined, looks));
   if (problem) return text(problem, true);
-  const check = m.params?.arguments?.force === true ? undefined : await checkPage(html, caller.folder);
-  if (check?.problems.length) {
-    return text(`The page was laid out as the chat shows it, and a reader would see these problems. Fix them and call ${HTML_TOOL} again; pass force: true only if every one is on purpose.\n- ${check.problems.join("\n- ")}`, true);
+  const forced = m.params?.arguments?.force === true;
+  const check = forced ? undefined : await checkPage(html, caller.folder);
+  const problems = forced ? [] : [...looks, ...(check?.problems ?? [])];
+  if (problems.length) {
+    const found = check?.problems.length ? "The page was laid out as the chat shows it, and a reader would see these problems." : "The page has these problems.";
+    return text(`${found} Fix them and call ${HTML_TOOL} again; pass force: true only if every one is on purpose.\n- ${problems.join("\n- ")}`, true);
   }
   const shown = "Shown to the reader above your reply. Don't say it's shown and don't describe it; reply in one or two sentences with what it doesn't say: a takeaway, a caveat or a next step.";
   // The browser is there but the check didn't run (it couldn't start, or failed): the agent should know nothing vouched for the page.
@@ -203,8 +252,8 @@ export async function mcpAnswer(m: RpcMessage, caller: Caller) {
  * What html_preview tells the agent: everything html_render would, as notes rather than a rejection. The screenshot comes only once the
  * checks pass: until then the problems say what to fix, and Paseo shows every image a tool returns in the chat.
  */
-function previewAnswer(problem: string | undefined, check: PageCheck | undefined, unread?: string) {
-  const problems = [problem, ...(check?.problems ?? [])].filter(Boolean);
+function previewAnswer(problem: string | undefined, check: PageCheck | undefined, unread?: string, looks: string[] = []) {
+  const problems = [problem, ...looks, ...(check?.problems ?? [])].filter(Boolean);
   const height = (width: number) => check?.heights.find(([w]) => w === width)?.[1];
   const heights = height(700) && height(360) ? [`Height: ${height(700)}px at 700px wide, ${height(360)}px at 360px.`] : [];
   const text = [

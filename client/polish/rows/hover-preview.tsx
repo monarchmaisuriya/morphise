@@ -6,6 +6,7 @@ import { Platform, View } from "react-native";
 import { cannotHover } from "../../web";
 import { usePrefs } from "../prefs";
 import { attachPreview, previewControl } from "../web/hover-previews";
+import { radius } from "../../../shared/design/tokens";
 
 /** A row's hover state; `available` is whether the row has something to preview right now (it is folded and has content). */
 export function useHoverPreview(available: boolean) {
@@ -32,7 +33,7 @@ export function HoverPreview({ theme, hover, children }: { theme: PluginTheme; h
   useLayoutEffect(() => attachPreview(box.current, row.current, { enter: control.enterPreview, leave: control.leavePreview, dismiss: control.dismiss }), [row, control]);
   const c = theme.colors;
   return (
-    <View ref={box} style={{ position: "absolute", padding: 10, borderRadius: 10, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface0 }}>
+    <View ref={box} style={{ position: "absolute", padding: 10, borderRadius: radius.lg, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface0 }}>
       {children}
     </View>
   );

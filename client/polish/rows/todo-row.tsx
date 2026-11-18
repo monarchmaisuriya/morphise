@@ -12,6 +12,7 @@ import { useRowSetup } from "./look";
 import { todoData, type todoSchema } from "./model";
 import { FadeIn, INDENT, PMONO, Row, useDisclosure, useIndent, usePulse, useStyles, useTween } from "./row";
 import { changesOfTodo, stepKey, type TaskChange } from "./steps";
+import { radius } from "../../../shared/design/tokens";
 
 const CHANGE_KEYS = { added: "chat.change.added", started: "chat.change.started", completed: "chat.change.completed" } as const;
 
@@ -98,7 +99,7 @@ export function TodoItem({ item, theme }: PluginTimelineItemProps<z.output<typeo
         onHoverOut={() => setHovered(false)}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
-        style={[s.row, { gap: 10, borderRadius: 6 }]}
+        style={[s.row, { gap: 10, borderRadius: radius.md }]}
       >
         <View style={s.slot}>
           <Icon name="ListChecks" size={15} color={look.accent ?? c.foregroundMuted} />

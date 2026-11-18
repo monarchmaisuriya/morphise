@@ -14,6 +14,7 @@ import type { ValueStore } from "../profile-store";
 import { Button, Card, Icon, PopoverHost, Segmented, Select, STAT_ROW_GAP, StatTile, type Tokens, useTokens } from "../ui/kit";
 import type { WorkspaceList } from "../workspaces";
 import { Terminals } from "./terminals";
+import { fontSize, radius } from "../../shared/design/tokens";
 
 const INDEXING_POLL_MS = 3000;
 const POLL_MS = 15_000;
@@ -76,7 +77,7 @@ function MiniBars({ t, values, color }: { t: Tokens; values: readonly number[]; 
   return (
     <View accessibilityLabel={`Last 14 days: ${values.join(", ")}`} style={{ flexDirection: "row", alignItems: "flex-end", gap: 2, height: 28 }}>
       {values.map((value, index) => (
-        <View key={index} style={{ flex: 1, height: Math.max(2, (value / max) * 28), borderRadius: 1.5, backgroundColor: value ? (index === values.length - 1 ? color : withAlpha(color, 0.55) ?? color) : t.c.surface2 }} />
+        <View key={index} style={{ flex: 1, height: Math.max(2, (value / max) * 28), borderRadius: radius.sm, backgroundColor: value ? (index === values.length - 1 ? color : withAlpha(color, 0.55) ?? color) : t.c.surface2 }} />
       ))}
     </View>
   );
@@ -147,7 +148,7 @@ function Heatmap({ t, summary }: { t: Tokens; summary: ActivitySummary }) {
         <View style={{ flexDirection: "row", gap }}>
           <View style={{ width: labelColumn - gap, gap, paddingTop: 16 }}>
             {WEEKDAYS.map((name, index) => (
-              <Text key={name} style={[t.text.small, { height: cell, lineHeight: cell, fontSize: 10 }]}>
+              <Text key={name} style={[t.text.small, { height: cell, lineHeight: cell, fontSize: fontSize.sm }]}>
                 {index % 2 ? name : ""}
               </Text>
             ))}
@@ -155,7 +156,7 @@ function Heatmap({ t, summary }: { t: Tokens; summary: ActivitySummary }) {
           <View style={{ gap: 4 }}>
             <View style={{ flexDirection: "row", gap, height: 12 }}>
               {months.map((month, week) => (
-                <Text key={week} style={[t.text.small, { width: cell, overflow: "visible", fontSize: 10 }]} numberOfLines={1}>
+                <Text key={week} style={[t.text.small, { width: cell, overflow: "visible", fontSize: fontSize.sm }]} numberOfLines={1}>
                   {month}
                 </Text>
               ))}
@@ -167,7 +168,7 @@ function Heatmap({ t, summary }: { t: Tokens; summary: ActivitySummary }) {
                     const index = week * 7 + weekday;
                     if (index >= cells.length) return <View key={weekday} style={{ width: cell, height: cell }} />;
                     const day = new Date(start + index * 86_400_000).toISOString().slice(0, 10);
-                    return <View key={weekday} accessibilityLabel={`${day}: ${cells[index]}`} style={{ width: cell, height: cell, borderRadius: 3, backgroundColor: shade(cells[index]) }} />;
+                    return <View key={weekday} accessibilityLabel={`${day}: ${cells[index]}`} style={{ width: cell, height: cell, borderRadius: radius.base, backgroundColor: shade(cells[index]) }} />;
                   })}
                 </View>
               ))}
@@ -179,7 +180,7 @@ function Heatmap({ t, summary }: { t: Tokens; summary: ActivitySummary }) {
         <Text style={[t.text.small, { flex: 1 }]}>{`${activeDays} active ${activeDays === 1 ? "day" : "days"} in the last year`}</Text>
         <Text style={t.text.small}>Less</Text>
         {[0, ...HEAT_LEVELS].map((level, index) => (
-          <View key={index} style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: level ? withAlpha(BLUE, level) ?? BLUE : t.c.surface2 }} />
+          <View key={index} style={{ width: 10, height: 10, borderRadius: radius.sm, backgroundColor: level ? withAlpha(BLUE, level) ?? BLUE : t.c.surface2 }} />
         ))}
         <Text style={t.text.small}>More</Text>
       </View>
@@ -192,7 +193,7 @@ function Legend({ t, keys }: { t: Tokens; keys: readonly string[] }) {
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
       {keys.map((key) => (
         <View key={key} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-          <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: tileColor(key) }} />
+          <View style={{ width: 8, height: 8, borderRadius: radius.sm, backgroundColor: tileColor(key) }} />
           <Text style={t.text.small}>{key}</Text>
         </View>
       ))}
@@ -211,7 +212,7 @@ function Creations({ t, summary }: { t: Tokens; summary: ActivitySummary }) {
         {summary.creations.map((day) => {
           const total = Object.values(day.byProvider).reduce((a, b) => a + b, 0);
           return (
-            <View key={day.day} accessibilityLabel={`${day.day}: ${total} created`} style={{ flex: 1, height: Math.max(2, (total / max) * height), justifyContent: "flex-end", borderRadius: 2, overflow: "hidden", backgroundColor: total ? undefined : t.c.surface2 }}>
+            <View key={day.day} accessibilityLabel={`${day.day}: ${total} created`} style={{ flex: 1, height: Math.max(2, (total / max) * height), justifyContent: "flex-end", borderRadius: radius.sm, overflow: "hidden", backgroundColor: total ? undefined : t.c.surface2 }}>
               {providers.map((provider) => (day.byProvider[provider] ? <View key={provider} style={{ height: `${(day.byProvider[provider] / total) * 100}%`, backgroundColor: tileColor(provider) }} /> : null))}
             </View>
           );
@@ -247,7 +248,7 @@ function Hours({ t, summary }: { t: Tokens; summary: ActivitySummary }) {
           <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 1, height }}>
             {summary.hourly.map((hour, index) => (
               <Pressable key={hour.hour} accessibilityRole="button" accessibilityLabel={`${hourLabel(hour.hour)}: ${hour.values[metric]} ${METRIC_LABELS[metric].toLowerCase()}`} onPress={() => setPicked(index)} style={{ width: 4, height, justifyContent: "flex-end" }}>
-                <View style={{ height: Math.max(1, (hour.values[metric] / max) * height), borderRadius: 1, backgroundColor: index === (picked ?? summary.hourly.length - 1) ? t.c.foreground : hour.values[metric] ? t.c.accent : t.c.surface2 }} />
+                <View style={{ height: Math.max(1, (hour.values[metric] / max) * height), borderRadius: radius.sm, backgroundColor: index === (picked ?? summary.hourly.length - 1) ? t.c.foreground : hour.values[metric] ? t.c.accent : t.c.surface2 }} />
               </Pressable>
             ))}
           </View>
@@ -324,7 +325,7 @@ function Insights({ t, summary, side }: { t: Tokens; summary: ActivitySummary; s
     <Card t={t} title="Insights" icon="Lightbulb" side={side}>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
         {summary.insights.map((row) => (
-          <View key={row.label} style={{ flexBasis: "47%", flexGrow: 1, flexDirection: "row", alignItems: "center", gap: 10, padding: 10, borderRadius: 8, backgroundColor: t.c.surface1 }}>
+          <View key={row.label} style={{ flexBasis: "47%", flexGrow: 1, flexDirection: "row", alignItems: "center", gap: 10, padding: 10, borderRadius: radius.lg, backgroundColor: t.c.surface1 }}>
             <View style={{ width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: withAlpha(BLUE, 0.16) ?? t.c.surface2 }}>
               <Icon name={INSIGHT_ICONS[row.label] ?? "Sparkles"} size={15} color={BLUE} />
             </View>
@@ -332,7 +333,7 @@ function Insights({ t, summary, side }: { t: Tokens; summary: ActivitySummary; s
               <Text style={t.text.small} numberOfLines={1}>
                 {row.label}
               </Text>
-              <Text style={{ color: t.c.foreground, fontSize: 15, fontWeight: "600", fontVariant: ["tabular-nums"] }} numberOfLines={1}>
+              <Text style={{ color: t.c.foreground, fontSize: fontSize.content, fontWeight: "600", fontVariant: ["tabular-nums"] }} numberOfLines={1}>
                 {row.value}
               </Text>
             </View>

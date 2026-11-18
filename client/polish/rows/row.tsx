@@ -15,6 +15,7 @@ import { highlight, highlightShell, highlightShellBlock, SYNTAX_THEMES, type Spa
 import { HoverPreview, useHoverPreview } from "./hover-preview";
 import { type RowLook, useRowSetup } from "./look";
 import type { Tone } from "./model";
+import { fontSize, radius } from "../../../shared/design/tokens";
 
 export type Colors = PluginTheme["colors"];
 export const SQUIRCLE_CARD = { dataSet: { cpSquircle: "card" } } as object;
@@ -94,15 +95,15 @@ function makeStyles(c: Colors, a: HostAppearance, look: RowLook) {
     meta: { ...ui, color: c.foregroundMuted, fontSize: body - 2, fontVariant: ["tabular-nums"], marginLeft: "auto", flexShrink: 0 },
     detail: { paddingLeft: INDENT, paddingTop: 2, marginTop: 6 },
     ruled: { paddingLeft: 18, borderLeftWidth: 1, borderLeftColor: c.border, gap: 4, paddingVertical: 2 },
-    block: { borderRadius: 8, backgroundColor: sunken(c.surface0), borderWidth: 1, borderColor: rule, overflow: "hidden" },
+    block: { borderRadius: radius.lg, backgroundColor: sunken(c.surface0), borderWidth: 1, borderColor: rule, overflow: "hidden" },
     blockHead: { flexDirection: "row", alignItems: "baseline", gap: 8, paddingHorizontal: 12, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: rule },
     blockBody: { paddingHorizontal: 12, paddingVertical: 9 },
     code: { ...code, color: c.foreground },
     gutter: { ...code, color: c.foregroundMuted, opacity: 0.6, textAlign: "right", fontVariant: ["tabular-nums"], flexShrink: 0 },
     small: { ...ui, color: c.foregroundMuted, fontSize: body - 1, lineHeight: Math.round((body - 1) * 1.45) },
-    label: { ...ui, color: c.foregroundMuted, fontSize: 10, fontWeight: "600", letterSpacing: 0.8, marginBottom: 4 },
+    label: { ...ui, color: c.foregroundMuted, fontSize: fontSize.sm, fontWeight: "600", letterSpacing: 0.8, marginBottom: 4 },
     prose: { ...ui, color: c.foregroundMuted, fontSize: body, lineHeight: Math.round(body * 1.6) },
-    card: { borderRadius: 12, backgroundColor: c.surface1, borderWidth: 1, borderColor: rule, overflow: "hidden" },
+    card: { borderRadius: radius.xl, backgroundColor: c.surface1, borderWidth: 1, borderColor: rule, overflow: "hidden" },
     cardHead: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: rule },
     title: { ...ui, color: c.foreground, fontSize: body, fontWeight: "600" },
     more: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 16, paddingBottom: 12, paddingTop: 4 },
@@ -365,7 +366,7 @@ export function Row(p: RowProps) {
       accessibilityState={p.onToggle ? { expanded: !!p.open } : undefined}
       accessibilityLabel={[p.verb, p.target, p.meta].filter(Boolean).join(" ")}
       // Bleeds into the gutter so the hover surface (full-strength rows only; faded rows brighten instead) covers the same area as Paseo's own tool rows.
-      style={[s.row, { marginHorizontal: -13, paddingHorizontal: 13, borderRadius: 6 }, hovered && p.onToggle && steps === "full" ? { backgroundColor: c.surface1 } : null, quiet && { opacity: QUIET[steps] }]}
+      style={[s.row, { marginHorizontal: -13, paddingHorizontal: 13, borderRadius: radius.md }, hovered && p.onToggle && steps === "full" ? { backgroundColor: c.surface1 } : null, quiet && { opacity: QUIET[steps] }]}
     >
       {bare ? null : (
         <View style={s.slot}>

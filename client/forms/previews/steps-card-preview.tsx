@@ -8,6 +8,7 @@ import { useTokens } from "../../ui/kit";
 import { stepsPlacement } from "./helpers";
 import { PREVIEW_FRAME, PreviewNote } from "./parts";
 import { SAMPLE_STEPS } from "./samples";
+import { fontSize, radius } from "../../../shared/design/tokens";
 
 const SAMPLE_PLAN = { status: "ready" as const, steps: SAMPLE_STEPS, latestAt: null, finishedAt: null };
 
@@ -23,13 +24,13 @@ export function StepsCardPreview({ theme, steps, compact = false }: { theme: Plu
     <View style={{ ...PREVIEW_FRAME, gap: 10 }}>
       <PreviewNote theme={theme} text={place.label} />
       {place.inline ? (
-        <View style={{ padding: 14, gap: 10, borderRadius: 10, backgroundColor: theme.colors.surface0 }}>
-          <Text style={{ fontSize: 13, lineHeight: 19, color: theme.colors.foregroundMuted }}>I'll move the auth checks into one middleware, then run the tests.</Text>
+        <View style={{ padding: 14, gap: 10, borderRadius: radius.lg, backgroundColor: theme.colors.surface0 }}>
+          <Text style={{ fontSize: fontSize.base, lineHeight: 19, color: theme.colors.foregroundMuted }}>I'll move the auth checks into one middleware, then run the tests.</Text>
           {/* Paseo leaves 16pt under each plugin row, which the row takes back in part; added here as the chat has it. */}
           <View style={{ paddingBottom: 16 }}>{card}</View>
         </View>
       ) : (
-        <View style={{ width: compact ? "100%" : 280, paddingVertical: 6, borderRadius: 10, backgroundColor: theme.colors.surface0 }}>{card}</View>
+        <View style={{ width: compact ? "100%" : 280, paddingVertical: 6, borderRadius: radius.lg, backgroundColor: theme.colors.surface0 }}>{card}</View>
       )}
     </View>
   );

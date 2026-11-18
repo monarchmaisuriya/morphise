@@ -4,6 +4,7 @@ import { createElement, useEffect, useRef, useState } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
 import { type Decoration, DECOR_COLORS, DECOR_ICONS, parseHexColor } from "../shared/project-groups";
 import { Field, Icon, IconButton, type Tokens } from "./ui/kit";
+import { radius } from "../shared/design/tokens";
 
 // A stored icon drawn: "lucide:Name" as that icon, "emoji:x" as text in the same colour (letters take it; emoji keep their own).
 export function DecorIcon({ icon, color, size }: { icon: string; color: string; size: number }) {
@@ -97,7 +98,7 @@ export function DecorPicker({ t, value, onChange, withIcon }: { t: Tokens; value
             {Platform.OS === "web" ? (
               <ColorWheel value={preview ?? value.color ?? "#8E4EC6"} onPreview={(color) => (setHex(color.toUpperCase()), setHexError(false))} onPick={(color) => saveHex(color)} />
             ) : (
-              <View style={{ width: 24, height: 24, borderRadius: 6, borderWidth: 1, borderColor: t.c.border, backgroundColor: preview ?? "transparent" }} />
+              <View style={{ width: 24, height: 24, borderRadius: radius.md, borderWidth: 1, borderColor: t.c.border, backgroundColor: preview ?? "transparent" }} />
             )}
             <View style={{ flex: 1, minWidth: 0 }}>
               <Field t={t} plain value={hex} onChangeText={(text) => (setHex(text), setHexError(false))} onSubmit={() => saveHex(hex)} maxLength={7} placeholder="#8E4EC6" accessibilityLabel="Custom colour as a hex code, then Enter" />

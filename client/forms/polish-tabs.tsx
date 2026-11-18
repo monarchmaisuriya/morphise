@@ -11,6 +11,7 @@ import { PLAIN_SYNTAX, SYNTAX_THEMES } from "../polish/rows/highlight";
 import { tokens } from "../ui/kit";
 import { LookPreview, MessagesPreview, PagesPreview, PreviewWidth } from "./previews";
 import { ChipRow, type Form, SelectField, SwitchField, TextField } from "./fields";
+import { fontSize } from "../../shared/design/tokens";
 
 // Settings for the features ported from Chat Polish and Quote (see NOTICE.md). They live in the
 // profile's `chat.polish`; a value equal to its default is removed, so older Morphise versions
@@ -276,7 +277,7 @@ export function UpdateSection({ form }: { form: Form }): ReactNode {
     <SettingsSection title="Updates">
       <SettingsCard>
         {status?.state === "update" && status.revision ? <SettingsAction label="Update available" hint={hint} actionLabel={started || busy ? "Updating" : "Update"} disabled={started || busy} onPress={() => install(status.revision!)} /> : <SettingsAction label="Morphise" hint={hint} actionLabel={busy ? "Checking" : "Check again"} disabled={busy} onPress={run} />}
-        {status?.state === "update" && status.links[0] ? <Text selectable style={{ paddingHorizontal: 16, paddingBottom: 12, fontSize: 12, color: form.theme.colors.foregroundMuted }}>{status.links[0]}</Text> : null}
+        {status?.state === "update" && status.links[0] ? <Text selectable style={{ paddingHorizontal: 16, paddingBottom: 12, fontSize: fontSize.sm, color: form.theme.colors.foregroundMuted }}>{status.links[0]}</Text> : null}
       </SettingsCard>
     </SettingsSection>
   );

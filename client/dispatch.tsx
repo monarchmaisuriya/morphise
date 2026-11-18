@@ -7,6 +7,7 @@ import { type DispatchSettings, dispatchSettings, modeChoices, modelChoices, mod
 import { createValueStore, type ValueStore, useValue } from "./profile-store";
 import { Button, Field, Icon, IconButton, PopoverHost, Segmented, Select, type Tokens, useTokens } from "./ui/kit";
 import type { WorkspaceList } from "./workspaces";
+import { fontSize, radius } from "../shared/design/tokens";
 
 // Dispatch: several prompts at once, each started as its own new workspace and agent. One row of
 // defaults (project, model, mode, worktree or folder), then numbered prompts that turn into live
@@ -67,7 +68,7 @@ function StatusChip({ t, status }: { t: Tokens; status: RowStatus }) {
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
       <Icon name={look.icon} size={12} color={look.color} />
-      <Text style={{ fontSize: 12, color: look.color }}>{look.label}</Text>
+      <Text style={{ fontSize: fontSize.sm, color: look.color }}>{look.label}</Text>
     </View>
   );
 }
@@ -82,12 +83,12 @@ function PromptRow({ t, row, index, count, running, onChange, onRemove, onSplit,
     <View style={{ borderTopWidth: index === 0 ? 0 : 1, borderTopColor: t.c.border, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 8, gap: 6 }}>
       {row.status === "failed" ? <View pointerEvents="none" style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: 2, backgroundColor: t.c.statusDanger }} /> : null}
       <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 10 }}>
-        <Text style={{ width: 16, paddingTop: t.compact ? 10 : 8, fontSize: 12, color: t.c.foregroundMuted, textAlign: "right" }}>{index + 1}</Text>
+        <Text style={{ width: 16, paddingTop: t.compact ? 10 : 8, fontSize: fontSize.sm, color: t.c.foregroundMuted, textAlign: "right" }}>{index + 1}</Text>
         <View style={{ flex: 1, minWidth: 0 }}>
           {editable ? (
             <Field t={t} bare multiline value={row.text} onChangeText={onChange} placeholder={index === 0 ? "What should the agent do? Paste a list to start several." : "Another task"} accessibilityLabel={`Prompt ${index + 1}`} onCommand={onCommand} autoFocus={index === 0 && count === 1 && row.status === "draft" && row.text === ""} />
           ) : (
-            <Text style={{ fontSize: 13, lineHeight: 20, paddingVertical: 8, paddingHorizontal: 6, color: row.status === "started" ? t.c.foreground : t.c.foregroundMuted }} numberOfLines={3}>
+            <Text style={{ fontSize: fontSize.base, lineHeight: 20, paddingVertical: 8, paddingHorizontal: 6, color: row.status === "started" ? t.c.foreground : t.c.foregroundMuted }} numberOfLines={3}>
               {row.text}
             </Text>
           )}
@@ -100,9 +101,9 @@ function PromptRow({ t, row, index, count, running, onChange, onRemove, onSplit,
         </View>
       </View>
       {parts ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={`Split into ${parts.length} prompts`} onPress={() => onSplit(parts)} style={{ flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", marginLeft: 26, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, backgroundColor: t.c.surface2 }}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Split into ${parts.length} prompts`} onPress={() => onSplit(parts)} style={{ flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", marginLeft: 26, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.lg, backgroundColor: t.c.surface2 }}>
           <Icon name="Split" size={12} color={t.c.foreground} />
-          <Text style={{ fontSize: 12, color: t.c.foreground }}>Split into {parts.length} prompts</Text>
+          <Text style={{ fontSize: fontSize.sm, color: t.c.foreground }}>Split into {parts.length} prompts</Text>
         </Pressable>
       ) : null}
       {row.status === "failed" && row.error ? <Text style={[t.text.danger, { marginLeft: 26 }]}>{row.error}</Text> : null}
@@ -233,7 +234,7 @@ function Dispatch({ t, deps, openWorkspace, header }: { t: Tokens; deps: Dispatc
         {header}
         {/* One card, like Paseo's own message box: the prompts, then a toolbar with where and with
             what, and Start. */}
-        <View style={{ borderRadius: 14, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1 }}>
+        <View style={{ borderRadius: radius.xl, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1 }}>
           {rows.map((row, index) => (
             <PromptRow
               key={row.id}
@@ -298,7 +299,7 @@ export function createDispatchScreen(deps: DispatchDeps) {
     const t = useTokens(theme, layout.compact);
     const header = (
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-        <View style={{ width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: t.c.surface2 }}>
+        <View style={{ width: 32, height: 32, borderRadius: radius.lg, alignItems: "center", justifyContent: "center", backgroundColor: t.c.surface2 }}>
           <Icon name={DISPATCH_ICON} size={16} color={t.c.foreground} />
         </View>
         <View style={{ flex: 1, gap: 2 }}>

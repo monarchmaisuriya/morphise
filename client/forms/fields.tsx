@@ -10,6 +10,7 @@ import type { DraftStore, Saved } from "../draft";
 import { useValue } from "../profile-store";
 import { useAutoSave } from "./autosave";
 import { openAfterSwap } from "./list-move";
+import { fontSize } from "../../shared/design/tokens";
 
 type Theme = PluginSurfaceProps["theme"];
 
@@ -184,8 +185,8 @@ function listStyles(theme: Theme) {
   return {
     row: { flexDirection: "row" as const, alignItems: "center" as const, paddingLeft: 12, minHeight: 40 },
     label: { flex: 1, flexDirection: "row" as const, alignItems: "center" as const, gap: 8, paddingVertical: 8 },
-    text: { color: theme.colors.foreground, fontSize: 13, flexShrink: 1 },
-    error: { color: theme.colors.statusDanger, fontSize: 11 },
+    text: { color: theme.colors.foreground, fontSize: fontSize.base, flexShrink: 1 },
+    error: { color: theme.colors.statusDanger, fontSize: fontSize.sm },
     body: { paddingLeft: 12, borderLeftWidth: 2, borderLeftColor: theme.colors.border, marginLeft: 12, marginBottom: 8 },
   };
 }
@@ -263,9 +264,9 @@ export function createFormScreen(
     const styles = useMemo(
       () => ({
         page: { gap: 12 },
-        muted: { color: theme.colors.foregroundMuted, fontSize: 12 },
-        danger: { color: theme.colors.statusDanger, fontSize: 12 },
-        warning: { color: theme.colors.statusWarning, fontSize: 12 },
+        muted: { color: theme.colors.foregroundMuted, fontSize: fontSize.sm },
+        danger: { color: theme.colors.statusDanger, fontSize: fontSize.sm },
+        warning: { color: theme.colors.statusWarning, fontSize: fontSize.sm },
       }),
       [theme],
     );
@@ -354,7 +355,7 @@ export function ChipRow({ form, label, hint, chips }: { form: Form; label: strin
   return (
     <View style={{ paddingVertical: 14, paddingHorizontal: 16, gap: 10 }}>
       <View style={{ gap: 2 }}>
-        <Text style={{ color: t.c.foreground, fontSize: 14 }}>{label}</Text>
+        <Text style={{ color: t.c.foreground, fontSize: fontSize.base }}>{label}</Text>
         {hint ? <Text style={t.text.small}>{hint}</Text> : null}
       </View>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
@@ -368,7 +369,7 @@ export function ChipRow({ form, label, hint, chips }: { form: Form; label: strin
             style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => ({ flexDirection: "row", alignItems: "center", gap: 6, height: 28, paddingHorizontal: 10, borderRadius: 14, borderWidth: 1, borderColor: chip.on ? t.c.accent : t.c.border, backgroundColor: chip.on ? t.c.surface2 : pressed || hovered ? t.c.surface1 : "transparent" })}
           >
             {chip.on ? <Icon name="Check" size={12} color={t.c.accent} /> : null}
-            <Text style={{ fontSize: 12, color: chip.on ? t.c.foreground : t.c.foregroundMuted }}>{chip.label}</Text>
+            <Text style={{ fontSize: fontSize.sm, color: chip.on ? t.c.foreground : t.c.foregroundMuted }}>{chip.label}</Text>
           </Pressable>
         ))}
       </View>

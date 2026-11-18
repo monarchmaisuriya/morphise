@@ -17,7 +17,7 @@ const MORE_WIDTHS = [480, 600, 840, 1000] as const;
 // A screenshot taller than this is cut; models scale long images down until they're unreadable anyway.
 const SHOT_MAX_HEIGHT = 1600;
 const THEME = themeCss(
-  { surface0: "#1e1f22", surface1: "#2b2d31", border: "#3f4147", foreground: "#e6e6e6", foregroundMuted: "#9a9ca3", accent: "#5b8cff", accentForeground: "#ffffff", statusSuccess: "#3fb950", statusWarning: "#d29922", statusDanger: "#f85149" },
+  { surface0: "#1e1f22", surface1: "#2b2d31", surface2: "#313338", border: "#3f4147", foreground: "#e6e6e6", foregroundMuted: "#9a9ca3", accent: "#5b8cff", accentForeground: "#ffffff", statusSuccess: "#3fb950", statusWarning: "#d29922", statusDanger: "#f85149" },
   { sans: '-apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif', mono: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" },
   chartPalette("#1e1f22"),
 );

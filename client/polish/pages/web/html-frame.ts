@@ -60,11 +60,11 @@ const SANS = '-apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif';
 const MONO = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
 
 /** The CSS variables a page gets from the app's theme and fonts. */
-export function useHtmlTheme(colors: HtmlColors) {
+export function useHtmlTheme(colors: HtmlColors, compact = false) {
   return useMemo(() => {
     const a = readHostAppearance();
-    return themeCss(colors, { sans: a.uiFont ? `${a.uiFont}, ${SANS}` : SANS, mono: a.monoFont ? `${a.monoFont}, ${MONO}` : MONO }, chartPalette(colors.surface0));
-  }, [colors]);
+    return themeCss(colors, { sans: a.uiFont ? `${a.uiFont}, ${SANS}` : SANS, mono: a.monoFont ? `${a.monoFont}, ${MONO}` : MONO }, chartPalette(colors.surface0), compact);
+  }, [colors, compact]);
 }
 
 /**
@@ -77,6 +77,7 @@ export function HtmlFrame({
   id = html,
   title,
   colors,
+  compact = false,
   heights,
   fill = false,
   onEscape,
@@ -87,6 +88,8 @@ export function HtmlFrame({
   id?: string;
   title: string;
   colors: HtmlColors;
+  // Paseo's compact layout, which sets the page's text size as it does a reply's.
+  compact?: boolean;
   heights?: ReadonlyArray<readonly [number, number]>;
   fill?: boolean;
   onEscape?: () => void;
@@ -100,7 +103,7 @@ export function HtmlFrame({
   const ask = useRef(onAsk);
   ask.current = onAsk;
   const pendingSvg = useRef(new Map<string, (svg: string | null) => void>());
-  const css = useHtmlTheme(colors);
+  const css = useHtmlTheme(colors, compact);
   const latest = useRef(css);
   latest.current = css;
   // The page starts in the theme of its first render; later themes are posted, since a new srcdoc would reload it.

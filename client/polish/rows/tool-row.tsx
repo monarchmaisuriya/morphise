@@ -19,6 +19,7 @@ import { detailBody, shownTarget, type ToolData, type ToolDetailData } from "./m
 import { numberedLines, striped } from "./preview-lines";
 import { Prose } from "./prose";
 import { alpha, CodeLine, Expand, PMONO, Row, Scroll, type Styles, toneColor, useDisclosure, useEnter, useIndent, useSpacing, useStyles } from "./row";
+import { radius } from "../../../shared/design/tokens";
 
 /** Rows inside an open merged run sit flush in its list, without the timeline spacing. */
 export type Nestable = { nested?: boolean };
@@ -116,7 +117,7 @@ function Diff({ s, lines, theme, keep, wrap, numbers, stripes = false }: { s: St
                 {/* Added and removed lines read in their color, their changed words marked; context lines keep the highlight theme. */}
                 {color ? (
                   <Text {...PMONO} selectable style={[s.code, lineStyle, { color }]}>
-                    {parts ? parts.map((part, j) => <Text key={j} style={part.changed ? { backgroundColor: alpha(color, 0.3), borderRadius: 2 } : null}>{part.text}</Text>) : l.text}
+                    {parts ? parts.map((part, j) => <Text key={j} style={part.changed ? { backgroundColor: alpha(color, 0.3), borderRadius: radius.sm } : null}>{part.text}</Text>) : l.text}
                   </Text>
                 ) : (
                   <CodeLine text={l.text} theme={theme} style={[s.code, lineStyle]} />
@@ -234,7 +235,7 @@ function ImagePreview({ s, path, actions, theme }: { s: Styles; path: string; ac
   }, [actions, path]);
   if (!state) return <Text style={s.small}>Loading the picture...</Text>;
   if ("reason" in state) return <Text style={s.small}>No picture: {state.reason}</Text>;
-  return <Image source={{ uri: state.uri }} accessibilityLabel={`Picture of ${path}`} resizeMode="contain" style={{ width: "100%", maxWidth: 520, height: 260, borderRadius: 8, backgroundColor: theme.colors.surface1 }} />;
+  return <Image source={{ uri: state.uri }} accessibilityLabel={`Picture of ${path}`} resizeMode="contain" style={{ width: "100%", maxWidth: 520, height: 260, borderRadius: radius.lg, backgroundColor: theme.colors.surface1 }} />;
 }
 
 function Action({ s, theme, icon, label, onPress }: { s: Styles; theme: PluginTheme; icon: string; label: string; onPress(): void }) {
@@ -244,7 +245,7 @@ function Action({ s, theme, icon, label, onPress }: { s: Styles; theme: PluginTh
       accessibilityLabel={label}
       onPress={onPress}
       hitSlop={6}
-      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => ({ flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, backgroundColor: pressed || hovered ? theme.colors.surface2 : "transparent" })}
+      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => ({ flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 6, paddingVertical: 3, borderRadius: radius.md, backgroundColor: pressed || hovered ? theme.colors.surface2 : "transparent" })}
     >
       <Icon name={icon} size={12} color={theme.colors.foregroundMuted} />
       <Text style={s.action}>{label}</Text>

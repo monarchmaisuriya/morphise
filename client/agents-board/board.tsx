@@ -50,6 +50,7 @@ import type { Indicator } from "../../shared/profile";
 import { GroupBox, GroupFooter, GroupList } from "../ui/grouped-list";
 import { statusColor } from "../ui/hues";
 import { observeOnScreen, onBoardKeys } from "./web";
+import { fontSize } from "../../shared/design/tokens";
 
 // The Workbench's Agents view: every agent on the host by status (Waiting, To review, Running, Done,
 // Archived), as a grouped list or as lanes, with filters, search, sort, keys on the web, and a details
@@ -96,7 +97,7 @@ function FilterMenu({ t, label, icon, groups, picked, onChange }: { t: Tokens; l
         style={{ flexDirection: "row", alignItems: "center", gap: 6, height: t.control, paddingHorizontal: 10, borderRadius: t.radius.control, borderWidth: 1, borderColor: picked.length ? t.c.accent : t.c.border, backgroundColor: t.c.surface1 }}
       >
         <Icon name={icon} size={13} color={t.c.foregroundMuted} />
-        <Text style={{ fontSize: 12, color: t.c.foreground }}>{picked.length ? `${label} · ${picked.length}` : label}</Text>
+        <Text style={{ fontSize: fontSize.sm, color: t.c.foreground }}>{picked.length ? `${label} · ${picked.length}` : label}</Text>
       </Pressable>
       <Dropdown t={t} open={open} onClose={() => setOpen(false)} anchor={anchor} width={260}>
         {groups.map((group) => (
@@ -118,7 +119,7 @@ function UpdatedMenu({ t, value, onChange }: { t: Tokens; value: UpdatedWithin; 
     <View ref={anchor}>
       <Pressable accessibilityRole="button" accessibilityLabel={`Last updated filter, ${UPDATED_TITLES[value]}. Change`} onPress={() => setOpen(!open)} style={{ flexDirection: "row", alignItems: "center", gap: 6, height: t.control, paddingHorizontal: 10, borderRadius: t.radius.control, borderWidth: 1, borderColor: value === "any" ? t.c.border : t.c.accent, backgroundColor: t.c.surface1 }}>
         <Icon name="Clock" size={13} color={t.c.foregroundMuted} />
-        <Text style={{ fontSize: 12, color: t.c.foreground }}>{label}</Text>
+        <Text style={{ fontSize: fontSize.sm, color: t.c.foreground }}>{label}</Text>
       </Pressable>
       <Dropdown t={t} open={open} onClose={() => setOpen(false)} anchor={anchor} width={200}>
         {UPDATED_WITHIN.map((key) => (
@@ -136,7 +137,7 @@ function SortMenu({ t, sort, onChange }: { t: Tokens; sort: SortKey; onChange(so
     <View ref={anchor}>
       <Pressable accessibilityRole="button" accessibilityLabel={`Sort by ${SORT_TITLES[sort]}. Change`} onPress={() => setOpen(!open)} style={{ flexDirection: "row", alignItems: "center", gap: 6, height: t.control, paddingHorizontal: 10, borderRadius: t.radius.control, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1 }}>
         <Icon name="ArrowDownWideNarrow" size={13} color={t.c.foregroundMuted} />
-        <Text style={{ fontSize: 12, color: t.c.foreground }}>{SORT_TITLES[sort]}</Text>
+        <Text style={{ fontSize: fontSize.sm, color: t.c.foreground }}>{SORT_TITLES[sort]}</Text>
       </Pressable>
       <Dropdown t={t} open={open} onClose={() => setOpen(false)} anchor={anchor} width={200}>
         {SORT_KEYS.map((key) => (
@@ -455,7 +456,7 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4 }} accessibilityRole="tablist">
           {laneList.map((lane) => (
             <Pressable key={lane} accessibilityRole="tab" accessibilityState={{ selected: lane === phoneLane }} accessibilityLabel={`${LANE_TITLES[lane]}, ${lanes[lane].length}`} onPress={() => setPhoneLane(lane)} style={{ flexDirection: "row", alignItems: "center", gap: 6, height: t.control, paddingHorizontal: 10, borderRadius: t.radius.control, backgroundColor: lane === phoneLane ? t.c.surface2 : "transparent" }}>
-              <Text style={{ fontSize: 13, color: lane === phoneLane ? t.c.foreground : t.c.foregroundMuted, fontWeight: lane === phoneLane ? "600" : "400" }}>{LANE_TITLES[lane]}</Text>
+              <Text style={{ fontSize: fontSize.base, color: lane === phoneLane ? t.c.foreground : t.c.foregroundMuted, fontWeight: lane === phoneLane ? "600" : "400" }}>{LANE_TITLES[lane]}</Text>
               <Text style={t.text.small}>{lanes[lane].length}</Text>
             </Pressable>
           ))}
@@ -502,7 +503,7 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
       style={({ hovered }: { pressed: boolean; hovered?: boolean }) => ({ width: open ? undefined : LANE_STRIP, alignSelf: open ? "stretch" : "flex-start", flexDirection: "row", alignItems: "center", gap: 6, height: 28, paddingHorizontal: 6, borderRadius: t.radius.control, backgroundColor: hovered ? t.c.surface1 : "transparent" })}
     >
       <Icon name={open ? "ChevronDown" : "ChevronRight"} size={13} color={t.c.foregroundMuted} />
-      <Text style={open ? t.text.heading : [t.text.heading, { fontSize: 13, color: t.c.foregroundMuted, fontWeight: "500" }]} numberOfLines={1}>
+      <Text style={open ? t.text.heading : [t.text.heading, { fontSize: fontSize.base, color: t.c.foregroundMuted, fontWeight: "500" }]} numberOfLines={1}>
         {LANE_TITLES[lane]}
       </Text>
       <Text style={[t.text.meta, { fontVariant: ["tabular-nums"] }]}>{lanes[lane].length}</Text>

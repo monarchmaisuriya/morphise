@@ -17,6 +17,7 @@ import { usePrefs } from "../prefs";
 import { limitFrameHeight } from "./frame";
 import type { HtmlData } from "./html-rows";
 import { HtmlFrame, lastFrameHeight, type SvgExporter, useEscapeKey, useHovered, useHtmlTheme, usePopoverRef, windowButtonsInset } from "./web/html-frame";
+import { fontSize } from "../../../shared/design/tokens";
 
 // What a page row can do in a chat beyond showing the page: fill the chat's message box (Morphise.ask) and save the page
 // to the Workbench's Bookmarks. Settings' preview has neither.
@@ -47,7 +48,7 @@ export function HtmlItem({ item, theme, layout, agentId, actions = null }: Plugi
   const t = useT();
   const compact = layout?.compact ?? false;
   if (Platform.OS === "web") return item.data.stored === undefined ? <HtmlPage {...item.data} agentId={agentId} theme={theme} compact={compact} actions={actions} /> : <StoredHtmlPage {...item.data} agentId={agentId} theme={theme} compact={compact} actions={actions} />;
-  return <Text style={{ color: theme.colors.foregroundMuted, fontSize: 13, paddingVertical: 4 }}>{t("chat.htmlNative", { title: item.data.title })}</Text>;
+  return <Text style={{ color: theme.colors.foregroundMuted, fontSize: fontSize.base, paddingVertical: 4 }}>{t("chat.htmlNative", { title: item.data.title })}</Text>;
 }
 
 /** A page Paseo cut to fit the timeline, loaded whole from where html_render stored it. */
@@ -69,7 +70,7 @@ function StoredHtmlPage({ stored, theme, compact, actions, ...data }: HtmlData &
   }, [stored, load]);
   if (html === undefined) return <View style={{ height: limitFrameHeight(lastFrameHeight(data.html, data.heights), limit) }} />;
   if (html === null) {
-    return <Text style={{ color: theme.colors.foregroundMuted, fontSize: 13, paddingVertical: 4 }}>{t("chat.htmlGone", { title: data.title })}</Text>;
+    return <Text style={{ color: theme.colors.foregroundMuted, fontSize: fontSize.base, paddingVertical: 4 }}>{t("chat.htmlGone", { title: data.title })}</Text>;
   }
   return <HtmlPage {...data} html={html} theme={theme} compact={compact} actions={actions} />;
 }
@@ -163,7 +164,7 @@ function HtmlPage({ html, title, heights, agentId, theme, compact, id, actions }
     return (
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6 }}>
         <Icon name="AppWindow" size={14} color={c.foregroundMuted} />
-        <Text style={{ flex: 1, color: c.foregroundMuted, fontSize: 13 }} numberOfLines={1}>
+        <Text style={{ flex: 1, color: c.foregroundMuted, fontSize: fontSize.base }} numberOfLines={1}>
           {title} · {t("chat.updatedBelow")}
         </Text>
         {button("Maximize2", t("chat.fullScreen"), () => setFull(true))}
@@ -174,25 +175,25 @@ function HtmlPage({ html, title, heights, agentId, theme, compact, id, actions }
     <View ref={box}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8, height: compact ? 36 : 28 }}>
         <Icon name="AppWindow" size={13} color={c.foregroundMuted} />
-        <Text style={{ flex: 1, minWidth: 0, color: c.foregroundMuted, fontSize: 12 }} numberOfLines={1}>
+        <Text style={{ flex: 1, minWidth: 0, color: c.foregroundMuted, fontSize: fontSize.sm }} numberOfLines={1}>
           {title}
         </Text>
         {/* Hidden, not removed, off hover: the buttons keep their place, so showing them never moves what is under the pointer. */}
         <View style={{ flexDirection: "row", gap: 2, opacity: hovered || cannotHover() ? 1 : 0 }}>{[button("Maximize2", t("chat.fullScreen"), () => setFull(true)), ...shared]}</View>
       </View>
       {/* A stand-in at the frame's last size (or the daemon's measured height) while images load, so the chat doesn't move when the page arrives. */}
-      {page === undefined ? <View style={{ height: limitFrameHeight(lastFrameHeight(html, heights), limit) }} /> : <HtmlFrame html={page} id={html} title={title} colors={c} heights={heights} onAsk={onAsk} exporter={exporter} />}
+      {page === undefined ? <View style={{ height: limitFrameHeight(lastFrameHeight(html, heights), limit) }} /> : <HtmlFrame html={page} id={html} title={title} colors={c} compact={compact} heights={heights} onAsk={onAsk} exporter={exporter} />}
       {full ? (
         <Modal transparent visible animationType="fade" onRequestClose={() => setFull(false)}>
           <View ref={fullScreen} style={{ flex: 1, backgroundColor: c.surface0 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6, height: 48, paddingLeft: windowButtonsInset(), paddingRight: 16, borderBottomWidth: 1, borderBottomColor: c.border }}>
-              <Text style={{ flex: 1, color: c.foreground, fontSize: 13, fontWeight: "500" }} numberOfLines={1}>
+              <Text style={{ flex: 1, color: c.foreground, fontSize: fontSize.base, fontWeight: "500" }} numberOfLines={1}>
                 {title}
               </Text>
               {[...shared, button("X", t("chat.closeFullScreen"), () => setFull(false))]}
             </View>
             <View style={{ flex: 1, paddingVertical: 24, paddingHorizontal: 32 }}>
-              <HtmlFrame html={page ?? html} title={title} colors={c} fill onEscape={() => setFull(false)} onAsk={onAsk} exporter={replaced ? exporter : undefined} />
+              <HtmlFrame html={page ?? html} title={title} colors={c} compact={compact} fill onEscape={() => setFull(false)} onAsk={onAsk} exporter={replaced ? exporter : undefined} />
             </View>
           </View>
         </Modal>
@@ -226,18 +227,18 @@ export function SavedPageViewer({ id, title, t: tk, onClose }: { id: string; tit
     <Modal transparent visible animationType="fade" onRequestClose={onClose}>
       <View ref={fullScreen} style={{ flex: 1, backgroundColor: colors.surface0 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6, height: 48, paddingLeft: windowButtonsInset(), paddingRight: 16, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-          <Text style={{ flex: 1, color: colors.foreground, fontSize: 13, fontWeight: "500" }} numberOfLines={1}>
+          <Text style={{ flex: 1, color: colors.foreground, fontSize: fontSize.base, fontWeight: "500" }} numberOfLines={1}>
             {title}
           </Text>
           <IconButton t={tk} icon="X" label={t("chat.closeFullScreen")} onPress={onClose} size="sm" />
         </View>
         <View style={{ flex: 1, paddingVertical: 24, paddingHorizontal: 32 }}>
           {html === undefined ? null : html === null ? (
-            <Text style={{ color: colors.foregroundMuted, fontSize: 13 }}>{t("chat.htmlGone", { title })}</Text>
+            <Text style={{ color: colors.foregroundMuted, fontSize: fontSize.base }}>{t("chat.htmlGone", { title })}</Text>
           ) : Platform.OS === "web" ? (
-            <HtmlFrame html={html} title={title} colors={colors} fill onEscape={onClose} />
+            <HtmlFrame html={html} title={title} colors={colors} compact={tk.compact} fill onEscape={onClose} />
           ) : (
-            <Text style={{ color: colors.foregroundMuted, fontSize: 13 }}>{t("chat.htmlNative", { title })}</Text>
+            <Text style={{ color: colors.foregroundMuted, fontSize: fontSize.base }}>{t("chat.htmlNative", { title })}</Text>
           )}
         </View>
       </View>

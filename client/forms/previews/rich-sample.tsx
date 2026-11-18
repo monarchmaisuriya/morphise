@@ -8,6 +8,7 @@ import type { Prefs } from "../../../shared/polish/prefs";
 import { alpha, PMONO, sunken, useStyles } from "../../polish/rows/row";
 import { Icon } from "../../ui/kit";
 import { SAMPLE_CODE, SAMPLE_TABLE } from "./samples";
+import { fontSize, radius } from "../../../shared/design/tokens";
 
 type Variant = "a" | "b" | "c";
 
@@ -16,7 +17,7 @@ export function InlineCode({ theme, variant, children }: { theme: PluginTheme; v
   const c = theme.colors;
   const box = { a: { backgroundColor: c.surface2 }, b: {}, c: { borderWidth: 1, borderColor: alpha(c.border, 0.6) } }[variant];
   return (
-    <View style={[{ paddingHorizontal: variant === "b" ? 0 : 5, paddingVertical: 1, borderRadius: 4 }, box]}>
+    <View style={[{ paddingHorizontal: variant === "b" ? 0 : 5, paddingVertical: 1, borderRadius: radius.base }, box]}>
       <Text {...PMONO} style={[s.code, { color: variant === "b" ? c.statusWarning : c.foreground }]}>
         {children}
       </Text>
@@ -50,8 +51,8 @@ export function RichSample({ theme, rt, diagram }: { theme: PluginTheme; rt: Pre
     const text = "Never read the token before refresh() runs: it may already be rotated.";
     if (rt.quote === "b")
       return (
-        <View style={{ flexDirection: "row", gap: 10, padding: 12, borderRadius: 8, backgroundColor: c.surface1 }}>
-          <Text style={[s.title, { fontSize: 20, lineHeight: 22, color: c.accent }]}>“</Text>
+        <View style={{ flexDirection: "row", gap: 10, padding: 12, borderRadius: radius.lg, backgroundColor: c.surface1 }}>
+          <Text style={[s.title, { fontSize: fontSize["2xl"], lineHeight: 22, color: c.accent }]}>“</Text>
           <Text style={[prose, { flex: 1 }]}>{text}</Text>
         </View>
       );
@@ -66,7 +67,7 @@ export function RichSample({ theme, rt, diagram }: { theme: PluginTheme; rt: Pre
     if (rt.callout === "b")
       return (
         <View key={label} style={{ borderLeftWidth: 2, borderLeftColor: tone, paddingLeft: 14, gap: 2 }}>
-          <Text style={[s.small, { fontSize: 11, fontWeight: "600", letterSpacing: 0.7, color: tone }]}>{label.toUpperCase()}</Text>
+          <Text style={[s.small, { fontSize: fontSize.sm, fontWeight: "600", letterSpacing: 0.7, color: tone }]}>{label.toUpperCase()}</Text>
           <Text style={prose}>{text}</Text>
         </View>
       );
@@ -81,10 +82,10 @@ export function RichSample({ theme, rt, diagram }: { theme: PluginTheme; rt: Pre
         </View>
       );
     return (
-      <View key={label} style={{ flexDirection: "row", gap: 10, padding: 12, borderRadius: 8, backgroundColor: alpha(tone, 0.12) }}>
+      <View key={label} style={{ flexDirection: "row", gap: 10, padding: 12, borderRadius: radius.lg, backgroundColor: alpha(tone, 0.12) }}>
         <Icon name={icon} size={14} color={tone} />
         <View style={{ flex: 1, gap: 2, marginTop: -3 }}>
-          <Text style={[s.title, { fontSize: 13, color: tone }]}>{label}</Text>
+          <Text style={[s.title, { fontSize: fontSize.base, color: tone }]}>{label}</Text>
           <Text style={prose}>{text}</Text>
         </View>
       </View>
@@ -128,7 +129,7 @@ export function RichSample({ theme, rt, diagram }: { theme: PluginTheme; rt: Pre
       {...(head ? null : PMONO)}
       style={[
         head ? s.small : s.code,
-        { flex: widths[i], fontSize: head ? 11 : undefined, fontWeight: head ? "600" : undefined, color: head ? c.foregroundMuted : i === 3 && text !== "0" ? c.statusDanger : c.foreground },
+        { flex: widths[i], fontSize: head ? fontSize.sm : undefined, fontWeight: head ? "600" : undefined, color: head ? c.foregroundMuted : i === 3 && text !== "0" ? c.statusDanger : c.foreground },
         grid ? { paddingHorizontal: 12, paddingVertical: 8, borderRightWidth: i < 3 ? 1 : 0, borderRightColor: rule } : null,
       ]}
     >
@@ -138,7 +139,7 @@ export function RichSample({ theme, rt, diagram }: { theme: PluginTheme; rt: Pre
   // Grid cells carry their own padding so the column rules run the full row height.
   const rowPad = grid ? { gap: 0 } : { gap: 12, paddingHorizontal: rt.table === "c" ? 0 : 12, paddingVertical: 8 };
   const table = (
-    <View style={bordered ? { borderRadius: 8, borderWidth: 1, borderColor: rule, overflow: "hidden" } : { gap: rt.table === "b" ? 2 : 0 }}>
+    <View style={bordered ? { borderRadius: radius.lg, borderWidth: 1, borderColor: rule, overflow: "hidden" } : { gap: rt.table === "b" ? 2 : 0 }}>
       <View style={{ flexDirection: "row", ...rowPad, backgroundColor: bordered ? c.surface1 : undefined, borderBottomWidth: rt.table === "b" ? 0 : 1, borderBottomColor: rule }}>{["File", "Change", "Added", "Removed"].map((head, i) => cell(head, i, true))}</View>
       {SAMPLE_TABLE.map((row, r) => (
         <View key={row[0]} style={{ flexDirection: "row", ...rowPad, borderRadius: rt.table === "b" ? 6 : 0, backgroundColor: rt.table === "b" && r % 2 === 0 ? c.surface1 : undefined, borderTopWidth: bordered && r ? 1 : 0, borderTopColor: rule }}>
@@ -167,7 +168,7 @@ export function RichSample({ theme, rt, diagram }: { theme: PluginTheme; rt: Pre
         ))}
       </View>
       {rt.code === "b" ? (
-        <Text {...PMONO} style={[s.code, { fontSize: 11, color: alpha(c.foregroundMuted, 0.6) }]}>
+        <Text {...PMONO} style={[s.code, { fontSize: fontSize.sm, color: alpha(c.foregroundMuted, 0.6) }]}>
           ts
         </Text>
       ) : null}
@@ -175,10 +176,10 @@ export function RichSample({ theme, rt, diagram }: { theme: PluginTheme; rt: Pre
     </View>
   );
   const codeBlock = (
-    <View style={{ borderRadius: 8, backgroundColor: rt.code === "c" ? undefined : sunken(c.surface0), borderWidth: rt.code === "b" ? 0 : 1, borderColor: rule }}>
+    <View style={{ borderRadius: radius.lg, backgroundColor: rt.code === "c" ? undefined : sunken(c.surface0), borderWidth: rt.code === "b" ? 0 : 1, borderColor: rule }}>
       {rt.code === "a" ? (
         <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: rule }}>
-          <Text {...PMONO} style={[s.code, { flex: 1, fontSize: 12, color: c.foregroundMuted }]}>
+          <Text {...PMONO} style={[s.code, { flex: 1, fontSize: fontSize.sm, color: c.foregroundMuted }]}>
             typescript
           </Text>
           <Icon name="Copy" size={13} color={c.foregroundMuted} />

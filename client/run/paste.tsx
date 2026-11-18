@@ -6,6 +6,7 @@ import { Platform, Text, View } from "react-native";
 import { LIMITS } from "../../shared/run/limits";
 import { makePalette, withAlpha, type ThemeColors } from "./palette";
 import { Button, codeSurface, mono } from "./ui";
+import { fontSize, radius } from "../../shared/design/tokens";
 
 // Paste for a phone, where the box that takes the keys is too small to press and hold. A phone
 // browser reads the clipboard when the button is pressed. Paseo gives plugins no way to read
@@ -62,7 +63,7 @@ function PasteBox({ colors, onClose, onPaste }: { colors: ThemeColors; onClose()
         <View style={{ gap: 12 }}>
           <View
             style={{
-              borderRadius: 6,
+              borderRadius: radius.md,
               backgroundColor: palette.well,
               borderWidth: 1,
               borderColor: focused ? colors.accent : withAlpha(colors.border, 0.6),
@@ -88,10 +89,10 @@ function PasteBox({ colors, onClose, onPaste }: { colors: ThemeColors; onClose()
               placeholderTextColor={colors.foregroundMuted}
               accessibilityLabel="Text to paste into the command"
               // 16 px: iOS Safari zooms the page into a smaller box when it's tapped.
-              style={{ height: 24, padding: 0, fontFamily: mono(), fontSize: 16, lineHeight: 24, color: colors.foreground, outlineWidth: 0 }}
+              style={{ height: 24, padding: 0, fontFamily: mono(), fontSize: fontSize.lg, lineHeight: 24, color: colors.foreground, outlineWidth: 0 }}
             />
           </View>
-          <Text style={{ color: colors.foregroundMuted, fontSize: 12, lineHeight: 18 }}>
+          <Text style={{ color: colors.foregroundMuted, fontSize: fontSize.sm, lineHeight: 18 }}>
             It goes in as if you typed it. Then press Return if the command asks for it.
           </Text>
           <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>

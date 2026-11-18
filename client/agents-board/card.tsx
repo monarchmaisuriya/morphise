@@ -9,6 +9,7 @@ import { Icon, IconButton, type Tokens } from "../ui/kit";
 import type { CardLive } from "./data";
 import { cannotHover } from "../web";
 import { onRightClick, reveal } from "./web";
+import { fontSize, radius } from "../../shared/design/tokens";
 
 // One agent on the Agents view's board, read top to bottom: its title (and its first prompt when the
 // workspace's title leads), one quiet line of facts (project, workspace, model, time), pills for its
@@ -74,8 +75,8 @@ export function subtasksText(subtasks: NonNullable<CardFacts["subtasks"]>): stri
 // A project's letter tile, as Paseo's own sidebar draws it.
 export function ProjectTile({ name }: { name: string }) {
   return (
-    <View style={{ width: 14, height: 14, borderRadius: 3, alignItems: "center", justifyContent: "center", backgroundColor: tileColor(name) }}>
-      <Text style={{ fontSize: 9, color: "#ffffff", fontWeight: "700" }}>{name.slice(0, 1).toUpperCase()}</Text>
+    <View style={{ width: 14, height: 14, borderRadius: radius.base, alignItems: "center", justifyContent: "center", backgroundColor: tileColor(name) }}>
+      <Text style={{ fontSize: fontSize.sm, color: "#ffffff", fontWeight: "700" }}>{name.slice(0, 1).toUpperCase()}</Text>
     </View>
   );
 }
@@ -92,7 +93,7 @@ function Pill({ t, icon, label, tone }: { t: Tokens; icon?: string; label: strin
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 4, height: 20, paddingHorizontal: 6, borderRadius: 10, backgroundColor: t.c.surface2, maxWidth: "100%" }}>
       {icon ? <Icon name={icon} size={11} color={tone ?? t.c.foregroundMuted} /> : null}
-      <Text style={{ fontSize: 11, color: tone ?? t.c.foreground, flexShrink: 1 }} numberOfLines={1} ellipsizeMode="middle">
+      <Text style={{ fontSize: fontSize.sm, color: tone ?? t.c.foreground, flexShrink: 1 }} numberOfLines={1} ellipsizeMode="middle">
         {label}
       </Text>
     </View>
@@ -182,7 +183,7 @@ export function AgentCard({ t, facts, card, preview = true, now, live, selected,
     >
       <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
         {dot ? <View style={{ width: 8, height: 8, borderRadius: 4, marginTop: 5, backgroundColor: dot }} /> : null}
-        <Text style={{ flex: 1, color: t.c.foreground, fontSize: 13, fontWeight: "500", lineHeight: 18 }} numberOfLines={2}>
+        <Text style={{ flex: 1, color: t.c.foreground, fontSize: fontSize.base, fontWeight: "500", lineHeight: 18 }} numberOfLines={2}>
           {headline.title}
         </Text>
       </View>
@@ -192,7 +193,7 @@ export function AgentCard({ t, facts, card, preview = true, now, live, selected,
         </Text>
       ) : null}
       {waitsOn ? (
-        <Text style={{ fontSize: 12, color: indicator === "failed" ? t.c.statusDanger : t.c.statusWarning }} numberOfLines={2}>
+        <Text style={{ fontSize: fontSize.sm, color: indicator === "failed" ? t.c.statusDanger : t.c.statusWarning }} numberOfLines={2}>
           {waitsOn}
         </Text>
       ) : null}

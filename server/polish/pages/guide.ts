@@ -30,13 +30,14 @@ Use the built-in helper instead of drawing axes yourself: it sizes to the page, 
 - Morphise.chart(...) returns { update(spec) } to redraw with new data (a slider or a select), without changing the height.`;
 
 const TABLES = `# Tables
-Plain <table> is already styled (numbers right-aligned with td.num). Add class "sortable" to sort by any column with a click, and data-filter to add a filter box above it:
+Plain <table> is already styled like the chat's own tables: full width, a line round every cell, a bold shaded header and alternating rows (numbers right-aligned with td.num). Add class "sortable" to sort by any column with a click, and data-filter to add a filter box above it:
 
   <table class="sortable" data-filter="Filter rows">
     <thead><tr><th>Store</th><th class="num">Orders</th><th class="num">Revenue</th></tr></thead>
     <tbody><tr><td>North</td><td class="num">120</td><td class="num">$4,200</td></tr></tbody>
   </table>
 
+- Cells hold plain text: write status as words (Yes, Partial, No, Unknown). Badges, pills or colours a page adds inside cells are dropped; a heatmap may colour a cell with an inline background on the td.
 - Numbers sort as numbers ($, %, commas and k/M suffixes are understood).
 - A table wider than the chat scrolls sideways in its own box on its own; rows highlight on hover; sortable headers also sort with Enter or Space.
 - Over about 15 rows, wrap the table in <div class="scroll" style="max-height:360px"> so the page height stays fixed.
@@ -69,8 +70,10 @@ const INTERACTIVE = `# Interactive pages
 - Charts that follow a control: keep the object Morphise.chart returns and call its update(spec).`;
 
 const MOCKUPS = `# Mock-ups
-- Build from the kit: .stack, .row, .grid, .card, .stat (.label, .value), .chip, .muted, .small; buttons (.primary for the main action), inputs, selects and tables are styled.
-- Use the theme variables only (--fg, --muted, --bg, --surface, --border, --accent, --accent-fg, --success, --warning, --danger, --chart-1..6), so the mock-up follows light and dark themes.
+- Build from the kit: .stack, .row, .grid, .card, .stat (.label, .value), .chip (.chip.good, .warn, .bad or .info add a coloured dot), .muted, .small; buttons (.primary for the main action), inputs, selects and tables are styled.
+- A selected tab or toggle: role="tab" with aria-selected="true", or a button with aria-pressed="true"; the kit draws it selected.
+- The kit draws every element like the chat; write CSS only to arrange them (grid, flex, widths, hiding), never to restyle them.
+- Use the theme variables only (--fg, --muted, --bg, --surface, --surface-2, --border, --accent, --accent-fg, --success, --warning, --danger, --chart-1..6), so the mock-up follows light and dark themes.
 - Keep it to what the question needs: one screen, real-looking but short text, no lorem ipsum.
 - Readable at a glance: headings in order (h2 under h1, h3 under h2); numbered section labels only for real steps; related things close and groups apart; text kept off box edges (a .card or .stat already pads it); no one-word last lines in headings (the kit balances them).`;
 

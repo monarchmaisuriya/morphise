@@ -5,6 +5,7 @@ import { Platform, ScrollView, Text, View } from "react-native";
 import { readText } from "../shared/files";
 import { createValueStore, type ValueStore, useValue } from "./profile-store";
 import { Button, Icon, useTokens } from "./ui/kit";
+import { fontSize } from "../shared/design/tokens";
 
 // The Details tab: a tool row's whole output, diff or content, or a file it touched read from the
 // daemon, with line numbers. Opened from a row's Details or Open file; it shows the latest one.
@@ -61,7 +62,7 @@ export function createDetailsPanel(client: PluginClientContext) {
     return (
       <View style={{ flex: 1, backgroundColor: theme.colors.surface0 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: t.c.border }}>
-          <Text style={{ flex: 1, fontSize: 13, color: t.c.foreground, fontFamily: MONO }} numberOfLines={1}>
+          <Text style={{ flex: 1, fontSize: fontSize.base, color: t.c.foreground, fontFamily: MONO }} numberOfLines={1}>
             {details.title}
           </Text>
           {text ? <Button t={t} variant="ghost" icon="Copy" label="Copy" onPress={() => void copyText(text).then(() => toast.show("Copied"), (error: unknown) => toast.error(String(error)))} /> : null}
@@ -79,8 +80,8 @@ export function createDetailsPanel(client: PluginClientContext) {
                     return (
                       <View key={index} style={{ flexDirection: "row" }}>
                         {diff ? <View pointerEvents="none" style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0, backgroundColor: diff, opacity: 0.12 }} /> : null}
-                        <Text style={{ width: numberWidth, paddingRight: 8, textAlign: "right", fontSize: 12, lineHeight: 19, color: t.c.foregroundMuted, fontFamily: MONO }}>{index + 1}</Text>
-                        <Text selectable style={{ paddingRight: 16, fontSize: 12, lineHeight: 19, color: t.c.foreground, fontFamily: MONO }}>
+                        <Text style={{ width: numberWidth, paddingRight: 8, textAlign: "right", fontSize: fontSize.sm, lineHeight: 19, color: t.c.foregroundMuted, fontFamily: MONO }}>{index + 1}</Text>
+                        <Text selectable style={{ paddingRight: 16, fontSize: fontSize.sm, lineHeight: 19, color: t.c.foreground, fontFamily: MONO }}>
                           {line || " "}
                         </Text>
                       </View>

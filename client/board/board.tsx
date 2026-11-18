@@ -25,6 +25,7 @@ import type { BoardDeps } from "./deps";
 import { useWorkspaceName } from "./workspace-picker";
 import { PRIORITY, priorityColor, priorityOf } from "./styles";
 import { PriorityMark } from "./priority-mark";
+import { fontSize } from "../../shared/design/tokens";
 
 type Layout = Pick<TaskView, "filter" | "sort" | "swimlanes" | "density">;
 type Tab = "board" | "today" | "archived";
@@ -70,7 +71,7 @@ function MetaItem({ t, icon, text, tone }: { t: Tokens; icon: string; text?: str
     <View style={{ flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 1, minWidth: 0, maxWidth: "100%" }}>
       <Icon name={icon} size={12} color={tone ?? t.c.foregroundMuted} />
       {text ? (
-        <Text style={{ flexShrink: 1, color: tone ?? t.c.foregroundMuted, fontSize: 11 }} numberOfLines={1}>
+        <Text style={{ flexShrink: 1, color: tone ?? t.c.foregroundMuted, fontSize: fontSize.sm }} numberOfLines={1}>
           {text}
         </Text>
       ) : null}
@@ -410,13 +411,13 @@ function PanelButton({ t, icon, label, open = false, count, iconOnly = false, on
     >
       <Icon name={icon} size={14} color={count ? t.c.accent : hovered || open ? t.c.foreground : t.c.foregroundMuted} />
       {iconOnly ? null : (
-        <Text style={{ color: t.c.foreground, fontSize: 13, maxWidth: 160 }} numberOfLines={1}>
+        <Text style={{ color: t.c.foreground, fontSize: fontSize.base, maxWidth: 160 }} numberOfLines={1}>
           {label}
         </Text>
       )}
       {count ? (
         <View style={{ minWidth: 18, height: 18, paddingHorizontal: 5, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: t.c.accent }}>
-          <Text style={{ color: t.c.accentForeground, fontSize: 11, fontWeight: "600" }}>{count}</Text>
+          <Text style={{ color: t.c.accentForeground, fontSize: fontSize.sm, fontWeight: "600" }}>{count}</Text>
         </View>
       ) : null}
     </Pressable>
@@ -503,10 +504,10 @@ function ColumnView({ t, entry, document, now, layout, open, run, workspaceId, w
     <View ref={drag.column(column.id)} style={{ width: t.compact ? 284 : 300, maxHeight: "100%", borderRadius: t.radius.panel, backgroundColor: target ? t.c.surface2 : t.c.surface1, paddingBottom: 8 }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8, height: 44, paddingLeft: 14, paddingRight: 6 }}>
         <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: column.color ?? (column.done ? t.c.statusSuccess : t.c.foregroundMuted) }} />
-        <Text style={[t.text.heading, { fontSize: 13, flexShrink: 1 }]} numberOfLines={1}>
+        <Text style={[t.text.heading, { fontSize: fontSize.base, flexShrink: 1 }]} numberOfLines={1}>
           {column.name}
         </Text>
-        <Text style={{ color: entry.overLimit ? t.c.statusDanger : t.c.foregroundMuted, fontSize: 12, fontWeight: entry.overLimit ? "600" : "400" }} accessibilityLabel={column.wipLimit ? `${entry.count} of ${column.wipLimit} allowed` : `${entry.inScope} cards`}>
+        <Text style={{ color: entry.overLimit ? t.c.statusDanger : t.c.foregroundMuted, fontSize: fontSize.sm, fontWeight: entry.overLimit ? "600" : "400" }} accessibilityLabel={column.wipLimit ? `${entry.count} of ${column.wipLimit} allowed` : `${entry.inScope} cards`}>
           {/* A card limit counts every card in the column; otherwise the count is this board's cards. */}
           {column.wipLimit ? `${entry.count} / ${column.wipLimit}` : entry.inScope}
         </Text>

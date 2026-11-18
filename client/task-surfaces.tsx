@@ -22,6 +22,7 @@ import { ReminderPicker } from "./reminder-picker";
 import { tasksOf } from "./task-store";
 import { Button, Icon, MenuItem, useTokens } from "./ui/kit";
 import { requestNotifications } from "./web";
+import { radius } from "../shared/design/tokens";
 
 export interface Announcement {
   seq: number;
@@ -121,7 +122,7 @@ export function createChatPopover(deps: BoardDeps) {
       <View style={{ width: 340, maxWidth: "100%", gap: 8 }}>
         {/* Paseo's popover pads its content; these parts add no padding of their own and sit 8 apart, as Paseo spaces its own. */}
         <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-          <View style={{ width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: t.c.surface2 }}>
+          <View style={{ width: 28, height: 28, borderRadius: radius.lg, alignItems: "center", justifyContent: "center", backgroundColor: t.c.surface2 }}>
             <Icon name="AlarmClock" size={15} color={t.c.statusWarning} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>

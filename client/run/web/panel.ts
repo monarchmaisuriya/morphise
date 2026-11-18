@@ -79,7 +79,7 @@ export const PANEL_CSS = `
 [${PANEL}] [data-tone="error"] { --tone: var(--colors-status-danger); }
 [${PANEL}] [data-tone] [data-part="dot"] { background: var(--tone, var(--colors-foreground-muted)); }
 [${PANEL}] [data-tone] [data-part="status"] { color: var(--tone, var(--colors-foreground-muted)); }
-[${PANEL}] button { display: inline-flex; align-items: center; gap: 4px; height: 24px; min-width: 24px; justify-content: center; padding: 0 5px; border: 0; border-radius: 5px; background: transparent; color: var(--colors-foreground-muted); font: 12px system-ui, sans-serif; cursor: pointer; }
+[${PANEL}] button { display: inline-flex; align-items: center; gap: 4px; height: 24px; min-width: 24px; justify-content: center; padding: 0 5px; border: 0; border-radius: 6px; background: transparent; color: var(--colors-foreground-muted); font: 12px system-ui, sans-serif; cursor: pointer; }
 [${PANEL}] button:hover { color: var(--colors-foreground); background: var(--colors-surface2); }
 [${PANEL}] button:focus-visible { outline: 2px solid var(--colors-accent); outline-offset: -2px; }
 [${PANEL}] button[hidden] { display: none; }
@@ -88,7 +88,7 @@ export const PANEL_CSS = `
 ${PANEL_LINE_CHOICES.map((lines) => `[${PANEL}][data-lines="${lines}"] pre { max-height: ${lines * LINE_PX}px; }`).join("\n")}
 [${PANEL}] pre:empty { display: none; }
 [${PANEL}][data-can-type] pre { cursor: text; }
-[${PANEL}][data-typing] pre { outline: 1px solid var(--colors-accent); outline-offset: 3px; border-radius: 3px; }
+[${PANEL}][data-typing] pre { outline: 1px solid var(--colors-accent); outline-offset: 3px; border-radius: 4px; }
 [${PANEL}][data-typing] [data-part="type"] { color: var(--colors-accent); }
 [${PANEL}] [data-part="type-box"] { position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; resize: none; overflow: hidden; font-size: 16px; }
 `;

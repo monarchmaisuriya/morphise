@@ -40,6 +40,7 @@ import { PolishLookSettings, PolishRowSettings, polishEditor, UpdateSection } fr
 import { PreviewWidth, StepsCardPreview } from "./previews";
 import { runSplits } from "../polish/rows/steps";
 import { RecapRow } from "../chat-rows";
+import { fontSize, radius } from "../../shared/design/tokens";
 
 type ViewConfig = Profile["sidebar"]["view"];
 type Row = Profile["sidebar"]["headerRows"][number];
@@ -60,7 +61,7 @@ function multiline(form: Form, label: string, value: string, onChange: (text: st
   const { theme } = form;
   return (
     <View style={{ gap: 8, paddingVertical: 12, paddingHorizontal: 16 }}>
-      <Text style={{ color: theme.colors.foreground, fontSize: 14 }}>{label}</Text>
+      <Text style={{ color: theme.colors.foreground, fontSize: fontSize.base }}>{label}</Text>
       <TextInput
         accessibilityLabel={label}
         multiline
@@ -72,17 +73,17 @@ function multiline(form: Form, label: string, value: string, onChange: (text: st
         style={{
           minHeight,
           padding: 8,
-          fontSize: 12,
+          fontSize: fontSize.sm,
           lineHeight: 18,
           color: theme.colors.foreground,
           backgroundColor: theme.colors.surface1,
           borderColor: error ? theme.colors.statusDanger : theme.colors.border,
           borderWidth: 1,
-          borderRadius: 6,
+          borderRadius: radius.md,
           textAlignVertical: "top",
         }}
       />
-      {error ? <Text style={{ color: theme.colors.statusDanger, fontSize: 11 }}>{error}</Text> : null}
+      {error ? <Text style={{ color: theme.colors.statusDanger, fontSize: fontSize.sm }}>{error}</Text> : null}
     </View>
   );
 }
@@ -102,7 +103,7 @@ export function LayoutsTab(form: Form): ReactNode {
             onChange={(id) => form.updateDocument((next) => void (next.activeLayout = id))}
           />
         </SettingsCard>
-        {form.documentError("activeLayout") ? <Text style={{ color: form.theme.colors.statusDanger, fontSize: 12 }}>{form.documentError("activeLayout")}</Text> : null}
+        {form.documentError("activeLayout") ? <Text style={{ color: form.theme.colors.statusDanger, fontSize: fontSize.sm }}>{form.documentError("activeLayout")}</Text> : null}
       </SettingsSection>
       <ListEditor<Layout>
         form={form}
@@ -149,7 +150,7 @@ function StatusOrder({ form }: { form: Form }) {
   return (
     <View style={{ paddingVertical: 10, paddingHorizontal: 16, gap: 6 }}>
       <View style={{ gap: 2 }}>
-        <Text style={{ color: t.c.foreground, fontSize: 13 }}>Status order</Text>
+        <Text style={{ color: t.c.foreground, fontSize: fontSize.base }}>Status order</Text>
         <Text style={t.text.small}>Used to sort by status and to order status groups.</Text>
       </View>
       <View style={{ borderRadius: t.radius.row, borderWidth: 1, borderColor: t.c.border, overflow: "hidden" }}>
@@ -157,7 +158,7 @@ function StatusOrder({ form }: { form: Form }) {
           <View key={indicator} style={{ flexDirection: "row", alignItems: "center", gap: 10, minHeight: 36, paddingLeft: 12, paddingRight: 4, borderTopWidth: index === 0 ? 0 : 1, borderTopColor: t.c.border, backgroundColor: t.c.surface1 }}>
             <Text style={[t.text.small, { width: 14 }]}>{index + 1}</Text>
             <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: statusColor(t.c, indicator) }} />
-            <Text style={{ color: t.c.foreground, fontSize: 13, flex: 1 }}>{STATUS_TITLES[indicator]}</Text>
+            <Text style={{ color: t.c.foreground, fontSize: fontSize.base, flex: 1 }}>{STATUS_TITLES[indicator]}</Text>
             <IconButton t={t} size="sm" icon="ChevronUp" label={`Move ${STATUS_TITLES[indicator]} up`} disabled={index === 0} onPress={() => move(index, -1)} />
             <IconButton t={t} size="sm" icon="ChevronDown" label={`Move ${STATUS_TITLES[indicator]} down`} disabled={index === order.length - 1} onPress={() => move(index, 1)} />
           </View>
@@ -521,11 +522,11 @@ function ViewCallout({ form }: { form: Form }) {
   if (!form.profile.sidebar.view.enabled || shown) return null;
   const { theme } = form;
   return (
-    <View style={{ flexDirection: "row", gap: 10, padding: 12, borderRadius: 8, borderWidth: 1, borderColor: theme.colors.statusWarning, backgroundColor: theme.colors.surface1 }}>
+    <View style={{ flexDirection: "row", gap: 10, padding: 12, borderRadius: radius.lg, borderWidth: 1, borderColor: theme.colors.statusWarning, backgroundColor: theme.colors.surface1 }}>
       <Icon name="TriangleAlert" size={16} color={theme.colors.statusWarning} />
       <View style={{ flex: 1, gap: 4 }}>
-        <Text style={{ color: theme.colors.foreground, fontSize: 13, fontWeight: "600" }}>Paseo is still showing its own sidebar</Text>
-        <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12 }}>
+        <Text style={{ color: theme.colors.foreground, fontSize: fontSize.base, fontWeight: "600" }}>Paseo is still showing its own sidebar</Text>
+        <Text style={{ color: theme.colors.foregroundMuted, fontSize: fontSize.sm }}>
           These settings change the Morphise sidebar view. To see it, open Paseo's Settings, then Sidebar, then Sidebar view, and pick
           Morphise. This note goes away once the view is showing in this window.
         </Text>
@@ -1269,7 +1270,7 @@ export function LookTab(form: Form): ReactNode {
               {colorFields(form, theme)}
               <TextField form={form} label="Sidebar (optional)" hint="Painted while Paseo's items are restyled and this theme is Paseo's theme" placeholder="#1e2227" value={theme.sidebar ?? ""} onChange={(text) => form.updateProfile((profile) => void (profile.theme && (text.trim() ? (profile.theme.sidebar = text.trim()) : delete profile.theme.sidebar)))} error={form.profileError("theme.sidebar")} />
               {contrastWarnings(theme.colors).map((warning) => (
-                <Text key={warning} style={{ paddingHorizontal: 16, paddingBottom: 8, fontSize: 12, color: form.theme.colors.statusWarning }}>
+                <Text key={warning} style={{ paddingHorizontal: 16, paddingBottom: 8, fontSize: fontSize.sm, color: form.theme.colors.statusWarning }}>
                   {warning}
                 </Text>
               ))}

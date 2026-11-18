@@ -21,6 +21,7 @@ import { claimTaskLink, LINK_INSTANCE } from "./task-link";
 import { Icon, type Tokens, useTokens } from "./ui/kit";
 import { StackViewerHost } from "./polish/media/views";
 import { FOCUS_SCOPE, useTooltip } from "./web";
+import { fontSize, radius } from "../shared/design/tokens";
 
 // Workbench: everything that needs the user, in one place. Chats waiting on them (raised by agents) and
 // their own tasks (Agents, Tasks, whose Filter shows Today and Archived too), plus bookmarked answers. Tabs along the top,
@@ -102,10 +103,10 @@ function WorkbenchTab({ t, label, icon, selected, onPress }: { t: Tokens; label:
       onPress={onPress}
       onHoverIn={() => setHovered(true)}
       onHoverOut={() => setHovered(false)}
-      style={{ flexDirection: "row", alignItems: "center", gap: 4, height: t.compact ? 32 : 28, paddingHorizontal: 8, marginHorizontal: 2, borderRadius: 6, backgroundColor: selected ? t.c.surface2 : hovered ? t.c.surface1 : "transparent" }}
+      style={{ flexDirection: "row", alignItems: "center", gap: 4, height: t.compact ? 32 : 28, paddingHorizontal: 8, marginHorizontal: 2, borderRadius: radius.md, backgroundColor: selected ? t.c.surface2 : hovered ? t.c.surface1 : "transparent" }}
     >
       <Icon name={icon} size={14} color={lit ? t.c.foreground : t.c.foregroundMuted} />
-      <Text style={{ fontSize: 14, color: lit ? t.c.foreground : t.c.foregroundMuted }} numberOfLines={1}>
+      <Text style={{ fontSize: fontSize.base, color: lit ? t.c.foreground : t.c.foregroundMuted }} numberOfLines={1}>
         {label}
       </Text>
     </Pressable>
@@ -137,7 +138,7 @@ function RailRow({ t, view, label, icon, selected, folded, onPress }: { t: Token
       <Icon name={icon} size={15} color={selected ? t.c.foreground : t.c.foregroundMuted} />
       {folded ? null : (
         <>
-          <Text style={{ flex: 1, fontSize: 14, color: t.c.foreground, fontWeight: selected ? "600" : "400" }} numberOfLines={1}>
+          <Text style={{ flex: 1, fontSize: fontSize.base, color: t.c.foreground, fontWeight: selected ? "600" : "400" }} numberOfLines={1}>
             {label}
           </Text>
         </>
@@ -294,7 +295,7 @@ export function createWorkbenchSidebarItem(deps: SurfaceDeps) {
           label={counts.due ? `Workbench · ${counts.due} due` : "Workbench"}
           active={active}
           onPress={() => openScreen({ screenId: WORKBENCH_SCREEN_ID })}
-          trailing={counts.waiting ? <Text style={{ fontSize: 12, color: counts.permission ? theme.colors.statusWarning : theme.colors.foregroundMuted, paddingRight: 8 }}>{counts.waiting}</Text> : null}
+          trailing={counts.waiting ? <Text style={{ fontSize: fontSize.sm, color: counts.permission ? theme.colors.statusWarning : theme.colors.foregroundMuted, paddingRight: 8 }}>{counts.waiting}</Text> : null}
         />
         {/* Always mounted with this row, so it shows the viewer for image stacks in Paseo's own replies. */}
         <StackViewerHost />

@@ -15,6 +15,7 @@ import { usePopoverRef } from "../pages/web/html-frame";
 import type { ImagesRow } from "./image-rows";
 import { loadImage } from "./images";
 import { closeStackViewer, setStackViewerIndex, useStackViewer, useStackViewerHost } from "./stack-viewer";
+import { fontSize, radius } from "../../../shared/design/tokens";
 
 type Images = Array<{ alt: string; url: string }>;
 
@@ -54,7 +55,7 @@ function Thumbnail({ alt, label, url, theme, onOpen, edge, focusable = true }: {
     return (
       <View style={[frame, { alignItems: "center", justifyContent: "center", gap: 6 }]}>
         <Icon name={failed ? "ImageOff" : "Image"} size={16} color={c.foregroundMuted} />
-        <Text style={{ color: c.foregroundMuted, fontSize: 12, lineHeight: 17 }}>{failed ? t("chat.imageUnavailable") : t("chat.loadingImage")}</Text>
+        <Text style={{ color: c.foregroundMuted, fontSize: fontSize.sm, lineHeight: 17 }}>{failed ? t("chat.imageUnavailable") : t("chat.loadingImage")}</Text>
       </View>
     );
   }
@@ -93,7 +94,7 @@ function LightboxButton({ icon, label, onPress, size = 32 }: { icon: string; lab
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
-      style={({ hovered, pressed }: { hovered?: boolean; pressed: boolean }) => ({ width: size, height: size, borderRadius: 999, alignItems: "center", justifyContent: "center", backgroundColor: `rgba(255,255,255,${pressed ? 0.2 : hovered ? 0.14 : 0.08})` })}
+      style={({ hovered, pressed }: { hovered?: boolean; pressed: boolean }) => ({ width: size, height: size, borderRadius: radius.full, alignItems: "center", justifyContent: "center", backgroundColor: `rgba(255,255,255,${pressed ? 0.2 : hovered ? 0.14 : 0.08})` })}
     >
       <Icon name={icon} size={size > 32 ? 18 : 16} color="#ffffff" />
     </Pressable>
@@ -137,7 +138,7 @@ function Lightbox({ images, index, onIndex, onClose }: { images: Images; index: 
   const fit = natural ? Math.min(Math.max(1, 320 / Math.max(natural.w, natural.h)), room.w / natural.w, room.h / natural.h) : 1;
   const scale = zoomed ? Math.max(1, fit * 2) : fit;
   const shown = natural ? { width: Math.round(natural.w * scale), height: Math.round(natural.h * scale) } : { width: Math.min(room.w, 640), height: Math.min(room.h, 400) };
-  const chrome = { color: "#ffffff", fontSize: 13 } as const;
+  const chrome = { color: "#ffffff", fontSize: fontSize.base } as const;
   // A native popover, so Escape here only closes the viewer (Paseo would also interrupt the agent).
   const viewer = usePopoverRef();
   return (
@@ -149,10 +150,10 @@ function Lightbox({ images, index, onIndex, onClose }: { images: Images; index: 
             <Text style={[chrome, { fontWeight: "500", flexShrink: 1 }]} numberOfLines={1}>
               {image.alt || t("chat.image")}
             </Text>
-            {natural ? <Text style={[chrome, { fontSize: 12, opacity: 0.55, fontVariant: ["tabular-nums"] }]}>{`${natural.w} × ${natural.h}`}</Text> : null}
-            {many ? <Text style={[chrome, { fontSize: 12, opacity: 0.55, fontVariant: ["tabular-nums"] }]}>{`${index + 1} / ${images.length}`}</Text> : null}
+            {natural ? <Text style={[chrome, { fontSize: fontSize.sm, opacity: 0.55, fontVariant: ["tabular-nums"] }]}>{`${natural.w} × ${natural.h}`}</Text> : null}
+            {many ? <Text style={[chrome, { fontSize: fontSize.sm, opacity: 0.55, fontVariant: ["tabular-nums"] }]}>{`${index + 1} / ${images.length}`}</Text> : null}
           </View>
-          {natural && fit < 1 ? <Text style={[chrome, { fontSize: 12, opacity: 0.55, fontVariant: ["tabular-nums"] }]}>{`${Math.round(scale * 100)}%`}</Text> : null}
+          {natural && fit < 1 ? <Text style={[chrome, { fontSize: fontSize.sm, opacity: 0.55, fontVariant: ["tabular-nums"] }]}>{`${Math.round(scale * 100)}%`}</Text> : null}
           <LightboxButton icon={zoomed ? "ZoomOut" : "ZoomIn"} label={zoomed ? t("chat.fitToWindow") : t("chat.zoomIn")} onPress={() => setZoomed((z) => !z)} />
           <LightboxButton icon="X" label={t("chat.close")} onPress={onClose} />
         </View>
@@ -167,7 +168,7 @@ function Lightbox({ images, index, onIndex, onClose }: { images: Images; index: 
               {uri ? (
                 <Pressable accessibilityRole="imagebutton" accessibilityLabel={zoomed ? t("chat.fitToWindow") : t("chat.zoomIn")} onPress={() => setZoomed((z) => !z)} style={{ cursor: zoomed ? "zoom-out" : "zoom-in" } as object}>
                   {/* Dimmed while it's still the previous image and the next one loads. */}
-                  <Image source={{ uri }} style={[shown, { borderRadius: 6, opacity: stale ? 0.45 : 1 }]} resizeMode="contain" />
+                  <Image source={{ uri }} style={[shown, { borderRadius: radius.md, opacity: stale ? 0.45 : 1 }]} resizeMode="contain" />
                 </Pressable>
               ) : (
                 <View pointerEvents="none" style={[shown, { alignItems: "center", justifyContent: "center", gap: 8 }]}>
@@ -188,7 +189,7 @@ function Lightbox({ images, index, onIndex, onClose }: { images: Images; index: 
             </View>
           </>
         ) : null}
-        <Text pointerEvents="none" style={[chrome, { position: "absolute", bottom: 14, alignSelf: "center", fontSize: 12, color: "rgba(255,255,255,0.6)", backgroundColor: "rgba(8,9,11,0.7)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, overflow: "hidden" }]}>
+        <Text pointerEvents="none" style={[chrome, { position: "absolute", bottom: 14, alignSelf: "center", fontSize: fontSize.sm, color: "rgba(255,255,255,0.6)", backgroundColor: "rgba(8,9,11,0.7)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.full, overflow: "hidden" }]}>
           {Platform.OS === "web"
             ? t("chat.lightboxHint", { action: t(zoomed ? "chat.lightboxFit" : "chat.lightboxZoom"), browse: many ? t("chat.lightboxBrowse") : "" })
             : t("chat.lightboxHintTap")}
@@ -217,8 +218,8 @@ type UpTarget = { addEventListener(type: "pointerup", listener: () => void, opti
 function StackBadge({ text, theme }: { text: string; theme: PluginTheme }) {
   const c = theme.colors;
   return (
-    <View pointerEvents="none" style={{ position: "absolute", right: 8, bottom: 8, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, borderWidth: StyleSheet.hairlineWidth, borderColor: c.border, backgroundColor: c.surface2 }}>
-      <Text style={{ color: c.foreground, fontSize: 12, fontWeight: "600", fontVariant: ["tabular-nums"] }}>{text}</Text>
+    <View pointerEvents="none" style={{ position: "absolute", right: 8, bottom: 8, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.full, borderWidth: StyleSheet.hairlineWidth, borderColor: c.border, backgroundColor: c.surface2 }}>
+      <Text style={{ color: c.foreground, fontSize: fontSize.sm, fontWeight: "600", fontVariant: ["tabular-nums"] }}>{text}</Text>
     </View>
   );
 }
@@ -389,7 +390,7 @@ function ImageStack({ images, theme, onOpen }: { images: Images; theme: PluginTh
             held.current = true;
             fold();
           }}
-          style={({ hovered }: { hovered?: boolean; pressed: boolean }) => ({ position: "absolute", top: 0, right: 4, zIndex: images.length + 2, width: 24, height: 24, borderRadius: 999, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: hovered ? c.accent : c.border, backgroundColor: c.surface2 })}
+          style={({ hovered }: { hovered?: boolean; pressed: boolean }) => ({ position: "absolute", top: 0, right: 4, zIndex: images.length + 2, width: 24, height: 24, borderRadius: radius.full, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: hovered ? c.accent : c.border, backgroundColor: c.surface2 })}
         >
           <Icon name="Minimize2" size={13} color={c.foregroundMuted} />
         </Pressable>

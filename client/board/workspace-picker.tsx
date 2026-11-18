@@ -3,6 +3,7 @@ import { Pressable, Text, View } from "react-native";
 import { type ValueStore, useValue } from "../profile-store";
 import { Dropdown, Field, Icon, MenuItem, type Tokens } from "../ui/kit";
 import { workspaceChoices, type WorkspaceList } from "../workspaces";
+import { fontSize } from "../../shared/design/tokens";
 
 // A workspace's name from the plugin's own list, so it works in modals as well as screens.
 export function useWorkspaceName(workspaces: ValueStore<WorkspaceList>, workspaceId: string | null | undefined): string | null {
@@ -43,7 +44,7 @@ export function WorkspacePicker({ t, workspaces, value, onChange, holder = () =>
         {/* Drawn as Select's trigger draws: a muted icon, and the label in the text colour once it names a choice (a workspace,
             or a none that is a real choice such as "All workspaces"). */}
         <Icon name="FolderGit2" size={14} color={t.c.foregroundMuted} />
-        <Text style={{ color: value || none.choice ? t.c.foreground : t.c.foregroundMuted, fontSize: 13, flexShrink: 1 }} numberOfLines={1}>
+        <Text style={{ color: value || none.choice ? t.c.foreground : t.c.foregroundMuted, fontSize: fontSize.base, flexShrink: 1 }} numberOfLines={1}>
           {label}
         </Text>
         <Icon name={open ? "ChevronUp" : "ChevronDown"} size={14} color={t.c.foregroundMuted} />

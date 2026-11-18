@@ -7,16 +7,33 @@
 
 export const KIT_VERSION = 3;
 
-export const KIT_CSS = [
-  // Numbers line up by digit everywhere; only table cells right-align them.
-  ".num{font-variant-numeric:tabular-nums}td.num,th.num{text-align:right}",
+// The helpers' styles, in the same three parts as the kit in ./page.ts: layout a page may override (in the `kit-base` layer), the look of
+// what a page arranges itself (unlayered), and the helpers' own controls, which a page never arranges (unlayered, layout included).
+export const KIT_CSS_BASE = [
+  "td.num,th.num{text-align:right}",
   ".scroll{overflow:auto}",
-  "table.sortable th{cursor:pointer;user-select:none;white-space:nowrap}table.sortable th[aria-sort]::after{content:'';display:inline-block;margin-left:4px;border:4px solid transparent;vertical-align:middle}",
-  "table.sortable th[aria-sort=ascending]::after{border-bottom-color:var(--muted);margin-top:-4px}table.sortable th[aria-sort=descending]::after{border-top-color:var(--muted);margin-top:4px}",
+  "table.sortable th{user-select:none;white-space:nowrap}",
   ".mk-filter{width:100%;max-width:280px;margin-bottom:8px}",
-  ".gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}.gallery figure{margin:0;display:flex;flex-direction:column;gap:6px}",
-  ".gallery img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:var(--radius);border:1px solid var(--border);background:var(--surface)}.gallery figcaption{font-size:12px;color:var(--muted)}",
-  ".mk-chart{position:relative;width:100%}.mk-chart svg{display:block;overflow:visible}.mk-chart text{font:11px var(--font);fill:var(--muted)}",
+  ".gallery{position:relative;display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}.gallery figure{margin:0;display:flex;flex-direction:column;gap:6px}",
+  ".gallery img{width:100%;aspect-ratio:4/3;object-fit:cover}",
+  // A table's frame scrolls it sideways when it is wider than the page, and clips the table's corners to the frame's radius.
+  ".mk-table{overflow:auto hidden;max-width:100%}.scroll:has(>table){overflow:auto}",
+  "@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}",
+].join("");
+
+export const KIT_CSS_LOOK = [
+  // Numbers line up by digit everywhere; only table cells right-align them.
+  ".num{font-variant-numeric:tabular-nums}",
+  "table.sortable th{cursor:pointer}table.sortable th:hover,table.sortable th:focus-visible{color:var(--fg)}",
+  ".mk-table,.scroll:has(>table){border-radius:6px}",
+  ".gallery img{border-radius:8px;border:1px solid var(--border);background:var(--surface);cursor:zoom-in}.gallery figcaption{font-size:12px;line-height:16px;color:var(--muted)}",
+  ".gallery img:focus-visible{outline:2px solid var(--accent);outline-offset:2px}",
+].join("");
+
+export const KIT_WIDGETS = [
+  "table.sortable th[aria-sort]::after{content:'';display:inline-block;margin-left:4px;border:4px solid transparent;vertical-align:middle}",
+  "table.sortable th[aria-sort=ascending]::after{border-bottom-color:var(--muted);margin-top:-4px}table.sortable th[aria-sort=descending]::after{border-top-color:var(--muted);margin-top:4px}",
+  ".mk-chart{position:relative;width:100%}.mk-chart svg{display:block;overflow:visible}.mk-chart text{font:12px var(--font);fill:var(--muted)}",
   ".mk-legend{display:flex;flex-wrap:wrap;gap:4px 12px;margin-bottom:8px;font-size:12px;color:var(--muted)}.mk-legend span{display:inline-flex;align-items:center;gap:5px}",
   ".mk-legend i{display:inline-block;width:8px;height:8px;border-radius:2px}.mk-legend .mk-on{color:var(--fg)}",
   // Legend items are buttons that hide and show a series; reset so neither the kit's nor a page's own button style changes them.
@@ -27,22 +44,18 @@ export const KIT_CSS = [
   ".mk-tip{position:absolute;z-index:10;display:none;pointer-events:none;max-width:260px;padding:6px 9px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--fg);font:12px/1.45 var(--font);box-shadow:0 4px 14px rgba(0,0,0,.28)}",
   ".mk-tip-title{font-weight:600;overflow-wrap:anywhere}.mk-tip-row{display:flex;align-items:center;gap:6px}.mk-tip-row i{width:8px;height:8px;border-radius:2px;flex:none}",
   ".mk-tip-row span{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mk-tip-row b{margin-left:auto;padding-left:12px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}",
-  ".mk-table{overflow-x:auto;max-width:100%}tbody tr:hover>td{background:color-mix(in srgb,var(--fg) 4%,transparent)}",
-  "table.sortable th:hover,table.sortable th:focus-visible{color:var(--fg)}",
-  ".gallery{position:relative}.gallery img{cursor:zoom-in}.gallery img:focus-visible{outline:2px solid var(--accent);outline-offset:2px}",
-  ".mk-zoom{position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:8px;background:var(--bg);border-radius:var(--radius);cursor:zoom-out;outline:none}",
+  ".mk-zoom{position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:8px;background:var(--bg);border-radius:8px;cursor:zoom-out;outline:none}",
   ".mk-zoom img{width:auto;max-width:100%;max-height:calc(100% - 28px);aspect-ratio:auto;object-fit:contain;border:0;background:none}",
   // The player: a fixed stage, a caption of exactly two lines and one row of fixed-width controls with a scrubber that takes the rest.
-  ".mk-player{display:flex;flex-direction:column;gap:8px;border-radius:var(--radius);outline:none}.mk-player:focus-visible{outline:2px solid var(--accent);outline-offset:4px}",
-  ".mk-stage{position:relative;overflow:hidden;width:100%;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border)}.mk-stage>svg,.mk-stage>canvas{position:absolute;left:0;top:0}",
-  ".mk-caption{height:2.9em;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;font-size:13px;line-height:1.45;overflow-wrap:anywhere}.mk-caption.mk-error{color:var(--danger)}",
+  ".mk-player{display:flex;flex-direction:column;gap:8px;border-radius:8px;outline:none}.mk-player:focus-visible{outline:2px solid var(--accent);outline-offset:4px}",
+  ".mk-stage{position:relative;overflow:hidden;width:100%;border-radius:8px;background:var(--surface);border:1px solid var(--border)}.mk-stage>svg,.mk-stage>canvas{position:absolute;left:0;top:0}",
+  ".mk-caption{height:2.9em;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;font-size:14px;line-height:1.45;overflow-wrap:anywhere}.mk-caption.mk-error{color:var(--danger)}",
   ".mk-player-bar{display:flex;flex-wrap:nowrap;align-items:center;gap:4px;height:36px}",
   ".mk-player-bar button{all:unset;box-sizing:border-box;flex:none;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;color:var(--fg);cursor:pointer}",
   ".mk-player-bar button:hover{background:color-mix(in srgb,var(--fg) 8%,transparent)}.mk-player-bar button:focus-visible{outline:2px solid var(--accent)}",
   ".mk-player-bar .mk-play{background:var(--accent);color:var(--accent-fg)}.mk-player-bar .mk-play:hover{background:var(--accent);filter:brightness(1.08)}",
   ".mk-player-bar input[type=range]{flex:1;min-width:48px;margin:0 6px;padding:0}.mk-count{flex:none;min-width:6ch;text-align:center;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}",
   ".mk-player-bar .mk-speed{width:5ch;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}",
-  "@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}",
 ].join("");
 
 // Pure layout maths, no DOM: nice axis ticks, compact numbers, label spacing and truncation.

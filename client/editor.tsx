@@ -17,6 +17,7 @@ import type { DraftStore, Saved } from "./draft";
 import { useAutoSave } from "./forms/autosave";
 import type { Problem } from "./reconciler";
 import { type ProfileStore, type ValueStore, useValue } from "./profile-store";
+import { fontSize, radius } from "../shared/design/tokens";
 
 const MONOSPACE = Platform.select({ ios: "Menlo", default: "monospace" });
 
@@ -62,17 +63,17 @@ export function createProfileEditor({ store, problems, drafts, reconnect }: Edit
           minHeight: layout.compact ? 280 : 420,
           padding: 12,
           fontFamily: MONOSPACE,
-          fontSize: 12,
+          fontSize: fontSize.sm,
           color: theme.colors.foreground,
           backgroundColor: theme.colors.surface2,
           borderColor: theme.colors.border,
           borderWidth: 1,
-          borderRadius: 8,
+          borderRadius: radius.lg,
           textAlignVertical: "top" as const,
         },
-        danger: { color: theme.colors.statusDanger, fontSize: 12 },
-        warning: { color: theme.colors.statusWarning, fontSize: 12 },
-        muted: { color: theme.colors.foregroundMuted, fontSize: 12 },
+        danger: { color: theme.colors.statusDanger, fontSize: fontSize.sm },
+        warning: { color: theme.colors.statusWarning, fontSize: fontSize.sm },
+        muted: { color: theme.colors.foregroundMuted, fontSize: fontSize.sm },
         list: { gap: 4 },
       }),
       [theme, layout.compact],

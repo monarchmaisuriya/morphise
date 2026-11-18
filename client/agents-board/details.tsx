@@ -16,6 +16,7 @@ import { Button, Field, Icon, IconButton, PropertyRow, type Tokens } from "../ui
 import { type CardFacts, StopButton } from "./card";
 import { type CliActions, useCardLive } from "./data";
 import { GenerateTitleButton } from "./title-button";
+import { fontSize } from "../../shared/design/tokens";
 
 // The chosen card in full: its request or error, first prompt and last reply, a reply box, sub-agents,
 // properties, usage and activity, with Open, Stop, Clear, Bookmark answer, Archive and Rename. Only what
@@ -267,7 +268,7 @@ export function AgentDetails({
             </Panel>
           ) : request.subject || request.body ? (
             <Panel t={t}>
-              <Text selectable style={{ color: t.c.foreground, fontSize: 12 }}>
+              <Text selectable style={{ color: t.c.foreground, fontSize: fontSize.sm }}>
                 {[request.subject, request.body].filter(Boolean).join("\n\n")}
               </Text>
             </Panel>
@@ -287,7 +288,7 @@ export function AgentDetails({
         <Section t={t} title="Error">
           {agent.lastError ? (
             <Panel t={t}>
-              <Text selectable style={{ color: t.c.statusDanger, fontSize: 12 }}>
+              <Text selectable style={{ color: t.c.statusDanger, fontSize: fontSize.sm }}>
                 {agent.lastError}
               </Text>
             </Panel>

@@ -2,6 +2,15 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.42.0 - 2026-11-18
+
+One look everywhere: HTML pages and Morphise's own screens use Paseo's own sizes and styles, so everything in a chat looks like one app.
+
+- **Pages look like Paseo's replies:** tables are drawn as Paseo draws a markdown table (full width, a line round every cell, a bold shaded header, alternating rows), and text, headings, links, lists, quotes, code, cards, stats, chips, buttons, tabs, inputs, charts, tooltips, galleries and the explainer player use Paseo's type and corner scale. Text follows Paseo's compact layout (15px, 14px compact). Pages already in your chats change on their next render.
+- **A page's own CSS can arrange, not restyle:** an agent's styles go in a lower CSS layer, so they can still set layout (grids, widths, hiding) but no longer change how the kit's elements look. Status words in tables are plain text; a cell's own background (a heatmap) is kept. New `.chip.good`, `.warn`, `.bad` and `.info` add a coloured dot, and a selected tab or toggle (`aria-selected`, `aria-pressed`) is drawn selected.
+- **Checked before it shows:** `html_render` rejects a page that uses `!important`, sets an inline colour, font, border or padding on a table, heading, chip, card, stat, control or anything inside a table cell, or has a style block with unbalanced braces; `force: true` still publishes it, and `html_preview` lists these too. The tool text and `html_guide` tell agents the new rules.
+- **Morphise's screens on Paseo's scale:** the Workbench, boards, sidebar rows, settings, stats strip and Morphise's restyle of Paseo's chat use Paseo's text sizes (12, 14 and 15px instead of 11, 11.5, 12.5 and 13) and corner radii, from one shared token file.
+
 ## 0.41.1 - 2026-11-18
 
 - **Fix: rows showing "Plugin timeline item unavailable."** Turn recaps (and any of Morphise's chat rows) could show this for good when a chat drew before Morphise's settings arrived, or during a Chat setting change. Paseo remembers that a row had no renderer and does not look again, so Morphise now registers all of its row renderers once, the moment it starts, whatever the settings; settings only decide which rows exist.

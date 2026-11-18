@@ -75,6 +75,7 @@ import { archiveConfirm, atRiskOfArchive, type HostWorkspace, markableDone, useH
 import { viewPresence } from "./view-presence";
 import { createHoverTracker, type HoverTracker, useHovered } from "./hover-tracker";
 import { afterPointerMoves, cannotHover } from "./web";
+import { fontSize, radius } from "../shared/design/tokens";
 
 type ViewConfig = Profile["sidebar"]["view"];
 type Theme = PluginSidebarViewProps["theme"];
@@ -124,17 +125,17 @@ function viewStyles(theme: Theme, config: ViewConfig, look: ReturnType<typeof si
     tools: { paddingHorizontal: 8, paddingBottom: 6, gap: 6 },
     // More space above a heading than below it: the heading belongs to the rows that follow.
     heading: { flexDirection: "row" as const, alignItems: "center" as const, gap: 6, minHeight: 28, paddingLeft: 16, paddingRight: 12, marginTop: groupGap },
-    headingText: { color: c.foregroundMuted, fontSize: 12, flexShrink: 1, fontWeight: look.boldGroups ? ("600" as const) : ("400" as const) },
-    count: { color: c.foregroundMuted, fontSize: 12, opacity: 0.6 },
+    headingText: { color: c.foregroundMuted, fontSize: fontSize.sm, flexShrink: 1, fontWeight: look.boldGroups ? ("600" as const) : ("400" as const) },
+    count: { color: c.foregroundMuted, fontSize: fontSize.sm, opacity: 0.6 },
     // Paseo's measured columns: tiles and status dots share a 16px slot at x=16; text starts at x=40.
-    project: { flexDirection: "row" as const, alignItems: "center" as const, minHeight: TOUCH ? 44 : 40, marginHorizontal: 8, marginTop: 10, paddingLeft: rowPad, paddingRight: 4, borderRadius: 8, gap: 2 },
+    project: { flexDirection: "row" as const, alignItems: "center" as const, minHeight: TOUCH ? 44 : 40, marginHorizontal: 8, marginTop: 10, paddingLeft: rowPad, paddingRight: 4, borderRadius: radius.lg, gap: 2 },
     projectMain: { flex: 1, minWidth: 0, flexDirection: "row" as const, alignItems: "center" as const, gap: 8, minHeight: TOUCH ? 44 : 40 },
-    tile: { width: 16, height: 16, borderRadius: 4, alignItems: "center" as const, justifyContent: "center" as const },
+    tile: { width: 16, height: 16, borderRadius: radius.base, alignItems: "center" as const, justifyContent: "center" as const },
     // This device's "Folder icons": off leaves a project's tile slot empty (its fold chevron still shows on hover).
     projectIcons: look.projectIcons,
-    tileText: { color: "#ffffff", fontSize: 10, fontWeight: "600" as const },
-    projectText: { color: c.foregroundMuted, fontSize: 14, flexShrink: 1 },
-    row: { minHeight: height, marginHorizontal: 8, paddingLeft: rowPad, paddingRight: 6, borderRadius: 8, flexDirection: "row" as const, alignItems: "center" as const, gap: 2 },
+    tileText: { color: "#ffffff", fontSize: fontSize.sm, fontWeight: "600" as const },
+    projectText: { color: c.foregroundMuted, fontSize: fontSize.base, flexShrink: 1 },
+    row: { minHeight: height, marginHorizontal: 8, paddingLeft: rowPad, paddingRight: 6, borderRadius: radius.lg, flexDirection: "row" as const, alignItems: "center" as const, gap: 2 },
     rowMain: { flex: 1, minWidth: 0, minHeight: height, flexDirection: "row" as const, alignItems: "center" as const, gap: 8 },
     // Two-line rows: the status mark and time line up with the title line.
     twoLine: { alignItems: "flex-start" as const, paddingVertical: 6 },
@@ -144,7 +145,7 @@ function viewStyles(theme: Theme, config: ViewConfig, look: ReturnType<typeof si
     lines: { flex: 1, minWidth: 0, gap: 1 },
     line: { flexDirection: "row" as const, alignItems: "center" as const, gap: 6, minHeight: 20 },
     subLine: { flexDirection: "row" as const, alignItems: "center" as const, gap: 8, minHeight: 16, overflow: "hidden" as const },
-    meta: { color: c.foregroundMuted, fontSize: 12, flexShrink: 1 },
+    meta: { color: c.foregroundMuted, fontSize: fontSize.sm, flexShrink: 1 },
     // Chats hang off a thin line under their workspace's status mark, sub-agents off one under their chat's.
     branchDown: { position: "absolute" as const, top: 0, bottom: 0, width: 1, backgroundColor: c.border },
     branchTurn: { position: "absolute" as const, top: 0, borderLeftWidth: 1, borderBottomWidth: 1, borderBottomLeftRadius: 6, borderColor: c.border },
@@ -166,16 +167,16 @@ function viewStyles(theme: Theme, config: ViewConfig, look: ReturnType<typeof si
     selected: { backgroundColor: withAlpha(c.surface2, 0.7) ?? c.surface2 },
     hovered: { backgroundColor: c.surface1 },
     label: { color: c.foreground, fontSize: textSize, flexShrink: 1 },
-    childLabel: { color: c.foregroundMuted, fontSize: 13, flexShrink: 1 },
-    secondary: { color: c.foregroundMuted, fontSize: 12, flexShrink: 1, opacity: 0.75 },
-    time: { color: c.foregroundMuted, fontSize: 12, opacity: 0.7, marginLeft: "auto" as const },
-    added: { color: c.statusSuccess, fontSize: 12 },
-    removed: { color: c.statusDanger, fontSize: 12 },
+    childLabel: { color: c.foregroundMuted, fontSize: fontSize.base, flexShrink: 1 },
+    secondary: { color: c.foregroundMuted, fontSize: fontSize.sm, flexShrink: 1, opacity: 0.75 },
+    time: { color: c.foregroundMuted, fontSize: fontSize.sm, opacity: 0.7, marginLeft: "auto" as const },
+    added: { color: c.statusSuccess, fontSize: fontSize.sm },
+    removed: { color: c.statusDanger, fontSize: fontSize.sm },
     dot: { width: 7, height: 7, borderRadius: 4 },
-    more: { flexDirection: "row" as const, alignItems: "center" as const, gap: 10, minHeight: 32, marginHorizontal: 8, paddingLeft: 10, borderRadius: 8 },
-    moreText: { color: c.foregroundMuted, fontSize: 14 },
+    more: { flexDirection: "row" as const, alignItems: "center" as const, gap: 10, minHeight: 32, marginHorizontal: 8, paddingLeft: 10, borderRadius: radius.lg },
+    moreText: { color: c.foregroundMuted, fontSize: fontSize.base },
     bulk: { flexDirection: "row" as const, alignItems: "center" as const, gap: 2, minHeight: 40, paddingLeft: 16, paddingRight: 8, borderTopWidth: 1, borderTopColor: c.border, backgroundColor: c.surface1 },
-    empty: { color: c.foregroundMuted, fontSize: 13, paddingHorizontal: 16, paddingVertical: 12 },
+    empty: { color: c.foregroundMuted, fontSize: fontSize.base, paddingHorizontal: 16, paddingVertical: 12 },
   };
 }
 
@@ -240,8 +241,8 @@ function DropLine({ shared }: { shared: Shared }) {
 function DragPill({ title, shared }: { title: string; shared: Shared }) {
   const { t } = shared;
   return (
-    <View style={{ marginHorizontal: 8, paddingHorizontal: 10, minHeight: 32, justifyContent: "center", borderRadius: 8, backgroundColor: t.c.surface2, borderWidth: 1, borderColor: t.c.border }}>
-      <Text style={{ color: t.c.foreground, fontSize: 13 }} numberOfLines={1}>
+    <View style={{ marginHorizontal: 8, paddingHorizontal: 10, minHeight: 32, justifyContent: "center", borderRadius: radius.lg, backgroundColor: t.c.surface2, borderWidth: 1, borderColor: t.c.border }}>
+      <Text style={{ color: t.c.foreground, fontSize: fontSize.base }} numberOfLines={1}>
         {title}
       </Text>
     </View>
@@ -339,7 +340,7 @@ function MoreRow({ label, spoken, icon, count, child, grandchild, onPress, share
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={spoken} onPress={onPress} style={[styles.more, child || grandchild ? { paddingLeft: grandchild ? 46 : 26, minHeight: 28 } : null]}>
       <Icon name={icon} size={child || grandchild ? 12 : 14} color={props.theme.colors.foregroundMuted} />
-      <Text style={[styles.moreText, child || grandchild ? { fontSize: 13 } : null]}>{label}</Text>
+      <Text style={[styles.moreText, child || grandchild ? { fontSize: fontSize.base } : null]}>{label}</Text>
       {count ? <Text style={styles.count}>{count}</Text> : null}
     </Pressable>
   );
@@ -363,7 +364,7 @@ function RemindButton({ chat, label, onPress, shared }: { chat: AgentRef; label:
 
 function InlinePicker({ target, title, onDone, shared }: { target: ReminderTarget; title: string; onDone(): void; shared: Shared }) {
   return (
-    <View style={{ marginHorizontal: 8, marginTop: 2, marginBottom: 6, padding: 8, borderWidth: 1, borderRadius: 10, borderColor: shared.t.c.border, backgroundColor: shared.t.c.surface1 }}>
+    <View style={{ marginHorizontal: 8, marginTop: 2, marginBottom: 6, padding: 8, borderWidth: 1, borderRadius: radius.lg, borderColor: shared.t.c.border, backgroundColor: shared.t.c.surface1 }}>
       <ReminderPicker deps={shared.picker} target={target} title={title} theme={shared.props.theme} compact={shared.t.compact} embedded onDone={onDone} />
     </View>
   );
@@ -677,7 +678,7 @@ function Meta({ icon, text, color, shared }: { icon?: string; text: string; colo
 function AheadBehind({ ahead, behind, shared }: { ahead: number; behind: number; shared: Shared }) {
   const c = shared.props.theme.colors;
   return (
-    <Text style={{ fontSize: 12 }} accessibilityLabel={`${ahead} commits to push, ${behind} to pull`}>
+    <Text style={{ fontSize: fontSize.sm }} accessibilityLabel={`${ahead} commits to push, ${behind} to pull`}>
       {ahead ? <Text style={{ color: BLUE }}>↑{ahead}</Text> : null}
       {ahead && behind ? " " : null}
       {behind ? <Text style={{ color: c.statusWarning }}>↓{behind}</Text> : null}
@@ -705,7 +706,7 @@ function LabelsMeta({ labels, shared }: { labels: readonly string[]; shared: Sha
 
 function DiffText({ diff, shared }: { diff: { additions: number; deletions: number }; shared: Shared }) {
   return (
-    <Text style={{ fontSize: 12 }} accessibilityLabel={`${diff.additions} lines added, ${diff.deletions} removed`}>
+    <Text style={{ fontSize: fontSize.sm }} accessibilityLabel={`${diff.additions} lines added, ${diff.deletions} removed`}>
       <Text style={shared.styles.added}>+{diff.additions}</Text> <Text style={shared.styles.removed}>-{diff.deletions}</Text>
     </Text>
   );
@@ -766,7 +767,7 @@ function WorkspaceCard({ title, workspace, info, host, shared }: { title: string
   const ahead = info ? `${info.ahead ? ` ↑${info.ahead}` : ""}${info.behind ? ` ↓${info.behind}` : ""}` : "";
   return (
     <View style={{ padding: 6, gap: 6 }}>
-      <Text style={{ color: c.foreground, fontSize: 13, fontWeight: "600" }} numberOfLines={2}>
+      <Text style={{ color: c.foreground, fontSize: fontSize.base, fontWeight: "600" }} numberOfLines={2}>
         {title}
       </Text>
       {workspace.diff && workspace.diff.additions + workspace.diff.deletions > 0 ? (
@@ -1265,7 +1266,7 @@ function UserGroupHeading({ group, index, count, collapsed, onToggle, shared }: 
             <DecorIcon icon={decor.icon} color={decor.color ?? props.theme.colors.foregroundMuted} size={12} />
           ) : decor.color ? (
             // A colour without an icon shows as a small swatch, since the name keeps the normal text colour.
-            <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: decor.color }} />
+            <View style={{ width: 8, height: 8, borderRadius: radius.sm, backgroundColor: decor.color }} />
           ) : null}
           <Text style={styles.headingText} numberOfLines={1}>
             {group.title}

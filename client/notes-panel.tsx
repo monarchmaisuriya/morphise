@@ -5,6 +5,7 @@ import { Text, View } from "react-native";
 import { MAX_NOTE_LENGTH, notePatch, readNote } from "../shared/notes";
 import { Icon, useTokens } from "./ui/kit";
 
+import { fontSize } from "../shared/design/tokens";
 const SAVE_DELAY_MS = 1000;
 
 type Status = { kind: "idle" } | { kind: "saving" } | { kind: "saved"; at: Date } | { kind: "failed"; message: string };
@@ -96,7 +97,7 @@ function NotesBody({ agentId, theme, compact }: { agentId: string; theme: Theme;
         maxLength={MAX_NOTE_LENGTH}
         value={text}
         onChangeText={setDraft}
-        style={{ flex: 1, minHeight: 200, padding: 12, fontSize: compact ? 15 : 14, lineHeight: compact ? 22 : 20, color: t.c.foreground, backgroundColor: t.c.surface1, borderColor: t.c.border, borderWidth: 1, borderRadius: t.radius.card, textAlignVertical: "top" }}
+        style={{ flex: 1, minHeight: 200, padding: 12, fontSize: compact ? fontSize.content : fontSize.base, lineHeight: compact ? 22 : 20, color: t.c.foreground, backgroundColor: t.c.surface1, borderColor: t.c.border, borderWidth: 1, borderRadius: t.radius.card, textAlignVertical: "top" }}
       />
       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
         <Icon name={statusIcon} size={12} color={status.kind === "failed" ? t.c.statusDanger : t.c.foregroundMuted} />

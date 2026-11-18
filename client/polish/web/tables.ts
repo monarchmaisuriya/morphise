@@ -75,14 +75,14 @@ const svg = (paths: string) => `<svg viewBox="0 0 24 24" width="14" height="14" 
 const STYLE = `
 :host { all: initial; }
 * { box-sizing: border-box; }
-.panel { display: flex; align-items: center; gap: 2px; padding: 3px; font-family: var(--pq-font); font-size: 13px; line-height: 18px; color: var(--pq-fg); background: var(--pq-bg); border: 1px solid var(--pq-border); border-radius: 10px; box-shadow: var(--pq-shadow); user-select: none; -webkit-user-select: none; }
+.panel { display: flex; align-items: center; gap: 2px; padding: 3px; font-family: var(--pq-font); font-size: 14px; line-height: 18px; color: var(--pq-fg); background: var(--pq-bg); border: 1px solid var(--pq-border); border-radius: 8px; box-shadow: var(--pq-shadow); user-select: none; -webkit-user-select: none; }
 .panel[data-tone="ok"] { color: var(--pq-success); }
 .panel[data-tone="error"] { color: var(--pq-danger); }
 .note { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; max-width: min(360px, calc(100vw - 16px)); overflow-wrap: anywhere; }
-button { appearance: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; margin: 0; padding: 5px 9px; border: 0; border-radius: 7px; background: transparent; color: inherit; font: inherit; font-weight: 500; white-space: nowrap; cursor: pointer; }
+button { appearance: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; margin: 0; padding: 5px 9px; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; font-weight: 500; white-space: nowrap; cursor: pointer; }
 button:hover { background: var(--pq-hover); }
 .corner { width: ${SIZE}px; height: ${SIZE}px; padding: 0; border-radius: 6px; }
-.corner button { width: 100%; height: 100%; padding: 0; border-radius: 5px; color: var(--pq-muted); }
+.corner button { width: 100%; height: 100%; padding: 0; border-radius: 6px; color: var(--pq-muted); }
 .corner button:hover { color: var(--pq-fg); }
 `;
 

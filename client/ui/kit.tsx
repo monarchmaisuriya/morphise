@@ -1,6 +1,7 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { type IconProps, Icon as PaseoIcon, TextInput } from "@getpaseo/plugin/client/ui";
 import { createContext, Fragment, type ReactNode, type RefObject, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { fontSize, lineHeight, radius } from "../../shared/design/tokens";
 import { createValueStore, useValue, type ValueStore } from "../profile-store";
 import { onPressOutside, useTooltip } from "../web";
 import { Modal as Layer, Platform, Pressable, ScrollView, type StyleProp, Text, type TextStyle, useWindowDimensions, View, type ViewStyle } from "react-native";
@@ -29,19 +30,20 @@ export function tokens(theme: PluginTheme, compact: boolean) {
     compact,
     control: compact ? 40 : 32,
     row: compact ? 44 : 36,
-    radius: { control: 6, row: 8, card: 10, panel: 12 },
+    // Paseo's radius and type scale (shared/design/tokens.ts), so Morphise's screens and its pages match the app.
+    radius: { control: radius.md, row: radius.lg, card: radius.lg, panel: radius.xl },
     // The gap between a tab's or panel's edge and its content, the same on every Morphise surface.
     inset: compact ? 12 : 16,
     space: { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 },
     text: {
-      title: { color: c.foreground, fontSize: 20, fontWeight: "600" as const },
-      heading: { color: c.foreground, fontSize: 14, fontWeight: "600" as const },
-      body: { color: c.foreground, fontSize: compact ? 15 : 13, lineHeight: compact ? 20 : 18 },
-      row: { color: c.foreground, fontSize: 14 },
-      label: { color: c.foregroundMuted, fontSize: 12 },
-      meta: { color: c.foregroundMuted, fontSize: 12 },
-      small: { color: c.foregroundMuted, fontSize: 11 },
-      danger: { color: c.statusDanger, fontSize: 12 },
+      title: { color: c.foreground, fontSize: fontSize["2xl"], fontWeight: "600" as const },
+      heading: { color: c.foreground, fontSize: fontSize.base, fontWeight: "600" as const },
+      body: { color: c.foreground, fontSize: compact ? fontSize.content : fontSize.base, lineHeight: lineHeight(compact ? fontSize.content : fontSize.base) },
+      row: { color: c.foreground, fontSize: fontSize.base },
+      label: { color: c.foregroundMuted, fontSize: fontSize.sm },
+      meta: { color: c.foregroundMuted, fontSize: fontSize.sm },
+      small: { color: c.foregroundMuted, fontSize: fontSize.sm },
+      danger: { color: c.statusDanger, fontSize: fontSize.sm },
     },
   };
 }
@@ -121,7 +123,7 @@ export function Button({
       ]}
     >
       {icon ? <Icon name={icon} size={15} color={variant === "ghost" && hover.hovered ? c.foreground : look.fg} /> : null}
-      {label ? <Text style={{ color: look.fg, fontSize: 13, fontWeight: variant === "primary" ? "600" : "500" }}>{label}</Text> : null}
+      {label ? <Text style={{ color: look.fg, fontSize: fontSize.base, fontWeight: variant === "primary" ? "600" : "500" }}>{label}</Text> : null}
     </Pressable>
   );
 }
@@ -250,7 +252,7 @@ export function Field({
               : undefined
           }
           style={[
-            { flex: 1, minWidth: 0, color: c.foreground, fontSize: t.compact ? 15 : 13, paddingVertical: multiline ? 8 : 0, minHeight: multiline ? (bare ? 44 : 72) : t.control - 2, textAlignVertical: multiline ? "top" : "center" },
+            { flex: 1, minWidth: 0, color: c.foreground, fontSize: t.compact ? fontSize.content : fontSize.base, paddingVertical: multiline ? 8 : 0, minHeight: multiline ? (bare ? 44 : 72) : t.control - 2, textAlignVertical: multiline ? "top" : "center" },
             // The field's border already shows focus; on the web the input's own outline would draw a
             // second ring inside it. `outlineWidth` is web-only, so it is cast past the native type.
             WEB ? (INPUT_NO_OUTLINE as TextStyle) : null,
@@ -280,7 +282,7 @@ export function Segmented<Value extends string | number>({ t, options, value, on
             style={{ height: t.control - 6, paddingHorizontal: 7, flexDirection: "row", alignItems: "center", gap: 4, borderRadius: t.radius.control, backgroundColor: on ? t.c.surface2 : "transparent" }}
           >
             {option.leading ?? (option.icon ? <Icon name={option.icon} size={13} color={option.tone ?? (on ? t.c.foreground : t.c.foregroundMuted)} /> : null)}
-            <Text style={{ color: on ? t.c.foreground : t.c.foregroundMuted, fontSize: 12, fontWeight: on ? "600" : "400" }}>{option.label}</Text>
+            <Text style={{ color: on ? t.c.foreground : t.c.foregroundMuted, fontSize: fontSize.sm, fontWeight: on ? "600" : "400" }}>{option.label}</Text>
           </Pressable>
         );
       })}
@@ -291,9 +293,9 @@ export function Segmented<Value extends string | number>({ t, options, value, on
 // A small coloured tag: a dot and a name, optionally removable or toggleable.
 export function Tag({ t, label, color, on = true, onPress, onRemove }: { t: Tokens; label: string; color?: string; on?: boolean; onPress?(): void; onRemove?(): void }) {
   const body = (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 5, height: t.compact ? 28 : 22, paddingHorizontal: 8, borderRadius: 11, borderWidth: 1, borderColor: on ? t.c.border : "transparent", backgroundColor: on ? t.c.surface1 : "transparent", opacity: on ? 1 : 0.6 }}>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 5, height: t.compact ? 28 : 22, paddingHorizontal: 8, borderRadius: radius.full, borderWidth: 1, borderColor: on ? t.c.border : "transparent", backgroundColor: on ? t.c.surface1 : "transparent", opacity: on ? 1 : 0.6 }}>
       {color ? <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: color }} /> : null}
-      <Text style={{ color: on ? t.c.foreground : t.c.foregroundMuted, fontSize: 11, maxWidth: 180 }} numberOfLines={1}>
+      <Text style={{ color: on ? t.c.foreground : t.c.foregroundMuted, fontSize: fontSize.sm, maxWidth: 180 }} numberOfLines={1}>
         {label}
       </Text>
       {onRemove ? (
@@ -491,7 +493,7 @@ export function Select<Value extends string>({ t, value, options, onChange, labe
       >
         {current?.dot ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: current.dot }} /> : null}
         {current?.icon ? <Icon name={current.icon} size={14} color={t.c.foregroundMuted} /> : null}
-        <Text style={{ color: current ? t.c.foreground : t.c.foregroundMuted, fontSize: 13, flexShrink: 1 }} numberOfLines={1}>
+        <Text style={{ color: current ? t.c.foreground : t.c.foregroundMuted, fontSize: fontSize.base, flexShrink: 1 }} numberOfLines={1}>
           {current?.label ?? placeholder ?? "None"}
         </Text>
         <Icon name={open ? "ChevronUp" : "ChevronDown"} size={14} color={t.c.foregroundMuted} />
@@ -535,7 +537,7 @@ export function MenuItem({ t, label, hint, icon, dot, checked, expanded, onPress
     >
       {dot ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: dot }} /> : null}
       {icon ? <Icon name={icon} size={14} color={tone ?? t.c.foregroundMuted} /> : null}
-      <Text style={{ flex: 1, color: tone ?? t.c.foreground, fontSize: 13 }} numberOfLines={1}>
+      <Text style={{ flex: 1, color: tone ?? t.c.foreground, fontSize: fontSize.base }} numberOfLines={1}>
         {label}
       </Text>
       {hint ? <Text style={t.text.meta}>{hint}</Text> : null}
@@ -587,7 +589,7 @@ export function StatTile({ t, label, value, tone, badge, footer, children }: { t
         </Text>
         {badge}
       </View>
-      <Text style={{ color: tone ?? t.c.foreground, fontSize: 22, fontWeight: "600", fontVariant: ["tabular-nums"] }} numberOfLines={1}>
+      <Text style={{ color: tone ?? t.c.foreground, fontSize: fontSize["3xl"], fontWeight: "600", fontVariant: ["tabular-nums"] }} numberOfLines={1}>
         {value}
       </Text>
       {children}

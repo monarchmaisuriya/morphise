@@ -4,6 +4,7 @@ import type { PluginTheme } from "@getpaseo/plugin";
 import { type ReactNode, useState } from "react";
 import { View } from "react-native";
 import { Segmented, tokens } from "../../ui/kit";
+import { radius } from "../../../shared/design/tokens";
 
 const PHONE_WIDTH = 390;
 
@@ -23,7 +24,7 @@ export function PreviewWidth({ theme, compact, children }: { theme: PluginTheme;
         ]}
         onChange={(value) => setPhone(value === "phone")}
       />
-      {phone ? <View style={{ width: PHONE_WIDTH, maxWidth: "100%", alignSelf: "center", borderWidth: 1, borderColor: theme.colors.border, borderRadius: 24, overflow: "hidden" }}>{children(true)}</View> : children(false)}
+      {phone ? <View style={{ width: PHONE_WIDTH, maxWidth: "100%", alignSelf: "center", borderWidth: 1, borderColor: theme.colors.border, borderRadius: radius["2xl"], overflow: "hidden" }}>{children(true)}</View> : children(false)}
     </View>
   );
 }

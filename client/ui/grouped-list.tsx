@@ -2,6 +2,7 @@ import { type ReactNode, type Ref, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { cannotHover } from "../web";
 import { Icon, type Tokens } from "./kit";
+import { fontSize } from "../../shared/design/tokens";
 
 // The grouped list the Agents and Tasks lists share (the shape of GitHub's boxed lists and Linear's grouped
 // list): each group a bordered box with a tinted header, rows with hairline dividers, one line per row on
@@ -25,7 +26,7 @@ export function GroupList({ t, children, scroll }: { t: Tokens; children: ReactN
 function CountChip({ t, count, tone }: { t: Tokens; count: number | string; tone?: string }) {
   return (
     <View style={{ minWidth: 20, height: 18, paddingHorizontal: 6, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: t.c.surface2 }}>
-      <Text style={{ fontSize: 11, fontWeight: "600", color: tone ?? t.c.foregroundMuted, fontVariant: ["tabular-nums"] }}>{count}</Text>
+      <Text style={{ fontSize: fontSize.sm, fontWeight: "600", color: tone ?? t.c.foregroundMuted, fontVariant: ["tabular-nums"] }}>{count}</Text>
     </View>
   );
 }
@@ -36,7 +37,7 @@ export function Fact({ t, icon, text, tone }: { t: Tokens; icon?: string; text?:
     <View style={{ flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 1, minWidth: 0 }}>
       {icon ? <Icon name={icon} size={12} color={tone ?? t.c.foregroundMuted} /> : null}
       {text ? (
-        <Text style={{ fontSize: 12, color: tone ?? t.c.foregroundMuted, flexShrink: 1, fontVariant: ["tabular-nums"] }} numberOfLines={1}>
+        <Text style={{ fontSize: fontSize.sm, color: tone ?? t.c.foregroundMuted, flexShrink: 1, fontVariant: ["tabular-nums"] }} numberOfLines={1}>
           {text}
         </Text>
       ) : null}
@@ -63,7 +64,7 @@ export function GroupBox({ t, title, count, countTone, empty, icon, dot, tone, o
         >
           <Icon name={open ? "ChevronDown" : "ChevronRight"} size={14} color={t.c.foregroundMuted} />
           {icon ? <Icon name={icon} size={14} color={tone ?? t.c.foregroundMuted} /> : dot ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: dot }} /> : null}
-          <Text style={{ fontSize: 13, fontWeight: "600", color: empty ? t.c.foregroundMuted : t.c.foreground, flexShrink: 1 }} numberOfLines={1}>
+          <Text style={{ fontSize: fontSize.base, fontWeight: "600", color: empty ? t.c.foregroundMuted : t.c.foreground, flexShrink: 1 }} numberOfLines={1}>
             {title}
           </Text>
           <CountChip t={t} count={count} tone={countTone} />
@@ -77,7 +78,7 @@ export function GroupBox({ t, title, count, countTone, empty, icon, dot, tone, o
 
 /** A box's last row: "Show 44 more", or a note such as "No agents". */
 export function GroupFooter({ t, text, onPress }: { t: Tokens; text: string; onPress?(): void }) {
-  const body = <Text style={[t.text.meta, { fontSize: 12 }]}>{text}</Text>;
+  const body = <Text style={[t.text.meta, { fontSize: fontSize.sm }]}>{text}</Text>;
   const style = { height: 36, justifyContent: "center" as const, paddingHorizontal: 38, borderTopWidth: 1, borderTopColor: t.c.border };
   if (!onPress) return <View style={style}>{body}</View>;
   return (
@@ -121,7 +122,7 @@ export function GroupRow({ t, nodeRef, leading, title, detail, struck, meta, fac
   const background = selected ? t.c.surface2 : hovered || pressed ? t.c.surface1 : t.c.surface0;
   // On desktop the title keeps up to 60% of the line when detail follows it, else all of it.
   const titleNode = (
-    <Text style={{ fontSize: 13, fontWeight: "500", lineHeight: 18, color: t.c.foreground, flexShrink: t.compact || !detail ? 1 : 0, maxWidth: t.compact || !detail ? undefined : "60%", textDecorationLine: struck ? "line-through" : "none" }} numberOfLines={1}>
+    <Text style={{ fontSize: fontSize.base, fontWeight: "500", lineHeight: 18, color: t.c.foreground, flexShrink: t.compact || !detail ? 1 : 0, maxWidth: t.compact || !detail ? undefined : "60%", textDecorationLine: struck ? "line-through" : "none" }} numberOfLines={1}>
       {title}
     </Text>
   );

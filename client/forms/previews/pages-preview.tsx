@@ -9,6 +9,7 @@ import { PrefsOverride } from "../../polish/prefs";
 import { pageHeightNote } from "./helpers";
 import { PreviewNote, rowProps, PREVIEW_FRAME } from "./parts";
 import { SAMPLE_PAGE } from "./samples";
+import { radius } from "../../../shared/design/tokens";
 
 export function PagesPreview({ theme, prefs, compact = false }: { theme: PluginTheme; prefs: Prefs; compact?: boolean }) {
   const web = Platform.OS === "web";
@@ -17,7 +18,7 @@ export function PagesPreview({ theme, prefs, compact = false }: { theme: PluginT
       <View style={{ ...PREVIEW_FRAME, gap: 10 }}>
         {prefs.html === "on" ? null : <PreviewNote theme={theme} text="Pages are off; this is how one would look." />}
         <PreviewNote theme={theme} text={web ? pageHeightNote(prefs.pageHeight) : "Pages preview on desktop and web; phones show the page's name, as below."} />
-        <View style={{ padding: compact ? 10 : 16, borderRadius: 12, backgroundColor: theme.colors.surface0, borderWidth: 1, borderColor: theme.colors.border }}>
+        <View style={{ padding: compact ? 10 : 16, borderRadius: radius.xl, backgroundColor: theme.colors.surface0, borderWidth: 1, borderColor: theme.colors.border }}>
           <HtmlItem {...rowProps(theme, compact, HTML_ROW_KIND, { title: "API latency, last 24 hours", html: SAMPLE_PAGE })} />
         </View>
       </View>

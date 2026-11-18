@@ -20,6 +20,7 @@ import { formatCount } from "../../shared/run/view";
 import type { Palette, ThemeColors } from "./palette";
 import { withAlpha } from "./palette";
 import { Button, codeSurface, mono, nativeDriver } from "./ui";
+import { fontSize, radius } from "../../shared/design/tokens";
 
 export const LINE_HEIGHT = 18;
 const WELL_PADDING_V = 8;
@@ -88,7 +89,7 @@ export function OutputWell({
   }, [total]);
 
   const body = (
-    <Text selectable style={{ fontFamily: mono(), fontSize: 12, lineHeight: LINE_HEIGHT, color: palette.text }}>
+    <Text selectable style={{ fontFamily: mono(), fontSize: fontSize.sm, lineHeight: LINE_HEIGHT, color: palette.text }}>
       {tall && commandLines.length > 1 ? (
         <Text style={{ color: colors.foregroundMuted }}>
           {commandLines.map((l) => `$ ${l}`).join("\n")}
@@ -125,7 +126,7 @@ export function OutputWell({
   const frame = {
     // No box of its own: the text lines up with the command, and a ring shows only while typing.
     marginHorizontal: 2,
-    borderRadius: 6,
+    borderRadius: radius.md,
     backgroundColor: palette.well,
     borderWidth: 1,
     borderColor: listening ? colors.accent : "transparent",

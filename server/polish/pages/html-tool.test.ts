@@ -130,6 +130,13 @@ describe("the html_render MCP server", () => {
     expect(explainersGuide.content[0].text).toMatch(/p = 0/);
     expect(tools[0]!.description).toMatch(/\.stat is a tile/);
     expect(tools[0]!.description).toMatch(/\.num right-aligns numbers in table cells/);
+    const tablesGuide = (await ask(24, "tools/call", { name: "html_guide", arguments: { topic: "tables" } })).result.content[0].text;
+    expect(tablesGuide).toMatch(/like the chat's own tables/);
+    expect(tablesGuide).toMatch(/Cells hold plain text/);
+    const mockupsGuide = (await ask(25, "tools/call", { name: "html_guide", arguments: { topic: "mockups" } })).result.content[0].text;
+    expect(mockupsGuide).toMatch(/\.chip\.good, \.warn, \.bad or \.info/);
+    expect(mockupsGuide).toMatch(/aria-selected="true"/);
+    expect(mockupsGuide).toContain("--surface-2");
     const unknownGuide = (await ask(21, "tools/call", { name: "html_guide", arguments: { topic: "poems" } })).result;
     expect(unknownGuide.isError).toBe(true);
     expect(unknownGuide.content[0].text).toMatch(/charts, tables, diagrams, images, interactive, mockups, explainers/);
@@ -163,6 +170,17 @@ describe("the html_render MCP server", () => {
     expect(readPageId(reverted)).not.toBe(id);
     expect((await update("<p>Third</p>", "f".repeat(64))).content[0]!.text).toMatch(/No page f+ is stored/);
     expect((await update("<p>Third</p>", "page-1")).isError).toBe(true);
+    // A page restyling what the kit draws is rejected even with no headless browser, says why, and goes out with force; html_preview lists it.
+    const restyled = '<table><tr><td style="color:#f00">x</td></tr></table>';
+    const rejected = (await ask(7, "tools/call", { name: "html_render", arguments: { title: "t", html: restyled } })).result;
+    expect(rejected.isError).toBe(true);
+    expect(rejected.content[0]!.text).toMatch(/<td> sets color/);
+    expect((await ask(8, "tools/call", { name: "html_render", arguments: { title: "t", html: restyled, force: true } })).result.isError).toBe(false);
+    expect((await ask(9, "tools/call", { name: "html_preview", arguments: { html: restyled } })).result.content[0]!.text).toMatch(/html_render would reject it for:\n- <td> sets color/);
+    // The description tells agents the kit draws every element like the chat, and names the third surface.
+    expect(tools[0]!.description).toMatch(/Don't style text, headings, links, lists, quotes, code, tables, chips, cards, stats, buttons or inputs/);
+    expect(tools[0]!.description).toContain("--surface-2");
+    expect(tools[0]!.description).toMatch(/\.chip\.good, \.warn, \.bad or \.info/);
     const publish = async (html: string) => (await ask(5, "tools/call", { name: "html_render", arguments: { title: "t", html, force: true } })).result;
     expect((await publish('<div style="min-height:100dvh"></div>')).content[0]!.text).toMatch(/viewport height unit \(100dvh\)/);
     expect((await publish("<script>\nconst a = {;\n</script>")).content[0]!.text).toMatch(/^Script 1 has a syntax error on its line 2/);
@@ -345,5 +363,38 @@ describe("the headless browser", () => {
   it("leaves a page unchecked while it is not installed", async () => {
     const { checkPage } = await import("./page-check");
     expect(await checkPage("<p>x</p>", undefined)).toBeUndefined();
+  });
+});
+
+// A page may arrange itself, but the kit draws text, tables and controls like the chat; these are the ways a page's own CSS could still
+// restyle them, which html_render rejects (forceable) whether or not the layout check can run.
+describe("a page restyling what the kit draws", () => {
+  it.each([
+    ["!important in its CSS", "<style>td{color:red!important}</style>", /uses !important/],
+    ["!important inline", '<p style="color:red !important">x</p>', /uses !important/],
+    ["an inline look on a cell", '<table><tr><td style="color:#f00">x</td></tr></table>', /<td> sets color/],
+    ["an inline look inside a cell", '<table><tr><td><span style="background:#2a3;border-radius:999px">OK</span></td></tr></table>', /<span> \(in a table cell\) sets background/],
+    ["an inline look on a heading", '<h2 style="font-size:30px">x</h2>', /<h2> sets font-size/],
+    ["an inline look on a chip", '<span class="chip good" style="border:0">x</span>', /<span class="chip good"> sets border/],
+    ["an inline look on a button", '<button style="padding:0">x</button>', /<button> sets padding/],
+    ["unbalanced braces", "<style>p{color:red}}td{color:red}</style>", /unbalanced braces/],
+  ])("rejects %s", async (_, html, problem) => {
+    const { ownLookProblems } = await import("./html-tool");
+    expect(ownLookProblems(html).join("\n")).toMatch(problem);
+  });
+  it.each([
+    ["layout inline", '<div class="grid" style="grid-template-columns:1fr 2fr;gap:8px"><div class="card" style="width:50%">x</div></div>'],
+    ["a heatmap cell", '<table><tr><td style="background:#3987e5">x</td><th style="background-color:#eee">y</th></tr></table>'],
+    ["a drawing's colours", '<svg><rect style="fill:red;stroke:blue"/></svg><div style="color:red">free text</div>'],
+    ["!important in a script or a comment", "<script>el.style.setProperty('color','red','important')</script><!-- td{color:red!important} -->"],
+    ["a closed cell, then free text", '<table><tr><td>x</td></tr></table><p style="color:red">after</p>'],
+  ])("accepts %s", async (_, html) => {
+    const { ownLookProblems } = await import("./html-tool");
+    expect(ownLookProblems(html)).toEqual([]);
+  });
+  it("finds nothing in the pages agents published before this rule", async () => {
+    const { ownLookProblems } = await import("./html-tool");
+    const stored = '<style>.c{display:inline-block;padding:1px 7px;border-radius:999px}td.pl{font-weight:600}</style><div class="grid" style="grid-template-columns:repeat(3,1fr)"><div class="stat" style="gap:2px"></div></div><table><tr><td class="pl"><span class="c y">yes</span></td></tr></table>';
+    expect(ownLookProblems(stored)).toEqual([]);
   });
 });

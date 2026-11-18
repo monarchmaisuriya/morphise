@@ -173,21 +173,21 @@ ${W}${LIGHT} {
    (flat) or the panel's own border (floating). */
 ${each(W, LEFT_EDGE)} { --colors-border: var(--cp-w-hair); border-right-color: transparent !important; }
 ${each(FLAT + LIGHT, LEFT_EDGE)} { border-right-color: var(--colors-border) !important; }
-${W} [${WIN}="nav"] [role="button"] > [dir] { font-size: 13px !important; }
+${W} [${WIN}="nav"] [role="button"] > [dir] { font-size: 14px !important; }
 /* The rules under the nav and above the footer stop 10px short of both sides, so they don't run into the edge. */
 ${each(W, [`[${WIN}="nav"]`, '[data-testid="sidebar-footer"]'])} { border-color: transparent !important; background-image: linear-gradient(var(--cp-w-hair), var(--cp-w-hair)); background-size: calc(100% - 20px) 1px; background-repeat: no-repeat; }
 ${W} [${WIN}="nav"] { background-position: center bottom; }
 ${W} [data-testid="sidebar-footer"] { background-position: center top; }
-${W} [${WIN}="ws-label"] { font-size: 11.5px !important; letter-spacing: 0.02em; }
-${W} [${WIN}="ws-title"] { font-size: 13px !important; }
-${W} [data-testid="sidebar-workspace-timestamp"] { font-size: 11.5px !important; }
+${W} [${WIN}="ws-label"] { font-size: 12px !important; letter-spacing: 0.02em; }
+${W} [${WIN}="ws-title"] { font-size: 14px !important; }
+${W} [data-testid="sidebar-workspace-timestamp"] { font-size: 12px !important; }
 
 /* Header and tabs: medium title, faint project name; the active tab raised, the others faint. */
 ${W} [${WIN}="header"], ${W} [data-testid="workspace-tabs-row"] { border-bottom-color: var(--cp-w-hair) !important; }
 ${W} [data-testid="workspace-header-title"] { font-weight: 500 !important; color: var(--cp-w-strong) !important; }
 ${W} [data-testid="workspace-header-subtitle"] { color: var(--cp-w-faint) !important; }
 ${W} ${TAB}[aria-selected="true"] { background-color: var(--colors-surface1) !important; }
-${W} ${TAB_LABEL} { font-size: 13px !important; color: var(--cp-w-faint) !important; }
+${W} ${TAB_LABEL} { font-size: 14px !important; color: var(--cp-w-faint) !important; }
 ${W} ${TAB}[aria-selected="true"] > div > [dir] { color: var(--cp-w-strong) !important; }
 /* The fade under the active tab's close button is an SVG Paseo colors with its own active fill (surface2); match the raised tab. */
 ${W} ${TAB}[aria-selected="true"] + div stop { stop-color: var(--colors-surface1); }
@@ -197,8 +197,8 @@ ${W} ${TAB}[aria-selected="true"] + div stop { stop-color: var(--colors-surface1
 ${W} [data-testid="workspace-explorer-sidebar"] { --colors-border: var(--cp-w-hair); }
 ${each(W, ['[data-testid="changes-repository-header"]', '[data-testid="changes-header"]', '[data-testid="files-pane-header"]'])} { border-bottom-color: transparent !important; }
 ${W} [data-testid="changes-repository-header"][data-cp-empty] { display: none !important; }
-${W} [data-testid="workspace-explorer-sidebar"] ${TAB_LABEL} { font-size: 12.5px !important; }
-${each(W, TREE_NAMES)} { font-size: 12.5px !important; }
+${W} [data-testid="workspace-explorer-sidebar"] ${TAB_LABEL} { font-size: 12px !important; }
+${each(W, TREE_NAMES)} { font-size: 12px !important; }
 ${W} ${DIFF_FOLDER}[data-testid$="-name"] { color: var(--colors-foreground-muted) !important; }
 /* Paseo also fades folder names to 76%, which takes light themes' muted text under 4.5:1. */
 ${W}${LIGHT} ${DIFF_FOLDER}[data-testid$="-name"] { opacity: 1 !important; }

@@ -34,7 +34,7 @@ ${MODEL_POP} > div:first-child { display: contents !important; }
 ${MODEL_POP} [data-cp-part="search"] { grid-column: 1 / -1; grid-row: 1; padding: 4px 12px !important; border-bottom: 1px solid var(--cp-rule) !important; }
 ${HEADER} { grid-column: 2; grid-row: 2; padding: 10px 12px 6px 14px !important; }
 ${HEADER} > :is(button, [data-cp-part="icon"]) { display: none !important; }
-${HEADER} > [data-cp-part="title"] { font-size: 13px !important; font-weight: 600 !important; color: var(--cp-fg) !important; }
+${HEADER} > [data-cp-part="title"] { font-size: 14px !important; font-weight: 600 !important; color: var(--cp-fg) !important; }
 ${HEADER} > [data-cp-part="title"]::after { content: attr(data-cp-count); margin-left: 8px; font-size: 12px; font-weight: 400; color: var(--cp-muted); }
 ${MODEL_POP} > div:nth-child(2) { grid-column: 2; grid-row: 3; min-height: 0 !important; }
 ${MODEL_POP} [data-cp-part="providers"] { display: none !important; }
@@ -52,14 +52,14 @@ ${MODEL_POP} ${MODEL_ROW} svg { stroke: var(--cp-accent) !important; }
 /* A 14% black rail is a mid grey on a light popup; a faint tint of the text color keeps it a step down. */
 :root:is(.light, .pluginLight) [data-cp-rail] { background: color-mix(in srgb, var(--cp-fg) 5%, transparent); }
 :root:is(.light, .pluginLight) [data-cp-tip] { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); }
-[data-cp-rail] button { all: unset; box-sizing: border-box; position: relative; display: flex; align-items: center; gap: 8px; flex-shrink: 0; height: 28px; padding: 0 8px; border-radius: 6px; font-size: 13px; color: var(--cp-fg); cursor: pointer; }
+[data-cp-rail] button { all: unset; box-sizing: border-box; position: relative; display: flex; align-items: center; gap: 8px; flex-shrink: 0; height: 28px; padding: 0 8px; border-radius: 6px; font-size: 14px; color: var(--cp-fg); cursor: pointer; }
 [data-cp-rail] button:hover { background: var(--cp-control); }
 [data-cp-rail] button[aria-current="true"] { background: var(--cp-control); font-weight: 500; }
 [data-cp-rail] button[aria-current="true"]::before { content: ""; position: absolute; left: -6px; top: 8px; bottom: 8px; width: 2px; border-radius: 999px; background: var(--cp-accent); }
 [data-cp-rail] button[aria-disabled="true"] { opacity: 0.45; cursor: default; }
 [data-cp-rail] button[aria-disabled="true"]:hover { background: transparent; }
 [data-cp-rail] hr { border: 0; height: 1px; margin: 4px 2px; background: var(--cp-rule); flex-shrink: 0; }
-[data-cp-rail] [data-cp-icon] { display: flex; align-items: center; justify-content: center; width: 14px; height: 14px; flex-shrink: 0; color: var(--cp-muted); font-size: 11px; font-weight: 600; }
+[data-cp-rail] [data-cp-icon] { display: flex; align-items: center; justify-content: center; width: 14px; height: 14px; flex-shrink: 0; color: var(--cp-muted); font-size: 12px; font-weight: 600; }
 [data-cp-rail] :is(svg, img) { width: 14px; height: 14px; }
 [data-cp-rail] [data-cp-label] { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 [data-cp-rail] [data-cp-status="loading"] svg { color: var(--cp-muted); animation: cp-spin 1s linear infinite; }
@@ -72,13 +72,13 @@ ${MODEL_POP} ${MODEL_ROW} svg { stroke: var(--cp-accent) !important; }
 ${THINKING_POP} { border-radius: 12px !important; border-color: var(--cp-rule) !important; }
 ${THINKING_POP}[data-cp-described] { width: 420px !important; }
 ${THINKING_POP} button { min-height: 28px !important; margin: 0 4px !important; padding: 0 8px !important; gap: 8px !important; }
-${THINKING_POP} button > div:nth-child(2) > :first-child, ${MODEL_POP} ${MODEL_ROW} > div > div:nth-child(2) > :first-child { font-size: 13px !important; font-weight: 500 !important; }
+${THINKING_POP} button > div:nth-child(2) > :first-child, ${MODEL_POP} ${MODEL_ROW} > div > div:nth-child(2) > :first-child { font-size: 14px !important; font-weight: 500 !important; }
 ${THINKING_POP} button > div:first-child { visibility: hidden !important; }
 ${THINKING_POP} button[data-cp-part="checked"] > div:first-child { display: none !important; }
 ${THINKING_POP} button > div:nth-child(3) { order: -1; }
 ${THINKING_POP} button > div:nth-child(3) svg { stroke: var(--cp-accent) !important; }
 ${THINKING_POP} button > div:nth-child(2) { flex: 1 1 auto !important; min-width: 0 !important; flex-direction: row !important; align-items: center !important; gap: 8px !important; }
-[data-cp-default] { flex-shrink: 0; padding: 0 6px; border: 1px solid var(--cp-rule); border-radius: 999px; font-size: 11px; line-height: 16px; color: var(--cp-muted); }
+[data-cp-default] { flex-shrink: 0; padding: 0 6px; border: 1px solid var(--cp-rule); border-radius: 999px; font-size: 12px; line-height: 16px; color: var(--cp-muted); }
 [data-cp-desc] { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; color: var(--cp-muted); }
 [data-cp-hint] { position: absolute; right: 12px; bottom: calc(100% + 8px); padding: 3px 10px; border: 1px solid var(--cp-rule); border-radius: 999px; background: var(--cp-raised); font-size: 12px; line-height: 16px; white-space: nowrap; color: var(--cp-muted); pointer-events: none; }
 /* Popup surfaces use 20px squircles; nested surfaces keep their own radius scale. */

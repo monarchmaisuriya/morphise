@@ -303,12 +303,12 @@ const STYLE = `
 [hidden] { display: none !important; }
 .panel {
   font-family: var(--pq-font);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 18px;
   color: var(--pq-fg);
   background: var(--pq-bg);
   border: 1px solid var(--pq-border);
-  border-radius: 10px;
+  border-radius: 8px;
   box-shadow: var(--pq-shadow);
   user-select: none;
   -webkit-user-select: none;
@@ -331,7 +331,7 @@ button {
   margin: 0;
   padding: 5px 9px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 8px;
   background: transparent;
   color: inherit;
   font: inherit;
@@ -356,7 +356,7 @@ button:disabled { opacity: 0.4; cursor: default; }
   -webkit-box-orient: vertical;
 }
 .footer { display: flex; align-items: center; gap: 6px; }
-.hint { flex: 1 1 auto; min-width: 0; color: var(--pq-faint); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hint { flex: 1 1 auto; min-width: 0; color: var(--pq-faint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .error { flex: 1 1 auto; min-width: 0; color: var(--pq-danger); font-size: 12px; overflow-wrap: anywhere; }
 .error:empty { display: none; }
 .error:not(:empty) + .hint { display: none; }

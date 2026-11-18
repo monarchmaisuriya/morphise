@@ -7,6 +7,7 @@ import type { StatsReadResult } from "../../shared/stats";
 import { agentIdFromTab, stripText } from "../../shared/stats-format";
 import type { DomElement, WebDocument } from "../polish/web/dom";
 
+import { fontSize } from "../../shared/design/tokens";
 // The plugin compiles without lib.dom (it also runs on phones), so the page globals it uses are declared here.
 declare const document: WebDocument & { hidden?: boolean };
 declare function getComputedStyle(el: DomElement): { color: string };
@@ -18,7 +19,7 @@ const REFRESH_MS = 2000;
 export function startStatsStrip(read: (agentId: string) => Promise<StatsReadResult>): () => void {
   if (typeof document === "undefined") return () => undefined;
   const style = document.createElement("style");
-  style.textContent = `${INPUT} { margin-bottom: 22px !important; } [${MARK}] { position: absolute; left: 12px; right: 12px; bottom: -20px; font-size: 11px; line-height: 16px; opacity: 0.7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; font-variant-numeric: tabular-nums; }`;
+  style.textContent = `${INPUT} { margin-bottom: 22px !important; } [${MARK}] { position: absolute; left: 12px; right: 12px; bottom: -20px; font-size: ${fontSize.sm}px; line-height: 16px; opacity: 0.7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; font-variant-numeric: tabular-nums; }`;
   document.head.appendChild(style);
   let stopped = false;
   const tick = async () => {
