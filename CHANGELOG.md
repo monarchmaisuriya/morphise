@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.45.1 - 2026-11-19
+
+- **Task pickers close predictably:** clicking outside an open reminder, due date or label picker closes that panel without changing its value or closing the task editor. Opening another property picker closes the previous one. The existing-task reminder keeps its toggle visible and offers an explicit close button; due dates and new reminders also have close controls. Invalid date/time input no longer forces a dismissed panel to remain open; its draft and validation error are preserved.
+
 ## 0.45.0 - 2026-11-19
 
 - **Visual color editing on desktop and web:** theme roles, sidebar theme color, chat accent and bold text, task columns and labels, and sidebar decorations have inline color previews and graphical RGB controls with precise hex entry, opacity where supported, Apply and Cancel. Existing presets and the system color picker remain. iOS and Android retain their previous color controls.
