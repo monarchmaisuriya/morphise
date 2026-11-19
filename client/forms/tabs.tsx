@@ -41,6 +41,8 @@ import { PreviewWidth, StepsCardPreview } from "./previews";
 import { runSplits } from "../polish/rows/steps";
 import { RecapRow } from "../chat-rows";
 import { fontSize, radius } from "../../shared/design/tokens";
+import { ColorSetting } from "./color-field";
+import { colorValue } from "../../shared/color-value";
 
 type ViewConfig = Profile["sidebar"]["view"];
 type Row = Profile["sidebar"]["headerRows"][number];
@@ -770,7 +772,7 @@ export function ChatTab(form: Form): ReactNode {
                   options={[{ value: "theme", label: "Theme" }, { value: "jade", label: "Jade" }, { value: "violet", label: "Violet" }, { value: "amber", label: "Amber" }, { value: "rose", label: "Rose" }, { value: "zinc", label: "Zinc" }, { value: "midnight", label: "Midnight" }, { value: "claude", label: "Claude" }, { value: "ghostty", label: "Ghostty" }, { value: "black", label: "Black" }, { value: "custom", label: "Custom colour" }]}
                   onChange={(value) => setChat("accent", value === "theme" ? undefined : value === "custom" ? "#6366f1" : value)}
                 />
-                {chat.accent?.startsWith("#") ? <TextField form={form} label="Custom accent (#rrggbb)" value={chat.accent} error={form.profileError("chat.accent")} onChange={(value) => setChat("accent", value.trim() || undefined)} /> : null}
+                {chat.accent?.startsWith("#") ? <ColorSetting form={form} label="Custom accent" value={chat.accent} error={form.profileError("chat.accent")} resetLabel="Follow theme" onChange={(value) => setChat("accent", value.trim() || undefined)} /> : null}
                 <SwitchField label="Show the time" value={look.timestamps} onChange={(value) => setChat("timestamps", value ? true : undefined)} />
               </SettingsCard>
             </SettingsSection>
@@ -820,7 +822,7 @@ export function ChatTab(form: Form): ReactNode {
         <SettingsCard>
           <SelectField label="Reply text size" value={String(web.replySize ?? 100)} options={[90, 100, 110, 120, 135, 150].map((size) => ({ value: String(size), label: size === 100 ? "As Paseo shows it" : `${size}%` }))} onChange={(value) => setWeb("replySize", value === "100" ? undefined : Number(value))} />
           <SelectField label="Reply line spacing" value={String(web.replyLineHeight ?? 100)} options={[100, 115, 130, 150, 175].map((size) => ({ value: String(size), label: size === 100 ? "As Paseo shows it" : `${size}%` }))} onChange={(value) => setWeb("replyLineHeight", value === "100" ? undefined : Number(value))} />
-          <TextField form={form} label="Bold text colour (#rrggbb)" placeholder="As Paseo shows it" value={web.boldColor ?? ""} error={form.profileError("chat.web.boldColor")} onChange={(value) => setWeb("boldColor", value.trim() || undefined)} />
+          <ColorSetting form={form} label="Bold text colour" resetLabel="Follow Paseo" value={web.boldColor ?? ""} error={form.profileError("chat.web.boldColor")} onChange={(value) => setWeb("boldColor", value.trim() || undefined)} />
           <SelectField label="Links" value={web.linkStyle ?? "paseo"} options={[{ value: "paseo", label: "As Paseo shows them" }, { value: "dashed", label: "Dashed underline" }]} onChange={(value) => setWeb("linkStyle", value === "paseo" ? undefined : value)} />
           <SelectField label="Long prompts" value={String(web.clampPrompts ?? 0)} options={[{ value: "0", label: "In full" }, ...[4, 6, 10].map((lines) => ({ value: String(lines), label: `First ${lines} lines, the rest on hover` }))]} onChange={(value) => setWeb("clampPrompts", value === "0" ? undefined : Number(value))} />
           <SelectField label="Reading style" hint="Paseo still draws replies, with their Fork and Copy; only spacing and fonts change." value={polish.prefs.markdownStyle} options={[{ value: "paseo", label: "As Paseo shows them" }, { value: "document", label: "Document (roomy)" }, { value: "compact", label: "Compact" }, { value: "terminal", label: "Terminal (code font)" }]} onChange={(value) => polish.set("markdownStyle", value)} />
@@ -1205,17 +1207,22 @@ const THEME_PRESETS: Record<string, Theme> = {
   ...Object.fromEntries(POLISH_PRESETS.map((preset) => [`polish-${preset.id}`, { name: preset.id === "dusk" ? "Dusk (Chat Polish)" : preset.name === "One Dark Darker Mariana" ? "Mariana" : preset.name, appearance: preset.appearance, colors: { ...preset.colors }, ...(preset.sidebar ? { sidebar: preset.sidebar } : {}) }])),
 };
 
-// Contrast warnings for a theme's text, by WCAG's ratios: 4.5:1 for text, 3:1 for muted text.
+// Primary and secondary normal-size text use the same 4.5:1 minimum.
 function contrastWarnings(colors: Theme["colors"]): string[] {
-  const hex = /^#[0-9a-fA-F]{6}$/;
   const checks: [string, string | undefined, string | undefined, number][] = [
     ["Text on the background", colors.foreground, colors.background, 4.5],
     ["Text on raised surfaces", colors.foreground, colors.raised, 4.5],
-    ["Muted text on the background", colors.mutedForeground, colors.background, 3],
+    ["Muted text on the background", colors.mutedForeground, colors.background, 4.5],
+    ["Muted text on raised surfaces", colors.mutedForeground, colors.raised, 4.5],
+    ["Text on controls", colors.foreground, colors.control, 4.5],
   ];
   return checks.flatMap(([what, text, back, needed]) => {
-    if (!text || !back || !hex.test(text) || !hex.test(back)) return [];
-    const ratio = contrast(text, back);
+    if (!text || !back) return [];
+    const front = colorValue(text), behind = colorValue(back);
+    if (!front || !behind) return [];
+    if (front.alpha !== 255 || behind.alpha !== 255) return [`${what}: contrast not checked for transparent colors.`];
+    const expand = (value: string) => value.length === 4 ? `#${[...value.slice(1)].map((digit) => digit + digit).join("")}` : value.slice(0, 7);
+    const ratio = contrast(expand(text), expand(back));
     return ratio < needed ? [`${what}: ${ratio.toFixed(1)}:1, below ${needed}:1`] : [];
   });
 }
@@ -1233,11 +1240,12 @@ function colorFields(form: Form, theme: Theme): ReactNode {
     ring: "Focus ring",
   };
   return (Object.keys(labels) as (keyof Colors)[]).map((key) => (
-    <TextField
+    <ColorSetting
       key={key}
       form={form}
       label={labels[key]}
-      placeholder="#1e1e2e"
+      lengths={[3, 6, 8]}
+      resetLabel={key === "accent" ? "Follow theme" : undefined}
       value={theme.colors[key] ?? ""}
       onChange={(text) =>
         form.updateProfile((profile) => {
@@ -1280,7 +1288,7 @@ export function LookTab(form: Form): ReactNode {
                 onChange={(value) => form.updateProfile((profile) => void (profile.theme && (profile.theme.appearance = value)))}
               />
               {colorFields(form, theme)}
-              <TextField form={form} label="Sidebar (optional)" hint="Painted while Paseo's items are restyled and this theme is Paseo's theme." placeholder="#1e2227" value={theme.sidebar ?? ""} onChange={(text) => form.updateProfile((profile) => void (profile.theme && (text.trim() ? (profile.theme.sidebar = text.trim()) : delete profile.theme.sidebar)))} error={form.profileError("theme.sidebar")} />
+              <ColorSetting form={form} label="Sidebar (optional)" hint="Painted while Paseo's items are restyled and this theme is Paseo's theme." lengths={[3, 6, 8]} resetLabel="Follow Paseo" value={theme.sidebar ?? ""} onChange={(text) => form.updateProfile((profile) => void (profile.theme && (text.trim() ? (profile.theme.sidebar = text.trim()) : delete profile.theme.sidebar)))} error={form.profileError("theme.sidebar")} />
               {contrastWarnings(theme.colors).map((warning) => (
                 <Text key={warning} style={{ paddingHorizontal: 16, paddingBottom: 8, fontSize: fontSize.sm, color: form.theme.colors.statusWarning }}>
                   {warning}

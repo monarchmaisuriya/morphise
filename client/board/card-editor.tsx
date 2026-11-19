@@ -1,6 +1,6 @@
 import type { PluginTheme } from "@getpaseo/plugin";
-import { Modal, useToast } from "@getpaseo/plugin/client/ui";
-import { useEffect, useState } from "react";
+import { Modal, ScrollView, useToast } from "@getpaseo/plugin/client/ui";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { slug, type TaskOperation } from "../../shared/task-ops";
 import type { Task, TaskDocument } from "../../shared/tasks";
@@ -17,6 +17,7 @@ import { NO_PRIORITY, PRIORITY, priorityColor } from "./styles";
 import { PriorityMark } from "./priority-mark";
 import { workspaceTask } from "../../shared/task-ops";
 import { fontSize } from "../../shared/design/tokens";
+import { hasTaskEdits, taskFieldProblems } from "./editor-state";
 
 export type EditorTarget = { kind: "existing"; taskId: string } | { kind: "new"; column: string; workspaceId: string | null };
 
@@ -84,7 +85,17 @@ export function CardEditor({ deps, target, theme, compact, onClose, openWorkspac
   const toast = useToast();
   const t = useTokens(theme, compact);
   const [reminderOpen, setReminderOpen] = useState(false);
-  const set = (patch: Partial<Draft>) => setDraft((current) => ({ ...current, ...patch }));
+  const [labelsOpen, setLabelsOpen] = useState(false);
+  const [labelSearch, setLabelSearch] = useState("");
+  const [dueOpen, setDueOpen] = useState(false);
+  const [newReminderOpen, setNewReminderOpen] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const pending = useRef(false);
+  const problems = taskFieldProblems(draft.title, draft.description, draft.url);
+  const dirty = hasTaskEdits(original, draft);
+  const requestClose = () => { if (!pending.current) { if (dirty) setDiscarding(true); else onClose(); } };
+  const set = (patch: Partial<Draft>) => { if (!pending.current) setDraft((current) => ({ ...current, ...patch })); };
   const now = new Date();
   const due = draft.dueText.trim() === "" ? null : parseDueDate(draft.dueText, now);
   const dueProblem = draft.dueText.trim() !== "" && due === null ? "Expected a date such as fri, tomorrow or 2026-11-20" : null;
@@ -112,6 +123,12 @@ export function CardEditor({ deps, target, theme, compact, onClose, openWorkspac
   // `after` runs once the card is saved and the editor closed: Open workspace saves first, so leaving the Workbench
   // loses no edit, and a failed save keeps the editor open with its error.
   async function save(after?: () => void) {
+    if (pending.current) return;
+    const problem = problems.title ?? problems.description ?? problems.url;
+    if (problem) return setError(problem);
+    pending.current = true;
+    setBusy(true);
+    try {
     const done = () => {
       onClose();
       after?.();
@@ -142,15 +159,20 @@ export function CardEditor({ deps, target, theme, compact, onClose, openWorkspac
     if (draft.workspaceId !== original.workspaceId) operations.push({ kind: "setLink", id: task.id, link: "workspaceId", value: draft.workspaceId });
     if (draft.column !== original.column) operations.push({ kind: "moveTask", id: task.id, column: draft.column });
     if (operations.length === 0 || (await run(...operations))) done();
+    } finally {
+      pending.current = false;
+      setBusy(false);
+    }
   }
 
   function insertIntoChat() {
+    if (pending.current) return;
     if (!task?.links.agentId) return;
     const [composer] = deps.client.composers({ agentId: task.links.agentId });
     if (!composer) return toast.error("That chat's message box is not open");
     composer.insertText([task.title, task.description].filter(Boolean).join("\n\n"));
     void composer.focus();
-    onClose();
+    requestClose();
   }
 
   const today = todayDate(now);
@@ -161,6 +183,7 @@ export function CardEditor({ deps, target, theme, compact, onClose, openWorkspac
   };
   const nextMonday = plusDays(((8 - now.getDay()) % 7) || 7);
   const addLabel = () => {
+    if (pending.current) return;
     const name = newLabel.trim();
     if (!name) return;
     const taken = document.labels.find((label) => label.name.toLowerCase() === name.toLowerCase());
@@ -178,18 +201,20 @@ export function CardEditor({ deps, target, theme, compact, onClose, openWorkspac
     });
   };
   const checked = task ? task.checklist.filter((item) => item.done).length : 0;
-  const canSave = draft.title.trim() !== "" && !dueProblem && !reminderProblem;
+  const canSave = draft.title.trim() !== "" && !dueProblem && !reminderProblem && !problems.title && !problems.description && !problems.url && !busy;
 
   return (
-    <Modal title={task ? "Edit task" : "New task"} open onOpenChange={(open) => !open && onClose()}>
-      <Modal.Content contentContainerStyle={{ gap: 16, paddingBottom: 20 }}>
+    <Modal title={task ? "Edit task" : "New task"} open onOpenChange={(open) => !open && requestClose()}>
+      <Modal.Content scrollable={false} contentContainerStyle={{ padding: 0, gap: 0, flex: 1 }}>
         <PopoverHost>
+        <ScrollView style={{ flex: 1, minHeight: 0 }} pointerEvents={busy ? "none" : "auto"} contentContainerStyle={{ padding: t.inset, gap: 16 }} keyboardShouldPersistTaps="handled">
         <View style={{ gap: 4 }}>
-          <Field t={t} bare value={draft.title} onChangeText={(title) => set({ title })} placeholder="Task title" accessibilityLabel="Title" autoFocus={!task} textStyle={{ fontSize: fontSize["2xl"], fontWeight: "600" }} />
-          <Field t={t} bare multiline value={draft.description} onChangeText={(description) => set({ description })} placeholder="Add a description…" accessibilityLabel="Description" />
+          <Field t={t} bare disabled={busy} value={draft.title} onChangeText={(title) => set({ title })} placeholder="Task title" accessibilityLabel="Title" error={problems.title} autoFocus={!task} textStyle={{ fontSize: fontSize["2xl"], fontWeight: "600" }} />
+          <Field t={t} bare multiline disabled={busy} value={draft.description} onChangeText={(description) => set({ description })} placeholder="Add a description…" accessibilityLabel="Description" error={problems.description} />
         </View>
 
         <View style={{ gap: 2, paddingVertical: 8, borderTopWidth: 1, borderBottomWidth: 1, borderColor: t.c.border }}>
+          <Text style={[t.text.heading, { paddingVertical: 8 }]}>Properties</Text>
           <PropertyRow t={t} icon="Columns3" label="Status">
             <Select t={t} label="Status" value={draft.column} onChange={(column) => set({ column })} options={document.columns.map((column) => ({ value: column.id, label: column.name, dot: column.color ?? (column.done ? t.c.statusSuccess : t.c.foregroundMuted) }))} />
           </PropertyRow>
@@ -204,38 +229,46 @@ export function CardEditor({ deps, target, theme, compact, onClose, openWorkspac
           </PropertyRow>
           <PropertyRow t={t} icon="Tag" label="Labels">
             <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
-              {document.labels.map((label) => (
-                <Tag key={label.id} t={t} label={label.name} color={label.color} on={draft.labels.includes(label.id)} onPress={() => set({ labels: draft.labels.includes(label.id) ? draft.labels.filter((id) => id !== label.id) : [...draft.labels, label.id] })} />
+              {document.labels.filter((label) => draft.labels.includes(label.id)).map((label) => (
+                <Tag key={label.id} t={t} label={label.name} color={label.color} onRemove={() => set({ labels: draft.labels.filter((id) => id !== label.id) })} />
               ))}
-              <View style={{ width: 150 }}>
-                <Field t={t} icon="Plus" value={newLabel} onChangeText={setNewLabel} onSubmit={addLabel} placeholder="New label" accessibilityLabel="New label" />
-              </View>
+              <Button t={t} variant="ghost" icon="Tag" label={labelsOpen ? "Close labels" : "Choose labels"} onPress={() => setLabelsOpen(!labelsOpen)} />
             </View>
+            {labelsOpen ? <View style={{ gap: 8 }}>
+              <Field t={t} plain icon="Search" value={labelSearch} onChangeText={setLabelSearch} placeholder="Find a label" accessibilityLabel="Find a label" />
+              <ScrollView style={{ maxHeight: 180 }} keyboardShouldPersistTaps="handled">{document.labels.filter((label) => label.name.toLowerCase().includes(labelSearch.toLowerCase())).map((label) => <View key={label.id} style={{ paddingVertical: 4 }}><Tag t={t} label={label.name} color={label.color} on={draft.labels.includes(label.id)} onPress={() => set({ labels: draft.labels.includes(label.id) ? draft.labels.filter((id) => id !== label.id) : [...draft.labels, label.id] })} /></View>)}</ScrollView>
+              <Field t={t} icon="Plus" value={newLabel} onChangeText={setNewLabel} onSubmit={addLabel} placeholder="New label, then Enter" accessibilityLabel="New label" />
+              <Button t={t} label="Create label" disabled={!newLabel.trim()} onPress={addLabel} />
+              <Text style={t.text.small}>Creating a label saves it immediately. Label selections save with the task.</Text>
+            </View> : null}
           </PropertyRow>
+          <Text style={[t.text.heading, { paddingTop: 16, paddingBottom: 8 }]}>Schedule</Text>
           <PropertyRow t={t} icon="Calendar" label="Due date">
+            <Button t={t} variant="ghost" icon="Calendar" style={{ alignSelf: "flex-start" }} label={due ? new Date(`${due}T12:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "Set due date"} onPress={() => setDueOpen(!dueOpen)} />
+            {dueOpen || dueProblem ? <>
             <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
               <Tag t={t} label="Today" on={due === today} onPress={() => set({ dueText: today })} />
               <Tag t={t} label="Tomorrow" on={due === plusDays(1)} onPress={() => set({ dueText: plusDays(1) })} />
               <Tag t={t} label="Next Monday" on={due === nextMonday} onPress={() => set({ dueText: nextMonday })} />
-              <View style={{ width: 170 }}>
-                <Field t={t} plain value={draft.dueText} onChangeText={(dueText) => set({ dueText })} placeholder="fri or 2026-11-20" accessibilityLabel="Due date" error={dueProblem} hint={draft.dueText ? null : "Type fri, 20 nov or 2026-11-20"} />
-              </View>
               {draft.dueText ? <IconButton t={t} size="sm" icon="X" label="Clear the due date" onPress={() => set({ dueText: "" })} /> : null}
             </View>
+            <Field t={t} plain value={draft.dueText} onChangeText={(dueText) => set({ dueText })} placeholder="fri, tomorrow or 2026-11-20" accessibilityLabel="Due date" error={dueProblem} />
             {due && !dueProblem ? <Text style={t.text.small}>{new Date(`${due}T12:00:00`).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</Text> : null}
+            </> : null}
           </PropertyRow>
           {!task ? (
             <PropertyRow t={t} icon="AlarmClock" label="Reminder">
+              <Button t={t} variant="ghost" icon="AlarmClock" style={{ alignSelf: "flex-start" }} label={draft.reminderText || "Set a reminder"} onPress={() => setNewReminderOpen(!newReminderOpen)} />
+              {newReminderOpen || reminderProblem ? <>
               <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
                 {[["In 1 hour", "1h"], ["Tomorrow 9:00", "tomorrow 9am"], ["Monday 9:00", "monday 9am"]].map(([label, text]) => (
                   <Tag key={text} t={t} label={label!} on={draft.reminderText === text} onPress={() => set({ reminderText: text! })} />
                 ))}
-                <View style={{ width: 210 }}>
-                  <Field t={t} plain value={draft.reminderText} onChangeText={(reminderText) => set({ reminderText })} placeholder="45m or 3pm" accessibilityLabel="Reminder" error={reminderProblem} hint={draft.reminderText ? null : "Type 45m, 3pm or tomorrow 9am"} />
-                </View>
                 {draft.reminderText ? <IconButton t={t} size="sm" icon="X" label="Clear the reminder" onPress={() => set({ reminderText: "" })} /> : null}
               </View>
+              <Field t={t} plain value={draft.reminderText} onChangeText={(reminderText) => set({ reminderText })} placeholder="45m, 3pm or tomorrow 9am" accessibilityLabel="Reminder" error={reminderProblem} />
               {remind?.ok ? <Text style={t.text.small}>{new Date(remind.reminder.at).toLocaleString(undefined, { weekday: "long", day: "numeric", month: "long", hour: "numeric", minute: "2-digit" })}</Text> : null}
+              </> : null}
             </PropertyRow>
           ) : null}
           {task ? (
@@ -254,6 +287,8 @@ export function CardEditor({ deps, target, theme, compact, onClose, openWorkspac
               )}
             </PropertyRow>
           ) : null}
+          {task ? <Text style={t.text.small}>Reminder changes save immediately.</Text> : null}
+          <Text style={[t.text.heading, { paddingTop: 16, paddingBottom: 8 }]}>Connections</Text>
           <PropertyRow t={t} icon="FolderGit2" label="Workspace">
             <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
               {/* Shrinks so a long workspace name is cut short and the arrow stays inside the dialog. */}
@@ -266,7 +301,7 @@ export function CardEditor({ deps, target, theme, compact, onClose, openWorkspac
             </View>
           </PropertyRow>
           <PropertyRow t={t} icon="Link" label="Link">
-            <Field t={t} plain value={draft.url} onChangeText={(url) => set({ url })} placeholder="https://…" accessibilityLabel="Web address" />
+            <Field t={t} plain disabled={busy} value={draft.url} onChangeText={(url) => set({ url })} placeholder="https://…" accessibilityLabel="Web address" error={problems.url} />
           </PropertyRow>
           {task?.links.agentId ? (
             <PropertyRow t={t} icon="MessageSquare" label="Chat">
@@ -280,17 +315,21 @@ export function CardEditor({ deps, target, theme, compact, onClose, openWorkspac
           ) : null}
         </View>
 
-        {task ? <Checklist t={t} task={task} checked={checked} newItem={newItem} setNewItem={setNewItem} run={run} /> : null}
-
+        {task ? <Checklist t={t} task={task} checked={checked} newItem={newItem} setNewItem={setNewItem} run={async (...operations) => pending.current ? false : run(...operations)} disabled={busy} /> : null}
+        {task ? <Text style={t.text.small}>Checklist changes save immediately.</Text> : null}
+        </ScrollView>
+        <View style={{ padding: t.inset, gap: 8, borderTopWidth: 1, borderTopColor: t.c.border, backgroundColor: t.c.surface0 }}>
+        {discarding ? <View style={{ gap: 8 }}><Text style={t.text.body}>{task ? "Discard unsaved task edits? Reminder, checklist and newly created label changes are already saved." : "Discard this new task? Newly created labels are already saved; the task and its reminder have not been saved."}</Text><View style={{ flexDirection: "row", gap: 8 }}><Button t={t} label="Keep editing" onPress={() => setDiscarding(false)} /><Button t={t} label="Discard edits" variant="danger" disabled={busy} onPress={onClose} /></View></View> : null}
         {error ? <Text style={t.text.danger}>{error}</Text> : null}
         <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: 8 }}>
           <View style={{ flexDirection: "row", gap: 4 }}>
-            {task ? <Button t={t} variant="ghost" icon={task.archivedAt ? "ArchiveRestore" : "Archive"} label={task.archivedAt ? "Restore" : "Archive"} onPress={() => void run({ kind: task.archivedAt ? "restoreTask" : "archiveTask", id: task.id }).then((ok) => ok && onClose())} /> : null}
+            {task ? <Button t={t} variant="ghost" icon={task.archivedAt ? "ArchiveRestore" : "Archive"} label={task.archivedAt ? "Restore" : "Archive"} disabled={busy} onPress={() => void run({ kind: task.archivedAt ? "restoreTask" : "archiveTask", id: task.id }).then((ok) => ok && requestClose())} /> : null}
             {task ? (
               <Button
                 t={t}
                 variant="danger"
                 icon="Trash2"
+                disabled={busy}
                 label={confirmDelete ? "Press again to delete" : "Delete"}
                 accessibilityLabel={confirmDelete ? "Press again to delete for good" : "Delete"}
                 onPress={() => (confirmDelete ? void run({ kind: "deleteTask", id: task.id }).then((ok) => ok && onClose()) : setConfirmDelete(true))}
@@ -298,9 +337,10 @@ export function CardEditor({ deps, target, theme, compact, onClose, openWorkspac
             ) : null}
           </View>
           <View style={{ flexDirection: "row", gap: 8 }}>
-            <Button t={t} label="Cancel" onPress={onClose} />
-            <Button t={t} variant="primary" label={task ? "Save" : "Add task"} disabled={!canSave} onPress={() => void save()} />
+            <Button t={t} label={dirty ? "Discard edits" : "Close"} disabled={busy} onPress={requestClose} />
+            <Button t={t} variant="primary" label={busy ? "Saving…" : task ? "Save" : "Add task"} disabled={!canSave} onPress={() => void save()} />
           </View>
+        </View>
         </View>
         </PopoverHost>
       </Modal.Content>
@@ -308,7 +348,7 @@ export function CardEditor({ deps, target, theme, compact, onClose, openWorkspac
   );
 }
 
-function Checklist({ t, task, checked, newItem, setNewItem, run }: { t: Tokens; task: Task; checked: number; newItem: string; setNewItem(text: string | ((current: string) => string)): void; run(...operations: TaskOperation[]): Promise<boolean> }) {
+function Checklist({ t, task, checked, newItem, setNewItem, run, disabled }: { t: Tokens; task: Task; checked: number; newItem: string; setNewItem(text: string | ((current: string) => string)): void; run(...operations: TaskOperation[]): Promise<boolean>; disabled: boolean }) {
   const total = task.checklist.length;
   const [itemId, nextItem] = useDraftId(() => `i-${Date.now().toString(36)}`);
   const add = () => {
@@ -335,14 +375,14 @@ function Checklist({ t, task, checked, newItem, setNewItem, run }: { t: Tokens; 
       ) : null}
       {task.checklist.map((item) => (
         <View key={item.id} style={{ flexDirection: "row", alignItems: "center", gap: 8, minHeight: t.compact ? 40 : 30 }}>
-          <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: item.done }} accessibilityLabel={item.text} onPress={() => void run({ kind: "setChecklistItem", id: task.id, itemId: item.id, done: !item.done })} style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Pressable disabled={disabled} accessibilityRole="checkbox" accessibilityState={{ checked: item.done, disabled }} accessibilityLabel={item.text} onPress={() => void run({ kind: "setChecklistItem", id: task.id, itemId: item.id, done: !item.done })} style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10 }}>
             <Icon name={item.done ? "SquareCheck" : "Square"} size={16} color={item.done ? t.c.statusSuccess : t.c.foregroundMuted} />
             <Text style={[t.text.body, { flex: 1, color: item.done ? t.c.foregroundMuted : t.c.foreground, textDecorationLine: item.done ? "line-through" : "none" }]}>{item.text}</Text>
           </Pressable>
-          <IconButton t={t} size="sm" icon="X" label={`Remove ${item.text}`} onPress={() => void run({ kind: "removeChecklistItem", id: task.id, itemId: item.id })} />
+          <IconButton t={t} size="sm" icon="X" label={`Remove ${item.text}`} disabled={disabled} onPress={() => void run({ kind: "removeChecklistItem", id: task.id, itemId: item.id })} />
         </View>
       ))}
-      <Field t={t} icon="Plus" value={newItem} onChangeText={(next) => { setNewItem(next); nextItem(); }} onSubmit={add} placeholder="Add an item and press Enter" accessibilityLabel="Add a checklist item" />
+      <Field t={t} icon="Plus" disabled={disabled} value={newItem} onChangeText={(next) => { setNewItem(next); nextItem(); }} onSubmit={add} placeholder="Add an item and press Enter" accessibilityLabel="Add a checklist item" />
     </View>
   );
 }

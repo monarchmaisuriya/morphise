@@ -1,7 +1,7 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { Modal, useToast } from "@getpaseo/plugin/client/ui";
 import { type ReactNode, useState } from "react";
-import { Pressable, Switch, Text, View } from "react-native";
+import { Platform, Pressable, Switch, Text, View } from "react-native";
 import { STATUS_TITLES } from "../../shared/arrange";
 import { slug, type TaskOperation } from "../../shared/task-ops";
 import { RULE_STATUSES, type Rule, type TaskDocument } from "../../shared/tasks";
@@ -9,6 +9,7 @@ import { useValue } from "../profile-store";
 import { tasksOf } from "../task-store";
 import { Button, ConfirmIconButton, Field, IconButton, PopoverHost, Select, type Tokens, useTokens } from "../ui/kit";
 import type { BoardDeps } from "./deps";
+import { ColorField } from "../ui/color-field";
 
 const COLORS = [
   { color: "#8f8cf2", name: "Violet" },
@@ -129,6 +130,7 @@ export function CustomiseBoard({ deps, theme, compact, onClose }: { deps: BoardD
               <CommitField key={`${column.id}:${column.name}`} t={t} label={`Name of ${column.name}`} value={column.name} onCommit={(name) => !!name && run({ kind: "updateColumn", id: column.id, patch: { name } })} />
               <CommitField key={`${column.id}:wip:${column.wipLimit}`} t={t} width={96} numeric label={`Task limit for ${column.name}`} placeholder="No limit" value={column.wipLimit === null ? "" : String(column.wipLimit)} onCommit={(text) => run({ kind: "updateColumn", id: column.id, patch: { wipLimit: text === "" ? null : Number(text) } })} />
               <ColorDots t={t} current={column.color} onPick={(color) => void run({ kind: "updateColumn", id: column.id, patch: { color } })} />
+              {Platform.OS === "web" ? <View style={{ width: "100%" }}><ColorField t={t} label={`${column.name} color`} value={column.color ?? ""} lengths={[3, 6]} resetLabel="Default column color" onReset={async () => { await deps.apply({ kind: "clearColumnColor", id: column.id }); }} onApply={async (color) => { await deps.apply({ kind: "updateColumn", id: column.id, patch: { color } }); }} /></View> : null}
               <View style={{ flexDirection: "row", alignItems: "center", gap: 2, marginLeft: "auto" }}>
                 <Button t={t} variant={column.done ? "secondary" : "ghost"} icon={column.done ? "CircleCheck" : "Circle"} label="Done" checked={column.done} accessibilityLabel={`${column.name} is the Done column`} onPress={() => void run({ kind: "setDoneColumn", id: column.id })} />
                 <IconButton t={t} size="sm" icon="ChevronLeft" label={`Move ${column.name} left`} disabled={index === 0} onPress={() => void run({ kind: "moveColumn", id: column.id, index: index - 1 })} />
@@ -150,7 +152,8 @@ export function CustomiseBoard({ deps, theme, compact, onClose }: { deps: BoardD
             <Row key={label.id} t={t}>
               <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: label.color }} />
               <CommitField key={`${label.id}:${label.name}`} t={t} label={`Name of label ${label.name}`} value={label.name} onCommit={(name) => !!name && run({ kind: "saveLabel", label: { ...label, name } })} />
-              <ColorDots t={t} current={label.color} onPick={(color) => void run({ kind: "saveLabel", label: { ...label, color } })} />
+              <ColorDots t={t} current={label.color} onPick={(color) => void run({ kind: "setLabelColor", id: label.id, color })} />
+              {Platform.OS === "web" ? <View style={{ width: "100%" }}><ColorField t={t} label={`${label.name} color`} value={label.color} lengths={[3, 6]} onApply={async (color) => { await deps.apply({ kind: "setLabelColor", id: label.id, color }); }} /></View> : null}
               <ConfirmIconButton t={t} label={`Delete label ${label.name}`} confirmLabel={`Press again to delete label ${label.name}; it is removed from every task`} onConfirm={() => void run({ kind: "deleteLabel", id: label.id })} />
             </Row>
           ))}

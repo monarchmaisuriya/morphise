@@ -33,6 +33,21 @@ function fakeHost(initial: TaskDocument = EMPTY_TASKS) {
 }
 
 describe("createTaskWriter", () => {
+  it("keeps a label rename made while its color saves", async () => {
+    const initial = applyTaskOperation(EMPTY_TASKS, { kind: "saveLabel", label: { id: "bug", name: "Bug", color: "#123456" } }, now);
+    const host = fakeHost(initial);
+    host.otherAppSaves((document) => applyTaskOperation(document, { kind: "saveLabel", label: { id: "bug", name: "Renamed", color: "#123456" } }, now));
+    await createTaskWriter(host.calls, () => now)({ kind: "setLabelColor", id: "bug", color: "#abcdef" });
+    expect(host.stored().labels).toEqual([{ id: "bug", name: "Renamed", color: "#abcdef" }]);
+  });
+
+  it("clears column color without undoing a concurrent name change", async () => {
+    const initial = applyTaskOperation(EMPTY_TASKS, { kind: "updateColumn", id: "todo", patch: { color: "#123456" } }, now);
+    const host = fakeHost(initial);
+    host.otherAppSaves((document) => applyTaskOperation(document, { kind: "updateColumn", id: "todo", patch: { name: "Next" } }, now));
+    await createTaskWriter(host.calls, () => now)({ kind: "clearColumnColor", id: "todo" });
+    expect(host.stored().columns.find((column) => column.id === "todo")).toEqual({ id: "todo", name: "Next", done: false, wipLimit: null });
+  });
   it("applies operations to the stored tasks and saves them", async () => {
     const host = fakeHost();
     await createTaskWriter(host.calls, () => now)(add("a"), add("b"));

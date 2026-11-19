@@ -752,7 +752,7 @@ export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, open
   const t = useTokens(theme, compact);
   const [tab, setTab] = useState<Tab>(initialTab);
   // List or columns, on this device, picked in Settings, General.
-  const [shape, , shapeLoading] = useDeviceChoice(useSettings(workbenchSettings), "tasksLayout");
+  const [shape, setShape, shapeLoading, shapeError] = useDeviceChoice(useSettings(workbenchSettings), "tasksLayout");
   // Filter and Display choices for this screen.
   const [layout, setLayout] = useState<Layout>(ALL_TASKS);
   // Read once: the board is mounted afresh for each link that asks for a task.
@@ -822,7 +822,7 @@ export function TasksBoard({ deps, theme, compact, workspaceId, initialTab, open
           }
         />
         {panel === "filter" ? <FilterPanel t={t} layout={layout} setLayout={setLayout} document={document} tab={tab} setTab={setTab} todayCount={todayCount} archivedCount={archived.length} /> : null}
-        {tab === "board" && panel === "display" ? <DisplayPanel t={t} layout={layout} setLayout={setLayout} /> : null}
+        {tab === "board" && panel === "display" ? <><Segmented t={t} label="Tasks layout" value={shape} onChange={setShape} options={[{ value: "list", label: "List", icon: "List" }, { value: "board", label: "Board", icon: "Columns3" }]} />{shapeError ? <Text style={t.text.danger}>{shapeError}</Text> : null}<DisplayPanel t={t} layout={layout} setLayout={setLayout} /></> : null}
         {tab === "board" && panel === "attach" && workspaceId ? <AttachPanel t={t} document={document} workspaceId={workspaceId} workspaces={deps.workspaces} run={run} /> : null}
         {panel !== "filter" ? <ActiveFilters t={t} layout={layout} setLayout={setLayout} document={document} tab={tab} setTab={setTab} /> : null}
       </View>

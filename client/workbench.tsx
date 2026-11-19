@@ -190,7 +190,7 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
     const toggleFolded = () => setFolded(!folded);
     const [lastBoard, saveLastBoard] = useDeviceChoice(railSettings, "boardTab");
     // Picked in Settings, General.
-    const [agentsLayout] = useDeviceChoice(railSettings, "agentsLayout");
+    const [agentsLayout, setAgentsLayout, , agentsLayoutError] = useDeviceChoice(railSettings, "agentsLayout");
     const lastOpened: WorkbenchView = lastBoard === "bookmarks" ? "bookmarks" : lastBoard === "activity" && activityShown ? "activity" : lastBoard === "agents" && agentsShown ? "agents" : "board";
     const countsReady = counts.waiting !== null && counts.tasksLoaded && railSettings.status !== "loading" && boardSettings.status !== "loading";
     const opening = useRef<WorkbenchView | null>(null);
@@ -233,7 +233,7 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
       ) : view === "activity" ? (
         <ActivityView client={deps.client} theme={theme} compact={layout.compact} workspaces={deps.workspaces} />
       ) : (view === "agents" || view === "board") && !ready ? null : view === "agents" ? (
-        <AgentsBoardView client={deps.client} workspaces={deps.workspaces} theme={theme} compact={layout.compact} navigation={navigation} layout={agentsLayout} bookmarkLastAnswer={deps.bookmarkLastAnswer} />
+        <AgentsBoardView client={deps.client} workspaces={deps.workspaces} theme={theme} compact={layout.compact} navigation={navigation} layout={agentsLayout} onLayoutChange={setAgentsLayout} layoutError={agentsLayoutError} bookmarkLastAnswer={deps.bookmarkLastAnswer} />
       ) : view === "board" ? (
         // Today or Archived shows when a link asked for it, or Today when the Workbench opened for what is due; Filter
         // changes it after.

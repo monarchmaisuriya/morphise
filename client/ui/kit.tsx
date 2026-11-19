@@ -211,6 +211,7 @@ export function Field({
   maxLength,
   plain,
   onCommand,
+  disabled,
 }: {
   t: Tokens;
   value: string;
@@ -237,6 +238,7 @@ export function Field({
   plain?: boolean;
   // Cmd+Enter (Ctrl+Enter off macOS) on a hardware keyboard, for "send" in multi-line fields.
   onCommand?(): void;
+  disabled?: boolean;
 }) {
   const [focused, setFocused] = useState(false);
   const { c } = t;
@@ -252,6 +254,7 @@ export function Field({
         {/* A quiet field has no box, so its icon brightens to show focus. */}
         {icon ? <Icon name={icon} size={14} color={quiet && focused ? c.foreground : c.foregroundMuted} /> : null}
         <TextInput
+          editable={!disabled}
           accessibilityLabel={accessibilityLabel ?? label ?? placeholder}
           value={value}
           onChangeText={onChangeText}

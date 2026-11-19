@@ -1,6 +1,6 @@
 import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { copyText, Markdown, useToast } from "@getpaseo/plugin/client/ui";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import type { Bookmark } from "../shared/bookmarks";
 import { waitsOnUser } from "../shared/inbox";
@@ -10,7 +10,7 @@ import type { AttentionItem, AttentionList } from "./attention";
 import { type ApplyBookmark, type BookmarkStore, bookmarksOf } from "./bookmark-store";
 import { SavedPageViewer } from "./polish/pages/html-item";
 import { type ValueStore, useValue } from "./profile-store";
-import { Field, Icon, IconButton, type Tokens } from "./ui/kit";
+import { Button, Field, Icon, IconButton, type Tokens } from "./ui/kit";
 import type { WorkspaceList } from "./workspaces";
 
 // The Workbench's Bookmarks view, and the count of chats waiting on the user (permission, failed, finished and not
@@ -42,9 +42,20 @@ function EmptyState({ t, icon, title, hint }: { t: Tokens; icon: string; title: 
 
 // ---------- Bookmarks ----------
 
-function BookmarkCard({ bookmark, t, workspaces, open, remove }: { bookmark: Bookmark; t: Tokens; workspaces: WorkspaceList; open: ((agentId: string) => void) | null; remove(): void }) {
+function BookmarkCard({ bookmark, t, workspaces, open, remove }: { bookmark: Bookmark; t: Tokens; workspaces: WorkspaceList; open: ((agentId: string) => void) | null; remove(): Promise<void> }) {
   const toast = useToast();
   const [viewing, setViewing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const pending = useRef(false);
+  const confirmRemove = async () => {
+    if (pending.current) return;
+    pending.current = true;
+    setBusy(true);
+    setError(null);
+    try { await remove(); } catch (caught) { setError(errorText(caught)); } finally { pending.current = false; setBusy(false); }
+  };
   const workspace = bookmark.workspaceId ? workspaces.get(bookmark.workspaceId)?.name ?? null : null;
   const meta = [bookmark.chat, workspace, formatElapsed(bookmark.at, new Date())].filter(Boolean).join(" · ");
   return (
@@ -57,8 +68,9 @@ function BookmarkCard({ bookmark, t, workspaces, open, remove }: { bookmark: Boo
         {bookmark.page ? <IconButton t={t} size="sm" icon="Maximize2" label={`Open the page ${bookmark.page.title}`} onPress={() => setViewing(true)} /> : null}
         <IconButton t={t} size="sm" icon="Copy" label={`Copy the bookmark from ${bookmark.chat}`} onPress={() => void copyText(bookmark.excerpt).then(() => toast.show("Copied"), (error: unknown) => toast.error(errorText(error)))} />
         {open ? <IconButton t={t} size="sm" icon="MessageSquare" label={`Open ${bookmark.chat}`} onPress={() => open(bookmark.agentId)} /> : null}
-        <IconButton t={t} size="sm" icon="Trash2" label={`Remove the bookmark from ${bookmark.chat}`} onPress={remove} />
+        <IconButton t={t} size="sm" icon="Trash2" label={`Remove the bookmark from ${bookmark.chat}`} onPress={() => setConfirming(true)} />
       </View>
+      {confirming ? <View style={{ gap: 8 }}><Text style={t.text.body}>{bookmark.page ? `Remove “${bookmark.page.title}” and release its saved page copy?` : `Remove this bookmark from “${bookmark.chat}”?`}</Text><View style={{ flexDirection: "row", gap: 8 }}><Button t={t} label="Cancel" disabled={busy} onPress={() => { setConfirming(false); setError(null); }} /><Button t={t} label={busy ? "Removing…" : "Remove bookmark"} variant="danger" disabled={busy} onPress={() => void confirmRemove()} /></View>{error ? <Text style={t.text.danger}>{error}</Text> : null}</View> : null}
       {bookmark.note ? <Text style={t.text.heading}>{bookmark.note}</Text> : null}
       {bookmark.page ? (
         <Pressable accessibilityRole="button" accessibilityLabel={`Open the page ${bookmark.page.title}`} onPress={() => setViewing(true)}>
@@ -80,7 +92,7 @@ export function Bookmarks({ t, deps, workspaces, open }: { t: Tokens; deps: Inbo
   const shown = all.filter((bookmark) => words.every((word) => `${bookmark.note} ${bookmark.chat} ${bookmark.excerpt}`.toLowerCase().includes(word)));
   // A saved page's kept copy goes with its bookmark.
   const remove = (bookmark: Bookmark) =>
-    void deps
+    deps
       .applyBookmark({ kind: "remove", id: bookmark.id })
       .then(() => {
         // The bookmark is gone either way; a kept copy left behind is removed when the plugin next starts (pruneKept).
@@ -88,7 +100,7 @@ export function Bookmarks({ t, deps, workspaces, open }: { t: Tokens; deps: Inbo
       })
       .then(
       () => toast.show("Bookmark removed"),
-      (error: unknown) => toast.error(`Could not remove the bookmark: ${errorText(error)}`),
+       (error: unknown) => { throw new Error(`Could not remove the bookmark: ${errorText(error)}`); },
     );
   if (!all.length) return <EmptyState t={t} icon="Bookmark" title="No bookmarks yet" hint="Type /bookmark in a chat, or use Bookmark answer here, to keep an answer." />;
   return (
@@ -103,4 +115,3 @@ export function Bookmarks({ t, deps, workspaces, open }: { t: Tokens; deps: Inbo
 export function waitingItems(list: AttentionList, workspaces: WorkspaceList, cleared: ReadonlySet<string>): AttentionItem[] {
   return [...list.values()].filter((item) => waitsOnUser(item, workspaces.get(item.workspaceId)?.open !== false, cleared));
 }
-
