@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.46.0 - 2026-11-19
+
+- **Consistent report spacing:** generated charts and tables can use shared report layouts with 8px between a heading and its takeaway, 12px before data, 16px before supporting content and 24px between sections. Report legends have more breathing room, and table filters stay grouped with their tables. Chart/table guidance includes the reusable pattern instead of adding a card around every chart. Existing saved pages and custom layouts are not rewritten; typography, colors, table styling and interactions remain unchanged.
+
 ## 0.45.1 - 2026-11-19
 
 - **Task pickers close predictably:** clicking outside an open reminder, due date or label picker closes that panel without changing its value or closing the task editor. Opening another property picker closes the previous one. The existing-task reminder keeps its toggle visible and offers an explicit close button; due dates and new reminders also have close controls. Invalid date/time input no longer forces a dismissed panel to remain open; its draft and validation error are preserved.

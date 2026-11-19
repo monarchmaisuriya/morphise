@@ -5,6 +5,24 @@
 export const GUIDE_TOPICS = ["charts", "tables", "diagrams", "images", "interactive", "mockups", "explainers"] as const;
 export type GuideTopic = (typeof GUIDE_TOPICS)[number];
 
+const REPORT_SPACING = `Report spacing
+Use the built-in report layout for dashboards and multi-section reports: 24px between sections, 12px from a heading group to its data, 8px between heading and takeaway, and 16px between a chart and supporting content. Keep a plain div around each supporting table so its inserted filter and scrolling frame stay together:
+
+  <main class="report">
+    <section class="report-section">
+      <header class="report-heading">
+        <h2>Changes over time</h2>
+        <p class="muted">A one-line takeaway explaining the data.</p>
+      </header>
+      <div class="report-data">
+        <div id="trend"></div>
+        <div><table><!-- supporting rows --></table></div>
+      </div>
+    </section>
+  </main>
+
+Put a KPI .grid directly inside .report before the sections. Initialize charts in the mounts after this markup. Use one section per question; do not put a card around every chart or add margins to every heading. A table-only section needs just the plain table wrapper after its heading group. These classes are opt-in layout defaults: existing pages and custom authored spacing are not rewritten.`;
+
 const CHARTS = `# Charts
 Use the built-in helper instead of drawing axes yourself: it sizes to the page, uses the theme's series colours, spaces labels so they never overlap, and keeps a fixed height.
 
@@ -25,7 +43,7 @@ Use the built-in helper instead of drawing axes yourself: it sizes to the page, 
 - Built in, nothing to add: a tooltip with every series' value on hover, tap and the arrow keys; the hovered mark lit and the rest dimmed; legend items that hide and show a series; labels that wrap to two lines; values on single-series bars.
 - Values are numbers; leave a gap with null. Keep labels under about 24 characters: longer ones wrap, and past two lines they are shortened (the tooltip still shows them whole).
 - Put the title and a one-line takeaway in HTML above the chart (h2, p.muted), not inside it.
-- Several charts: a .grid of .card elements, each with an h3 and its chart.
+- Several charts: prefer .report sections for a vertical reading path. For charts that need a side-by-side comparison, use a .grid with .report-section children; do not add cards just for separation.
 - A KPI row: a .grid of .stat tiles, each a .label then a .value (no .num on them; a .stat is already a tile, so don't wrap it in a .card), with a sparkline under each value if a trend matters. Give each value its context in the label ("Refund rate, last 30 days"), not a bare number.
 - Morphise.chart(...) returns { update(spec) } to redraw with new data (a slider or a select), without changing the height.`;
 
@@ -126,5 +144,5 @@ export const GUIDES: Record<GuideTopic, string> = { charts: CHARTS, tables: TABL
 
 export function guideText(topic: unknown): { text: string; known: boolean } {
   const known = typeof topic === "string" && (GUIDE_TOPICS as readonly string[]).includes(topic);
-  return known ? { text: GUIDES[topic as GuideTopic], known } : { text: `Pick a topic: ${GUIDE_TOPICS.join(", ")}.`, known: false };
+  return known ? { text: GUIDES[topic as GuideTopic] + (topic === "charts" || topic === "tables" ? `\n\n${REPORT_SPACING}` : ""), known } : { text: `Pick a topic: ${GUIDE_TOPICS.join(", ")}.`, known: false };
 }

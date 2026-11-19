@@ -34,7 +34,7 @@ export const KIT_WIDGETS = [
   "table.sortable th[aria-sort]::after{content:'';display:inline-block;margin-left:4px;border:4px solid transparent;vertical-align:middle}",
   "table.sortable th[aria-sort=ascending]::after{border-bottom-color:var(--muted);margin-top:-4px}table.sortable th[aria-sort=descending]::after{border-top-color:var(--muted);margin-top:4px}",
   ".mk-chart{position:relative;width:100%}.mk-chart svg{display:block;overflow:visible}.mk-chart text{font:12px var(--font);fill:var(--muted)}",
-  ".mk-legend{display:flex;flex-wrap:wrap;gap:4px 12px;margin-bottom:8px;font-size:12px;color:var(--muted)}.mk-legend span{display:inline-flex;align-items:center;gap:5px}",
+  ".mk-legend{display:flex;flex-wrap:wrap;gap:var(--report-legend-row,4px) var(--report-legend-column,12px);margin-bottom:var(--report-legend-bottom,8px);font-size:12px;color:var(--muted)}.mk-legend span{display:inline-flex;align-items:center;gap:5px}",
   ".mk-legend i{display:inline-block;width:8px;height:8px;border-radius:2px}.mk-legend .mk-on{color:var(--fg)}",
   // Legend items are buttons that hide and show a series; reset so neither the kit's nor a page's own button style changes them.
   ".mk-legend button{all:unset;display:inline-flex;align-items:center;gap:5px;cursor:pointer;color:var(--muted);border-radius:4px;padding:1px 3px;font-size:12px}",

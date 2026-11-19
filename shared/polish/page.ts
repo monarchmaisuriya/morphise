@@ -78,6 +78,9 @@ const KIT_BASE = [
   "summary::before{content:'';width:6px;height:6px;flex:none;transform:rotate(-45deg);transition:transform .15s ease-out}details[open]>summary::before{transform:rotate(45deg)}",
   "pre{margin:0;overflow:auto}",
   ".stack{display:flex;flex-direction:column;gap:12px}.row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}",
+  // Report rhythm belongs to the layout owner, not margins on arbitrary headings or chart internals.
+  ".report,.report-section,.report-heading,.report-data{display:flex;flex-direction:column;min-width:0}",
+  ".report{gap:24px;--report-legend-row:8px;--report-legend-column:16px;--report-legend-bottom:12px}.report-section{gap:12px}.report-heading{gap:8px}.report-data{gap:16px}",
   ".grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}",
   ".stat{display:flex;flex-direction:column;gap:4px;min-width:0}.stat .value{text-align:left}",
   ".chip{display:inline-flex;align-items:center;gap:6px;vertical-align:middle;white-space:nowrap}",

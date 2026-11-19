@@ -50,6 +50,16 @@ describe("the page's own styles", () => {
 });
 
 describe("the document a published page runs in", () => {
+  it("provides separate overridable gaps for report sections, headings and supporting data", () => {
+    const page = htmlPage('<main class="report"></main>', "");
+    const base = page.slice(page.indexOf("@layer kit-base{"), page.indexOf("html,body{font:"));
+    expect(base).toContain(".report{gap:24px;");
+    expect(base).toContain(".report-section{gap:12px}");
+    expect(base).toContain(".report-heading{gap:8px}");
+    expect(base).toContain(".report-data{gap:16px}");
+    expect(base).toContain(".report,.report-section,.report-heading,.report-data{display:flex;flex-direction:column;min-width:0}");
+    expect(base).toContain(".stack{display:flex;flex-direction:column;gap:12px}");
+  });
   it("draws tables as Paseo's replies do: full width, a line on every side of every cell, a bold shaded header, rows shaded from the page background", () => {
     const page = htmlPage("<table><tr><td>a</td></tr></table>", "");
     expect(page).toMatch(/table\{border-collapse:collapse;width:100%\}/);
