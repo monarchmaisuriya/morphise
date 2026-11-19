@@ -26,6 +26,7 @@ import { useWorkspaceName } from "./workspace-picker";
 import { PRIORITY, priorityColor, priorityOf } from "./styles";
 import { PriorityMark } from "./priority-mark";
 import { fontSize } from "../../shared/design/tokens";
+import { ToolbarPanel as PanelBox, ToolbarPanelRow as PanelRow } from "../ui/toolbar-panel";
 
 type Layout = Pick<TaskView, "filter" | "sort" | "swimlanes" | "density">;
 type Tab = "board" | "today" | "archived";
@@ -223,7 +224,7 @@ function QuickAdd({ t, document, run, workspaceId, trailing }: { t: Tokens; docu
   return (
     <View style={{ gap: 6 }}>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-        <Field t={t} grow plain icon="Plus" value={text} onChangeText={(next) => { setText(next); nextDraft(); }} onSubmit={() => void add()} accessibilityLabel="Quick add a task" placeholder="Add a task…" />
+        <Field t={t} grow plain icon="Plus" value={text} onChangeText={(next) => { setText(next); nextDraft(); }} onSubmit={() => void add()} accessibilityLabel="Quick add a task" placeholder="Fix login p1 @bug #review due:fri tomorrow 9am" />
         {trailing}
       </View>
       {parsed ? (
@@ -243,22 +244,7 @@ function QuickAdd({ t, document, run, workspaceId, trailing }: { t: Tokens; docu
             {reminder ? <Tag t={t} label={`Reminder ${formatDue(reminder, now)}`} color={t.c.statusWarning} /> : null}
           </View>
         )
-      ) : (
-        <Text style={t.text.small}>Try: Fix login p1 @bug #review due:fri tomorrow 9am</Text>
-      )}
-    </View>
-  );
-}
-
-function PanelBox({ t, children }: { t: Tokens; children: ReactNode }) {
-  return <View style={{ gap: 12, padding: 12, borderRadius: t.radius.panel, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1 }}>{children}</View>;
-}
-
-function PanelRow({ t, label, children }: { t: Tokens; label: string; children: ReactNode }) {
-  return (
-    <View style={{ flexDirection: t.compact ? "column" : "row", alignItems: t.compact ? "flex-start" : "center", gap: 8 }}>
-      <Text style={[t.text.label, { width: t.compact ? undefined : 72 }]}>{label}</Text>
-      <View style={{ flex: t.compact ? undefined : 1, flexDirection: "row", flexWrap: "wrap", gap: 6 }}>{children}</View>
+      ) : null}
     </View>
   );
 }

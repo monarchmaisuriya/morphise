@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.47.0 - 2026-11-20
+
+- **Consistent Agents controls:** Filter and Display panels follow Tasks' layout. All filter categories, nine sort options, List/Board and the settings shortcut remain available. Search conversations is a labelled option in Filter, with progress, unavailable-provider, search-limit and error feedback. Failed toggle saves are visible, and old searches cannot populate a new query. Conversation logs remain limited to Claude Code and Codex.
+- **Less task-editor clutter:** quick-add syntax appears in the placeholder instead of a help row. Removed the reminder/checklist immediate-save help lines without changing their save behavior or the unsaved-edits warning.
+
 ## 0.46.0 - 2026-11-19
 
 - **Consistent report spacing:** generated charts and tables can use shared report layouts with 8px between a heading and its takeaway, 12px before data, 16px before supporting content and 24px between sections. Report legends have more breathing room, and table filters stay grouped with their tables. Chart/table guidance includes the reusable pattern instead of adding a card around every chart. Existing saved pages and custom layouts are not rewritten; typography, colors, table styling and interactions remain unchanged.

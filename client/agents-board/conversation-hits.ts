@@ -11,31 +11,49 @@ const DEBOUNCE_MS = 200;
 const AT_ONCE = 2;
 const MAX_PAGES = 50;
 
-// The excerpt found for each agent, for the current search; empty while the switch is off or the search is empty.
-export function useConversationHits(client: PluginClientContext, agents: readonly BoardAgent[], search: string, on: boolean, fieldsMatch: (agent: BoardAgent) => boolean): ReadonlyMap<string, string> {
-  const [hits, setHits] = useState<ReadonlyMap<string, string>>(new Map());
+interface ConversationHits {
+  hits: ReadonlyMap<string, string>;
+  pending: number;
+  problems: readonly string[];
+}
+
+// Outcomes belong to a query and its target set, including the render before effect cleanup.
+export function useConversationHits(client: PluginClientContext, agents: readonly BoardAgent[], search: string, on: boolean, fieldsMatch: (agent: BoardAgent) => boolean): ConversationHits {
+  const [state, setState] = useState<ConversationHits & { key: string }>({ key: "", hits: new Map(), pending: 0, problems: [] });
   const query = search.trim();
-  const wanted = on && query ? agents.filter((agent) => !fieldsMatch(agent)).map((agent) => agent.id) : [];
-  const key = JSON.stringify([query, wanted]);
+  const invalid = on && query.length > 1000;
+  const wanted = on && query && !invalid ? agents.filter((agent) => !fieldsMatch(agent)).map((agent) => agent.id) : [];
+  const key = JSON.stringify([on, query, wanted]);
   useEffect(() => {
-    setHits(new Map());
+    setState({ key, hits: new Map(), pending: wanted.length, problems: invalid ? ["Search must be 1000 characters or fewer"] : [] });
     if (!wanted.length) return;
     let alive = true;
     const queue = [...wanted];
+    const problem = (text: string) => {
+      if (alive) setState((current) => ({ ...current, problems: [...new Set([...current.problems, text])] }));
+    };
     const searchOne = async (agentId: string) => {
       let cursor: ConversationCursor | undefined;
       for (let page = 0; page < MAX_PAGES && alive; page++) {
         const result = await client.rpc(conversationSearch, { agentId, query, ...(cursor ? { cursor } : {}) });
         if (!alive) return;
-        if (result.match) return setHits((current) => new Map(current).set(agentId, result.match as string));
-        if (result.unavailable || !result.nextCursor) return;
+        if (result.match) return setState((current) => ({ ...current, hits: new Map(current.hits).set(agentId, result.match as string) }));
+        if (result.unavailable) return problem(result.unavailable);
+        if (!result.nextCursor) return;
         cursor = result.nextCursor;
       }
+      problem("Some conversations reached the search limit; results may be incomplete");
     };
     const worker = async () => {
       while (alive && queue.length) {
         const agentId = queue.shift() as string;
-        await searchOne(agentId).catch((error: unknown) => console.warn(`[morphise] Could not search ${agentId}'s conversation`, error));
+        try {
+          await searchOne(agentId);
+        } catch (error) {
+          problem(error instanceof Error ? error.message : String(error));
+        } finally {
+          if (alive) setState((current) => ({ ...current, pending: current.pending - 1 }));
+        }
       }
     };
     const timer = setTimeout(() => {
@@ -48,5 +66,5 @@ export function useConversationHits(client: PluginClientContext, agents: readonl
     // `key` holds the query and the agents to search.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, key]);
-  return hits;
+  return state.key === key ? state : { hits: new Map(), pending: wanted.length, problems: invalid ? ["Search must be 1000 characters or fewer"] : [] };
 }

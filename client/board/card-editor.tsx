@@ -305,7 +305,6 @@ export function CardEditor({ deps, target, theme, compact, onClose, openWorkspac
             </PropertyRow>
             </Dismissible>
           ) : null}
-          {task ? <Text style={t.text.small}>Reminder changes save immediately.</Text> : null}
           <Text style={[t.text.heading, { paddingTop: 16, paddingBottom: 8 }]}>Connections</Text>
           <PropertyRow t={t} icon="FolderGit2" label="Workspace">
             <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
@@ -334,7 +333,6 @@ export function CardEditor({ deps, target, theme, compact, onClose, openWorkspac
         </View>
 
         {task ? <Checklist t={t} task={task} checked={checked} newItem={newItem} setNewItem={setNewItem} run={async (...operations) => pending.current ? false : run(...operations)} disabled={busy} /> : null}
-        {task ? <Text style={t.text.small}>Checklist changes save immediately.</Text> : null}
         </ScrollView>
         <View style={{ padding: t.inset, gap: 8, borderTopWidth: 1, borderTopColor: t.c.border, backgroundColor: t.c.surface0 }}>
         {discarding ? <View style={{ gap: 8 }}><Text style={t.text.body}>{task ? "Discard unsaved task edits? Reminder, checklist and newly created label changes are already saved." : "Discard this new task? Newly created labels are already saved; the task and its reminder have not been saved."}</Text><View style={{ flexDirection: "row", gap: 8 }}><Button t={t} label="Keep editing" onPress={() => setDiscarding(false)} /><Button t={t} label="Discard edits" variant="danger" disabled={busy} onPress={onClose} /></View></View> : null}
