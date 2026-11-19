@@ -18,6 +18,7 @@ import { PriorityMark } from "./priority-mark";
 import { workspaceTask } from "../../shared/task-ops";
 import { fontSize } from "../../shared/design/tokens";
 import { hasTaskEdits, taskFieldProblems } from "./editor-state";
+import { Dismissible } from "../ui/dismissible";
 
 export type EditorTarget = { kind: "existing"; taskId: string } | { kind: "new"; column: string; workspaceId: string | null };
 
@@ -84,11 +85,16 @@ export function CardEditor({ deps, target, theme, compact, onClose, openWorkspac
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
   const t = useTokens(theme, compact);
-  const [reminderOpen, setReminderOpen] = useState(false);
-  const [labelsOpen, setLabelsOpen] = useState(false);
+  const [openProperty, setOpenProperty] = useState<"labels" | "due" | "reminder" | null>(null);
+  const reminderOpen = openProperty === "reminder";
+  const labelsOpen = openProperty === "labels";
+  const dueOpen = openProperty === "due";
+  const newReminderOpen = reminderOpen;
+  const setReminderOpen = (open: boolean) => setOpenProperty(open ? "reminder" : null);
+  const setLabelsOpen = (open: boolean) => setOpenProperty(open ? "labels" : null);
+  const setDueOpen = (open: boolean) => setOpenProperty(open ? "due" : null);
+  const setNewReminderOpen = setReminderOpen;
   const [labelSearch, setLabelSearch] = useState("");
-  const [dueOpen, setDueOpen] = useState(false);
-  const [newReminderOpen, setNewReminderOpen] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   const [busy, setBusy] = useState(false);
   const pending = useRef(false);
@@ -227,6 +233,7 @@ export function CardEditor({ deps, target, theme, compact, onClose, openWorkspac
               options={[{ value: "0", label: "None", leading: <PriorityMark kind={NO_PRIORITY.mark} color={priorityColor(t.c, null)} /> }, ...([1, 2, 3, 4] as const).map((priority) => ({ value: String(priority), label: PRIORITY[priority].name, leading: <PriorityMark kind={PRIORITY[priority].mark} color={priorityColor(t.c, priority)} /> }))]}
             />
           </PropertyRow>
+          <Dismissible open={labelsOpen} onDismiss={() => setLabelsOpen(false)}>
           <PropertyRow t={t} icon="Tag" label="Labels">
             <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
               {document.labels.filter((label) => draft.labels.includes(label.id)).map((label) => (
@@ -242,10 +249,13 @@ export function CardEditor({ deps, target, theme, compact, onClose, openWorkspac
               <Text style={t.text.small}>Creating a label saves it immediately. Label selections save with the task.</Text>
             </View> : null}
           </PropertyRow>
+          </Dismissible>
           <Text style={[t.text.heading, { paddingTop: 16, paddingBottom: 8 }]}>Schedule</Text>
+          <Dismissible open={dueOpen} onDismiss={() => setDueOpen(false)}>
           <PropertyRow t={t} icon="Calendar" label="Due date">
             <Button t={t} variant="ghost" icon="Calendar" style={{ alignSelf: "flex-start" }} label={due ? new Date(`${due}T12:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "Set due date"} onPress={() => setDueOpen(!dueOpen)} />
-            {dueOpen || dueProblem ? <>
+            {dueOpen ? <>
+            <Button t={t} variant="ghost" label="Close due date" style={{ alignSelf: "flex-start" }} onPress={() => setDueOpen(false)} />
             <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
               <Tag t={t} label="Today" on={due === today} onPress={() => set({ dueText: today })} />
               <Tag t={t} label="Tomorrow" on={due === plusDays(1)} onPress={() => set({ dueText: plusDays(1) })} />
@@ -256,10 +266,14 @@ export function CardEditor({ deps, target, theme, compact, onClose, openWorkspac
             {due && !dueProblem ? <Text style={t.text.small}>{new Date(`${due}T12:00:00`).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</Text> : null}
             </> : null}
           </PropertyRow>
+          {!dueOpen && dueProblem ? <Text style={t.text.danger}>{dueProblem}</Text> : null}
+          </Dismissible>
           {!task ? (
+            <Dismissible open={newReminderOpen} onDismiss={() => setNewReminderOpen(false)}>
             <PropertyRow t={t} icon="AlarmClock" label="Reminder">
               <Button t={t} variant="ghost" icon="AlarmClock" style={{ alignSelf: "flex-start" }} label={draft.reminderText || "Set a reminder"} onPress={() => setNewReminderOpen(!newReminderOpen)} />
-              {newReminderOpen || reminderProblem ? <>
+              {newReminderOpen ? <>
+              <Button t={t} variant="ghost" label="Close reminder" style={{ alignSelf: "flex-start" }} onPress={() => setNewReminderOpen(false)} />
               <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
                 {[["In 1 hour", "1h"], ["Tomorrow 9:00", "tomorrow 9am"], ["Monday 9:00", "monday 9am"]].map(([label, text]) => (
                   <Tag key={text} t={t} label={label!} on={draft.reminderText === text} onPress={() => set({ reminderText: text! })} />
@@ -270,22 +284,26 @@ export function CardEditor({ deps, target, theme, compact, onClose, openWorkspac
               {remind?.ok ? <Text style={t.text.small}>{new Date(remind.reminder.at).toLocaleString(undefined, { weekday: "long", day: "numeric", month: "long", hour: "numeric", minute: "2-digit" })}</Text> : null}
               </> : null}
             </PropertyRow>
+            {!newReminderOpen && reminderProblem ? <Text style={t.text.danger}>{reminderProblem}</Text> : null}
+            </Dismissible>
           ) : null}
           {task ? (
+            <Dismissible open={reminderOpen} onDismiss={() => setReminderOpen(false)}>
             <PropertyRow t={t} icon="AlarmClock" label="Reminder">
               {finished ? (
                 <Text style={t.text.meta}>{task.reminder ? "Paused while the task is in Done or archived." : "Move the task out of Done to set a reminder."}</Text>
-              ) : reminderOpen ? (
-                <View style={{ padding: 8, borderWidth: 1, borderColor: t.c.border, borderRadius: t.radius.card, backgroundColor: t.c.surface1 }}>
-                  <ReminderPicker deps={deps} target={{ kind: "task", taskId: task.id }} title={task.title} theme={theme} compact={compact} embedded onDone={() => setReminderOpen(false)} />
-                </View>
-              ) : (
-                <Pressable accessibilityRole="button" accessibilityLabel={task.reminder ? `Reminder ${formatDue(task.reminder, now)}. Change it` : "Set a reminder"} onPress={() => setReminderOpen(true)} style={{ alignSelf: "flex-start", height: t.control, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 8, borderRadius: t.radius.control, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1 }}>
+              ) : <>
+                <Pressable accessibilityRole="button" accessibilityState={{ expanded: reminderOpen }} accessibilityLabel={task.reminder ? `Reminder ${formatDue(task.reminder, now)}. Change it` : "Set a reminder"} onPress={() => setReminderOpen(!reminderOpen)} style={{ alignSelf: "flex-start", height: t.control, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 8, borderRadius: t.radius.control, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1 }}>
                   <Text style={{ color: task.reminder ? t.c.foreground : t.c.foregroundMuted, fontSize: fontSize.base }}>{task.reminder ? formatDue(task.reminder, now) : "Set a reminder"}</Text>
-                  <Icon name="ChevronDown" size={14} color={t.c.foregroundMuted} />
+                  <Icon name={reminderOpen ? "ChevronUp" : "ChevronDown"} size={14} color={t.c.foregroundMuted} />
                 </Pressable>
-              )}
+              {reminderOpen ? (
+                <View style={{ padding: 8, borderWidth: 1, borderColor: t.c.border, borderRadius: t.radius.card, backgroundColor: t.c.surface1 }}>
+                  <ReminderPicker deps={deps} target={{ kind: "task", taskId: task.id }} title={task.title} theme={theme} compact={compact} embedded onDone={() => setReminderOpen(false)} onCancel={() => setReminderOpen(false)} />
+                </View>
+              ) : null}</>}
             </PropertyRow>
+            </Dismissible>
           ) : null}
           {task ? <Text style={t.text.small}>Reminder changes save immediately.</Text> : null}
           <Text style={[t.text.heading, { paddingTop: 16, paddingBottom: 8 }]}>Connections</Text>
