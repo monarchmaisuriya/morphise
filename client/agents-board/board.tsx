@@ -40,7 +40,8 @@ import { inboxSettings, oneTapChoice, withCleared } from "../../shared/inbox";
 import { useConversationHits } from "./conversation-hits";
 import { summarizePermission } from "../../shared/inbox";
 import { type ValueStore, useValue } from "../profile-store";
-import { Dropdown, Icon, IconButton, MenuItem, PopoverHost, Segmented, type Tokens, useTokens } from "../ui/kit";
+import { Button, Dropdown, Icon, IconButton, MenuItem, PopoverHost, Segmented, type Tokens, useTokens } from "../ui/kit";
+import { ToolbarPanel, ToolbarPanelRow } from "../ui/toolbar-panel";
 import type { WorkspaceList } from "../workspaces";
 import { AgentCard, type CardButtons, type CardFacts } from "./card";
 import { type CliActions, useAgentEntries, useCardLive, useCliActions } from "./data";
@@ -211,6 +212,10 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
   const now = useNow(30_000);
   const [filter, setFilter] = useState<BoardFilter>(NO_FILTER);
   const [sort, setSort] = useState<SortKey>("updated");
+  const [panel, setPanel] = useState<"filter" | "display" | null>(null);
+  const [searchSaving, setSearchSaving] = useState(false);
+  const searchSavePending = useRef(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [focused, setFocused] = useState<string | null>(null);
   const [pickedPhoneLane, setPhoneLane] = useState<Lane>("waiting");
@@ -248,7 +253,24 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
   const laneById = useMemo(() => new Map(LANES.flatMap((lane) => allLanes[lane].map((agent) => [agent.id, lane] as const))), [allLanes]);
   // "Search conversations" (this device): agents whose fields miss a search word are searched in their own logs.
   const searchConversations = inbox.status === "ready" && inbox.values.searchConversations;
-  const hits = useConversationHits(client, onBoard, filter.search, searchConversations, (agent) => matchesFilter(agent, { ...NO_FILTER, search: filter.search }, now.getTime()));
+  const conversation = useConversationHits(client, onBoard, filter.search, searchConversations, (agent) => matchesFilter(agent, { ...NO_FILTER, search: filter.search }, now.getTime()));
+  const hits = conversation.hits;
+  const toggleConversationSearch = async () => {
+    if (inbox.status !== "ready" || searchSavePending.current) return;
+    searchSavePending.current = true;
+    setSearchSaving(true);
+    setSearchError(null);
+    if (!searchConversations) search.current?.focus();
+    try {
+      const saved = await inbox.save({ ...inbox.values, searchConversations: !searchConversations }, inbox.revision);
+      if (!saved) setSearchError("Could not save conversation search. Try again.");
+    } catch (error) {
+      setSearchError(`Could not save conversation search: ${message(error)}`);
+    } finally {
+      searchSavePending.current = false;
+      setSearchSaving(false);
+    }
+  };
   const lanes = useMemo(() => {
     const order = compareAgents(sort, now.getTime());
     return Object.fromEntries(LANES.map((lane) => [lane, allLanes[lane].filter((agent) => matchesFilter(agent, filter, now.getTime(), { activeNow: lane === "waiting" || lane === "running", status: laneStatus(lane, agent, cleared), conversation: hits.get(agent.id) ?? null })).sort(order)])) as Record<Lane, BoardAgent[]>;
@@ -415,16 +437,17 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
     [],
   );
 
+  const filterCount = filter.statuses.length + filter.providers.length + filter.labels.length + filter.projects.length + filter.workspaces.length + Number(filter.updatedWithin !== "any");
   const toolbar = (
     <View style={{ gap: 8, paddingHorizontal: t.inset, paddingTop: t.inset, paddingBottom: 12 }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-        <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8, height: t.control, paddingHorizontal: 10, borderRadius: t.radius.control, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1 }}>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+        <View style={{ flex: 1, minWidth: 180, flexDirection: "row", alignItems: "center", gap: 8, height: t.control, paddingHorizontal: 10, borderRadius: t.radius.control, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1 }}>
           <Icon name="Search" size={14} color={t.c.foregroundMuted} />
           <TextInput
             ref={search}
             value={filter.search}
             onChangeText={(text) => setFilter({ ...filter, search: text })}
-            placeholder={Platform.OS === "web" ? "Search titles, projects, workspaces, branches  /" : "Search agents"}
+            placeholder={searchConversations ? "Search agent details and conversations" : Platform.OS === "web" ? "Search titles, projects, workspaces, branches  /" : "Search agents"}
             placeholderTextColor={t.c.foregroundMuted}
             accessibilityLabel="Search agents"
             autoCapitalize="none"
@@ -432,28 +455,30 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
             style={[{ flex: 1, minWidth: 0, color: t.c.foreground, fontSize: t.compact ? 15 : 13, height: t.control - 2 }, Platform.OS === "web" ? (WEB_NO_OUTLINE as TextStyle) : null]}
           />
         </View>
-        <IconButton
-          t={t}
-          icon="MessagesSquare"
-          tone={searchConversations ? t.c.accent : undefined}
-          label={searchConversations ? "Searching conversations too (Claude Code and Codex). Turn off" : "Also search inside conversations (Claude Code and Codex)"}
-          disabled={inbox.status !== "ready"}
-          onPress={() => inbox.status === "ready" && void inbox.save({ ...inbox.values, searchConversations: !searchConversations }, inbox.revision)}
-        />
+        <Button t={t} icon="ListFilter" label={filterCount ? `Filter · ${filterCount}` : "Filter"} onPress={() => setPanel(panel === "filter" ? null : "filter")} style={panel === "filter" ? { borderColor: t.c.accent, backgroundColor: t.c.surface2 } : undefined} />
+        <Button t={t} icon="SlidersHorizontal" label="Display" onPress={() => setPanel(panel === "display" ? null : "display")} style={panel === "display" ? { borderColor: t.c.accent, backgroundColor: t.c.surface2 } : undefined} />
         <IconButton t={t} icon="Settings2" label="Agents tab settings" onPress={() => client.openSettings(AGENTS_SETTINGS_TAB)} />
       </View>
-      {onLayoutChange ? <Segmented t={t} label="Agents layout" value={shape} onChange={onLayoutChange} options={[{ value: "list", label: "List", icon: "List" }, { value: "board", label: "Board", icon: "Columns3" }]} /> : null}
-      {layoutError ? <Text style={t.text.danger}>{layoutError}</Text> : null}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, alignItems: "center" }}>
+      {panel === "display" ? <ToolbarPanel t={t}>
+        {onLayoutChange ? <ToolbarPanelRow t={t} label="Layout"><Segmented t={t} label="Agents layout" value={shape} onChange={onLayoutChange} options={[{ value: "list", label: "List", icon: "List" }, { value: "board", label: "Board", icon: "Columns3" }]} /></ToolbarPanelRow> : null}
+        {layoutError ? <Text style={t.text.danger}>{layoutError}</Text> : null}
+        <ToolbarPanelRow t={t} label="Order"><SortMenu t={t} sort={sort} onChange={setSort} /></ToolbarPanelRow>
+      </ToolbarPanel> : null}
+      {panel === "filter" ? <ToolbarPanel t={t}>
+      <ToolbarPanelRow t={t} label="Match">
         <FilterMenu t={t} label="Status" icon="CircleDot" groups={statusGroups(allLanes, cleared)} picked={filter.statuses} onChange={(statuses) => setFilter({ ...filter, statuses: statuses as BoardFilter["statuses"] })} />
         <FilterMenu t={t} label="Agent" icon="Bot" groups={groups.providers} picked={filter.providers} onChange={(providers) => setFilter({ ...filter, providers })} />
         <FilterMenu t={t} label="Label" icon="Tag" groups={groups.labels} picked={filter.labels} onChange={(labels) => setFilter({ ...filter, labels })} />
         <FilterMenu t={t} label="Project" icon="FolderGit2" groups={groups.projects} picked={filter.projects} onChange={(projects) => setFilter({ ...filter, projects })} />
         <FilterMenu t={t} label="Workspace" icon="LayoutGrid" groups={groups.workspaces} picked={filter.workspaces} onChange={(picked) => setFilter({ ...filter, workspaces: picked })} />
         <UpdatedMenu t={t} value={filter.updatedWithin} onChange={(updatedWithin) => setFilter({ ...filter, updatedWithin })} />
-        <SortMenu t={t} sort={sort} onChange={setSort} />
-        {JSON.stringify(filter) !== JSON.stringify(NO_FILTER) ? <IconButton t={t} icon="FilterX" label="Clear the search and filters" onPress={() => setFilter(NO_FILTER)} /> : null}
-      </ScrollView>
+      </ToolbarPanelRow>
+      <ToolbarPanelRow t={t} label="Search"><Button t={t} icon="MessagesSquare" label={searchSaving ? "Saving…" : searchConversations ? "Conversations: on" : "Search conversations"} accessibilityLabel={searchConversations ? "Turn off conversation search" : "Also search inside conversations (Claude Code and Codex)"} disabled={inbox.status !== "ready" || searchSaving || inbox.saving} onPress={() => void toggleConversationSearch()} style={searchConversations ? { borderColor: t.c.accent } : undefined} /></ToolbarPanelRow>
+      <View style={{ alignSelf: "flex-start" }}><Button t={t} variant="ghost" icon="FilterX" label="Clear filters" onPress={() => setFilter({ ...NO_FILTER, search: filter.search })} /></View>
+      </ToolbarPanel> : null}
+      {searchError ? <Text style={t.text.danger}>{searchError}</Text> : null}
+      {searchConversations ? <Text style={t.text.small}>{!filter.search.trim() ? "Type a search term to search conversations (Claude Code and Codex)." : conversation.pending ? `Searching ${conversation.pending} conversations…` : "Conversation search on (Claude Code and Codex)."}</Text> : null}
+      {conversation.problems.map((problem) => <Text key={problem} style={t.text.danger}>{problem}</Text>)}
       {compact && !asList ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4 }} accessibilityRole="tablist">
           {laneList.map((lane) => (
