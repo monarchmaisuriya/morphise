@@ -40,7 +40,7 @@ import { inboxSettings, oneTapChoice, withCleared } from "../../shared/inbox";
 import { useConversationHits } from "./conversation-hits";
 import { summarizePermission } from "../../shared/inbox";
 import { type ValueStore, useValue } from "../profile-store";
-import { Dropdown, Icon, IconButton, MenuItem, PopoverHost, type Tokens, useTokens } from "../ui/kit";
+import { Dropdown, Icon, IconButton, MenuItem, PopoverHost, Segmented, type Tokens, useTokens } from "../ui/kit";
 import type { WorkspaceList } from "../workspaces";
 import { AgentCard, type CardButtons, type CardFacts } from "./card";
 import { type CliActions, useAgentEntries, useCardLive, useCliActions } from "./data";
@@ -195,7 +195,7 @@ function BoardCard({ as, t, client, facts, card, preview, now, selected, focused
   );
 }
 
-export function AgentsBoardView({ client, workspaces, theme, compact, navigation, layout: shape, bookmarkLastAnswer }: { client: PluginClientContext; workspaces: ValueStore<WorkspaceList>; theme: PluginTheme; compact: boolean; navigation: PluginScreenProps["navigation"]; layout: ViewLayout; bookmarkLastAnswer(agentId: string, workspaceId: string | null, note: string): Promise<void> }) {
+export function AgentsBoardView({ client, workspaces, theme, compact, navigation, layout: shape, onLayoutChange, layoutError, bookmarkLastAnswer }: { client: PluginClientContext; workspaces: ValueStore<WorkspaceList>; theme: PluginTheme; compact: boolean; navigation: PluginScreenProps["navigation"]; layout: ViewLayout; onLayoutChange?(layout: ViewLayout): void; layoutError?: string | null; bookmarkLastAnswer(agentId: string, workspaceId: string | null, note: string): Promise<void> }) {
   const t = useTokens(theme, compact);
   const toast = useToast();
   const stored = useSettings(agentsBoardSettings);
@@ -442,6 +442,8 @@ export function AgentsBoardView({ client, workspaces, theme, compact, navigation
         />
         <IconButton t={t} icon="Settings2" label="Agents tab settings" onPress={() => client.openSettings(AGENTS_SETTINGS_TAB)} />
       </View>
+      {onLayoutChange ? <Segmented t={t} label="Agents layout" value={shape} onChange={onLayoutChange} options={[{ value: "list", label: "List", icon: "List" }, { value: "board", label: "Board", icon: "Columns3" }]} /> : null}
+      {layoutError ? <Text style={t.text.danger}>{layoutError}</Text> : null}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, alignItems: "center" }}>
         <FilterMenu t={t} label="Status" icon="CircleDot" groups={statusGroups(allLanes, cleared)} picked={filter.statuses} onChange={(statuses) => setFilter({ ...filter, statuses: statuses as BoardFilter["statuses"] })} />
         <FilterMenu t={t} label="Agent" icon="Bot" groups={groups.providers} picked={filter.providers} onChange={(providers) => setFilter({ ...filter, providers })} />

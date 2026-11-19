@@ -46,6 +46,8 @@ export type TaskOperation =
   | { kind: "moveColumn"; id: string; index: number }
   | { kind: "deleteColumn"; id: string }
   | { kind: "saveLabel"; label: Pick<Label, "id" | "name"> & Partial<Label> }
+  | { kind: "setLabelColor"; id: string; color: string }
+  | { kind: "clearColumnColor"; id: string }
   | { kind: "deleteLabel"; id: string }
   | { kind: "saveRule"; rule: Rule }
   | { kind: "deleteRule"; id: string }
@@ -331,6 +333,12 @@ function mutate(document: TaskDocument, operation: TaskOperation, now: Date): vo
       Object.assign(column, copy(operation.patch));
       return;
     }
+    case "clearColumnColor": {
+      const column = document.columns.find((item) => item.id === operation.id);
+      if (!column) throw new TaskOperationError(`No column has the id "${operation.id}"`);
+      delete column.color;
+      return;
+    }
     case "setDoneColumn": {
       if (!document.columns.some((column) => column.id === operation.id)) throw new TaskOperationError(`No column has the id "${operation.id}"`);
       const previous = doneColumn(document).id;
@@ -366,6 +374,12 @@ function mutate(document: TaskDocument, operation: TaskOperation, now: Date): vo
         applyDoneRules(document, task, false, now);
       }
       document.rules = document.rules.filter((rule) => !(rule.then.kind === "move" && rule.then.column === operation.id));
+      return;
+    }
+    case "setLabelColor": {
+      const label = document.labels.find((item) => item.id === operation.id);
+      if (!label) throw new TaskOperationError(`No label has the id "${operation.id}"`);
+      label.color = operation.color;
       return;
     }
     case "saveLabel":

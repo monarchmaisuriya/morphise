@@ -1,10 +1,10 @@
 // The colour and icon of a group, project or workspace in "Your groups": 11 colours, 36 icons or any typed emoji.
 // Ported from Project Groups by topar12 (MIT, see NOTICE.md), client/decor.tsx at 8515d90.
-import { createElement, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
 import { type Decoration, DECOR_COLORS, DECOR_ICONS, parseHexColor } from "../shared/project-groups";
 import { Field, Icon, IconButton, type Tokens } from "./ui/kit";
-import { radius } from "../shared/design/tokens";
+import { ColorField } from "./ui/color-field";
 
 // A stored icon drawn: "lucide:Name" as that icon, "emoji:x" as text in the same colour (letters take it; emoji keep their own).
 export function DecorIcon({ icon, color, size }: { icon: string; color: string; size: number }) {
@@ -14,47 +14,17 @@ export function DecorIcon({ icon, color, size }: { icon: string; color: string; 
 
 const isPreset = (color: string) => DECOR_COLORS.some((item) => item.value.toUpperCase() === color.toUpperCase());
 
-// The system colour wheel, on desktop and web only (phones type a hex code). It previews while you drag
-// and saves once, on the native "change" event when the wheel closes, so dragging doesn't rewrite the
-// shared document on every move.
-// The three members of the browser's <input type="color"> used here (this project has no DOM types).
-type ColorInput = { value: string; addEventListener(type: "change", listener: () => void): void; removeEventListener(type: "change", listener: () => void): void };
-
-function ColorWheel({ value, onPreview, onPick }: { value: string; onPreview(color: string): void; onPick(color: string): void }) {
-  const input = useRef<ColorInput | null>(null);
-  const pick = useRef(onPick);
-  pick.current = onPick;
-  useEffect(() => {
-    const element = input.current;
-    if (!element) return;
-    const commit = () => {
-      const color = parseHexColor(element.value);
-      if (color) pick.current(color);
-    };
-    element.addEventListener("change", commit);
-    return () => element.removeEventListener("change", commit);
-  }, []);
-  return createElement("input", {
-    ref: input,
-    type: "color",
-    value: value.toLowerCase(),
-    "aria-label": "Pick a colour",
-    onInput: (event: { currentTarget: ColorInput }) => onPreview(event.currentTarget.value),
-    style: { width: 28, height: 28, padding: 0, border: "none", background: "none", cursor: "pointer" },
-  });
-}
-
 // `withIcon` false offers colours only (workspaces). Every choice saves at once through `onChange`;
-// a custom colour saves when Enter is pressed in its hex field or the colour wheel closes.
-export function DecorPicker({ t, value, onChange, withIcon }: { t: Tokens; value: Decoration; onChange(next: Decoration): void; withIcon: boolean }) {
+// custom graphical colors preview locally until Apply.
+export function DecorPicker({ t, value, onChange, onApplyColor, withIcon }: { t: Tokens; value: Decoration; onChange(next: Decoration): void; onApplyColor?(color: string | null): Promise<void>; withIcon: boolean }) {
   const [emoji, setEmoji] = useState(value.icon?.startsWith("emoji:") ? value.icon.slice("emoji:".length) : "");
   const customColor = value.color !== null && !isPreset(value.color) ? value.color : null;
   const [customOpen, setCustomOpen] = useState(customColor !== null);
   const [hex, setHex] = useState(value.color ?? "");
   const [hexError, setHexError] = useState(false);
   const preview = parseHexColor(hex);
-  const saveHex = (text: string) => {
-    const color = parseHexColor(text);
+  const saveHex = () => {
+    const color = parseHexColor(hex);
     setHexError(color === null);
     if (color) {
       setHex(color);
@@ -94,21 +64,13 @@ export function DecorPicker({ t, value, onChange, withIcon }: { t: Tokens; value
           {customColor ? null : <Icon name="Plus" size={12} color={t.c.foregroundMuted} />}
         </Pressable>
       </View>
-      {customOpen ? (
-        <View style={{ gap: 4 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            {Platform.OS === "web" ? (
-              <ColorWheel value={preview ?? value.color ?? "#8E4EC6"} onPreview={(color) => (setHex(color.toUpperCase()), setHexError(false))} onPick={(color) => saveHex(color)} />
-            ) : (
-              <View style={{ width: 24, height: 24, borderRadius: radius.md, borderWidth: 1, borderColor: t.c.border, backgroundColor: preview ?? "transparent" }} />
-            )}
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Field t={t} plain value={hex} onChangeText={(text) => (setHex(text), setHexError(false))} onSubmit={() => saveHex(hex)} maxLength={7} placeholder="#8E4EC6" accessibilityLabel="Custom colour as a hex code, then Enter" />
-            </View>
-          </View>
-          {hexError ? <Text style={[t.text.small, { color: t.c.statusDanger }]}>Enter a hex colour such as #8E4EC6</Text> : null}
+      {customOpen ? Platform.OS === "web" ? <ColorField t={t} label="Custom color" value={value.color ?? ""} resetLabel="No color override" onReset={() => onApplyColor ? onApplyColor(null) : onChange({ ...value, color: null })} onApply={(color) => onApplyColor ? onApplyColor(color) : onChange({ ...value, color })} /> : <View style={{ gap: 4 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <View style={{ width: 24, height: 24, borderRadius: t.radius.control, borderWidth: 1, borderColor: t.c.border, backgroundColor: preview ?? "transparent" }} />
+          <View style={{ flex: 1, minWidth: 0 }}><Field t={t} plain value={hex} onChangeText={(text) => { setHex(text); setHexError(false); }} onSubmit={saveHex} maxLength={7} placeholder="#8E4EC6" accessibilityLabel="Custom colour as a hex code, then Enter" /></View>
         </View>
-      ) : null}
+        {hexError ? <Text style={[t.text.small, { color: t.c.statusDanger }]}>Enter a hex colour such as #8E4EC6</Text> : null}
+      </View> : null}
       {withIcon ? (
         <>
           <Text style={t.text.label}>Icon</Text>

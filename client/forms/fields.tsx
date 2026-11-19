@@ -431,6 +431,8 @@ export function createFormScreen(
             />
           </SettingsCard>
         ) : null}
+        <Text accessibilityLiveRegion="polite" style={issues.size || saveError ? styles.danger : styles.muted}>{status}</Text>
+        {issues.size ? <View style={{ gap: 4 }}>{[...issues].map(([path, message]) => <Text key={path} style={styles.danger}>{path.replace(profilePrefix, "").split(".").join(" › ")}: {message}</Text>)}</View> : null}
         {render(form)}
         <Text style={issues.size || saveError ? styles.danger : styles.muted}>{status}</Text>
         {dirty && (issues.size > 0 || saveError) ? (

@@ -2,6 +2,14 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.45.0 - 2026-11-19
+
+- **Visual color editing on desktop and web:** theme roles, sidebar theme color, chat accent and bold text, task columns and labels, and sidebar decorations have inline color previews and graphical RGB controls with precise hex entry, opacity where supported, Apply and Cancel. Existing presets and the system color picker remain. iOS and Android retain their previous color controls.
+- **Clearer task editing:** Properties, Schedule and Connections stay visible; labels open a searchable list, and due dates and new reminders open focused controls. The action footer stays outside the scrolling fields. Invalid links and overlong text have field errors; pending saves prevent duplicate submission, and closing asks before discarding staged changes. Immediate reminder, checklist and label creation behavior is explained.
+- **Local layout controls:** switch Agents between List and Board at its toolbar, and Tasks under Display, using the same device preferences as General settings.
+- **Save feedback and safer bookmark removal:** settings show save and validation feedback above and below their content; bookmark removal asks for explicit confirmation. Normal-size secondary theme text uses the same contrast warning threshold as primary text.
+- **Field-level color saves:** changing a label's color keeps a concurrent rename, and resetting a column color removes only its override.
+
 ## 0.44.2 - 2026-11-19
 
 - **Move to group only where it applies:** a project's menu offers "Move to group" only while the sidebar is grouped by Your groups, the one grouping groups arrange; in every other grouping the menu keeps Colour and icon, New workspace, Copy path and Remove project.

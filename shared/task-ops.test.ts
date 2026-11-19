@@ -21,6 +21,19 @@ const order = (document: TaskDocument, column: string) =>
     .map((task) => task.id);
 
 describe("tasks", () => {
+  it("clears only a column color", () => {
+    const colored = apply(EMPTY_TASKS, { kind: "updateColumn", id: "todo", patch: { color: "#abcdef", name: "Next" } });
+    const cleared = apply(colored, { kind: "clearColumnColor", id: "todo" });
+    expect(cleared.columns.find((column) => column.id === "todo")).toEqual({ id: "todo", name: "Next", done: false, wipLimit: null });
+  });
+  it("changes label color without replacing its name", () => {
+    const labeled = apply(EMPTY_TASKS, { kind: "saveLabel", label: { id: "bug", name: "Renamed elsewhere", color: "#123456" } });
+    expect(apply(labeled, { kind: "setLabelColor", id: "bug", color: "#abcdef" }).labels).toEqual([{ id: "bug", name: "Renamed elsewhere", color: "#abcdef" }]);
+  });
+  it("refuses color updates for deleted targets", () => {
+    expect(() => apply(EMPTY_TASKS, { kind: "setLabelColor", id: "missing", color: "#abcdef" })).toThrow('No label has the id "missing"');
+    expect(() => apply(EMPTY_TASKS, { kind: "clearColumnColor", id: "missing" })).toThrow('No column has the id "missing"');
+  });
   it("adds a task at the end of its column, and adding the same id again changes nothing", () => {
     const document = apply(EMPTY_TASKS, add("a"), add("b"), add("a", { title: "Different" }));
     expect(order(document, "todo")).toEqual(["a", "b"]);

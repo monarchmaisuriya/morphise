@@ -226,7 +226,7 @@ interface Shared {
   hover: HoverTracker;
   // "Your groups": the saved groups, a change to them, and every project by key (for projects with no workspace).
   // `byLastUsed`: groups are ordered by when they were last used (Settings, Sidebar), so they cannot be moved by hand.
-  groups: { doc: ProjectGroups; change(operation: (doc: ProjectGroups) => ProjectGroups): void; projectRefs: ReadonlyMap<string, ProjectRef>; byLastUsed: boolean };
+  groups: { doc: ProjectGroups; change(operation: (doc: ProjectGroups) => ProjectGroups): void; apply(operation: (doc: ProjectGroups) => ProjectGroups): Promise<void>; projectRefs: ReadonlyMap<string, ProjectRef>; byLastUsed: boolean };
   // "Your groups" in the workspace list: dragging projects between groups, and groups up and down (null while groups
   // are ordered by last use); null otherwise.
   drag: { projects: DragApi; groups: DragApi | null } | null;
@@ -1083,7 +1083,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
         {menu === "colour" ? (
           <>
             <MenuItem t={t} icon="ChevronLeft" label="Back" hint="Set colour" onPress={() => setMenu("actions")} />
-            <DecorPicker t={t} value={workspaceDecor} withIcon={false} onChange={(next) => shared.groups.change((doc) => setDecoration(doc, "workspaces", reference.key, next))} />
+            <DecorPicker t={t} value={workspaceDecor} withIcon={false} onApplyColor={(color) => shared.groups.apply((doc) => setDecoration(doc, "workspaces", reference.key, { icon: doc.decorations.workspaces[reference.key]?.icon ?? null, color }))} onChange={(next) => shared.groups.change((doc) => setDecoration(doc, "workspaces", reference.key, next))} />
           </>
         ) : menu === "labels" ? (
           <>
@@ -1317,7 +1317,7 @@ function UserGroupHeading({ group, index, count, collapsed, onToggle, shared }: 
           ) : menu === "decor" ? (
             <>
               <MenuItem t={t} icon="ChevronLeft" label="Back" hint="Colour and icon" onPress={() => setMenu("actions")} />
-              <DecorPicker t={t} value={decor} withIcon onChange={(next) => shared.groups.change((doc) => setDecoration(doc, "groups", id, next))} />
+              <DecorPicker t={t} value={decor} withIcon onApplyColor={(color) => shared.groups.apply((doc) => setDecoration(doc, "groups", id, { icon: doc.decorations.groups[id]?.icon ?? null, color }))} onChange={(next) => shared.groups.change((doc) => setDecoration(doc, "groups", id, next))} />
             </>
           ) : (
           <>
@@ -1462,7 +1462,7 @@ function ProjectHeading({ title, first, projectRef = null, count, collapsed, onT
           ) : menu === "decor" && project ? (
             <>
               <MenuItem t={t} icon="ChevronLeft" label="Back" hint="Colour and icon" onPress={() => setMenu("actions")} />
-              <DecorPicker t={t} value={decor} withIcon onChange={(next) => shared.groups.change((doc) => setDecoration(doc, "projects", project.key, next))} />
+              <DecorPicker t={t} value={decor} withIcon onApplyColor={(color) => shared.groups.apply((doc) => setDecoration(doc, "projects", project.key, { icon: doc.decorations.projects[project.key]?.icon ?? null, color }))} onChange={(next) => shared.groups.change((doc) => setDecoration(doc, "projects", project.key, next))} />
             </>
           ) : menu === "move" ? (
             <>
@@ -2057,7 +2057,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
         openKey: props.active.agent?.key ?? null,
       },
       hover,
-      groups: { doc: groupsDoc, change: changeGroups, projectRefs: source.projectRefs, byLastUsed: groupsByLastUsed },
+      groups: { doc: groupsDoc, change: changeGroups, apply: deps.changeGroups, projectRefs: source.projectRefs, byLastUsed: groupsByLastUsed },
       drag: draggable.length ? { projects: projectDrag.value, groups: groupsByLastUsed ? null : groupDrag.value } : null,
       removeProject: deps.removeProject,
     };
