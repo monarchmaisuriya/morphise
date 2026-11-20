@@ -10,7 +10,9 @@ What each section does and its limits: [OVERVIEW.md](OVERVIEW.md).
 
 ## Install
 
-Requires Paseo 0.16.0-beta.1 or later.
+This source requires a Paseo host advertising `adaptiveAgentFeatures`; older hosts fail setup with update guidance. A released host/SDK version for this source has not been assigned. The manifest and lockfile still describe the published baseline, not an install-ready adaptive release. See [Setup and limits](OVERVIEW.md#setup-and-limits) before using this development source.
+
+The commands below install the existing published release, not this adaptive source:
 
 ```bash
 paseo plugin install github:monarchmaisuriya/morphise --ref v0.23.0
@@ -39,6 +41,8 @@ Morphise includes code ported from seven MIT-licensed Paseo plugins. Each ported
 Packages Morphise installs on the daemon when their option is used: [pele](https://www.npmjs.com/package/pele) (diagrams, MIT) and [sharp](https://sharp.pixelplumbing.com) (thumbnails, Apache-2.0; its prebuilt libvips is LGPL-3.0-or-later). The optional icon sets are downloaded from npm when picked: Hugeicons (MIT) and Untitled UI (its own licence). Commands that run in a terminal use the `node-pty` that Paseo itself ships (MIT); Morphise does not include a copy.
 
 ## Develop
+
+For adaptive source verification, first build the matching host protocol/client/plugin SDK stack and stage its package artifacts in an isolated dependency directory. Do not publish a placeholder version or commit local dependency paths. Keep tests/builds serialized with the host work. The existing package scripts are:
 
 ```bash
 npm install

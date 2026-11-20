@@ -2,7 +2,7 @@
 // open; the daemon sends each request to the window M used last and waits for its answer, so an
 // action runs in one window only. Pinning needs no window and runs here.
 import { randomUUID } from "node:crypto";
-import { defineAgentTool, type AgentToolDefinition } from "@getpaseo/plugin/server";
+import { defineAgentTool, type AgentToolDefinition, type PluginSessionOpenRequest } from "@getpaseo/plugin/server";
 import { SHOW_TOOL, showEnabled, showInput, type ShowInput, type ShowRequest } from "../shared/show";
 import { PARENT_AGENT_ID_LABEL } from "../shared/chat-status";
 import { TITLE_HELPER } from "./titles";
@@ -228,23 +228,20 @@ export function readShowSetting(
   };
 }
 
-interface OpenRequest {
-  tools: AgentToolDefinition[];
-  labels?: Readonly<Record<string, string>>;
-  metadata?: Readonly<Record<string, unknown>>;
-  // Sent by Paseo 0.16.0-beta.2 and later; absent from the installed SDK's type.
-  background?: boolean;
-}
-
 /**
  * For `agent.open.before`: the session gets the tool while the setting is on. Morphise's title
  * helper, sub-agents and background helpers never do; `execute` refuses them again at call time.
  */
 export function createShowHook({ enabled, tool }: { enabled(): Promise<boolean>; tool: AgentToolDefinition }) {
-  return async <Request extends OpenRequest>({ request }: { request: Request }): Promise<Request | undefined> => {
-    if (request.metadata?.[TITLE_HELPER] === true || request.labels?.[PARENT_AGENT_ID_LABEL] || request.background === true) return undefined;
+  return async ({ request }: { request: PluginSessionOpenRequest }): Promise<PluginSessionOpenRequest | undefined> => {
+    if (request.purpose === "history" || request.baseConfig?.internal || request.metadata?.[TITLE_HELPER] === true || request.labels?.[PARENT_AGENT_ID_LABEL] || request.background === true) return undefined;
     const on = await enabled().catch((error: unknown) => (console.error("[morphise] Could not read the show-in-Paseo setting; the tool is not attached", error), false));
     if (!on) return undefined;
+    const attached = request.openSupport?.attachedTools;
+    if (!attached?.enabled || (attached.delivery !== "native" && attached.delivery !== "mcp") || attached.disabledTools.includes(SHOW_TOOL)) {
+      console.info(`[morphise] ${request.agentId} show: attached tool delivery unavailable or disabled`);
+      return undefined;
+    }
     return { ...request, tools: [...request.tools, tool] };
   };
 }

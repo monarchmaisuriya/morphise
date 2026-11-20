@@ -1,7 +1,7 @@
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import { readImageFile, readTextFile, revealPath } from "./server/files";
 import { watchSettings } from "./server/settings-watch";
-import { createPlanInstruction, createPlanTools } from "./server/plan-tools";
+import { createPlanTools } from "./server/plan-tools";
 import { createTurnRecap } from "./server/turn-recap";
 import { registerAgentActions } from "./server/agent-actions";
 import { createTitleJobs, type TitlePaseo } from "./server/titles";
@@ -10,7 +10,7 @@ import { startTitle, titleSettings, titleStatus } from "./shared/agent-titles";
 import { createTaskKeeper } from "./server/task-keeper";
 import { createShowHook, createShowTool, createShowWindows, readShowSetting } from "./server/show";
 import { registerMedia } from "./server/polish/media.register";
-import { registerPages } from "./server/polish/pages.register";
+import { registerLegacyConfig, registerPages } from "./server/polish/pages.register";
 import { registerUpdate } from "./server/polish/update.register";
 import { registerRun } from "./server/run/register";
 import { profileSettings } from "./shared/document";
@@ -26,6 +26,8 @@ import { taskSettings } from "./shared/tasks";
 import { bookmarksWatch, profileWatch, tasksWatch } from "./shared/watch";
 
 export default function contribute(server: PluginServerContext) {
+  if (!server.features?.adaptiveAgentFeatures) throw new Error("Morphise requires a Paseo host with adaptive agent features. Update the host before loading this plugin source.");
+  registerLegacyConfig(server);
   const profile = server.registerSettings(profileSettings);
   server.handle(profileWatch, watchSettings(profile));
   const tasks = server.registerSettings(taskSettings);
@@ -70,8 +72,6 @@ export default function contribute(server: PluginServerContext) {
   // While the steps card is on, Claude agents launch with Claude Code's task-list tools, so they
   // publish the plan the card draws (newer models do not get those tools by default).
   const stopPlanTools = server.addHook("agent.open.before", createPlanTools(profile));
-  // ...and each new one is asked to keep that plan, since Claude Code only lists the tools by name.
-  const stopPlanInstruction = server.addHook("agent.create.before", createPlanInstruction(profile));
   // The daemon side of the parts ported from Chat Polish (see NOTICE.md).
   const stopPolish = [registerMedia, (polish: PluginServerContext, reader: typeof profile) => registerPages(polish, reader, bookmarks), registerUpdate].map((register) => register(server, profile));
   // Shell commands the user runs from a chat (/run, Run buttons), ported from Shell Yeah (see NOTICE.md).
@@ -93,7 +93,6 @@ export default function contribute(server: PluginServerContext) {
     windows.stop();
     stopRecap();
     stopPlanTools();
-    stopPlanInstruction();
     stopPolish.forEach((stop) => stop());
     keeper.dispose();
     // Marks running commands interrupted and ends their processes before the plugin stops.

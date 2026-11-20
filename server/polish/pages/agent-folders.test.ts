@@ -30,6 +30,59 @@ afterAll(() => {
 });
 
 describe("per-agent tokens for the html tools", () => {
+  it("keeps launch tokens in memory, preserves legacy disk bytes and revokes only their own lifetime", async () => {
+    const { issueAgentToken, issueLaunchToken, folderOfToken } = await fresh();
+    const legacy = await issueAgentToken("/work/legacy");
+    const before = await readFile(storeFile(), "utf8");
+    const cleanupA: Array<() => void> = [];
+    const cleanupB: Array<() => void> = [];
+    const a = issueLaunchToken("/work/a/..", { signal: new AbortController().signal, onDispose: (cleanup) => void cleanupA.push(cleanup) });
+    const b = issueLaunchToken("/work/b", { signal: new AbortController().signal, onDispose: (cleanup) => void cleanupB.push(cleanup) });
+    expect(a).toMatch(/^[0-9a-f]{48}$/);
+    expect(a).not.toBe(b);
+    expect(await folderOfToken(a)).toBe(resolve("/work"));
+    expect(await folderOfToken(b)).toBe(resolve("/work/b"));
+    cleanupA[0]!();
+    cleanupA[0]!();
+    expect(await folderOfToken(a)).toBeUndefined();
+    expect(await folderOfToken(b)).toBe(resolve("/work/b"));
+    expect(await folderOfToken(legacy)).toBe(resolve("/work/legacy"));
+    expect(await readFile(storeFile(), "utf8")).toBe(before);
+    cleanupB[0]!();
+    const restarted = await fresh();
+    expect(await restarted.folderOfToken(b)).toBeUndefined();
+    expect(await restarted.folderOfToken(legacy)).toBe(resolve("/work/legacy"));
+  });
+
+  it("does not grow the legacy map across 100 disposed launch attempts", async () => {
+    const { issueAgentToken, issueLaunchToken, folderOfToken } = await fresh();
+    await issueAgentToken("/work/legacy");
+    const before = await readFile(storeFile(), "utf8");
+    const tokens: string[] = [];
+    // Repetition checks the invariant for every launch, not runner retries.
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const cleanups: Array<() => void> = [];
+      tokens.push(issueLaunchToken("/work/new", { signal: new AbortController().signal, onDispose: (cleanup) => void cleanups.push(cleanup) }));
+      cleanups[0]!();
+    }
+    expect(await readFile(storeFile(), "utf8")).toBe(before);
+    expect(await Promise.all(tokens.map(folderOfToken))).toEqual(Array(100).fill(undefined));
+  });
+
+  it("does not issue a token for an already cancelled attempt", async () => {
+    const { issueLaunchToken } = await fresh();
+    const controller = new AbortController();
+    controller.abort(new Error("open cancelled"));
+    const onDispose = vi.fn();
+    expect(() => issueLaunchToken("/work/a", { signal: controller.signal, onDispose })).toThrow("open cancelled");
+    expect(onDispose).not.toHaveBeenCalled();
+  });
+
+  it("does not create an unowned token when lifetime cleanup registration rejects", async () => {
+    const { issueLaunchToken } = await fresh();
+    expect(() => issueLaunchToken("/work/a", { signal: new AbortController().signal, onDispose: () => { throw new Error("disposed lifetime"); } })).toThrow("disposed lifetime");
+  });
+
   it("maps an issued token to the agent's resolved folder, and nothing else to any folder", async () => {
     const { issueAgentToken, folderOfToken } = await fresh();
     const token = await issueAgentToken("/work/project/../project");

@@ -1,5 +1,5 @@
 // Ported from Chat Polish (lthieu96/paseo-chat-polish, MIT, see NOTICE.md): server/html.ts
-import type { PluginHookRequests } from "@getpaseo/plugin/server";
+import type { PluginSessionOpenRequest } from "@getpaseo/plugin/server";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { chmod, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
@@ -14,10 +14,7 @@ import { headlessShell } from "./headless-shell";
 import { pagesCacheDir } from "./cache";
 import { checkPage, type PageCheck } from "./page-check";
 
-// A new agent's config as the agent.create.before hook receives it (Paseo's AgentSessionConfig).
-export type AgentConfig = PluginHookRequests["agent.create.before"]["config"];
-
-// When an agent should draw a page, in one place for both the system prompt (new chats) and the tool description (which
+// When an agent should draw a page, in one place for both the launch instructions and the tool description (which
 // Morphise's tool server sends live, so chats created before a change read it too). Proactive on purpose, like Claude
 // Code's own guidance: draw without being asked whenever a page is clearer than text, keep text for short answers.
 const WHEN_TO_DRAW = `Draw a page without being asked whenever it would be clearer than text:
@@ -53,7 +50,7 @@ Don't style text, headings, links, lists, quotes, code, tables, chips, cards, st
 The tool lays the page out at 700 and 360px before showing it; when it finds script errors, overlapping or cut-off text, overflow, a moving height or styles that restyle what the kit draws, it shows nothing and returns them for you to fix.`;
 
 /**
- * Added to a new agent's system prompt while pages are on: when to draw one, and the layout rules, since a description can load late and the
+ * Appended at session opening while pages are on: when to draw one, and the layout rules, since a description can load late and the
  * agent never sees its page. Overlapping labels were the most common fault in trials, all from text placed at hand-picked coordinates.
  */
 const SYSTEM_PROMPT = `# HTML pages
@@ -72,8 +69,47 @@ You never see the page you publish, so build it so nothing can overlap, get cut 
 Your reply
 After publishing, write one or two sentences the page doesn't already say: a takeaway, a caveat or a next step. Never say the page is shown, above, ready or rendered, and never reply with only punctuation.`;
 
-// Only for agents created while the headless shell is installed: html_preview has nothing to lay a page out in without it.
+// Only for openings while the headless shell is installed: html_preview has nothing to lay a page out in without it.
 const PREVIEW_RULE = `- To see a page before publishing it (canvas drawings, dense SVG), call ${HTML_PREVIEW_TOOL}: it reports what ${HTML_TOOL} would reject and, once the page passes, returns a screenshot. It doesn't publish the page, and it means writing the page twice, so skip it for plain layouts.`;
+
+const withPreviewRule = (prompt: string) => prompt.replace("\n\nYour reply", `\n${PREVIEW_RULE}\n\nYour reply`);
+
+// Exact source-known suffixes: v0.16-v0.32, v0.37, v0.38-v0.40 and v0.41-v0.46.
+// These are adoption selectors, not permission to delete text that merely has the same heading.
+const EARLY_SYSTEM_PROMPT = `# HTML pages
+You have an ${HTML_TOOL} tool that shows an HTML page inline in this chat.
+
+When to use it
+- Only when the user asks for a visual, in any language: draw, chart, plot, visualize, illustrate, simulate, animate, mock up. Answer everything else in text.
+- Flowcharts, sequence, state, class and ER diagrams: write a \`\`\`mermaid block in your reply instead. The chat draws and lays it out.
+
+Layout rules
+You never see the page you publish, so build it so nothing can overlap, get cut off or move the chat:
+- Put text in normal HTML flow (flex, grid, tables) and let it wrap. Don't position text absolutely or at fixed coordinates when HTML layout can place it.
+- In SVG and canvas, compute positions from the data in your script, never from hand-picked numbers. Give each item (step, message, bar) its own row, at least 20px per line of text plus 12px. Put labels in their own row above or beside a shape, never on another label, line or arrow. Size the viewBox from the rows. Split long labels into short lines with <tspan>, and make boxes wider than their text (about 0.6 × font size per character).
+- Keep at least 8px between labels, and between text and a box edge. Everything must fit a 360px-wide page too.
+- Simulations: moving parts get a region of their own; readouts and controls go below the canvas, in HTML.
+- Animations and controls must not change the page's height: the chat resizes the frame to fit, so the conversation would jump. Reserve space for every state up front: fixed or min-height areas (one that scrolls its overflow is fine), room for rows that appear later, single-line readouts with tabular numbers.
+
+Your reply
+After publishing, write one or two sentences the page doesn't already say: a takeaway, a caveat or a next step. Never say the page is shown, above, ready or rendered, and never reply with only punctuation.`;
+const HELPFUL_SYSTEM_PROMPT = SYSTEM_PROMPT.replace(`${WHEN_TO_DRAW}\nCall ${HTML_GUIDE_TOOL} for the kind of page first.`, `- When a visual clearly helps the user understand: numbers to compare, a trend over time, data in a table, a structure or process, steps, an interactive explainer, a mock-up. And always when the user asks to draw, chart, plot, visualize, illustrate, simulate, animate or mock up something, in any language.
+- Answer everything else in text. A short answer stays text; don't add a page to decorate it.
+- Flowcharts, sequence, state, class and ER diagrams: write a \`\`\`mermaid block in your reply instead. The chat draws and lays it out.
+- Call ${HTML_GUIDE_TOOL} for the kind of page first.`);
+const PROACTIVE_SYSTEM_PROMPT = SYSTEM_PROMPT.replace("- Processes: how something works step by step or over time (an algorithm, a request's path, a protocol, a lifecycle, a physical process). An animated explainer with Morphise.player: scenes with captions, and play, pause and step controls the reader drives.\n", "");
+export const LEGACY_HTML_PROMPTS = [
+  { id: "html-prompt-current", text: SYSTEM_PROMPT },
+  { id: "html-prompt-current-preview", text: withPreviewRule(SYSTEM_PROMPT) },
+  { id: "html-prompt-proactive", text: PROACTIVE_SYSTEM_PROMPT },
+  { id: "html-prompt-proactive-preview", text: withPreviewRule(PROACTIVE_SYSTEM_PROMPT) },
+  { id: "html-prompt-helpful", text: HELPFUL_SYSTEM_PROMPT },
+  { id: "html-prompt-helpful-preview", text: withPreviewRule(HELPFUL_SYSTEM_PROMPT) },
+  { id: "html-prompt-early", text: EARLY_SYSTEM_PROMPT },
+  { id: "html-prompt-early-preview", text: withPreviewRule(EARLY_SYSTEM_PROMPT) },
+] as const;
+
+export const htmlInstruction = () => `<morphise-html-pages>\n${headlessShell() ? withPreviewRule(SYSTEM_PROMPT) : SYSTEM_PROMPT}\n</morphise-html-pages>`;
 
 const TOOL = {
   name: HTML_TOOL,
@@ -270,9 +306,6 @@ function previewAnswer(problem: string | undefined, check: PageCheck | undefined
   return { content: [{ type: "text", text }, ...shot], isError: false };
 }
 
-/** Providers whose agents may preapprove exact MCP tools (`PROVIDER_CONTRACTS` in Paseo's provider-registry.ts); Paseo refuses to create an agent on any other with a toolPolicy. The tools go only to these, so no other provider is handed an MCP server it may not support. */
-export const PREAPPROVES = new Set(["claude", "codex", "opencode"]);
-
 /** The provider a configured one finally extends, as Paseo resolves its contract: `claude-mobile` → `claude`, a custom ACP one → `acp`. */
 export function baseProvider(provider: string, providers: unknown = {}): string {
   const entries = (providers && typeof providers === "object" ? providers : {}) as Record<string, { extends?: unknown } | undefined>;
@@ -285,21 +318,15 @@ export function baseProvider(provider: string, providers: unknown = {}): string 
   }
 }
 
-/**
- * A new agent's config with the tools added, preapproved where its base provider allows it so calling them never asks for permission, loaded up
- * front on Claude, and its rules appended to the system prompt. A config that has them already (Paseo re-creating a stored agent hands the hook
- * its saved config) only gets the new address and token.
- */
-export function withHtmlTool(config: AgentConfig, { url, token }: { url: string; token: string }, base = config.provider): AgentConfig {
-  const added = Boolean(config.mcpServers?.[HTML_SERVER]);
-  const others = (config.toolPolicy?.preapproved ?? []).filter((entry) => entry.server !== HTML_SERVER);
+/** Adds only this opening's optional fields; the saved caller base is never rewritten. */
+export function withHtmlTool(request: PluginSessionOpenRequest, { url, token, instructions, preapprove }: { url: string; token: string; instructions: boolean; preapprove: boolean }): PluginSessionOpenRequest {
   return {
-    ...config,
-    mcpServers: { ...config.mcpServers, [HTML_SERVER]: { type: "http", url, headers: { Authorization: `Bearer ${token}` }, alwaysLoad: true } },
-    ...(PREAPPROVES.has(base) && {
-      toolPolicy: { ...config.toolPolicy, preapproved: [...others, ...[HTML_TOOL, HTML_GUIDE_TOOL, HTML_PREVIEW_TOOL].map((tool) => ({ kind: "mcp" as const, server: HTML_SERVER, tool }))] },
+    ...request,
+    mcpServers: { ...request.mcpServers, [HTML_SERVER]: { type: "http", url, headers: { Authorization: `Bearer ${token}` }, alwaysLoad: true } },
+    ...(preapprove && {
+      toolPolicy: { preapproved: [...(request.toolPolicy?.preapproved ?? []), ...[HTML_TOOL, HTML_GUIDE_TOOL, HTML_PREVIEW_TOOL].map((tool) => ({ kind: "mcp" as const, server: HTML_SERVER, tool }))] },
     }),
-    systemPrompt: added ? config.systemPrompt : [config.systemPrompt, headlessShell() ? SYSTEM_PROMPT.replace("\n\nYour reply", `\n${PREVIEW_RULE}\n\nYour reply`) : SYSTEM_PROMPT].filter(Boolean).join("\n\n"),
+    ...(instructions && { appendSystemPrompt: [...(request.appendSystemPrompt ?? []), htmlInstruction()] }),
   };
 }
 
@@ -330,7 +357,8 @@ async function callerOf(authorization: string | undefined, shared: string): Prom
   return folder ? { folder } : refuse(sameLength ? "unknown token" : "wrong length");
 }
 
-// Stateless Streamable HTTP: one JSON answer per POST, no event stream and no sessions, so a plugin restart between calls goes unnoticed.
+// Stateless Streamable HTTP: one JSON answer per POST, no event stream and no MCP sessions.
+// Launch credentials still require a fresh opening after a plugin restart; legacy disk tokens remain readable.
 async function serveMcp(req: IncomingMessage, res: ServerResponse, token: string) {
   if (req.method !== "POST") return void res.writeHead(405, { Allow: "POST" }).end();
   const caller = await callerOf(req.headers.authorization, token);

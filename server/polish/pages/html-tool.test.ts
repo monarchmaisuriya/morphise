@@ -1,8 +1,10 @@
 // Ported from Chat Polish (lthieu96/paseo-chat-polish, MIT, see NOTICE.md): test/html.test.mjs
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import type { PluginSessionOpenRequest } from "@getpaseo/plugin/server";
 import { readPageId, readReplaces } from "../../../shared/polish/html";
 import { PAGE_POLICY } from "../../../shared/polish/page";
 
@@ -53,44 +55,71 @@ afterAll(async () => {
 });
 
 describe("the html_render MCP server", () => {
-  it("adds itself to a new agent's config without dropping other servers, preapproved where the base provider allows", async () => {
+  it.each([
+    ["html-prompt-early", "bd37b09c3f95b4bfb3ceaa9d4861c4fc5e935fc46164684bf04167ae2bcd245d"],
+    ["html-prompt-early-preview", "10388173efb0aafba6a12dd97dbeb025be4026b432a51866181503b77e976e58"],
+    ["html-prompt-helpful", "228bf17f22da44f00d0b7dbe3aa5972a07a5686dfb3bcdb0f3c0dc863036a899"],
+    ["html-prompt-helpful-preview", "6782e0803e070e785c82e8898b6157b6c18d7167f44410a8e4c50d9293da5d57"],
+    ["html-prompt-proactive", "63bddcde605baf029f66ea8dd0d5e48041333ef1b6577d4c623d8184f6b0cfe8"],
+    ["html-prompt-proactive-preview", "97bb34365fb0be0978f5a8134212d95cb98223d4dca16bf7217ff57494e66e75"],
+    ["html-prompt-current", "a98669d1f4cbdeca5e5eead0375044948a727cffabf08900245f7a00660c4ae7"],
+    ["html-prompt-current-preview", "946ee32bbeef7e460b1871f7a47412a9a4b4ba5e2bb0690460756d72f2368a46"],
+  ])("keeps exact source-known bytes for legacy selector %s", async (id, digest) => {
+    // Hashes extracted from the source at 2a9f5ea, 03262f4, 5670b3c and 9996dd7, respectively.
+    const { LEGACY_HTML_PROMPTS } = await import("./html-tool");
+    const suffix = LEGACY_HTML_PROMPTS.find((prompt) => prompt.id === id);
+    expect(suffix).toBeDefined();
+    expect(createHash("sha256").update(suffix!.text).digest("hex")).toBe(digest);
+  });
+
+  it("adds only launch fields without dropping other plugin contributions or changing saved caller intent", async () => {
     const { startHtmlTool, withHtmlTool, baseProvider } = await import("./html-tool");
     const tool = await startHtmlTool();
     expect(tool.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
-    const config = withHtmlTool({ provider: "claude", cwd: "/w", systemPrompt: "Base", mcpServers: { other: { type: "http", url: "x" } } }, tool);
-    expect(Object.keys(config.mcpServers ?? {})).toEqual(["other", "chat_polish"]);
-    expect(config.mcpServers?.chat_polish).toEqual({ type: "http", url: tool.url, headers: { Authorization: `Bearer ${tool.token}` }, alwaysLoad: true });
-    expect(config.toolPolicy?.preapproved).toEqual([
+    const baseConfig = { provider: "actual-alias", cwd: "/w", systemPrompt: "Base" };
+    const request: PluginSessionOpenRequest = {
+      agentId: "a", workspaceId: null, provider: "actual-alias", cwd: "/w", reason: "create", purpose: "interactive", title: null,
+      background: false, labels: {}, metadata: {}, tools: [], env: {}, baseConfig,
+      mcpServers: { other: { type: "http", url: "x" } }, appendSystemPrompt: ["Other launch guidance"],
+    };
+    const opened = withHtmlTool(request, { ...tool, instructions: true, preapprove: true });
+    expect(Object.keys(opened.mcpServers)).toEqual(["other", "chat_polish"]);
+    expect(opened.mcpServers.chat_polish).toEqual({ type: "http", url: tool.url, headers: { Authorization: `Bearer ${tool.token}` }, alwaysLoad: true });
+    expect(opened.toolPolicy?.preapproved).toEqual([
       { kind: "mcp", server: "chat_polish", tool: "html_render" },
       { kind: "mcp", server: "chat_polish", tool: "html_guide" },
       { kind: "mcp", server: "chat_polish", tool: "html_preview" },
     ]);
-    expect(config.systemPrompt).toMatch(/^Base\n\n# HTML pages\nYou have an html_render tool/);
+    expect(opened.appendSystemPrompt?.[0]).toBe("Other launch guidance");
+    const prompt = opened.appendSystemPrompt?.[1];
+    expect(prompt).toMatch(/^<morphise-html-pages>\n# HTML pages\nYou have an html_render tool/);
     // Proactive: agents draw without being asked when a page is clearer, for each kind of content, and keep text for short answers.
-    expect(config.systemPrompt).toMatch(/When to use it\nDraw a page without being asked whenever it would be clearer than text/);
-    for (const kind of ["Choices:", "Numbers:", "Structure:", "Interfaces:", "Results:", "Processes:"]) expect(config.systemPrompt).toContain(`- ${kind}`);
-    expect(config.systemPrompt).toMatch(/Processes:[^\n]*Morphise\.player/);
-    expect(config.systemPrompt).toMatch(/Keep text for a direct fact/);
-    expect(config.systemPrompt).not.toMatch(/clearly helps/);
+    expect(prompt).toMatch(/When to use it\nDraw a page without being asked whenever it would be clearer than text/);
+    for (const kind of ["Choices:", "Numbers:", "Structure:", "Interfaces:", "Results:", "Processes:"]) expect(prompt).toContain(`- ${kind}`);
+    expect(prompt).toMatch(/Processes:[^\n]*Morphise\.player/);
+    expect(prompt).toMatch(/Keep text for a direct fact/);
+    expect(prompt).not.toMatch(/clearly helps/);
     // No headless browser in this cache: nothing to preview pages in.
-    expect(config.systemPrompt).not.toMatch(/html_preview/);
-    // Paseo refuses to create an agent on a provider without exact-tool preapprovals that has a toolPolicy.
-    const omp = withHtmlTool({ provider: "omp", cwd: "/w" }, tool);
-    expect(omp.toolPolicy).toBeUndefined();
-    expect(omp.mcpServers?.chat_polish?.type).toBe("http");
-    // A configured provider gets its base's contract through a chain of extends; a custom ACP one gets none.
+    expect(prompt).not.toMatch(/html_preview/);
+    expect(baseConfig).toEqual({ provider: "actual-alias", cwd: "/w", systemPrompt: "Base" });
+    expect(request.mcpServers).toEqual({ other: { type: "http", url: "x" } });
+    expect(opened.provider).toBe("actual-alias");
+    // Title helper mode selection still resolves an alias without rerouting its execution.
     const providers = { "claude-mobile": { extends: "claude" }, work: { extends: "claude-mobile" }, mine: { extends: "acp" }, loop: { extends: "loop" }, omp: {} };
     expect(["claude-mobile", "work", "mine", "loop", "omp", "codex"].map((id) => baseProvider(id, providers))).toEqual(["claude", "claude", "acp", "loop", "omp", "codex"]);
     expect(baseProvider("claude-mobile", undefined)).toBe("claude-mobile");
   });
 
-  it("adds the tools once: on a config that has them (a stored agent Paseo re-creates), it only replaces the token", async () => {
-    const { startHtmlTool, withHtmlTool } = await import("./html-tool");
-    const tool = await startHtmlTool();
-    const once = withHtmlTool({ provider: "claude", cwd: "/w", systemPrompt: "Base", toolPolicy: { preapproved: [{ kind: "mcp", server: "other", tool: "x" }] } }, tool);
-    expect(withHtmlTool(once, tool)).toEqual(once);
-    const renewed = withHtmlTool(once, { url: tool.url, token: "renewed" });
-    expect(renewed).toEqual({ ...once, mcpServers: { chat_polish: { ...once.mcpServers!.chat_polish!, headers: { Authorization: "Bearer renewed" } } } });
+  it("keeps tools without exact approvals or instructions when those independent capabilities are unavailable", async () => {
+    const { withHtmlTool } = await import("./html-tool");
+    const request: PluginSessionOpenRequest = {
+      agentId: "a", workspaceId: null, provider: "actual-alias", cwd: "/w", reason: "create", purpose: "interactive", title: null,
+      background: false, labels: {}, metadata: {}, tools: [], env: {}, mcpServers: {},
+    };
+    const opened = withHtmlTool(request, { url: "http://127.0.0.1:1/mcp", token: "dummy-token", instructions: false, preapprove: false });
+    expect(opened.mcpServers.chat_polish?.type).toBe("http");
+    expect(opened.toolPolicy).toBeUndefined();
+    expect(opened.appendSystemPrompt).toBeUndefined();
   });
 
   it("answers MCP over HTTP: lists the tool, rejects broken pages, publishes and stores a good one", async () => {
@@ -115,6 +144,8 @@ describe("the html_render MCP server", () => {
     // The same guidance reaches chats created before a change, since this description is read live from the tool server.
     expect(tools[0]!.description).toMatch(/When to use it\nDraw a page without being asked whenever it would be clearer than text/);
     expect(tools[0]!.description).toContain("- Choices:");
+    expect(tools[0]!.description).toContain(".report (24px between sections)");
+    expect(tools[0]!.description).toContain(".report-heading (8px heading to takeaway)");
     const chartsGuide = (await ask(20, "tools/call", { name: "html_guide", arguments: { topic: "charts" } })).result;
     expect(chartsGuide.isError).toBe(false);
     expect(chartsGuide.content[0].text).toMatch(/Morphise\.chart/);
@@ -249,6 +280,34 @@ describe("which local images a tool call may open", () => {
     expect(await ping({ Authorization: tool.token })).toBe(403);
     expect(await ping({ Authorization: `Bearer ${tool.token}` })).toBe(200);
     expect(await ping({ Authorization: `Bearer ${await issueAgentToken(work)}` })).toBe(200);
+  });
+
+  it("accepts a launch token only until its lifetime is disposed, keeping unadopted legacy tokens valid", async () => {
+    const { startHtmlTool } = await import("./html-tool");
+    const { issueAgentToken, issueLaunchToken } = await import("./agent-folders");
+    const tool = await startHtmlTool();
+    const cleanups: Array<() => void> = [];
+    const token = issueLaunchToken(work, { signal: new AbortController().signal, onDispose: (cleanup) => void cleanups.push(cleanup) });
+    const legacy = await issueAgentToken(work);
+    const ping = async (credential: string) => (await fetch(tool.url, { method: "POST", headers: { Authorization: `Bearer ${credential}` }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" }) })).status;
+    expect(await ping(token)).toBe(200);
+    cleanups[0]!();
+    expect(await ping(token)).toBe(403);
+    expect(await ping(legacy)).toBe(200);
+  });
+
+  it("applies the existing local-image containment to launch tokens", async () => {
+    const { startHtmlTool } = await import("./html-tool");
+    const { issueLaunchToken } = await import("./agent-folders");
+    const tool = await startHtmlTool();
+    const cleanups: Array<() => void> = [];
+    const token = issueLaunchToken(work, { signal: new AbortController().signal, onDispose: (cleanup) => void cleanups.push(cleanup) });
+    const call = callAs(tool.url, token);
+    expect((await call("html_render", `<img src="${join(work, "inside.png")}">`)).isError).toBe(false);
+    const escaped = await call("html_render", `<img src="${join(outside, "launch.png")}">`);
+    expect(escaped.isError).toBe(true);
+    expect(escaped.content[0]!.text).toContain("could not be read inside your working folder");
+    cleanups[0]!();
   });
 
   it("opens an agent's page images only inside its folder, and answers the same whether an outside image exists or not", async () => {

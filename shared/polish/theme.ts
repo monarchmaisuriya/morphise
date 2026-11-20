@@ -8,7 +8,7 @@ export interface Preset {
   id: string;
   name: string;
   appearance: "light" | "dark";
-  colors: Required<Colors>;
+  colors: Required<Pick<Colors, Token>>;
   /** Desktop sidebar color the plugin paints itself; Paseo's dark themes reuse the background. */
   sidebar?: string;
   /** Highlight theme that suits the palette. */

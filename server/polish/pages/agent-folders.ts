@@ -10,6 +10,8 @@ const hashOf = (token: string) => createHash("sha256").update(token).digest("hex
 const HASH = /^[0-9a-f]{64}$/;
 
 let folders: Promise<Map<string, string>> | undefined;
+// New launches never add rows to the legacy disk store. Only their owning lifetime can revoke them.
+const launchFolders = new Map<string, string>();
 // Writes one at a time, each after the load, so none replaces another's mapping or the saved ones.
 let writing: Promise<void> = Promise.resolve();
 
@@ -75,7 +77,19 @@ export async function issueAgentToken(cwd: string) {
   return token;
 }
 
+/** A random credential owned by one open attempt, not the saved agent configuration. */
+export function issueLaunchToken(cwd: string, launch: { readonly signal: AbortSignal; onDispose(cleanup: () => void): void }) {
+  launch.signal.throwIfAborted();
+  const token = randomBytes(24).toString("hex");
+  const hash = hashOf(token);
+  launch.onDispose(() => { launchFolders.delete(hash); });
+  launch.signal.throwIfAborted();
+  launchFolders.set(hash, resolve(cwd));
+  return token;
+}
+
 /** The folder of the agent a token was issued to, or undefined for any other token. Looked up by hash, so the token is never compared character by character. */
 export async function folderOfToken(token: string) {
-  return (await loadAgentFolders()).get(hashOf(token));
+  const hash = hashOf(token);
+  return launchFolders.get(hash) ?? (await loadAgentFolders()).get(hash);
 }

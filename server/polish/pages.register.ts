@@ -1,20 +1,20 @@
+import { isDeepStrictEqual } from "node:util";
 import { resolve } from "node:path";
-import type { PluginHookContext, PluginHookPayload, PluginHookResult, PluginServerContext } from "@getpaseo/plugin/server";
+import type { PluginHookPayload, PluginServerContext, PluginSessionOpenContext, PluginSessionOpenRequest } from "@getpaseo/plugin/server";
 import { bookmarkDocumentSchema } from "../../shared/bookmarks";
 import { activeProfile } from "../../shared/document";
-import { browserStatus, HTML_SERVER, installBrowser, keepPage, openHtml, removeBrowser, storedPage } from "../../shared/polish/html";
+import { browserStatus, HTML_GUIDE_TOOL, HTML_PREVIEW_TOOL, HTML_SERVER, HTML_TOOL, installBrowser, keepPage, openHtml, removeBrowser, storedPage } from "../../shared/polish/html";
 import { polishPrefs } from "../../shared/polish/prefs";
-import { folderOfToken, issueAgentToken, loadAgentFolders } from "./pages/agent-folders";
+import { folderOfToken, issueLaunchToken, loadAgentFolders } from "./pages/agent-folders";
 import { installHeadlessShell, removeHeadlessShell, shellStatus, staleShell } from "./pages/headless-shell";
-import { type AgentConfig, baseProvider, closeLocalServer, keepStoredPage, pruneKept, PREAPPROVES, localServerUsedBefore, openHtmlPage, readStoredPage, startHtmlTool, withHtmlTool } from "./pages/html-tool";
+import { closeLocalServer, keepStoredPage, pruneKept, LEGACY_HTML_PROMPTS, localServerUsedBefore, openHtmlPage, readStoredPage, startHtmlTool, withHtmlTool } from "./pages/html-tool";
 import { TITLE_HELPER } from "../titles";
+import { TASK_LIST_INSTRUCTION, TODO_TOOLS_ENV } from "../plan-tools";
 import type { ProfileReader } from "./profile-reader";
 
-type CreateHook = (payload: PluginHookPayload<"agent.create.before">, context: PluginHookContext) => Promise<PluginHookResult<"agent.create.before">>;
+type OpenHook = (payload: PluginHookPayload<"agent.open.before">, context: PluginSessionOpenContext) => Promise<PluginSessionOpenRequest | undefined>;
 
-// HTML pages (on unless turned off; Settings, Chat, HTML pages): while the option is on, new agents (and stored ones Paseo
-// re-creates) get the chat_polish MCP server (html_render, html_guide, and html_preview while the headless browser is
-// installed). Off, or with an unreadable profile, agents are created as Paseo would.
+// HTML pages are derived at each interactive open, independently of Show and the steps card.
 async function htmlPagesOn(profile: ProfileReader) {
   try {
     const state = await profile.read();
@@ -27,29 +27,87 @@ async function htmlPagesOn(profile: ProfileReader) {
 
 const htmlTool = () => startHtmlTool().catch((error: unknown) => (console.error("[morphise] html_render tool unavailable", error), undefined));
 
-// The agent's own token, which tells the tool server whose folder a page's images may come from: the one a stored agent Paseo re-creates
-// already holds when it was issued for this folder, otherwise a new one, saved before it is handed out.
-async function agentToken(config: AgentConfig) {
-  const server = config.mcpServers?.[HTML_SERVER];
-  const held = server && "headers" in server ? /^Bearer (.+)$/.exec(server.headers?.Authorization ?? "")?.[1] : undefined;
-  if (held && (await folderOfToken(held)) === resolve(config.cwd)) return held;
-  return issueAgentToken(config.cwd);
+export function registerLegacyConfig(server: Pick<PluginServerContext, "registerLegacyAgentConfig">) {
+  server.registerLegacyAgentConfig({
+    version: 1,
+    selectors: [
+      { id: "html-endpoint", group: "html", label: "HTML tools endpoint", kind: "mcp", name: HTML_SERVER },
+      ...LEGACY_HTML_PROMPTS.map(({ id, text }) => ({ id, group: "html", label: "HTML page guidance", kind: "prompt-suffix" as const, text })),
+      ...[HTML_TOOL, HTML_GUIDE_TOOL, HTML_PREVIEW_TOOL].map((tool) => ({ id: `html-grant-${tool}`, group: "html", label: `HTML ${tool} approval`, kind: "grant" as const, server: HTML_SERVER, tool })),
+      { id: "task-list-prompt", group: "task-list", label: "Claude task-list guidance", kind: "prompt-suffix", text: TASK_LIST_INSTRUCTION },
+      { id: "task-list-prompt-before-html", group: "task-list", label: "Claude task-list guidance before HTML", kind: "prompt-suffix", text: TASK_LIST_INSTRUCTION, followedBySuffix: LEGACY_HTML_PROMPTS.map(({ text }) => `\n\n${text}`) },
+      { id: "task-list-env", group: "task-list", label: "Claude task-list tools", kind: "env", key: TODO_TOOLS_ENV, baselines: [
+        { id: "inherit", label: "Inherit current defaults (not recovered history)", kind: "absent" },
+        { id: "off", label: "Explicitly disable task-list tools", kind: "value", value: "0" },
+        { id: "on", label: "Explicitly enable task-list tools", kind: "value", value: "1" },
+      ] },
+    ],
+  });
 }
 
-// Adds the tools to a new agent while the option is on; never to internal agents (commit and PR
-// messages) or Morphise's title helper. Exported for its test.
-export function addHtmlTools(profile: ProfileReader): CreateHook {
-  return async ({ request }, { paseo }) => {
-    if (request.config.internal || request.metadata?.[TITLE_HELPER] === true || !(await htmlPagesOn(profile))) return undefined;
-    // Unreadable daemon config: judge the provider by its own id, so a derived one goes without the tools rather than failing to start.
-    const providers = await paseo.config.get().then(({ config }) => config.providers, () => undefined);
-    const base = baseProvider(request.config.provider, providers);
-    if (!PREAPPROVES.has(base)) return undefined;
+// An occupied name is caller state, not an owned credential or permission grant.
+export function addHtmlTools(profile: ProfileReader): OpenHook {
+  return async ({ request }, { launch }) => {
+    if (request.purpose === "history") return undefined;
+    const support = request.openSupport;
+    const fixed = support?.restrictions.mcpConfiguration === "fixed";
+    const hasPriorHtml = Object.hasOwn(request.previousContribution?.mcpServers ?? {}, HTML_SERVER);
+    const closeRequired = () => new Error("Morphise cannot reuse its prior HTML contribution with the current settings and session support. Fully close this agent and its retained children, then reopen it.");
+    const excluded = request.baseConfig?.internal || request.metadata[TITLE_HELPER] === true;
+    const endpointState = request.legacyConfigState?.selectors["html-endpoint"];
+    const occupied = (endpointState !== undefined && endpointState !== "absent") || Object.hasOwn(request.baseConfig?.mcpServers ?? {}, HTML_SERVER) || Object.hasOwn(request.mcpServers, HTML_SERVER);
+    if (fixed && hasPriorHtml && (excluded || occupied)) throw closeRequired();
+    if (excluded) return undefined;
+    if (occupied) {
+      console.info(`[morphise] ${request.agentId} html: saved binding retained; new HTML additions suppressed (not fully adaptive)`);
+      return undefined;
+    }
+    if (fixed && !hasPriorHtml) return undefined;
+    const on = await htmlPagesOn(profile);
+    if (!on) {
+      if (fixed) throw closeRequired();
+      return undefined;
+    }
+    if (support?.mcpHttp !== "supported" || (!fixed && support.restrictions.mcpConfiguration !== "mutable")) {
+      if (fixed) throw closeRequired();
+      console.info(`[morphise] ${request.agentId} html: unavailable HTTP delivery or mutable MCP configuration`);
+      return undefined;
+    }
+    const prompt = request.baseConfig?.systemPrompt ?? "";
+    const savedGuidance = Object.entries(request.legacyConfigState?.selectors ?? {}).some(([id, state]) => id.startsWith("html-prompt-") && state !== "absent")
+      || LEGACY_HTML_PROMPTS.some(({ text }) => prompt.includes(text)) || prompt.includes("# HTML pages") || prompt.includes("<morphise-html-pages>");
+    if (savedGuidance) console.info(`[morphise] ${request.agentId} html: saved or ambiguous guidance retained; fresh guidance suppressed`);
+    if (support.exactMcpPreapproval !== "supported") console.info(`[morphise] ${request.agentId} html: exact approvals unavailable; ordinary permission prompts retained`);
+    const instructions = support.instructions === "supported" && !savedGuidance;
+    const preapprove = support.exactMcpPreapproval === "supported";
+    if (fixed) {
+      const previous = request.previousContribution;
+      const binding = previous?.mcpServers[HTML_SERVER];
+      if (!previous || !binding || binding.type !== "http") throw closeRequired();
+      const token = /^Bearer ([0-9a-f]{48})$/.exec(binding.headers?.Authorization ?? "")?.[1];
+      if (!token || (await folderOfToken(token)) !== resolve(request.cwd)) throw closeRequired();
+      const expected = withHtmlTool(request, { url: binding.url, token, instructions, preapprove });
+      const priorGuidance = previous.appendSystemPrompt?.filter((text) => text.includes("<morphise-html-pages>")) ?? [];
+      const newGuidance = expected.appendSystemPrompt?.filter((text) => text.includes("<morphise-html-pages>")) ?? [];
+      if (!isDeepStrictEqual(binding, expected.mcpServers[HTML_SERVER]) || !isDeepStrictEqual(priorGuidance, newGuidance)) throw closeRequired();
+      const priorGrants = previous.toolPolicy?.preapproved.filter((grant) => grant.server === HTML_SERVER) ?? [];
+      const allowedGrants = expected.toolPolicy?.preapproved.filter((grant) => grant.server === HTML_SERVER) ?? [];
+      if (preapprove && !isDeepStrictEqual(priorGrants, allowedGrants)) throw closeRequired();
+      // The host owns instance/generation validity and retains the prior cleanup through this launch.
+      const retained = launch.retainPrevious();
+      if (!isDeepStrictEqual(retained, previous)) throw closeRequired();
+      console.info(`[morphise] ${request.agentId} html: retained prior binding and launch lifetime`);
+      return {
+        ...expected,
+        mcpServers: { ...request.mcpServers, [HTML_SERVER]: structuredClone(binding) },
+        ...(instructions && { appendSystemPrompt: [...(request.appendSystemPrompt ?? []), ...priorGuidance] }),
+        ...(preapprove && { toolPolicy: { preapproved: [...(request.toolPolicy?.preapproved ?? []), ...structuredClone(priorGrants)] } }),
+      };
+    }
     const tool = await htmlTool();
     if (!tool) return undefined;
-    const token = await agentToken(request.config).catch((error: unknown) => (console.error("[morphise] html tools: couldn't save the new agent's token, so it gets no html_render", error), undefined));
-    if (!token) return undefined;
-    return { ...request, config: withHtmlTool(request.config, { url: tool.url, token }, base) };
+    const token = issueLaunchToken(request.cwd, launch);
+    return withHtmlTool(request, { url: tool.url, token, instructions, preapprove });
   };
 }
 
@@ -90,7 +148,7 @@ export function registerPages(server: PluginServerContext, profile: ProfileReade
     return htmlTool();
   });
   if (bookmarks) void pruneUnheldPages(bookmarks).catch((error: unknown) => console.warn("[morphise] couldn't tidy kept pages", error));
-  const stopHook = server.addHook("agent.create.before", addHtmlTools(profile));
+  const stopHook = server.addHook("agent.open.before", addHtmlTools(profile));
   return () => {
     stopped = true;
     stopHook();

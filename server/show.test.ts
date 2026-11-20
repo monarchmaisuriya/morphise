@@ -1,3 +1,4 @@
+import type { PluginSessionOpenRequest } from "@getpaseo/plugin/server";
 import { describe, expect, it, vi } from "vitest";
 import type { ShowInput, ShowRequest } from "../shared/show";
 import { createRateLimit, createShowHook, createShowTool, createShowWindows, readShowSetting } from "./show";
@@ -246,7 +247,15 @@ describe("the show_in_paseo tool", () => {
 });
 
 describe("attaching the tool", () => {
-  const request = { agentId: "a1", provider: "claude", tools: [], metadata: {} };
+  const request: PluginSessionOpenRequest = {
+    agentId: "a1", workspaceId: null, provider: "actual-alias", cwd: "/w", reason: "create", purpose: "interactive", title: null,
+    tools: [], metadata: {}, labels: {}, background: false, env: {}, mcpServers: {}, baseConfig: { provider: "actual-alias", cwd: "/w" },
+    openSupport: {
+      adapter: { kind: "acp" }, instructions: "unsupported", mcpHttp: "unsupported", exactMcpPreapproval: "unsupported",
+      attachedTools: { delivery: "native", enabled: true, disabledTools: [] },
+      restrictions: { mcpConfiguration: "none", processEnvironment: "none" }, providerOptions: [],
+    },
+  };
 
   it("adds the tool to a session while the setting is on", async () => {
     const { tool } = toolWith();
@@ -270,6 +279,42 @@ describe("attaching the tool", () => {
     expect(await hook({ request: { ...request, labels: { "paseo.parent-agent-id": "a0" } } } as never)).toBeUndefined();
     expect(await hook({ request: { ...request, labels: {}, background: true } } as never)).toBeUndefined();
     expect((await hook({ request: { ...request, labels: {}, background: false } } as never))?.tools).toEqual([tool]);
+  });
+
+  it("retains native Show without external HTTP or exact approvals and does not change the alias", async () => {
+    const { tool } = toolWith();
+    const opened = await createShowHook({ enabled: async () => true, tool })({ request });
+    expect(opened?.tools).toEqual([tool]);
+    expect(opened?.provider).toBe("actual-alias");
+    expect(opened?.toolPolicy).toBeUndefined();
+  });
+
+  it.each(["none", "unknown"] as const)("omits only Show when attached delivery is %s", async (delivery) => {
+    const { tool } = toolWith();
+    const input = { ...request, openSupport: { ...request.openSupport!, attachedTools: { delivery, enabled: true, disabledTools: [] } } };
+    expect(await createShowHook({ enabled: async () => true, tool })({ request: input })).toBeUndefined();
+  });
+
+  it("respects explicit host and per-tool disable and restores only on an eligible open", async () => {
+    const { tool } = toolWith();
+    const hook = createShowHook({ enabled: async () => true, tool });
+    expect(await hook({ request: { ...request, openSupport: { ...request.openSupport!, attachedTools: { delivery: "native", enabled: false, disabledTools: [] } } } })).toBeUndefined();
+    expect(await hook({ request: { ...request, openSupport: { ...request.openSupport!, attachedTools: { delivery: "native", enabled: true, disabledTools: ["show_in_paseo"] } } } })).toBeUndefined();
+    expect((await hook({ request }))?.tools).toEqual([tool]);
+    expect(request.tools).toEqual([]);
+  });
+
+  it("accepts host-attached MCP delivery without requiring Morphise's external HTTP feature", async () => {
+    const { tool } = toolWith();
+    const opened = await createShowHook({ enabled: async () => true, tool })({ request: { ...request, openSupport: { ...request.openSupport!, attachedTools: { delivery: "mcp", enabled: true, disabledTools: [] } } } });
+    expect(opened?.tools).toEqual([tool]);
+  });
+
+  it("never attaches in history or to an internal agent", async () => {
+    const { tool } = toolWith();
+    const hook = createShowHook({ enabled: async () => true, tool });
+    expect(await hook({ request: { ...request, purpose: "history" } })).toBeUndefined();
+    expect(await hook({ request: { ...request, baseConfig: { provider: "actual-alias", cwd: "/w", internal: true } } })).toBeUndefined();
   });
 });
 
