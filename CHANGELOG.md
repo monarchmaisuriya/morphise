@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.51.1 - 2026-11-22
+
+- **Lean Quick Chat toolbar:** removed the separate Your chats heading and Start with label. Active/Archived counts remain in the tabs, and manual Refresh is right-aligned with the wrapping provider/filter/sort toolbar.
+- **Provider icons beside model names:** Quick Chat's picker uses host-supplied provider icons instead of a provider-name prefix and separator. Full provider/model identity stays in accessible names and hover/focus help; duplicate model names show a small provider-identity badge to avoid ambiguous choices. Missing icon metadata uses a neutral CPU icon. Keyboard selection, focus return and outside dismissal are covered without changing other pickers or selected model identifiers.
+
 ## 0.51.0 - 2026-11-21
 
 - **Quick Chat archive:** Active and Archived views with native archive and unarchive for owned chats. Archive requires confirmation explaining that agent work/commands stop and saved command-output logs are removed; conversation and scratch files remain. Unarchive restores the same native agent and may initialize the provider, but cannot restore removed logs. No extra prompt or chat copy is created by Morphise.
