@@ -1,4 +1,5 @@
 import { modelChoices } from "./dispatch-options";
+import { providerIconSvg } from "./provider-icons";
 
 export interface QuickChatModelChoice { value: string; label: string; accessibleLabel: string; iconSvg?: string; disambiguator?: string; }
 
@@ -9,12 +10,13 @@ export function quickChatModelChoices(entries: readonly unknown[]): QuickChatMod
     const id = choice.value.slice(choice.provider.length + 1);
     const model = entry?.models?.find((value) => value.id === id);
     const label = model?.label || id;
+    const iconSvg = providerIconSvg(choice.provider, entry?.iconSvg);
     const duplicate = choices.some((other) => {
       if (other.value === choice.value) return false;
       const provider = entries.find((value) => (value as { provider?: string })?.provider === other.provider) as { models?: { id: string; label?: string }[] } | undefined;
       const otherId = other.value.slice(other.provider.length + 1);
       return (provider?.models?.find((value) => value.id === otherId)?.label || otherId) === label;
     });
-    return { value: choice.value, label, accessibleLabel: `${entry?.label || choice.provider} · ${label}`, ...(entry?.iconSvg ? { iconSvg: entry.iconSvg } : {}), ...(duplicate ? { disambiguator: choice.provider } : {}) };
+    return { value: choice.value, label, accessibleLabel: `${entry?.label || choice.provider} · ${label}`, ...(iconSvg ? { iconSvg } : {}), ...(duplicate ? { disambiguator: choice.provider } : {}) };
   });
 }

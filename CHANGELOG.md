@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.51.2 - 2026-11-22
+
+- **Fix native provider icons in Quick Chat:** built-in providers such as Claude, Codex and OpenCode do not need to supply snapshot SVGs. Quick Chat now resolves all nine built-in provider marks using the same pinned artwork as Paseo's native picker, rather than showing generic CPU icons. Custom provider SVGs remain unchanged; unknown providers without artwork retain the fallback. The bundled artwork includes upstream attribution and license. No selected model IDs, settings or chat data change.
+
 ## 0.51.1 - 2026-11-22
 
 - **Lean Quick Chat toolbar:** removed the separate Your chats heading and Start with label. Active/Archived counts remain in the tabs, and manual Refresh is right-aligned with the wrapping provider/filter/sort toolbar.
