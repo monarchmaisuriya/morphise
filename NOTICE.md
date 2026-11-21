@@ -6,7 +6,13 @@ Morphise includes code ported from the following MIT-licensed Paseo plugins. Eac
 
 Morphise's Quick Chat was independently implemented. Its project-free conversation and later project-handoff workflow was inspired by [Quick Chat](https://github.com/5h0ov/paseo-quick-chat) by Shuvadipta Das (@5h0ov). The reference project's source is MIT-licensed, with Copyright (c) 2026 Shuvadipta Das; no code, assets, tests or prompt templates from that plugin are included in Morphise. This credit does not place independently written Morphise code under the reference project's license.
 
-The Quick Chat interface refinements and device preferences reuse Morphise's existing components and Paseo-provided runtime APIs. They introduce no additional third-party dependency or copied implementation. The incorporated-code notices below remain unchanged.
+The Quick Chat interface refinements and device preferences reuse Morphise's existing components and Paseo-provided runtime APIs. Its native provider artwork is incorporated as described below; it adds no executable dependency.
+
+## Paseo native provider artwork
+
+`client/provider-icons.ts` adapts the SVG geometry from `packages/app/src/components/icons/{antigravity,claude,codex,copilot,kiro,minimax,omp,opencode,pi}-icon.tsx` in [getpaseo/paseo](https://github.com/getpaseo/paseo/tree/5afe6bd9aa7e8572eac29bc9105217f17fb4e828/packages/app/src/components/icons), pinned at commit `5afe6bd9aa7e8572eac29bc9105217f17fb4e828`.
+
+Copyright (c) 2025-present Mohamed Boudra. Licensed under Apache License 2.0; the full upstream license is included in [third-party/paseo/LICENSE](third-party/paseo/LICENSE). Modified by converting React Native JSX attributes to self-contained SVG XML, using currentColor and leaving output dimensions to the host renderer. Provider marks identify their respective products; no trademark rights or endorsement are claimed. Custom providers continue to use host-supplied artwork.
 
 ## Chat Polish
 
