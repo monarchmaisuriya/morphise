@@ -49,11 +49,17 @@ export class QuickChatService {
     return agent;
   }
   async list(paseo: Paseo) {
-    const chats: { id: string; title: string; workspaceId: string }[] = [];
+    const chats: { id: string; title: string; workspaceId: string; directory?: string; docsDirectory?: string }[] = [];
     let cursor: string | undefined;
     for (let page = 0; page < 20; page++) {
       const result = await paseo.agents.list({ filter: { includeBackground: true }, page: { limit: 200, ...(cursor ? { cursor } : {}) } });
-      for (const { agent } of result.entries) if (!agent.archivedAt && agent.workspaceId && agent.metadata?.[QUICK_CHAT_KEY] === true && visibleQuickChatAgent(agent)) chats.push({ id: agent.id, title: agent.title || "Quick Chat", workspaceId: agent.workspaceId });
+      for (const { agent } of result.entries) if (!agent.archivedAt && agent.workspaceId && agent.metadata?.[QUICK_CHAT_KEY] === true && visibleQuickChatAgent(agent)) {
+        let location = false;
+        try { location = await this.owned(agent); } catch (error) {
+          if (!["ENOENT", "ENOTDIR"].includes((error as NodeJS.ErrnoException).code || "")) throw error;
+        }
+        chats.push({ id: agent.id, title: agent.title || "Quick Chat", workspaceId: agent.workspaceId, ...(location ? { directory: agent.cwd, docsDirectory: join(agent.cwd, "docs") } : {}) });
+      }
       if (!result.pageInfo.hasMore) return chats;
       cursor = result.pageInfo.nextCursor ?? undefined;
       if (!cursor) throw new Error("Paseo returned an incomplete chat page without a cursor.");
@@ -70,7 +76,9 @@ export class QuickChatService {
       if (relative(base, actual) !== operationId) throw new Error("The scratch workspace is not inside its owned directory.");
       const hash = createHash("sha256").update(operationId).digest("hex");
       const agentId = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
-      const workspace = await paseo.workspaces.create({ source: { kind: "directory", path: directory }, title: "Quick Chat", background: true, idempotencyKey: `morphise.quick-chat.workspace.${operationId}`, agent: { agentId, cwd: directory, title: "Quick Chat", config: { provider, systemPrompt: note }, metadata: { [QUICK_CHAT_KEY]: true } } });
+      const locationNote = `${note}\nYour absolute working directory on the daemon host is ${JSON.stringify(directory)}. A relative docs/ path resolves to ${JSON.stringify(join(directory, "docs"))}. When proposing or reporting a saved file, give its absolute path on this host. Do not claim a file was saved unless the write succeeded; distinguish planned saves from completed writes. No docs directory has been created for you.`;
+      // Leave the agent title unset: Paseo owns normal first-message naming and manual-title preservation.
+      const workspace = await paseo.workspaces.create({ source: { kind: "directory", path: directory }, title: "Quick Chat", background: true, idempotencyKey: `morphise.quick-chat.workspace.${operationId}`, agent: { agentId, cwd: directory, config: { provider, systemPrompt: locationNote }, metadata: { [QUICK_CHAT_KEY]: true } } });
       await workspace.setMetadata({ [QUICK_CHAT_KEY]: true });
       return { agentId, workspaceId: workspace.id, directory };
     });

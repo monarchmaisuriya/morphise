@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -26,6 +26,29 @@ async function fixture() {
 }
 
 describe("independent Quick Chat handoff", () => {
+  it("leaves new agent titles to Paseo and names exact save locations", async () => {
+    const f = await fixture();
+    let input: Record<string, unknown> = {};
+    const api = { workspaces: { create: async (value: Record<string, unknown>) => { input = value; return { id: "scratch", setMetadata: async () => {} }; } } } as unknown as PluginHandlerContext["paseo"];
+    const created = await f.service.start(api, "t-title-synthetic", "fake/test");
+    const agent = input.agent as { title?: string; config: { systemPrompt: string } };
+    expect(agent.title).toBeUndefined();
+    expect(agent.config.systemPrompt).toContain(JSON.stringify(created.directory));
+    expect(agent.config.systemPrompt).toContain(JSON.stringify(join(created.directory, "docs")));
+    expect(agent.config.systemPrompt).toContain("absolute path");
+    expect(agent.config.systemPrompt).toContain("Do not claim");
+  });
+  it("returns the actual chat title and both absolute storage paths", async () => {
+    const f = await fixture();
+    expect(await f.service.list(f.api)).toEqual([{ id: "source", title: "An idea", workspaceId: "scratch", directory: f.cwd, docsDirectory: join(f.cwd, "docs") }]);
+  });
+  it("does not disclose paths for marked but unowned, missing or escaped folders", async () => {
+    const f = await fixture();
+    const outside = await mkdtemp(join(tmpdir(), "morphise-outside-")); folders.push(outside);
+    const escaped = join(f.root, "workspaces", "escaped"); await symlink(outside, escaped);
+    const api = { agents: { list: async () => ({ entries: [outside, join(f.root, "missing"), escaped].map((cwd, i) => ({ agent: { id: String(i), title: "Keep title", workspaceId: "scratch", cwd, metadata: { [QUICK_CHAT_KEY]: true } } })), pageInfo: { hasMore: false } }) } } as unknown as PluginHandlerContext["paseo"];
+    expect(await f.service.list(api)).toEqual([{ id: "0", title: "Keep title", workspaceId: "scratch" }, { id: "1", title: "Keep title", workspaceId: "scratch" }, { id: "2", title: "Keep title", workspaceId: "scratch" }]);
+  });
   it("prepares without creating and creates context once while keeping original files", async () => {
     const f = await fixture();
     const preview = await f.service.prepare(f.api, "source", "project");

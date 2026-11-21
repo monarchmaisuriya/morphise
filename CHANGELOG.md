@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.50.2 - 2026-11-21
+
+- **Native Quick Chat titles:** new chats no longer receive an explicit generic agent title, allowing Paseo's normal first-message naming. No extra model call or title writer is introduced; existing and manually chosen titles are not rewritten. The workspace's organizational label can still say Quick Chat.
+- **Know where files go:** Files location on each chat row shows its verified daemon-host working folder and where relative `docs/` resolves. New chats receive exact absolute-path instructions and distinguish planned saves from completed writes. Locations are disclosed only after owned-root validation; unavailable folders are reported honestly. A path is not proof that a report exists. Existing chat instructions and files remain unchanged.
+
 ## 0.50.1 - 2026-11-21
 
 - **Tidier Quick Chat header:** manual Refresh is right-aligned with the Your chats heading, including when the list is empty. Removed the redundant top-right Settings shortcut; all preferences remain under Plugins → Morphise → Settings → Quick Chat. Refresh, recovery, settings setup access and model memory are unchanged.
