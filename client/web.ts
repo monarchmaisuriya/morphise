@@ -10,6 +10,17 @@ interface StyleElement {
 }
 type PressListener = (event: { target: unknown }) => void;
 type PointerListener = (event: { relatedTarget?: unknown }) => void;
+
+// React Native Web does not activate Pressable radios with Space. Keep DOM listeners at this boundary.
+export function onRadioActivate(node: unknown, activate: () => void): () => void {
+  if (Platform.OS !== "web" || !node) return () => {};
+  const element = node as { addEventListener(type: string, listener: (event: { key: string; repeat: boolean; preventDefault(): void; stopPropagation(): void }) => void): void; removeEventListener(type: string, listener: unknown): void };
+  const key = (event: { key: string; repeat: boolean; preventDefault(): void; stopPropagation(): void }) => {
+    if ((event.key === " " || event.key === "Enter") && !event.repeat) { event.preventDefault(); event.stopPropagation(); activate(); }
+  };
+  element.addEventListener("keydown", key);
+  return () => element.removeEventListener("keydown", key);
+}
 interface PageElement {
   getBoundingClientRect(): { top: number; bottom: number };
   scrollIntoView(options: { block: "start"; behavior: "smooth" }): void;
