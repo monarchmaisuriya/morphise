@@ -2,9 +2,9 @@ import type { PluginClientContext, PluginScreenProps } from "@getpaseo/plugin/cl
 import { useSettings } from "@getpaseo/plugin/client";
 import { SidebarRow } from "@getpaseo/plugin/client/ui";
 import { useEffect, useRef, useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { quickChatContinue, quickChatList, quickChatPrepare, quickChatRecover, quickChatSettings, quickChatStart, quickChatTargets } from "../shared/quick-chat";
-import { Button, Field, PopoverHost, Select, useTokens } from "./ui/kit";
+import { Button, Field, Icon, IconButton, PopoverHost, Select, type Tokens, useTokens } from "./ui/kit";
 import { modelChoices } from "./dispatch-options";
 import { screenOpener } from "./dispatch";
 
@@ -13,12 +13,24 @@ const describe = (error: unknown) => error instanceof Error ? error.message : St
 // Workspace operation IDs use Morphise's existing cross-platform draft-ID source.
 import { useDraftId } from "./board/card-editor";
 
+function Section({ t, title, children }: { t: Tokens; title: string; children: React.ReactNode }) {
+  return <View style={{ gap: 12 }}><Text style={t.text.heading}>{title}</Text>{children}</View>;
+}
+
 export function QuickChatScreen({ client, theme, layout, navigation, params }: PluginScreenProps & { client: PluginClientContext }) {
   const t = useTokens(theme, layout.compact);
   const settings = useSettings(quickChatSettings);
   const [state, setState] = useState<Awaited<ReturnType<typeof readList>> | null>(null);
   const [models, setModels] = useState<{ value: string; label: string }[]>([]);
   const [model, setModel] = useState("");
+  const [providersLoading, setProvidersLoading] = useState(true);
+  const [listLoading, setListLoading] = useState(true);
+  const [utility, setUtility] = useState<"settings" | "recovery" | null>(null);
+  const [chatSearch, setChatSearch] = useState("");
+  const [showFiles, setShowFiles] = useState(false);
+  const [recovered, setRecovered] = useState<{ agentId: string; workspaceId: string; warning: string | null } | null>(null);
+  const [recoveredId, setRecoveredId] = useState("");
+  const generation = useRef(0);
   const [targets, setTargets] = useState<{ id: string; title: string; directory: string }[]>([]);
   const [sourceId, setSourceId] = useState<string | null>(null);
   const [preview, setPreview] = useState<Awaited<ReturnType<typeof prepare>> | null>(null);
@@ -28,11 +40,16 @@ export function QuickChatScreen({ client, theme, layout, navigation, params }: P
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const pending = useRef(false);
+  const mounted = useRef(true);
   const [attempted, setAttempted] = useState(false);
   const [result, setResult] = useState<{ agentId: string; workspaceId: string; warning: string | null } | null>(null);
   const [operationId, nextOperation] = useDraftId();
   const readList = () => client.rpc(quickChatList, {});
   const prepare = (agentId: string, workspaceId: string) => client.rpc(quickChatPrepare, { agentId, workspaceId });
+  const resetHandoff = () => {
+    generation.current++;
+    setSourceId(null); setTargets([]); setPreview(null); setText(""); setSearch(""); setResult(null); setAttempted(false); setShowFiles(false); setError(null);
+  };
   const run = async (action: () => Promise<void>) => {
     if (pending.current) return;
     pending.current = true;
@@ -40,56 +57,97 @@ export function QuickChatScreen({ client, theme, layout, navigation, params }: P
     try { await action(); } catch (error) { setError(describe(error)); } finally { pending.current = false; setBusy(false); }
   };
   useEffect(() => {
+    mounted.current = true;
     let alive = true;
-    readList().then((value) => alive && setState(value), (error) => alive && setError(describe(error)));
-    client.paseo.providers.snapshot().then((value) => { if (alive) setModels(modelChoices(value.entries, [])); }, (error) => alive && setError(describe(error)));
-    const stopProviders = client.paseo.providers.subscribe((value) => { if (alive) setModels(modelChoices(value.entries, [])); });
-    return () => { alive = false; stopProviders(); };
+    readList().then((value) => { if (alive) { setState(value); setListLoading(false); } }, (error) => { if (alive) { setError(describe(error)); setListLoading(false); } });
+    client.paseo.providers.snapshot().then((value) => { if (alive) { setModels(modelChoices(value.entries, [])); setProvidersLoading(false); } }, (error) => { if (alive) { setError(describe(error)); setProvidersLoading(false); } });
+    const stopProviders = client.paseo.providers.subscribe((value) => { if (alive) { setModels(modelChoices(value.entries, [])); setProvidersLoading(false); } });
+    return () => { mounted.current = false; alive = false; stopProviders(); };
   }, [client]);
   useEffect(() => {
     if (!params.agentId) return;
-    let alive = true;
-    client.rpc(quickChatTargets, {}).then((value) => { if (alive) { setSourceId(params.agentId!); setTargets(value.targets); } }, (error) => alive && setError(describe(error)));
-    return () => { alive = false; };
+    if (pending.current) { setError("Finish the current operation before opening another handoff. Your current context is preserved."); return; }
+    if (sourceId) { setError("Close the current handoff before opening another. Your reviewed context and recovery details are preserved."); return; }
+    resetHandoff();
+    const request = generation.current;
+    setSourceId(params.agentId!); setUtility(null); setBusy(true); pending.current = true;
+    client.rpc(quickChatTargets, {}).then((value) => { if (mounted.current && generation.current === request) setTargets(value.targets); }, (error) => mounted.current && generation.current === request && setError(describe(error))).finally(() => { if (generation.current === request) { pending.current = false; if (mounted.current) setBusy(false); } });
   }, [client, params.agentId]);
   const enabled = settings.status === "ready" && settings.values.enabled;
-  return <PopoverHost><ScrollView style={{ flex: 1, backgroundColor: t.c.surface0 }} contentContainerStyle={{ padding: t.inset, gap: 16 }}>
-    <Text style={t.text.title}>Quick Chat</Text>
-    <Text style={t.text.body}>Chat or capture an idea without choosing a project. Each Quick Chat workspace has its own scratch folder; native chat tabs in that workspace share it. Only chats started here are managed as Quick Chats. It is not a security sandbox.</Text>
-    {settings.status !== "ready" ? <Text style={t.text.meta}>Loading Quick Chat settings…</Text> : <Button t={t} disabled={busy || settings.saving} label={enabled ? "Disable new Quick Chats" : "Enable Quick Chat"} onPress={() => void run(async () => { if (!(await settings.save({ enabled: !enabled }, settings.revision))) throw new Error("Could not save Quick Chat settings. Try again."); })} />}
-    {enabled ? <><Select t={t} label="Provider and model" value={model} options={models} placeholder="Choose a provider and model" onChange={(value) => { if (!busy) setModel(value); }} /><Button t={t} icon="MessageSquarePlus" label="New Quick Chat" disabled={busy || !navigation || !model} onPress={() => void run(async () => { const created = await client.rpc(quickChatStart, { operationId, provider: model }); nextOperation(); navigation?.openAgent({ agentId: created.agentId }); })} /></> : null}
-    {!navigation ? <Text style={t.text.danger}>Update the Paseo app to open native chats from this screen.</Text> : null}
-    {state ? <Text style={t.text.small}>Scratch storage on this host: {state.directory}. Disabling keeps existing chats and files.</Text> : null}
-    <Button t={t} variant="ghost" label="Refresh chats" disabled={busy} onPress={() => void run(async () => setState(await readList()))} />
-    {state?.chats.map((chat) => <View key={chat.id} style={{ gap: 8, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: t.c.border }}>
-      <Text style={t.text.heading}>{chat.title}</Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        <Button t={t} label="Open chat" disabled={busy || !navigation} onPress={() => navigation?.openAgent({ agentId: chat.id })} />
-        {enabled ? <Button t={t} label="Continue in project" disabled={busy} onPress={() => void run(async () => { setPreview(null); setResult(null); setAttempted(false); setSourceId(chat.id); setTargets((await client.rpc(quickChatTargets, {})).targets); })} /> : null}
+  const selectedModel = models.find((item) => item.value === model);
+  const sourceTitle = state?.chats.find((chat) => chat.id === sourceId)?.title || "Selected Quick Chat";
+  const visibleChats = state?.chats.filter((chat) => chat.title.toLowerCase().includes(chatSearch.trim().toLowerCase())) ?? [];
+  const actionRow = { flexDirection: "row" as const, flexWrap: "wrap" as const, alignItems: "center" as const, gap: 8 };
+  const panelStyle = { padding: layout.compact ? 16 : 20, gap: 16, borderRadius: t.radius.panel, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1 };
+  return <PopoverHost><ScrollView style={{ flex: 1, backgroundColor: t.c.surface0 }} contentContainerStyle={{ padding: layout.compact ? 16 : 32, alignItems: "center" }}>
+    <View style={{ width: "100%", maxWidth: 1040, gap: 24 }}>
+      <View style={{ ...actionRow, justifyContent: "space-between", alignItems: "flex-start" }}>
+        <View style={{ flex: 1, minWidth: 180, gap: 6 }}><Text style={t.text.title}>Quick Chat</Text><Text style={t.text.meta}>A place for questions and ideas, before they become a project.</Text></View>
+        <View style={actionRow}>
+          <Button t={t} variant={utility === "settings" ? "secondary" : "ghost"} icon="Settings2" label="Settings" disabled={busy} onPress={() => setUtility(utility === "settings" ? null : "settings")} />
+          <Button t={t} variant={utility === "recovery" ? "secondary" : "ghost"} icon="RotateCcw" label="Recover handoff" disabled={busy} onPress={() => setUtility(utility === "recovery" ? null : "recovery")} />
+        </View>
       </View>
-    </View>)}
-    {state && !state.chats.length ? <Text style={t.text.meta}>No Quick Chats yet. Start one above, then use Paseo's provider and model picker.</Text> : null}
-    {sourceId && !preview ? <View style={{ gap: 8 }}>
-      <Text style={t.text.heading}>Choose an open project workspace</Text>
-      <Text style={t.text.small}>To use another folder, add it as a project in Paseo first. No disk-wide search is performed.</Text>
-      <Field t={t} value={search} onChangeText={setSearch} placeholder="Find a project or workspace" />
-      {targets.filter((target) => `${target.title} ${target.directory}`.toLowerCase().includes(search.toLowerCase())).map((target) => <Button key={target.id} t={t} label={target.title} accessibilityLabel={`Prepare context for ${target.title}, ${target.directory}`} disabled={busy} onPress={() => void run(async () => { const value = await prepare(sourceId, target.id); setPreview(value); setText(value.text); setAttempted(false); })} />)}
-      <Button t={t} variant="ghost" label="Cancel handoff" disabled={busy} onPress={() => setSourceId(null)} />
-    </View> : null}
-    {preview ? <View style={{ gap: 12 }}>
-      <Text style={t.text.heading}>Review context before sending</Text>
-      <Text style={t.text.body}>Destination: {preview.directory}{"\n"}Provider/model: {preview.provider}{"\n"}{preview.entries} history entries read. {preview.partial ? "Partial history: earlier or oversized content omitted." : "Fetched visible message history."}</Text>
-      <Text style={t.text.small}>This starts a new agent with normal project permission defaults. It sends the reviewed snapshot, not a live conversation or session move. Another client can still change the original; updates after preparation are not included. Reasoning, tool outputs and attachments are excluded. The original chat and scratch files remain. Review for secrets before sending to the displayed provider.</Text>
-      <Text style={t.text.small}>Top-level scratch files (not copied): {preview.files.join(", ") || "none"}{preview.filesPartial ? ". More directories/files may exist; this is not a complete inventory." : ""}</Text>
-      <Field t={t} label={`Context (${text.length}/40000 characters)`} multiline value={text} maxLength={40000} disabled={busy || attempted} onChangeText={setText} accessibilityLabel="Context to send" />
-      {!attempted ? <Button t={t} variant="primary" label="Create project chat with this context" disabled={busy || !text.trim()} onPress={() => void run(async () => { setAttempted(true); setResult(await client.rpc(quickChatContinue, { previewId: preview.previewId, text })); })} /> : <Button t={t} label="Check handoff result (does not resend)" disabled={busy} onPress={() => void run(async () => setResult(await client.rpc(quickChatRecover, { operationId: preview.previewId })))} />}
-      <Text selectable style={t.text.small}>Recovery ID: {preview.previewId}. Keep this ID if you close the screen during creation.</Text>
-      <Button t={t} variant="ghost" label="Close preview" disabled={busy} onPress={() => { setPreview(null); setSourceId(null); }} />
-    </View> : null}
-    {result ? <View style={{ gap: 8 }}><Text style={t.text.body}>{result.warning || "Project chat created. The original Quick Chat is unchanged."}</Text><Button t={t} label="Open project chat" disabled={!navigation} onPress={() => navigation?.openAgent({ agentId: result.agentId })} /></View> : null}
-    <Field t={t} label="Recover an interrupted handoff" value={recoveryId} onChangeText={setRecoveryId} placeholder="Paste the recovery ID" plain maxLength={36} />
-    <Button t={t} label="Check recovery ID (does not resend)" disabled={busy || !/^[0-9a-f-]{36}$/i.test(recoveryId)} onPress={() => void run(async () => setResult(await client.rpc(quickChatRecover, { operationId: recoveryId })))} />
-    {error ? <Text accessibilityRole="alert" style={t.text.danger}>{error}</Text> : null}
+      {error ? <View style={{ padding: 12, borderRadius: t.radius.control, borderWidth: 1, borderColor: t.c.statusDanger }}><Text accessibilityRole="alert" style={t.text.danger}>{error}</Text></View> : null}
+      {!navigation ? <Text accessibilityRole="alert" style={t.text.danger}>Update the Paseo app to open native chats from this screen. You can still review and recover handoffs.</Text> : null}
+
+      {utility === "settings" ? <View style={panelStyle}>
+        <View style={{ ...actionRow, justifyContent: "space-between" }}><Text style={t.text.heading}>Quick Chat settings</Text><IconButton t={t} icon="X" label="Close settings" onPress={() => setUtility(null)} /></View>
+        <View style={{ ...actionRow, justifyContent: "space-between" }}><View style={{ flex: 1, minWidth: 160, gap: 4 }}><Text style={t.text.body}>Allow new Quick Chats</Text><Text style={t.text.meta}>Disabling keeps existing chats, files and recovery records.</Text></View><Button t={t} label={enabled ? "Disable new Quick Chats" : "Enable Quick Chat"} disabled={busy || settings.status !== "ready" || settings.saving} onPress={() => void run(async () => { if (settings.status !== "ready" || !(await settings.save({ enabled: !enabled }, settings.revision))) throw new Error("Could not save Quick Chat settings. Try again."); })} /></View>
+        <Text style={t.text.heading}>Storage and privacy</Text>
+        <Text style={t.text.body}>Each workspace has its own scratch folder. Native tabs in that workspace share it; only chats started here are managed as Quick Chats. Scratch storage is not a security sandbox.</Text>
+        <Text selectable style={t.text.meta}>Scratch storage on this host: {state?.directory || "Load the chat list to view the path."}</Text>
+        <Text style={t.text.meta}>Project handoffs keep the original chat and files. No automatic file copying, archiving or whole-disk search. Recovery covers process restarts, not guaranteed power-loss durability.</Text>
+      </View> : null}
+
+      {utility === "recovery" ? <View style={panelStyle}>
+        <View style={{ ...actionRow, justifyContent: "space-between" }}><Text style={t.text.heading}>Recover an interrupted handoff</Text><IconButton t={t} icon="X" label="Close recovery" onPress={() => setUtility(null)} /></View>
+        <Text style={t.text.meta}>Check whether a project chat was created. This only looks up the result; it never resends context.</Text>
+        <View style={actionRow}><Field t={t} grow value={recoveryId} onChangeText={setRecoveryId} placeholder="Paste the recovery ID" accessibilityLabel="Recovery ID" plain maxLength={36} /><Button t={t} label="Check recovery ID (does not resend)" disabled={busy || !/^[0-9a-f-]{36}$/i.test(recoveryId)} onPress={() => void run(async () => { const id = recoveryId; const value = await client.rpc(quickChatRecover, { operationId: id }); setRecovered(value); setRecoveredId(id); })} /></View>
+        {recovered ? <View style={{ gap: 8 }}><Text style={t.text.body}>{recovered.warning || "Project chat found."}</Text><Text selectable style={t.text.meta}>Recovery ID: {recoveredId}</Text><View style={actionRow}><Button t={t} label="Open recovered project chat" disabled={!navigation} onPress={() => navigation?.openAgent({ agentId: recovered.agentId })} /></View></View> : null}
+      </View> : null}
+
+      {!sourceId ? <>
+        <View style={panelStyle}>
+          <View style={{ gap: 4 }}><Text style={t.text.heading}>Start a conversation</Text><Text style={t.text.meta}>Choose your model. Your chat opens in Paseo, without selecting a project.</Text></View>
+          {settings.status !== "ready" ? <Text style={t.text.meta}>{settings.status === "invalid" ? "Quick Chat settings could not be read. Open Settings to inspect your configuration." : "Loading Quick Chat settings…"}</Text> : !enabled ? <View style={actionRow}><Button t={t} variant="primary" icon="MessageSquarePlus" label="Enable Quick Chat" disabled={busy || settings.saving} onPress={() => void run(async () => { if (!(await settings.save({ enabled: true }, settings.revision))) throw new Error("Could not save Quick Chat settings. Try again."); })} /><Text style={t.text.meta}>Off until you enable it. Existing chats stay available.</Text></View> : <>
+            <View style={{ ...actionRow, alignItems: "flex-end" }}>
+              <View style={{ flexGrow: 1, flexBasis: 280, minWidth: 0, gap: 6 }}><Text style={t.text.label}>Provider and model</Text><Select t={t} label="Provider and model" value={model} options={models} placeholder={providersLoading ? "Loading models…" : "Choose a provider and model"} onChange={(value) => { if (!busy) setModel(value); }} /></View>
+              <Button t={t} variant="primary" icon="MessageSquarePlus" label={busy ? "Working…" : "New Quick Chat"} disabled={busy || !navigation || !selectedModel} onPress={() => void run(async () => { if (!models.some((item) => item.value === model)) throw new Error("Choose an available model before starting a chat."); const created = await client.rpc(quickChatStart, { operationId, provider: model }); nextOperation(); navigation?.openAgent({ agentId: created.agentId }); })} />
+            </View>
+            {model && !selectedModel ? <Text style={t.text.danger}>Your selected model is no longer available. Choose another model; nothing has been substituted.</Text> : !models.length && !providersLoading ? <View style={{ gap: 8 }}><Text style={t.text.meta}>No available models yet. Check your provider setup in Paseo, then refresh.</Text><View style={actionRow}><Button t={t} variant="ghost" label="Refresh providers" disabled={busy} onPress={() => void run(async () => setModels(modelChoices((await client.paseo.providers.snapshot()).entries, [])))} /></View></View> : !model ? <Text style={t.text.meta}>Select a model to start. You can change it before each new chat.</Text> : null}
+          </>}
+        </View>
+        <Section t={t} title={`Your chats${state ? ` · ${state.chats.length}` : ""}`}>
+          <View style={actionRow}><Field t={t} grow plain icon="Search" value={chatSearch} onChangeText={setChatSearch} placeholder="Find a chat by title" accessibilityLabel="Find a Quick Chat" /><IconButton t={t} icon="RefreshCw" label="Refresh chats" disabled={busy || listLoading} onPress={() => void run(async () => { setListLoading(true); try { setState(await readList()); } finally { setListLoading(false); } })} /></View>
+          {listLoading ? <Text style={t.text.meta}>Loading your chats…</Text> : !state ? <Text style={t.text.meta}>The chat list could not be loaded. Use Refresh chats to try again.</Text> : !state.chats.length ? <View style={{ paddingVertical: 24, gap: 6 }}><Text style={t.text.heading}>Room for your next idea</Text><Text style={t.text.meta}>Start a Quick Chat above. You can bring the conversation into a project later.</Text></View> : !visibleChats.length ? <Text style={t.text.meta}>No chats match “{chatSearch}”. Try another title.</Text> : <View style={{ borderWidth: 1, borderColor: t.c.border, borderRadius: t.radius.panel, overflow: "hidden" }}>{visibleChats.map((chat, index) => <View key={chat.id} style={{ padding: 16, borderTopWidth: index ? 1 : 0, borderTopColor: t.c.border, ...actionRow, justifyContent: "space-between" }}>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Open ${chat.title}`} disabled={busy || !navigation} onPress={() => navigation?.openAgent({ agentId: chat.id })} style={{ flex: 1, minWidth: 140, flexDirection: "row", alignItems: "center", gap: 12 }}><Icon name="MessageSquare" size={18} color={t.c.foregroundMuted} /><View style={{ flex: 1, gap: 4 }}><Text numberOfLines={2} style={t.text.body}>{chat.title}</Text><Text style={t.text.meta}>Project-free conversation</Text></View></Pressable>
+            <View style={actionRow}><Button t={t} variant="ghost" label="Open chat" accessibilityLabel={`Open chat: ${chat.title}`} disabled={busy || !navigation} onPress={() => navigation?.openAgent({ agentId: chat.id })} />{enabled ? <Button t={t} icon="FolderInput" label="Continue in project" accessibilityLabel={`Continue ${chat.title} in project`} disabled={busy} onPress={() => { resetHandoff(); setSourceId(chat.id); setUtility(null); const request = generation.current; void run(async () => { const value = await client.rpc(quickChatTargets, {}); if (generation.current === request) setTargets(value.targets); }); }} /> : null}</View>
+          </View>)}</View>}
+        </Section>
+      </> : <View style={{ gap: 20 }}>
+        <View style={{ ...actionRow, justifyContent: "space-between" }}><Button t={t} variant="ghost" icon="ArrowLeft" label="Back to chats" disabled={busy} onPress={resetHandoff} /><Text style={t.text.meta}>{result ? "Destination → Review → Result" : preview ? "Destination → Review" : "Destination"}</Text></View>
+        <View style={{ gap: 6 }}><Text style={t.text.title}>{result ? "Your idea has a project" : preview ? "Review your handoff" : "Continue in a project"}</Text><Text style={t.text.meta}>From: {sourceTitle}</Text></View>
+        {result ? <View style={panelStyle}><Text style={t.text.body}>{result.warning || "Project chat created. The original Quick Chat is unchanged."}</Text><View style={actionRow}><Button t={t} variant="primary" icon="SquareArrowRight" label="Open project chat" disabled={!navigation} onPress={() => navigation?.openAgent({ agentId: result.agentId })} /><Button t={t} variant="ghost" label="Back to chats" onPress={resetHandoff} /></View>{preview ? <Text selectable style={t.text.meta}>Recovery ID: {preview.previewId}</Text> : null}</View> : !preview ? <View style={{ gap: 12 }}>
+          <Field t={t} plain icon="Search" value={search} onChangeText={setSearch} placeholder="Find a project or workspace" />
+          <Text style={t.text.meta}>Choose an open workspace. To use another folder, add it as a project in Paseo first. No disk-wide search is performed.</Text>
+          {busy ? <Text style={t.text.meta}>Loading project context…</Text> : !targets.length ? <Text style={t.text.body}>No open project workspaces are available.</Text> : !targets.some((target) => `${target.title} ${target.directory}`.toLowerCase().includes(search.toLowerCase())) ? <Text style={t.text.meta}>No workspaces match “{search}”. Try another project name or path.</Text> : null}
+          {targets.filter((target) => `${target.title} ${target.directory}`.toLowerCase().includes(search.toLowerCase())).map((target) => <Pressable key={target.id} accessibilityRole="button" accessibilityLabel={`Prepare context for ${target.title}, ${target.directory}`} disabled={busy} onPress={() => { const request = generation.current; void run(async () => { const value = await prepare(sourceId, target.id); if (generation.current === request) { setPreview(value); setText(value.text); setAttempted(false); } }); }} style={{ padding: 16, borderWidth: 1, borderColor: t.c.border, borderRadius: t.radius.control, flexDirection: "row", alignItems: "center", gap: 12 }}><Icon name="FolderGit2" size={18} color={t.c.foregroundMuted} /><View style={{ flex: 1, minWidth: 0, gap: 4 }}><Text style={t.text.body}>{target.title}</Text><Text numberOfLines={2} style={t.text.meta}>{target.directory}</Text></View><Icon name="ChevronRight" size={16} color={t.c.foregroundMuted} /></Pressable>)}
+          <View style={actionRow}><Button t={t} variant="ghost" label="Cancel handoff" disabled={busy} onPress={resetHandoff} /></View>
+        </View> : <View style={{ gap: 16 }}>
+          <View style={panelStyle}><Text selectable style={t.text.body}>Destination: {preview.directory}</Text><Text style={t.text.meta}>Provider/model: {preview.provider} · {preview.entries} history entries read</Text><Text style={preview.partial ? t.text.danger : t.text.meta}>{preview.partial ? "Partial history: earlier or oversized content was omitted. Review the context carefully." : "Visible message history prepared."}</Text></View>
+          <Text style={t.text.body}>A new project chat will receive the text below. Your original chat and scratch files stay where they are.</Text>
+          <Field t={t} label={`Context to send · ${text.length.toLocaleString()} / 40,000 characters`} multiline value={text} maxLength={40000} disabled={busy || attempted} textStyle={{ minHeight: layout.compact ? 220 : 320, maxHeight: 560 }} onChangeText={setText} accessibilityLabel="Context to send" />
+          <Text style={t.text.meta}>Review for secrets before sending to the displayed provider. Normal project permission defaults apply. This is a reviewed snapshot, not a live conversation or session move; later changes in another client are not included. Reasoning, tool outputs and attachments are excluded.</Text>
+          <View style={{ alignSelf: "flex-start" }}><Button t={t} variant="ghost" icon={showFiles ? "ChevronUp" : "ChevronDown"} label={`Scratch files · ${preview.files.length}${preview.filesPartial ? "+" : ""} (not copied)`} onPress={() => setShowFiles(!showFiles)} /></View>
+          {showFiles ? <Text selectable style={t.text.meta}>{preview.files.join("\n") || "No top-level files."}{preview.filesPartial ? "\nMore directories/files may exist; this is not a complete inventory." : ""}</Text> : null}
+          <View style={{ paddingTop: 16, borderTopWidth: 1, borderTopColor: t.c.border, gap: 12 }}>
+            <View style={actionRow}>{!attempted ? <Button t={t} variant="primary" icon="FolderInput" label={busy ? "Creating project chat…" : "Create project chat with this context"} disabled={busy || !text.trim()} onPress={() => { const request = generation.current; void run(async () => { setAttempted(true); const value = await client.rpc(quickChatContinue, { previewId: preview.previewId, text }); if (generation.current === request) setResult(value); }); }} /> : <Button t={t} label={busy ? "Checking…" : "Check handoff result (does not resend)"} disabled={busy} onPress={() => { const request = generation.current; void run(async () => { const value = await client.rpc(quickChatRecover, { operationId: preview.previewId }); if (generation.current === request) setResult(value); }); }} />}<Button t={t} variant="ghost" label="Close preview" disabled={busy} onPress={resetHandoff} /></View>
+            <Text selectable style={t.text.meta}>Recovery ID: {preview.previewId}. Keep it if you close this screen during creation. Recovery only checks the result; it never resends.</Text>
+          </View>
+        </View>}
+      </View>}
+    </View>
   </ScrollView></PopoverHost>;
 }
 
