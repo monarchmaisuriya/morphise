@@ -48,17 +48,35 @@ export class QuickChatService {
     if (agent.archivedAt || agent.activeTurn || ["running", "initializing"].includes(agent.status) || agent.pendingPermissions.length) throw new Error("Finish the reply and resolve permissions before continuing in a project.");
     return agent;
   }
-  async list(paseo: Paseo) {
-    const chats: { id: string; title: string; workspaceId: string; directory?: string; docsDirectory?: string }[] = [];
+  async setArchived(paseo: Paseo, agentId: string, archived: boolean) {
+    return this.exclusive(`archive:${agentId}`, async () => {
+      const handle = paseo.agents.ref(agentId);
+      const agent = (await handle.refresh())?.agent;
+      let owned = false;
+      try { owned = !!agent && await this.owned(agent); } catch (error) {
+        if (!["ENOENT", "ENOTDIR"].includes((error as NodeJS.ErrnoException).code || "")) throw error;
+      }
+      if (!agent || !owned) throw new Error("Only an owned Morphise Quick Chat with an available scratch folder can be archived or restored. Its folder may be missing; check the original location in Paseo.");
+      if (!!agent.archivedAt !== archived) {
+        if (archived) await handle.archive();
+        else await handle.reload();
+      }
+      const current = (await handle.refresh())?.agent;
+      if (!current || !!current.archivedAt !== archived) throw new Error(`Paseo did not confirm the chat was ${archived ? "archived" : "unarchived"}. Refresh the list before trying again.`);
+      return { ok: true as const };
+    });
+  }
+  async list(paseo: Paseo, includeArchived = false) {
+    const chats: { id: string; title: string; workspaceId: string; directory?: string; docsDirectory?: string; archivedAt: string | null; provider: string; createdAt: string; updatedAt: string }[] = [];
     let cursor: string | undefined;
     for (let page = 0; page < 20; page++) {
-      const result = await paseo.agents.list({ filter: { includeBackground: true }, page: { limit: 200, ...(cursor ? { cursor } : {}) } });
-      for (const { agent } of result.entries) if (!agent.archivedAt && agent.workspaceId && agent.metadata?.[QUICK_CHAT_KEY] === true && visibleQuickChatAgent(agent)) {
+      const result = await paseo.agents.list({ filter: { includeBackground: true, includeArchived }, page: { limit: 200, ...(cursor ? { cursor } : {}) } });
+      for (const { agent } of result.entries) if ((includeArchived || !agent.archivedAt) && agent.workspaceId && agent.metadata?.[QUICK_CHAT_KEY] === true && visibleQuickChatAgent(agent)) {
         let location = false;
         try { location = await this.owned(agent); } catch (error) {
           if (!["ENOENT", "ENOTDIR"].includes((error as NodeJS.ErrnoException).code || "")) throw error;
         }
-        chats.push({ id: agent.id, title: agent.title || "Quick Chat", workspaceId: agent.workspaceId, ...(location ? { directory: agent.cwd, docsDirectory: join(agent.cwd, "docs") } : {}) });
+        chats.push({ id: agent.id, title: agent.title || "Quick Chat", workspaceId: agent.workspaceId, archivedAt: agent.archivedAt || null, provider: agent.provider || "", createdAt: agent.createdAt || "", updatedAt: agent.updatedAt || "", ...(location ? { directory: agent.cwd, docsDirectory: join(agent.cwd, "docs") } : {}) });
       }
       if (!result.pageInfo.hasMore) return chats;
       cursor = result.pageInfo.nextCursor ?? undefined;

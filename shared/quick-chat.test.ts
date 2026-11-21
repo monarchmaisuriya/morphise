@@ -1,5 +1,12 @@
 import { expect, it } from "vitest";
-import { QUICK_CHAT_KEY, quickChatAgentChange, quickChatPreferences, quickChatSettings, quickChatStart, restoredQuickChatModel, visibleQuickChatAgent } from "./quick-chat";
+import { QUICK_CHAT_KEY, filteredQuickChats, quickChatAgentChange, quickChatPreferences, quickChatSettings, quickChatStart, restoredQuickChatModel, visibleQuickChatAgent } from "./quick-chat";
+
+it("filters archive/provider/title and sorts dates without invalid timestamp instability", () => {
+  const chats = [{ id: "b", title: "Beta", workspaceId: "w", provider: "claude", updatedAt: "invalid" }, { id: "a", title: "Alpha", workspaceId: "w", provider: "codex", updatedAt: "2026-01-01" }, { id: "c", title: "Archived", workspaceId: "w", provider: "claude", archivedAt: "2026-01-01" }];
+  expect(filteredQuickChats(chats, { archived: false, query: "", provider: "", sort: "updated" }).map((chat) => chat.id)).toEqual(["a", "b"]);
+  expect(filteredQuickChats(chats, { archived: true, query: "arch", provider: "claude", sort: "title" }).map((chat) => chat.id)).toEqual(["c"]);
+  expect(filteredQuickChats(chats, { archived: false, query: "", provider: "claude", sort: "created" }).map((chat) => chat.id)).toEqual(["b"]);
+});
 
 it("keeps device preferences separate and restores only remembered models", () => {
   expect(quickChatPreferences.schema.parse({})).toEqual({ rememberModel: true, lastModel: "", width: "comfortable", density: "comfortable", showDescriptions: true });
