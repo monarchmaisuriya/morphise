@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.49.0 - 2026-11-21
+
+- **Task-first Quick Chat:** grouped model selection and New Quick Chat, searchable conversation rows, and a focused destination/review/result handoff replace the long settings-heavy page. Settings, storage/privacy details and recovery remain one labelled action away; all existing operations and safeguards are retained.
+- **Safer handoff state:** incoming links cannot discard an active draft, standalone recovery cannot overwrite another handoff's result, and unavailable selected models block creation without silent substitution. Responsive home, destination, review and recovery layouts are verified across 360/700/1440px in light and dark themes, including long paths and uncertain creation without resending.
+
 ## 0.48.0 - 2026-11-21
 
 - **Quick Chat:** an independently implemented, opt-in place to chat and capture ideas without choosing a project. Select a provider/model, then continue in Paseo's native chat UI. Each workspace has separate scratch storage; tabs inside it share the folder.
