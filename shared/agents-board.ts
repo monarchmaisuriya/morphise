@@ -252,7 +252,7 @@ export function readBoardAgent(entry: unknown, workspaceOf: (id: string) => Work
     sessionId: text(record(agent.runtimeInfo)?.sessionId) ?? text(record(agent.persistence)?.sessionId),
     lastError: text(agent.lastError),
     context: readContext(agent.lastUsage),
-    workspaceOpen: workspace?.open !== false,
+    workspaceOpen: record(agent.metadata)?.["morphise.quick-chat"] === true || workspace?.open !== false,
   };
 }
 

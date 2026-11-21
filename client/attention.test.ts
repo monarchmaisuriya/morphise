@@ -10,6 +10,10 @@ const waiting = { status: "running", pendingPermissions: [{ id: "perm-1" }] };
 const upsert = (value: unknown) => ({ message: { type: "agent_update", payload: { kind: "upsert", agent: value } } });
 
 describe("attention", () => {
+  it("keeps owned Quick Chat permission requests visible without including helpers", () => {
+    expect(readAttention(agent("quick", { ...waiting, background: true, metadata: { "morphise.quick-chat": true } }))?.item?.reason).toBe("permission");
+    expect(readAttention(agent("helper", { ...waiting, background: true }))?.item).toBeNull();
+  });
   it("keeps agents waiting on the user, and only those", () => {
     const list = reduceAttention(new Map(), {
       snapshot: [

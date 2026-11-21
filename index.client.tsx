@@ -1,4 +1,6 @@
 import { settingsRpc } from "@getpaseo/plugin";
+import { registerQuickChatClient } from "./client/quick-chat";
+import { quickChatAgentChange, visibleQuickChatAgent } from "./shared/quick-chat";
 import type { z } from "zod";
 import { type PluginClientContext, openExternalUrl } from "@getpaseo/plugin/client";
 import { createArchiveSweep, listEveryWorkspace } from "./client/auto-archive-sweep";
@@ -59,6 +61,7 @@ interface ListSubscription<Snapshot> {
 }
 
 export default function contribute(client: PluginClientContext) {
+  const stopQuickChat = registerQuickChatClient(client);
   const store = createProfileStore();
   const problems = createValueStore<Problem[]>([]);
   // The session stats settings; on (and the strip off) until the daemon says otherwise.
@@ -440,8 +443,9 @@ export default function contribute(client: PluginClientContext) {
     },
   }, workspacesFailed);
 
-  watch("Agent", client.paseo.agents.list({ subscribe: {} }), {
+  watch("Agent", client.paseo.agents.list({ subscribe: {}, filter: { includeBackground: true } }), {
     snapshot: (snapshot) => {
+      snapshot = { ...snapshot, entries: snapshot.entries.filter((entry) => visibleQuickChatAgent(entry.agent)) };
       lastAgentEntries = snapshot.entries;
       migrateLegacy(snapshot.entries);
       changeChats({ snapshot: snapshot.entries });
@@ -450,6 +454,7 @@ export default function contribute(client: PluginClientContext) {
       setDirectory({ ...directory, agents: reduceAgents(directory.agents, { snapshot: snapshot.entries }) });
     },
     update: (message) => {
+      message = quickChatAgentChange(message);
       changeChats({ message });
       changeAttention({ message });
       const agents = reduceAgents(directory.agents, { message });
@@ -458,6 +463,7 @@ export default function contribute(client: PluginClientContext) {
   }, () => attentionReady.set(true));
 
   return () => {
+    stopQuickChat();
     stopped = true;
     releases.forEach((release) => release());
     profile.stop();

@@ -2,6 +2,12 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.48.0 - 2026-11-21
+
+- **Quick Chat:** an independently implemented, opt-in place to chat and capture ideas without choosing a project. Select a provider/model, then continue in Paseo's native chat UI. Each workspace has separate scratch storage; tabs inside it share the folder.
+- **Reviewed project handoff:** Continue in project previews editable, bounded visible-message context before creating a new project agent with ordinary permission defaults. Originals and files stay put. Partial history is disclosed; reasoning, tool output and attachments are excluded. Interrupted creation offers a recovery-ID lookup without replaying the request. Handoffs are snapshots, not live session moves; recovery covers process restarts, not guaranteed power-loss durability.
+- **Owned chat visibility:** Quick Chats appear in Morphise's Agents and attention handling without admitting unrelated background helpers. Includes feature-inspiration credit to Shuvadipta Das (@5h0ov); no reference-plugin code, tests, assets or prompt templates are included. Existing third-party notices are explicitly included in package files.
+
 ## 0.47.0 - 2026-11-20
 
 - **Consistent Agents controls:** Filter and Display panels follow Tasks' layout. All filter categories, nine sort options, List/Board and the settings shortcut remain available. Search conversations is a labelled option in Filter, with progress, unavailable-provider, search-limit and error feedback. Failed toggle saves are visible, and old searches cannot populate a new query. Conversation logs remain limited to Claude Code and Codex.
