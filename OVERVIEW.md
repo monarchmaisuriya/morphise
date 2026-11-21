@@ -2,6 +2,10 @@ Morphise reshapes Paseo's interface from settings forms, adds a status-aware sid
 
 ## What you can change
 
+Quick Chat (sidebar or Command Center) is opt-in project-free conversation and idea capture using Paseo's native chats. New workspaces get isolated scratch folders; tabs in the same workspace share files. Continue in project previews bounded visible-message context, then creates a new agent in an open project with normal permission defaults. Originals/files stay put; no automatic archive, file copying or whole-disk search. Missing/partial context is disclosed. Interrupted creation offers a recovery-ID lookup without replaying the request. See README for storage, retention and limits.
+
+Feature inspiration: Quick Chat by Shuvadipta Das (@5h0ov), https://github.com/5h0ov/paseo-quick-chat (MIT). Morphise's implementation is independent; no reference-plugin code, tests, assets or prompt templates are included.
+
 Settings are split into tabs: Layouts, General, Sidebar, Chat, Messages, Pages, Look, Buttons, Commands, Prompts and Advanced (the whole profile as JSON).
 
 - **Layouts:** keep several whole setups and switch between them in settings or from the Command Center ("Morphise layout: …"). Your 0.1 profile becomes the layout "Default".

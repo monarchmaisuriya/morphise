@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { type AgentEntries, applyAgentUpdate, dueForRefresh, entriesFromSnapshot, readUsage, type UsageFacts } from "../../shared/agents-board";
 import { type AgentActionResult, agentActionsAvailable, renameAgent, stopAgent } from "../../shared/agent-actions";
 import { latestPlan } from "../../shared/steps";
+import { quickChatAgentChange, visibleQuickChatAgent } from "../../shared/quick-chat";
 
 // What the Agents view reads from Paseo: every agent on the host, archived ones included, while
 // the view is open; each card's usage while it is on screen, and its plan while it is also busy; and the daemon's Stop and Rename.
@@ -28,7 +29,7 @@ export function useAgentEntries(client: PluginClientContext): ListState {
 export function watchAgentEntries(client: PluginClientContext, report: (state: ListState) => void): () => void {
   let released = false;
   let release = () => {};
-  const filter = { includeArchived: true };
+  const filter = { includeArchived: true, includeBackground: true };
   client.paseo.agents.list({ subscribe: {}, filter, page: { limit: PAGE } }).then(
     ({ subscription }) => {
       if (released) return void subscription.release();
@@ -43,7 +44,7 @@ export function watchAgentEntries(client: PluginClientContext, report: (state: L
         while (cursor && !released && read < MAX_AGENTS) {
           const page = await client.paseo.agents.list({ filter, page: { limit: PAGE, cursor } });
           if (released || from !== generation) return;
-          const older = [...entriesFromSnapshot(page.entries)].filter(([id]) => !removed.has(id));
+           const older = [...entriesFromSnapshot(page.entries.filter((entry) => visibleQuickChatAgent(entry.agent)))].filter(([id]) => !removed.has(id));
           entries = new Map([...older, ...entries]);
           report({ status: "ready", entries });
           read += page.entries.length;
@@ -54,12 +55,12 @@ export function watchAgentEntries(client: PluginClientContext, report: (state: L
         snapshot: (snapshot) => {
           generation += 1;
           removed = new Set();
-          entries = entriesFromSnapshot(snapshot.entries);
+          entries = entriesFromSnapshot(snapshot.entries.filter((entry) => visibleQuickChatAgent(entry.agent)));
           report({ status: "ready", entries });
           readOlder(snapshot.pageInfo.hasMore ? snapshot.pageInfo.nextCursor : null, generation).catch((error: unknown) => console.warn("[morphise] Could not read older agents for the Agents view", error));
         },
         update: (update) => {
-          const change = update as { type: string; payload?: { kind?: unknown; agentId?: unknown } };
+          const change = quickChatAgentChange(update as { type: string; payload?: unknown }) as { type: string; payload?: { kind?: unknown; agentId?: unknown } };
           if (change.type === "agent_update" && change.payload?.kind === "remove" && typeof change.payload.agentId === "string") removed.add(change.payload.agentId);
           const next = applyAgentUpdate(entries, change);
           if (next === entries) return;
@@ -174,4 +175,3 @@ export function useCliActions(client: PluginClientContext): CliActions {
     rename: (agentId, title) => call(() => client.rpc(renameAgent, { agentId, title })),
   };
 }
-

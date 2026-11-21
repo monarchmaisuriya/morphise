@@ -4,6 +4,7 @@
 
 import { chatIndicator, type ChatStatusFields, parentFromLabels } from "../shared/chat-status";
 import { type PermissionSummary, summarizePermission } from "../shared/inbox";
+import { visibleQuickChatAgent } from "../shared/quick-chat";
 
 export type AttentionReason = "permission" | "failed" | "finished";
 
@@ -37,7 +38,7 @@ const text = (value: unknown) => (typeof value === "string" ? value : "");
 export function readAttention(value: unknown): { id: string; item: AttentionItem | null } | null {
   const agent = record(value);
   if (!agent || typeof agent.id !== "string") return null;
-  if (agent.archivedAt || agent.background === true) return { id: agent.id, item: null };
+  if (agent.archivedAt || !visibleQuickChatAgent(agent)) return { id: agent.id, item: null };
   const pending = Array.isArray(agent.pendingPermissions) ? agent.pendingPermissions : [];
   const indicator = chatIndicator({
     status: agent.status as ChatStatusFields["status"],

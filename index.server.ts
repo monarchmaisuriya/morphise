@@ -18,6 +18,7 @@ import { groupOrderSettings, projectGroupsSettings } from "./shared/project-grou
 import { registerProjectActions } from "./server/project-actions";
 import { registerStats } from "./server/stats/register";
 import { registerActivity } from "./server/activity/register";
+import { registerQuickChat } from "./server/quick-chat/register";
 import { remindersKeeper } from "./shared/reminder-contracts";
 import { showChannel, showResult, showSettings, showUsed } from "./shared/show";
 import { bookmarkSettings } from "./shared/bookmarks";
@@ -26,6 +27,7 @@ import { taskSettings } from "./shared/tasks";
 import { bookmarksWatch, profileWatch, tasksWatch } from "./shared/watch";
 
 export default function contribute(server: PluginServerContext) {
+  const stopQuickChat = registerQuickChat(server);
   const profile = server.registerSettings(profileSettings);
   server.handle(profileWatch, watchSettings(profile));
   const tasks = server.registerSettings(taskSettings);
@@ -88,6 +90,7 @@ export default function contribute(server: PluginServerContext) {
   server.handle(showResult, ({ requestId, ok, message }) => (windows.answer(requestId, ok, message), { ok: true as const }));
   const stopShowTool = server.addHook("agent.open.before", createShowHook({ enabled: showOn, tool: createShowTool({ windows, enabled: showOn, log: console.log }) }));
   return () => {
+    stopQuickChat();
     stopStats();
     stopShowTool();
     windows.stop();
