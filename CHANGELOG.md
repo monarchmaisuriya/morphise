@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.50.1 - 2026-11-21
+
+- **Tidier Quick Chat header:** manual Refresh is right-aligned with the Your chats heading, including when the list is empty. Removed the redundant top-right Settings shortcut; all preferences remain under Plugins → Morphise → Settings → Quick Chat. Refresh, recovery, settings setup access and model memory are unchanged.
+
 ## 0.50.0 - 2026-11-21
 
 - **Quick Chat preferences in Settings:** the chat screen's Settings shortcut opens Morphise Settings → Quick Chat. Host availability and storage/privacy details live there alongside device-specific model memory, content width, row density and description visibility. No settings form remains on the chat screen.
