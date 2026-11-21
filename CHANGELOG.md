@@ -2,6 +2,12 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.50.0 - 2026-11-21
+
+- **Quick Chat preferences in Settings:** the chat screen's Settings shortcut opens Morphise Settings → Quick Chat. Host availability and storage/privacy details live there alongside device-specific model memory, content width, row density and description visibility. No settings form remains on the chat screen.
+- **Ready with your last model:** the exact provider/model from the last successful Quick Chat preloads on this device by default. Manual choices win over delayed settings, unavailable models never silently switch, and failed creation never changes model history. Forget and Remember off are explicit controls; resetting appearance does not erase history. Optional memory saving cannot delay opening a created chat or repeat creation.
+- **Cleaner start screen:** a compact model/start toolbar replaces the large start panel; empty lists no longer show an unnecessary search field. All conversation, handoff and recovery features remain available.
+
 ## 0.49.0 - 2026-11-21
 
 - **Task-first Quick Chat:** grouped model selection and New Quick Chat, searchable conversation rows, and a focused destination/review/result handoff replace the long settings-heavy page. Settings, storage/privacy details and recovery remain one labelled action away; all existing operations and safeguards are retained.

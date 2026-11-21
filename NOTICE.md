@@ -2,6 +2,12 @@
 
 Morphise includes code ported from the following MIT-licensed Paseo plugins. Each ported file says where it came from in its first comment.
 
+## Feature inspiration (not incorporated code)
+
+Morphise's Quick Chat was independently implemented. Its project-free conversation and later project-handoff workflow was inspired by [Quick Chat](https://github.com/5h0ov/paseo-quick-chat) by Shuvadipta Das (@5h0ov). The reference project's source is MIT-licensed, with Copyright (c) 2026 Shuvadipta Das; no code, assets, tests or prompt templates from that plugin are included in Morphise. This credit does not place independently written Morphise code under the reference project's license.
+
+The Quick Chat interface refinements and device preferences reuse Morphise's existing components and Paseo-provided runtime APIs. They introduce no additional third-party dependency or copied implementation. The incorporated-code notices below remain unchanged.
+
 ## Chat Polish
 
 https://github.com/lthieu96/paseo-chat-polish (ported from commit 6b52cc2528426812c78ec8d2b547ffb8d158e542)

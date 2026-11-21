@@ -1,12 +1,13 @@
 import type { PluginClientContext, PluginScreenProps } from "@getpaseo/plugin/client";
 import { useSettings } from "@getpaseo/plugin/client";
-import { SidebarRow } from "@getpaseo/plugin/client/ui";
+import { SidebarRow, useToast } from "@getpaseo/plugin/client/ui";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
-import { quickChatContinue, quickChatList, quickChatPrepare, quickChatRecover, quickChatSettings, quickChatStart, quickChatTargets } from "../shared/quick-chat";
+import { QUICK_CHAT_PREFERENCES, quickChatContinue, quickChatList, quickChatPreferences, quickChatPrepare, quickChatRecover, quickChatSettings, quickChatStart, quickChatTargets, restoredQuickChatModel } from "../shared/quick-chat";
 import { Button, Field, Icon, IconButton, PopoverHost, Select, type Tokens, useTokens } from "./ui/kit";
 import { modelChoices } from "./dispatch-options";
 import { screenOpener } from "./dispatch";
+import { QUICK_CHAT_SETTINGS_PAGE, QuickChatPreferencesScreen } from "./quick-chat-preferences";
 
 const SCREEN = "quick-chat";
 const describe = (error: unknown) => error instanceof Error ? error.message : String(error);
@@ -20,12 +21,18 @@ function Section({ t, title, children }: { t: Tokens; title: string; children: R
 export function QuickChatScreen({ client, theme, layout, navigation, params }: PluginScreenProps & { client: PluginClientContext }) {
   const t = useTokens(theme, layout.compact);
   const settings = useSettings(quickChatSettings);
+  const preferences = useSettings(quickChatPreferences);
+  const preferenceRef = useRef(preferences);
+  preferenceRef.current = preferences;
+  const personal = preferences.status === "ready" ? preferences.values : QUICK_CHAT_PREFERENCES;
+  const toast = useToast();
   const [state, setState] = useState<Awaited<ReturnType<typeof readList>> | null>(null);
   const [models, setModels] = useState<{ value: string; label: string }[]>([]);
-  const [model, setModel] = useState("");
+  const [manualModel, setModel] = useState<string | null>(null);
+  const model = restoredQuickChatModel(manualModel, personal);
   const [providersLoading, setProvidersLoading] = useState(true);
   const [listLoading, setListLoading] = useState(true);
-  const [utility, setUtility] = useState<"settings" | "recovery" | null>(null);
+  const [utility, setUtility] = useState<"recovery" | null>(null);
   const [chatSearch, setChatSearch] = useState("");
   const [showFiles, setShowFiles] = useState(false);
   const [recovered, setRecovered] = useState<{ agentId: string; workspaceId: string; warning: string | null } | null>(null);
@@ -80,25 +87,16 @@ export function QuickChatScreen({ client, theme, layout, navigation, params }: P
   const actionRow = { flexDirection: "row" as const, flexWrap: "wrap" as const, alignItems: "center" as const, gap: 8 };
   const panelStyle = { padding: layout.compact ? 16 : 20, gap: 16, borderRadius: t.radius.panel, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1 };
   return <PopoverHost><ScrollView style={{ flex: 1, backgroundColor: t.c.surface0 }} contentContainerStyle={{ padding: layout.compact ? 16 : 32, alignItems: "center" }}>
-    <View style={{ width: "100%", maxWidth: 1040, gap: 24 }}>
+    <View style={{ width: "100%", maxWidth: personal.width === "wide" ? 1200 : 880, gap: 20 }}>
       <View style={{ ...actionRow, justifyContent: "space-between", alignItems: "flex-start" }}>
         <View style={{ flex: 1, minWidth: 180, gap: 6 }}><Text style={t.text.title}>Quick Chat</Text><Text style={t.text.meta}>A place for questions and ideas, before they become a project.</Text></View>
         <View style={actionRow}>
-          <Button t={t} variant={utility === "settings" ? "secondary" : "ghost"} icon="Settings2" label="Settings" disabled={busy} onPress={() => setUtility(utility === "settings" ? null : "settings")} />
+          <Button t={t} variant="ghost" icon="Settings2" label="Settings" disabled={busy} onPress={() => client.openSettings(QUICK_CHAT_SETTINGS_PAGE)} />
           <Button t={t} variant={utility === "recovery" ? "secondary" : "ghost"} icon="RotateCcw" label="Recover handoff" disabled={busy} onPress={() => setUtility(utility === "recovery" ? null : "recovery")} />
         </View>
       </View>
       {error ? <View style={{ padding: 12, borderRadius: t.radius.control, borderWidth: 1, borderColor: t.c.statusDanger }}><Text accessibilityRole="alert" style={t.text.danger}>{error}</Text></View> : null}
       {!navigation ? <Text accessibilityRole="alert" style={t.text.danger}>Update the Paseo app to open native chats from this screen. You can still review and recover handoffs.</Text> : null}
-
-      {utility === "settings" ? <View style={panelStyle}>
-        <View style={{ ...actionRow, justifyContent: "space-between" }}><Text style={t.text.heading}>Quick Chat settings</Text><IconButton t={t} icon="X" label="Close settings" onPress={() => setUtility(null)} /></View>
-        <View style={{ ...actionRow, justifyContent: "space-between" }}><View style={{ flex: 1, minWidth: 160, gap: 4 }}><Text style={t.text.body}>Allow new Quick Chats</Text><Text style={t.text.meta}>Disabling keeps existing chats, files and recovery records.</Text></View><Button t={t} label={enabled ? "Disable new Quick Chats" : "Enable Quick Chat"} disabled={busy || settings.status !== "ready" || settings.saving} onPress={() => void run(async () => { if (settings.status !== "ready" || !(await settings.save({ enabled: !enabled }, settings.revision))) throw new Error("Could not save Quick Chat settings. Try again."); })} /></View>
-        <Text style={t.text.heading}>Storage and privacy</Text>
-        <Text style={t.text.body}>Each workspace has its own scratch folder. Native tabs in that workspace share it; only chats started here are managed as Quick Chats. Scratch storage is not a security sandbox.</Text>
-        <Text selectable style={t.text.meta}>Scratch storage on this host: {state?.directory || "Load the chat list to view the path."}</Text>
-        <Text style={t.text.meta}>Project handoffs keep the original chat and files. No automatic file copying, archiving or whole-disk search. Recovery covers process restarts, not guaranteed power-loss durability.</Text>
-      </View> : null}
 
       {utility === "recovery" ? <View style={panelStyle}>
         <View style={{ ...actionRow, justifyContent: "space-between" }}><Text style={t.text.heading}>Recover an interrupted handoff</Text><IconButton t={t} icon="X" label="Close recovery" onPress={() => setUtility(null)} /></View>
@@ -108,20 +106,35 @@ export function QuickChatScreen({ client, theme, layout, navigation, params }: P
       </View> : null}
 
       {!sourceId ? <>
-        <View style={panelStyle}>
-          <View style={{ gap: 4 }}><Text style={t.text.heading}>Start a conversation</Text><Text style={t.text.meta}>Choose your model. Your chat opens in Paseo, without selecting a project.</Text></View>
-          {settings.status !== "ready" ? <Text style={t.text.meta}>{settings.status === "invalid" ? "Quick Chat settings could not be read. Open Settings to inspect your configuration." : "Loading Quick Chat settings…"}</Text> : !enabled ? <View style={actionRow}><Button t={t} variant="primary" icon="MessageSquarePlus" label="Enable Quick Chat" disabled={busy || settings.saving} onPress={() => void run(async () => { if (!(await settings.save({ enabled: true }, settings.revision))) throw new Error("Could not save Quick Chat settings. Try again."); })} /><Text style={t.text.meta}>Off until you enable it. Existing chats stay available.</Text></View> : <>
-            <View style={{ ...actionRow, alignItems: "flex-end" }}>
-              <View style={{ flexGrow: 1, flexBasis: 280, minWidth: 0, gap: 6 }}><Text style={t.text.label}>Provider and model</Text><Select t={t} label="Provider and model" value={model} options={models} placeholder={providersLoading ? "Loading models…" : "Choose a provider and model"} onChange={(value) => { if (!busy) setModel(value); }} /></View>
-              <Button t={t} variant="primary" icon="MessageSquarePlus" label={busy ? "Working…" : "New Quick Chat"} disabled={busy || !navigation || !selectedModel} onPress={() => void run(async () => { if (!models.some((item) => item.value === model)) throw new Error("Choose an available model before starting a chat."); const created = await client.rpc(quickChatStart, { operationId, provider: model }); nextOperation(); navigation?.openAgent({ agentId: created.agentId }); })} />
+        <View style={{ gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: t.c.border }}>
+          {settings.status !== "ready" ? <Text style={t.text.meta}>{settings.status === "invalid" ? "Quick Chat settings could not be read. Open Settings to inspect your configuration." : "Loading Quick Chat settings…"}</Text> : !enabled ? <View style={actionRow}><Text style={t.text.body}>Quick Chat is turned off for this host.</Text><Button t={t} variant="primary" icon="Settings2" label="Open Quick Chat settings" onPress={() => client.openSettings(QUICK_CHAT_SETTINGS_PAGE)} /></View> : <>
+            <View style={{ ...actionRow, justifyContent: "space-between" }}>
+              <View style={{ flexShrink: 1, minWidth: 0, gap: 6 }}><Text style={t.text.label}>Start with</Text><Select t={t} label="Provider and model" value={model} options={models} placeholder={providersLoading ? "Loading models…" : "Choose a provider and model"} onChange={(value) => { if (!busy) setModel(value); }} /></View>
+              <Button t={t} variant="primary" icon="MessageSquarePlus" label={busy ? "Working…" : "New Quick Chat"} disabled={busy || preferences.status !== "ready" || !navigation || !selectedModel} onPress={() => void run(async () => {
+                if (!models.some((item) => item.value === model)) throw new Error("Choose an available model before starting a chat.");
+                const captured = preferenceRef.current;
+                const used = model;
+                const created = await client.rpc(quickChatStart, { operationId, provider: used });
+                nextOperation();
+                navigation?.openAgent({ agentId: created.agentId });
+                const latest = preferenceRef.current;
+                const warn = (message: string) => { setError(message); toast.error(message); };
+                if (captured.status !== "ready" || latest.status !== "ready" || captured.revision !== latest.revision) {
+                  warn("Chat opened. Preferences changed while it was starting, so its model was not remembered.");
+                  return;
+                }
+                if (!latest.values.rememberModel || latest.values.lastModel === used) return;
+                if (latest.saving) { warn("Chat opened. Preferences are being saved elsewhere, so its model was not remembered."); return; }
+                void latest.save({ ...latest.values, lastModel: used }, latest.revision).then((ok) => { if (!ok) warn("Chat opened, but its model could not be remembered. Your other preferences were kept; review Quick Chat settings."); }, () => warn("Chat opened, but its model could not be remembered. Review Quick Chat settings."));
+              })} />
             </View>
-            {model && !selectedModel ? <Text style={t.text.danger}>Your selected model is no longer available. Choose another model; nothing has been substituted.</Text> : !models.length && !providersLoading ? <View style={{ gap: 8 }}><Text style={t.text.meta}>No available models yet. Check your provider setup in Paseo, then refresh.</Text><View style={actionRow}><Button t={t} variant="ghost" label="Refresh providers" disabled={busy} onPress={() => void run(async () => setModels(modelChoices((await client.paseo.providers.snapshot()).entries, [])))} /></View></View> : !model ? <Text style={t.text.meta}>Select a model to start. You can change it before each new chat.</Text> : null}
+            {preferences.status !== "ready" ? <Text style={t.text.meta}>{preferences.status === "invalid" ? "Device preferences could not be read. Open Quick Chat settings; no saved model has been replaced." : "Loading your saved preferences…"}</Text> : model && !selectedModel ? <Text style={t.text.danger}>Your selected model is no longer available. Choose another model; nothing has been substituted.</Text> : !models.length && !providersLoading ? <View style={{ gap: 8 }}><Text style={t.text.meta}>No available models yet. Check your provider setup in Paseo, then refresh.</Text><View style={actionRow}><Button t={t} variant="ghost" label="Refresh providers" disabled={busy} onPress={() => void run(async () => setModels(modelChoices((await client.paseo.providers.snapshot()).entries, [])))} /></View></View> : !model ? <Text style={t.text.meta}>Choose a model to start a conversation.</Text> : personal.rememberModel && manualModel === null ? <Text style={t.text.meta}>Ready with your last used model.</Text> : null}
           </>}
         </View>
         <Section t={t} title={`Your chats${state ? ` · ${state.chats.length}` : ""}`}>
-          <View style={actionRow}><Field t={t} grow plain icon="Search" value={chatSearch} onChangeText={setChatSearch} placeholder="Find a chat by title" accessibilityLabel="Find a Quick Chat" /><IconButton t={t} icon="RefreshCw" label="Refresh chats" disabled={busy || listLoading} onPress={() => void run(async () => { setListLoading(true); try { setState(await readList()); } finally { setListLoading(false); } })} /></View>
-          {listLoading ? <Text style={t.text.meta}>Loading your chats…</Text> : !state ? <Text style={t.text.meta}>The chat list could not be loaded. Use Refresh chats to try again.</Text> : !state.chats.length ? <View style={{ paddingVertical: 24, gap: 6 }}><Text style={t.text.heading}>Room for your next idea</Text><Text style={t.text.meta}>Start a Quick Chat above. You can bring the conversation into a project later.</Text></View> : !visibleChats.length ? <Text style={t.text.meta}>No chats match “{chatSearch}”. Try another title.</Text> : <View style={{ borderWidth: 1, borderColor: t.c.border, borderRadius: t.radius.panel, overflow: "hidden" }}>{visibleChats.map((chat, index) => <View key={chat.id} style={{ padding: 16, borderTopWidth: index ? 1 : 0, borderTopColor: t.c.border, ...actionRow, justifyContent: "space-between" }}>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Open ${chat.title}`} disabled={busy || !navigation} onPress={() => navigation?.openAgent({ agentId: chat.id })} style={{ flex: 1, minWidth: 140, flexDirection: "row", alignItems: "center", gap: 12 }}><Icon name="MessageSquare" size={18} color={t.c.foregroundMuted} /><View style={{ flex: 1, gap: 4 }}><Text numberOfLines={2} style={t.text.body}>{chat.title}</Text><Text style={t.text.meta}>Project-free conversation</Text></View></Pressable>
+          <View style={actionRow}>{state?.chats.length ? <Field t={t} grow plain icon="Search" value={chatSearch} onChangeText={setChatSearch} placeholder="Find a chat by title" accessibilityLabel="Find a Quick Chat" /> : null}<IconButton t={t} icon="RefreshCw" label="Refresh chats" disabled={busy || listLoading} onPress={() => void run(async () => { setListLoading(true); try { setState(await readList()); } finally { setListLoading(false); } })} /></View>
+          {listLoading ? <Text style={t.text.meta}>Loading your chats…</Text> : !state ? <Text style={t.text.meta}>The chat list could not be loaded. Use Refresh chats to try again.</Text> : !state.chats.length ? <View style={{ paddingVertical: 12, gap: 6 }}><Text style={t.text.heading}>Start your first conversation</Text><Text style={t.text.meta}>Start a Quick Chat above. You can bring the conversation into a project later.</Text></View> : !visibleChats.length ? <Text style={t.text.meta}>No chats match “{chatSearch}”. Try another title.</Text> : <View style={{ borderWidth: 1, borderColor: t.c.border, borderRadius: t.radius.panel, overflow: "hidden" }}>{visibleChats.map((chat, index) => <View key={chat.id} style={{ padding: personal.density === "compact" ? 10 : 16, borderTopWidth: index ? 1 : 0, borderTopColor: t.c.border, ...actionRow, justifyContent: "space-between" }}>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Open ${chat.title}`} disabled={busy || !navigation} onPress={() => navigation?.openAgent({ agentId: chat.id })} style={{ flex: 1, minWidth: 140, flexDirection: "row", alignItems: "center", gap: 12 }}><Icon name="MessageSquare" size={18} color={t.c.foregroundMuted} /><View style={{ flex: 1, gap: 4 }}><Text numberOfLines={2} style={t.text.body}>{chat.title}</Text>{personal.showDescriptions ? <Text style={t.text.meta}>Project-free conversation</Text> : null}</View></Pressable>
             <View style={actionRow}><Button t={t} variant="ghost" label="Open chat" accessibilityLabel={`Open chat: ${chat.title}`} disabled={busy || !navigation} onPress={() => navigation?.openAgent({ agentId: chat.id })} />{enabled ? <Button t={t} icon="FolderInput" label="Continue in project" accessibilityLabel={`Continue ${chat.title} in project`} disabled={busy} onPress={() => { resetHandoff(); setSourceId(chat.id); setUtility(null); const request = generation.current; void run(async () => { const value = await client.rpc(quickChatTargets, {}); if (generation.current === request) setTargets(value.targets); }); }} /> : null}</View>
           </View>)}</View>}
         </Section>
@@ -166,6 +179,7 @@ export function registerQuickChatClient(client: PluginClientContext) {
   const poll = setInterval(() => { void refreshPills().catch((error) => console.error("[morphise] Quick Chat actions unavailable", describe(error))); }, 15000);
   void refreshPills().catch((error) => console.error("[morphise] Quick Chat actions unavailable", describe(error)));
   const cleanups = [
+    client.addSettingsScreen({ id: QUICK_CHAT_SETTINGS_PAGE, title: "Quick Chat", icon: "MessageSquarePlus", Component: (props) => <QuickChatPreferencesScreen {...props} client={client} /> }),
     client.addScreen({ id: SCREEN, title: "Quick Chat", Component: (props) => <QuickChatScreen {...props} client={client} /> }),
     client.addSidebarHeaderItem({ id: "quick-chat", title: "Quick Chat", Component: ({ openScreen, currentScreen }) => <SidebarRow icon="MessageSquarePlus" active={currentScreen?.screenId === SCREEN} onPress={() => openScreen({ screenId: SCREEN })} /> }),
     client.addCommandCenterItem({ id: "quick-chat", title: "Open Quick Chat", icon: "MessageSquarePlus", context: "global", onSelect: ({ openScreen }) => openScreen({ screenId: SCREEN }) }),

@@ -2,7 +2,7 @@
 
 ## Quick Chat
 
-Quick Chat is an opt-in Morphise feature for chatting and capturing ideas without choosing a project. Open it from the sidebar or Command Center, enable it, and choose a provider/model beside New Quick Chat. The new chat opens in Paseo's native UI. Search your existing chats by title, open one, or choose Continue in project. Settings contains the enable/disable control and storage/privacy details; Recover handoff opens the separate recovery lookup. Both remain available while reviewing context, without replacing your edited draft. Each Quick Chat workspace has separate scratch storage; native tabs inside that workspace share the folder. Scratch storage is not a security sandbox.
+Quick Chat is an opt-in Morphise feature for chatting and capturing ideas without choosing a project. Open it from the sidebar or Command Center, enable it, and choose a provider/model beside New Quick Chat. The new chat opens in Paseo's native UI. Search your existing chats by title, open one, or choose Continue in project. The Settings shortcut opens Morphise Settings → Quick Chat, the only home for enable/disable, start-up, appearance and storage/privacy controls. Recover handoff remains a separate chat-screen action. The last successfully used provider/model is remembered on this device by default and preloaded next time, without substituting unavailable models. Device preferences let you turn memory off, forget the saved model, choose Comfortable/Wide content, Compact/Comfortable rows and row descriptions. Reset appearance leaves model history and host availability unchanged. Each Quick Chat workspace has separate scratch storage; native tabs inside that workspace share the folder. Scratch storage is not a security sandbox.
 
 Continue in project prepares an editable preview of visible messages for an already-open project workspace. It shows destination/provider, partial-history warnings and top-level scratch filenames. Confirming creates a new agent with ordinary project permission defaults. It does not move the original session, copy files, include reasoning/tool output/attachments, archive the source or silently switch providers. The handoff is a reviewed snapshot, not an atomic freeze: concurrent changes after the final source check are not included. Context is bounded to 40,000 UTF-16 code units including the envelope, with truncation disclosed; history reading is bounded and may be partial. Reading native history may initialize a stopped provider for history access.
 
@@ -37,6 +37,8 @@ paseo plugin update morphise --ref v0.23.0
 ## Credits and licences
 
 Morphise includes code ported from seven MIT-licensed Paseo plugins. Each ported file names its source in its first comment, and [NOTICE.md](NOTICE.md) holds each licence in full.
+
+Quick Chat is separately credited above as feature inspiration, not as an eighth code port. Its independent implementation, UI refinements and device preferences add no third-party dependency. See [NOTICE.md](NOTICE.md#feature-inspiration-not-incorporated-code) for that distinction.
 
 | Plugin | Author | What Morphise uses | Licence |
 | --- | --- | --- | --- |
