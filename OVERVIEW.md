@@ -6,6 +6,8 @@ Quick Chat (sidebar or Command Center) is opt-in project-free conversation and i
 
 Feature inspiration: Quick Chat by Shuvadipta Das (@5h0ov), https://github.com/5h0ov/paseo-quick-chat (MIT). Morphise's implementation is independent; no reference-plugin code, tests, assets or prompt templates are included.
 
+Quick Chat has Active/Archived views, title/provider filtering, Updated/Created/Title sorting, clickable titles and Info/Continue/Archive-or-Unarchive icons. Archive confirmation explains that work/commands stop and saved command logs are removed; conversations and scratch files stay. Native Unarchive restores the same agent, may initialize the provider, and cannot recover removed logs. No automatic archive, workspace deletion or extra prompt is introduced.
+
 New Quick Chat agent tabs use Paseo's normal first-message title; existing explicit/user titles are not rewritten. Files location on each chat row shows its verified scratch working folder and the absolute resolution of `docs/` on the daemon host. These paths do not claim a report exists. New chats receive absolute-path instructions; prior chats keep their existing instructions.
 
 Settings are split into tabs: Layouts, General, Sidebar, Chat, Messages, Pages, Look, Buttons, Commands, Prompts and Advanced (the whole profile as JSON).

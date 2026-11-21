@@ -40,14 +40,73 @@ describe("independent Quick Chat handoff", () => {
   });
   it("returns the actual chat title and both absolute storage paths", async () => {
     const f = await fixture();
-    expect(await f.service.list(f.api)).toEqual([{ id: "source", title: "An idea", workspaceId: "scratch", directory: f.cwd, docsDirectory: join(f.cwd, "docs") }]);
+    expect(await f.service.list(f.api)).toEqual([{ id: "source", title: "An idea", workspaceId: "scratch", directory: f.cwd, docsDirectory: join(f.cwd, "docs"), provider: "fake", archivedAt: null, createdAt: "", updatedAt: "2026-01-01" }]);
   });
   it("does not disclose paths for marked but unowned, missing or escaped folders", async () => {
     const f = await fixture();
     const outside = await mkdtemp(join(tmpdir(), "morphise-outside-")); folders.push(outside);
     const escaped = join(f.root, "workspaces", "escaped"); await symlink(outside, escaped);
     const api = { agents: { list: async () => ({ entries: [outside, join(f.root, "missing"), escaped].map((cwd, i) => ({ agent: { id: String(i), title: "Keep title", workspaceId: "scratch", cwd, metadata: { [QUICK_CHAT_KEY]: true } } })), pageInfo: { hasMore: false } }) } } as unknown as PluginHandlerContext["paseo"];
-    expect(await f.service.list(api)).toEqual([{ id: "0", title: "Keep title", workspaceId: "scratch" }, { id: "1", title: "Keep title", workspaceId: "scratch" }, { id: "2", title: "Keep title", workspaceId: "scratch" }]);
+    expect((await f.service.list(api)).map(({ id, directory, docsDirectory }) => ({ id, directory, docsDirectory }))).toEqual([{ id: "0", directory: undefined, docsDirectory: undefined }, { id: "1", directory: undefined, docsDirectory: undefined }, { id: "2", directory: undefined, docsDirectory: undefined }]);
+  });
+  it("archives and restores the same owned agent and does not repeat an already applied action", async () => {
+    const f = await fixture();
+    let archivedAt: string | null = null;
+    let archives = 0, restores = 0;
+    const record = { id: "owned", cwd: f.cwd, metadata: { [QUICK_CHAT_KEY]: true }, workspaceId: "scratch" };
+    const api = { agents: { ref: () => ({ refresh: async () => ({ agent: { ...record, archivedAt } }), archive: async () => { archives++; archivedAt = "2026-01-01"; }, reload: async () => { restores++; archivedAt = null; } }) } } as unknown as PluginHandlerContext["paseo"];
+    expect(await f.service.setArchived(api, "owned", true)).toEqual({ ok: true });
+    expect(await f.service.setArchived(api, "owned", true)).toEqual({ ok: true });
+    expect(archives).toBe(1);
+    expect(await f.service.setArchived(api, "owned", false)).toEqual({ ok: true });
+    expect(await f.service.setArchived(api, "owned", false)).toEqual({ ok: true });
+    expect(restores).toBe(1);
+  });
+  it("rejects lifecycle writes outside the scratch ownership boundary", async () => {
+    const f = await fixture(); let writes = 0;
+    const api = { agents: { ref: () => ({ refresh: async () => ({ agent: { id: "outsider", cwd: f.root, metadata: { [QUICK_CHAT_KEY]: true } } }), archive: async () => { writes++; }, reload: async () => { writes++; } }) } } as unknown as PluginHandlerContext["paseo"];
+    await expect(f.service.setArchived(api, "outsider", true)).rejects.toThrow("Only an owned");
+    await expect(f.service.setArchived(api, "outsider", false)).rejects.toThrow("Only an owned");
+    expect(writes).toBe(0);
+  });
+  it("excludes archives by default and requests them only for the inclusive list", async () => {
+    const f = await fixture(); const filters: unknown[] = [];
+    const api = { agents: { list: async (input: { filter: unknown }) => { filters.push(input.filter); return { entries: [{ agent: { id: "archived", title: "Older idea", workspaceId: "scratch", cwd: f.cwd, metadata: { [QUICK_CHAT_KEY]: true }, archivedAt: "2026-01-01", provider: "fake" } }], pageInfo: { hasMore: false } }; } } } as unknown as PluginHandlerContext["paseo"];
+    expect(await f.service.list(api)).toEqual([]);
+    expect((await f.service.list(api, true)).map((chat) => chat.id)).toEqual(["archived"]);
+    expect(filters).toEqual([{ includeBackground: true, includeArchived: false }, { includeBackground: true, includeArchived: true }]);
+  });
+  it("rejects missing ownership, helpers, missing folders and symlink escapes without native writes", async () => {
+    const f = await fixture(); const outside = await mkdtemp(join(tmpdir(), "morphise-archive-outside-")); folders.push(outside);
+    const escaped = join(f.root, "workspaces", "escape"); await symlink(outside, escaped);
+    let writes = 0;
+    const records: Record<string, unknown> = { unmarked: { cwd: f.cwd }, helper: { cwd: f.cwd, background: true, labels: { "paseo.parent-agent-id": "parent" }, metadata: { [QUICK_CHAT_KEY]: true } }, missing: { cwd: join(f.root, "gone"), metadata: { [QUICK_CHAT_KEY]: true } }, escape: { cwd: escaped, metadata: { [QUICK_CHAT_KEY]: true } } };
+    const api = { agents: { ref: (id: string) => ({ refresh: async () => ({ agent: { id, ...records[id] as object } }), archive: async () => { writes++; }, reload: async () => { writes++; } }) } } as unknown as PluginHandlerContext["paseo"];
+    await expect(f.service.setArchived(api, "unmarked", true)).rejects.toThrow("Only an owned");
+    await expect(f.service.setArchived(api, "helper", false)).rejects.toThrow("Only an owned");
+    await expect(f.service.setArchived(api, "missing", true)).rejects.toThrow("folder may be missing");
+    await expect(f.service.setArchived(api, "escape", false)).rejects.toThrow("Only an owned");
+    expect(writes).toBe(0);
+  });
+  it("does not report success when the native archive state is unchanged", async () => {
+    const f = await fixture();
+    const api = { agents: { ref: () => ({ refresh: async () => ({ agent: { id: "owned", cwd: f.cwd, metadata: { [QUICK_CHAT_KEY]: true }, archivedAt: null } }), archive: async () => {} }) } } as unknown as PluginHandlerContext["paseo"];
+    await expect(f.service.setArchived(api, "owned", true)).rejects.toThrow("did not confirm");
+  });
+  it("rejects overlapping archive/restore requests and reconciles a lost response without replay", async () => {
+    const f = await fixture(); let archivedAt: string | null = null;
+    let finish!: () => void; let entered!: () => void;
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    let writes = 0;
+    const api = { agents: { ref: () => ({ refresh: async () => ({ agent: { id: "owned", cwd: f.cwd, metadata: { [QUICK_CHAT_KEY]: true }, archivedAt } }), archive: async () => { writes++; entered(); await new Promise<void>((resolve) => { finish = resolve; }); archivedAt = "2026-01-01"; throw new Error("Lost archive response"); }, reload: async () => { writes++; archivedAt = null; } }) } } as unknown as PluginHandlerContext["paseo"];
+    const first = f.service.setArchived(api, "owned", true);
+    await started;
+    await expect(f.service.setArchived(api, "owned", true)).rejects.toThrow("already in progress");
+    await expect(f.service.setArchived(api, "owned", false)).rejects.toThrow("already in progress");
+    finish();
+    await expect(first).rejects.toThrow("Lost archive response");
+    expect(await f.service.setArchived(api, "owned", true)).toEqual({ ok: true });
+    expect(writes).toBe(1);
   });
   it("prepares without creating and creates context once while keeping original files", async () => {
     const f = await fixture();

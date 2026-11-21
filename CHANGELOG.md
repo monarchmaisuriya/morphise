@@ -2,6 +2,12 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.51.0 - 2026-11-21
+
+- **Quick Chat archive:** Active and Archived views with native archive and unarchive for owned chats. Archive requires confirmation explaining that agent work/commands stop and saved command-output logs are removed; conversation and scratch files remain. Unarchive restores the same native agent and may initialize the provider, but cannot restore removed logs. No extra prompt or chat copy is created by Morphise.
+- **Compact chat rows:** click the title to open; the redundant Open button is removed. File locations use an Info icon, Continue in project uses an icon, and Archive/Unarchive have named icons with hover help. Removed the redundant last-model-ready sentence without changing model memory.
+- **Find chats faster:** title search, provider filtering, Updated/Created/Title sorting with deterministic missing-date handling, clear filters and distinct empty states. Older hosts omit unsupported archive actions instead of presenting nonfunctional controls.
+
 ## 0.50.2 - 2026-11-21
 
 - **Native Quick Chat titles:** new chats no longer receive an explicit generic agent title, allowing Paseo's normal first-message naming. No extra model call or title writer is introduced; existing and manually chosen titles are not rewritten. The workspace's organizational label can still say Quick Chat.
