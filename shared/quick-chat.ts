@@ -3,6 +3,18 @@ import { z } from "zod";
 
 export const QUICK_CHAT_KEY = "morphise.quick-chat";
 export const quickChatSettings = defineSettings({ id: "quick-chat", scope: "host", version: 1, schema: z.object({ enabled: z.boolean().default(false) }) });
+export const quickChatPreferences = defineSettings({ id: "quick-chat-preferences", scope: "device", version: 1, schema: z.object({
+  rememberModel: z.boolean().default(true),
+  lastModel: z.string().max(300).default(""),
+  width: z.enum(["comfortable", "wide"]).default("comfortable"),
+  density: z.enum(["comfortable", "compact"]).default("comfortable"),
+  showDescriptions: z.boolean().default(true),
+}) });
+export type QuickChatPreferences = z.output<typeof quickChatPreferences.schema>;
+export const QUICK_CHAT_PREFERENCES = quickChatPreferences.schema.parse({});
+export function restoredQuickChatModel(manual: string | null, preferences: Pick<QuickChatPreferences, "rememberModel" | "lastModel">): string {
+  return manual ?? (preferences.rememberModel ? preferences.lastModel : "");
+}
 const id = z.string().uuid();
 const destination = z.object({ agentId: z.string(), workspaceId: z.string(), warning: z.string().nullable() });
 export const quickChatList = defineRpc({ name: "quick-chat.list", input: z.object({}), output: z.object({ enabled: z.boolean(), directory: z.string(), chats: z.array(z.object({ id: z.string(), title: z.string(), workspaceId: z.string() })) }) });

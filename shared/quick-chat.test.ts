@@ -1,5 +1,13 @@
 import { expect, it } from "vitest";
-import { QUICK_CHAT_KEY, quickChatAgentChange, quickChatSettings, quickChatStart, visibleQuickChatAgent } from "./quick-chat";
+import { QUICK_CHAT_KEY, quickChatAgentChange, quickChatPreferences, quickChatSettings, quickChatStart, restoredQuickChatModel, visibleQuickChatAgent } from "./quick-chat";
+
+it("keeps device preferences separate and restores only remembered models", () => {
+  expect(quickChatPreferences.schema.parse({})).toEqual({ rememberModel: true, lastModel: "", width: "comfortable", density: "comfortable", showDescriptions: true });
+  expect(restoredQuickChatModel(null, { rememberModel: true, lastModel: "claude/example" })).toBe("claude/example");
+  expect(restoredQuickChatModel("codex/manual", { rememberModel: true, lastModel: "claude/example" })).toBe("codex/manual");
+  expect(restoredQuickChatModel(null, { rememberModel: false, lastModel: "claude/example" })).toBe("");
+  expect(() => quickChatPreferences.schema.parse({ lastModel: "x".repeat(301) })).toThrow();
+});
 
 it("defaults off and confines workspace operation identifiers", () => {
   expect(quickChatSettings.schema.parse({})).toEqual({ enabled: false });
