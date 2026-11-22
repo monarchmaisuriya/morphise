@@ -2,6 +2,12 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.51.3 - 2026-11-22
+
+- **Complete stored titles:** Quick Chat titles wrap without a two-line cutoff. Compact layouts put row actions below the title so long names have usable width. Existing titles are preserved, including names shortened by older hosts.
+- **Richer Chat info:** the inline Info disclosure now shows full stored title, provider, known active/archive state, UTC created/updated/archive timestamps, chat/workspace IDs and existing storage locations. Missing or ambiguous metadata is marked Unavailable. No transcript reads or new list requests are introduced.
+- Future automatic title word-boundary naming is a separate Paseo source fix, not included in or activated by this plugin release.
+
 ## 0.51.2 - 2026-11-22
 
 - **Fix native provider icons in Quick Chat:** built-in providers such as Claude, Codex and OpenCode do not need to supply snapshot SVGs. Quick Chat now resolves all nine built-in provider marks using the same pinned artwork as Paseo's native picker, rather than showing generic CPU icons. Custom provider SVGs remain unchanged; unknown providers without artwork retain the fallback. The bundled artwork includes upstream attribution and license. No selected model IDs, settings or chat data change.
