@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_TITLE_PROMPT } from "../shared/agent-titles";
-import { createTitleJobs, generateTitle, TITLE_HELPER, TITLE_JOB_DEADLINE_MS, type TitlePaseo } from "./titles";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createTitleJobs, generateTitle, TITLE_HELPER, TITLE_JOB_DEADLINE_MS, type TitlePaseo, titleWorkersDir } from "./titles";
 
 function fakePaseo(reply: { status: string; error: string | null; lastMessage: string | null }, providers: unknown = {}) {
   const archive = vi.fn(async () => undefined);
@@ -28,6 +31,8 @@ describe("title generation", () => {
     // nobody answers a hidden agent; Morphise's own hooks know it by its metadata.
     expect(create.mock.calls[0]?.[0]).toMatchObject({ config: { provider: "claude/claude-opus-5-5", modeId: "default" }, cwd: "/tmp/morphise-title-x", background: true, metadata: { [TITLE_HELPER]: true } });
     expect(create.mock.calls[0]?.[0].prompt).toContain("Fix the login timeout in auth");
+    // A one-line title needs none of the user's setup: no CLAUDE.md, and only the MCP servers given (none).
+    expect(create.mock.calls[0]?.[0]).toMatchObject({ config: { mcpServers: {}, options: { extraArgs: { "strict-mcp-config": null } } }, env: { CLAUDE_CODE_DISABLE_CLAUDE_MDS: "1" } });
     expect(rename).toHaveBeenCalledWith("a1", "Raise login timeout");
     expect(archive).toHaveBeenCalledTimes(1);
     expect(remove).toHaveBeenCalledTimes(1);
@@ -54,10 +59,25 @@ describe("title generation", () => {
   it("picks the asking mode through a configured provider's base, and leaves other providers on their own default", async () => {
     const derived = fakePaseo({ status: "idle", error: null, lastMessage: "Title" }, { work: { extends: "claude" } });
     await generateTitle("a1", derived.paseo, { readSettings: settings({ provider: "work" }), rename: async () => null, workdir: async () => ({ path: "/tmp/x", remove: async () => undefined }) });
-    expect(derived.create.mock.calls[0]?.[0].config).toEqual({ provider: "work", modeId: "default" });
+    expect(derived.create.mock.calls[0]?.[0].config).toEqual({ provider: "work", modeId: "default", options: { extraArgs: { "strict-mcp-config": null } }, mcpServers: {} });
     const other = fakePaseo({ status: "idle", error: null, lastMessage: "Title" });
     await generateTitle("a1", other.paseo, { readSettings: settings({ provider: "opencode" }), rename: async () => null, workdir: async () => ({ path: "/tmp/x", remove: async () => undefined }) });
     expect(other.create.mock.calls[0]?.[0].config).toEqual({ provider: "opencode" });
+  });
+
+  it("runs the helper in Morphise's own workers folder under plugin-data, which other plugins leave bare, and removes it after", async () => {
+    const home = process.env.PASEO_HOME;
+    process.env.PASEO_HOME = await mkdtemp(join(tmpdir(), "morphise-title-home-"));
+    try {
+      const { paseo, create } = fakePaseo({ status: "idle", error: null, lastMessage: "Title" });
+      await generateTitle("a1", paseo, { readSettings: settings(), rename: async () => null });
+      const cwd = create.mock.calls[0]?.[0].cwd ?? "";
+      expect(titleWorkersDir()).toBe(join(process.env.PASEO_HOME, "plugin-data", "morphise", "workers"));
+      expect(cwd.startsWith(`${titleWorkersDir()}/title-`)).toBe(true);
+    } finally {
+      if (home === undefined) delete process.env.PASEO_HOME;
+      else process.env.PASEO_HOME = home;
+    }
   });
 
   it("reports a rename the CLI refused", async () => {

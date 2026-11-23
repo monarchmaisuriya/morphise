@@ -1,4 +1,5 @@
-import { resolve } from "node:path";
+import { homedir } from "node:os";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { PluginHookContext, PluginHookPayload, PluginHookResult, PluginServerContext } from "@getpaseo/plugin/server";
 import { bookmarkDocumentSchema } from "../../shared/bookmarks";
 import { activeProfile } from "../../shared/document";
@@ -36,11 +37,19 @@ async function agentToken(config: AgentConfig) {
   return issueAgentToken(config.cwd);
 }
 
+// Other plugins run their helper agents (summaries, memory capture) in `<PASEO_HOME>/plugin-data/<plugin>/workers`;
+// they write JSON for their plugin, never a page for M, so the tools and the long page rules would only add to
+// each of their calls. Only `workers`: Quick Chat keeps M's own chats elsewhere under plugin-data.
+const inPluginWorkers = (cwd: string) => {
+  const parts = relative(resolve(process.env.PASEO_HOME || join(homedir(), ".paseo"), "plugin-data"), resolve(cwd)).split(sep);
+  return parts.length >= 2 && parts[0] !== ".." && !isAbsolute(parts[0]) && parts[1] === "workers";
+};
+
 // Adds the tools to a new agent while the option is on; never to internal agents (commit and PR
-// messages) or Morphise's title helper. Exported for its test.
+// messages), Morphise's title helper, or plugins' helper agents. Exported for its test.
 export function addHtmlTools(profile: ProfileReader): CreateHook {
   return async ({ request }, { paseo }) => {
-    if (request.config.internal || request.metadata?.[TITLE_HELPER] === true || !(await htmlPagesOn(profile))) return undefined;
+    if (request.config.internal || request.metadata?.[TITLE_HELPER] === true || inPluginWorkers(request.config.cwd) || !(await htmlPagesOn(profile))) return undefined;
     // Unreadable daemon config: judge the provider by its own id, so a derived one goes without the tools rather than failing to start.
     const providers = await paseo.config.get().then(({ config }) => config.providers, () => undefined);
     const base = baseProvider(request.config.provider, providers);
