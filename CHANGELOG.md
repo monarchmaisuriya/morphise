@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.52.0 - 2026-11-23
+
+- **Leaner helpers:** the Claude title helper starts without the user's CLAUDE.md and MCP servers, in `plugin-data/morphise/workers` so Memorise and Computerise leave it bare too; it writes one line from its prompt. Other plugins' helper workers (`plugin-data/<plugin>/workers`) no longer get the HTML page tools and their rules; Quick Chats keep them.
+
 ## 0.51.3 - 2026-11-22
 
 - **Complete stored titles:** Quick Chat titles wrap without a two-line cutoff. Compact layouts put row actions below the title so long names have usable width. Existing titles are preserved, including names shortened by older hosts.

@@ -88,6 +88,13 @@ describe("HTML page tools for new agents", () => {
     expect(await addHtmlTools(profile(true))(helper, context())).toBeUndefined();
   });
 
+  it("never gives them to another plugin's helper workers, but does to Quick Chats under plugin-data", async () => {
+    const helper = request({ cwd: join(process.env.PASEO_HOME!, "plugin-data", "contextualise", "workers") });
+    expect(await addHtmlTools(profile(true))(helper, context())).toBeUndefined();
+    const quickChat = request({ cwd: join(process.env.PASEO_HOME!, "plugin-data", "morphise", "quick-chat", "workspaces", "t-1") });
+    expect((await addHtmlTools(profile(true))(quickChat, context()))?.config.mcpServers?.chat_polish?.type).toBe("http");
+  });
+
   it("creates the agent as Paseo would when the profile cannot be read", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const broken = { read: async () => Promise.reject(new Error("disk")) };

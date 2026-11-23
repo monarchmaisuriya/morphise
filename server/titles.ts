@@ -2,8 +2,8 @@
 // for a title with the chosen provider and model (the chat's own by default), and applies it.
 // Approach after Better Paseo (RoundRedDot/better-paseo, MIT, see NOTICE.md). The helper runs on the
 // user's provider login, so it costs tokens; it is archived when it finishes or fails.
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { cleanTitle, type TitleJob, type TitleSettings, titleRequest } from "../shared/agent-titles";
 import { baseProvider } from "./polish/pages/html-tool";
@@ -17,6 +17,12 @@ export const TITLE_HELPER = "morphise.titleHelper";
 // stalls until the helper times out. Codex has no asking mode: "auto" keeps its default approval flow instead of the auto-reviewer, and the
 // empty folder is what contains it. Paseo can't deny tools outright: a tool policy only preapproves. Other providers keep their default.
 const ASKING_MODE: Record<string, string> = { claude: "default", codex: "auto" };
+// A title needs only the text in the prompt. A Claude helper would otherwise load the user's CLAUDE.md
+// and every MCP server they configured (tens of thousands of tokens) to write one line: it gets only
+// the servers passed here (none), and no CLAUDE.md. Paseo keeps its own tool server on top of these.
+const LEAN: Record<string, { options: Record<string, unknown>; env: Record<string, string> }> = {
+  claude: { options: { extraArgs: { "strict-mcp-config": null } }, env: { CLAUDE_CODE_DISABLE_CLAUDE_MDS: "1" } },
+};
 // Finished jobs are kept a while for the app to read, then dropped.
 const KEEP_MS = 10 * 60_000;
 // The newest page holds the latest reply; when the chat is longer, its oldest page holds the first message.
@@ -42,14 +48,19 @@ interface AgentHandle {
 
 // The helper is fed chat text, which can carry instructions, and "Do not use any tools" is only a
 // request. It runs in an empty folder of its own, in a mode that asks before tools (ASKING_MODE),
-// without Morphise's HTML page tools.
+// without Morphise's HTML page tools or other plugins' helper additions.
 export interface Workdir {
   path: string;
   remove(): Promise<void>;
 }
 
+// Under <PASEO_HOME>/plugin-data/morphise/workers, the folder other plugins (Memorise, Computerise) recognise
+// as a plugin's helper workers and give no memory index, computer tools or notes.
+export const titleWorkersDir = () => join(process.env.PASEO_HOME || join(homedir(), ".paseo"), "plugin-data", "morphise", "workers");
+
 async function emptyWorkdir(): Promise<Workdir> {
-  const path = await mkdtemp(join(tmpdir(), "morphise-title-"));
+  await mkdir(titleWorkersDir(), { recursive: true, mode: 0o700 });
+  const path = await mkdtemp(join(titleWorkersDir(), "title-"));
   return { path, remove: () => rm(path, { recursive: true, force: true }) };
 }
 
@@ -61,7 +72,7 @@ interface HelperHandle {
 export interface TitlePaseo {
   agents: {
     ref(agentId: string): AgentHandle;
-    create(options: { config: { provider: string; modeId?: string }; cwd: string; prompt: string; background: boolean; title: string; metadata: Record<string, boolean> }): Promise<HelperHandle>;
+    create(options: { config: { provider: string; modeId?: string; options?: Record<string, unknown>; mcpServers?: Record<string, never> }; env?: Record<string, string>; cwd: string; prompt: string; background: boolean; title: string; metadata: Record<string, boolean> }): Promise<HelperHandle>;
   };
   config: { get(): Promise<{ config: { providers?: unknown } }> };
 }
@@ -98,7 +109,9 @@ export async function generateTitle(agentId: string, paseo: TitlePaseo, deps: Pi
   const model = settings.model || (settings.provider ? "" : agent.model ?? "");
   // Unreadable daemon config: judge the provider by its own id.
   const providers = await paseo.config.get().then(({ config }) => config.providers, () => undefined);
-  const modeId = ASKING_MODE[baseProvider(providerName, providers)];
+  const base = baseProvider(providerName, providers);
+  const modeId = ASKING_MODE[base];
+  const lean = LEAN[base];
   const workdir = await (deps.workdir ?? emptyWorkdir)();
   // A create that never answers would otherwise leave the folder behind once the job has failed.
   const removeLate = () => void workdir.remove().catch(() => undefined);
@@ -107,7 +120,8 @@ export async function generateTitle(agentId: string, paseo: TitlePaseo, deps: Pi
   try {
     deadline?.throwIfAborted();
     helper = await paseo.agents.create({
-      config: { provider: model ? `${providerName}/${model}` : providerName, ...(modeId && { modeId }) },
+      config: { provider: model ? `${providerName}/${model}` : providerName, ...(modeId && { modeId }), ...(lean && { options: lean.options, mcpServers: {} }) },
+      ...(lean && { env: lean.env }),
       cwd: workdir.path,
       prompt: titleRequest(settings.prompt, textOf(first), last ? textOf(last) : ""),
       background: true,
