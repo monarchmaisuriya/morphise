@@ -12,6 +12,7 @@ import { tokens } from "../ui/kit";
 import { LookPreview, MessagesPreview, PagesPreview, PreviewWidth } from "./previews";
 import { ChipRow, type Form, SelectField, SwitchField, TextField } from "./fields";
 import { fontSize } from "../../shared/design/tokens";
+import { SidebarStatusSettings } from "./sidebar-status";
 
 // Settings for the features ported from Chat Polish and Quote (see NOTICE.md). They live in the
 // profile's `chat.polish`; a value equal to its default is removed, so older Morphise versions
@@ -196,6 +197,7 @@ export function PolishLookSettings({ form }: { form: Form }): ReactNode {
           <PreviewWidth theme={form.theme} compact={form.compact}>{(compact) => <LookPreview theme={form.theme} prefs={prefs} profileTheme={form.profile.theme} compact={compact} />}</PreviewWidth>
         </SettingsCard>
       </SettingsSection>
+      <SidebarStatusSettings form={form} value={prefs.sidebarStatus} onChange={(value) => set("sidebarStatus", value)} />
       <SettingsSection title="Restyle Paseo (experimental)" info="Chat Polish's design for Paseo's own message box, cards, menus, tool groups and replies, on desktop and web. It works through Paseo's page structure, so a Paseo update can break parts of it.">
         <SettingsCard>
           <SwitchField label="Restyle Paseo's items" value={restyled} onChange={(value) => set("restyle", value)} />

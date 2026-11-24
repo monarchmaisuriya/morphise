@@ -69,3 +69,9 @@ npm test
 ```
 
 Versions follow [semantic versioning](https://semver.org): `package.json` holds the version, each release is tagged `vX.Y.Z`, and [CHANGELOG.md](CHANGELOG.md) lists the changes.
+
+### Sidebar status indicators
+
+In Plugins → Morphise → Settings → Look → Sidebar status indicators, choose **Dot and ring** (default) or **Paseo default**. Each existing sidebar chat status slot gets the same standalone shape, with no provider logo and no pulsing. Starting, Working, Needs input, Failed, Attention/unread and Idle/done each have a color override (`#RRGGBB`, blank follows the semantic theme default) and rotation speed: Stopped, Slow (3.2 seconds), Medium (1.6 seconds), Fast (0.8 seconds per revolution). Preview every state beside its controls. Reduced motion stops all plugin rotation.
+
+These are profile settings, independent of Restyle Paseo, on desktop/web only. Switching to Paseo default preserves custom choices; Reset sidebar indicators restores recommended values without changing other settings. Invalid partial color text stays local and does not replace saved preferences. Existing host indicators remain intact under the presentation override, so choosing Paseo default or unloading Morphise restores them; host-owned hidden animation clocks may continue. Unknown/absent host status slots are not invented or relabeled.
