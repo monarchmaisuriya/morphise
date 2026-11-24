@@ -2,12 +2,13 @@ import type { PluginClientContext } from "@getpaseo/plugin/client";
 import type { PluginTheme } from "@getpaseo/plugin";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
-import { calendarRange, calendarRead, calendarTotals, type WorkInterval } from "../shared/work-calendar";
+import { calendarRange, calendarRead, calendarTotals, calendarTitle, type WorkInterval } from "../shared/work-calendar";
 import { calendarLayout, durationText, HOUR_HEIGHT } from "../shared/calendar-layout";
 import { Button, IconButton, PopoverHost, Segmented, Select, useTokens } from "./ui/kit";
 import type { WorkspaceList } from "./workspaces";
+import type { Chats } from "./chats";
 
-function CalendarBody({ client, theme, compact, workspaces, openChat }: { client: PluginClientContext; theme: PluginTheme; compact: boolean; workspaces: WorkspaceList; openChat: ((id: string) => void) | null }) {
+function CalendarBody({ client, theme, compact, workspaces, chats, openChat }: { client: PluginClientContext; theme: PluginTheme; compact: boolean; workspaces: WorkspaceList; chats?: Chats; openChat: ((id: string) => void) | null }) {
   const t = useTokens(theme, compact);
   const [width, setWidth] = useState(0);
   const [choice, setChoice] = useState<"day" | "week" | null>(null), [date, setDate] = useState(() => new Date());
@@ -30,7 +31,11 @@ function CalendarBody({ client, theme, compact, workspaces, openChat }: { client
   }, [client, from, to, refresh]);
   useEffect(() => setSelectedId(null), [provider, workspace, project]);
   const currentData = snapshot.from === from && snapshot.to === to ? data : null;
-  const intervals = (currentData?.intervals ?? []).filter((value) => (!provider || value.provider === provider) && (!workspace || value.workspaceId === workspace) && (!project || workspaces.get(value.workspaceId ?? "")?.project === project));
+  const intervals = (currentData?.intervals ?? []).filter((value) => (!provider || value.provider === provider) && (!workspace || value.workspaceId === workspace) && (!project || workspaces.get(value.workspaceId ?? "")?.project === project)).map((value) => {
+    const chat = chats?.get(value.agentId);
+    const name = chat?.workspaceId === value.workspaceId && chat.title !== value.provider ? chat.title : null;
+    return { ...value, title: calendarTitle(value, name, workspaces.get(value.workspaceId ?? "")?.name) };
+  });
   const grid = calendarLayout(intervals, from, to, snapshot.at, fullDay);
   const totals = calendarTotals(intervals, from, to, snapshot.at);
   const selected = currentData ? intervals.find((value) => value.id === selectedId) : null;

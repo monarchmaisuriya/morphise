@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.57.1 - 2026-11-24
+
+- **Restore sidebar second-line context:** return to v0.55.0's latest-chat context, configured metadata and branch/project fallback, with pull-request badges on the title row. Current tabs, Calendar grid, indicator positioning and timestamp fixes remain.
+- **Resolve Calendar placeholder titles:** existing Untitled agent entries use the matching current chat name, then workspace name, then a provider session label. A title available at turn completion fills a stored placeholder without changing runtime. Meaningful recorded titles and actual chat titles remain unchanged.
+
 ## 0.57.0 - 2026-11-24
 
 - **Calendar time grid:** Day/Week views position observed work by time, with side-by-side overlapping events, selectable details, project/workspace/provider context and Open chat. Compact navigation, collapsible filters/coverage, human-readable durations, narrow-screen Day defaults and Show all hours replace oversized agenda cards. Local day boundaries support daylight-saving changes; uncertain markers remain selectable without entering runtime totals.

@@ -72,10 +72,10 @@ export class WorkStore {
       state.intervals.push({ id: randomUUID(), agentId: actor.id, workspaceId: actor.workspaceId, provider: actor.provider, title: actor.title ?? "Untitled agent", turnId, startAt: at, endAt: null, outcome: "running", uncertain: turnId === null });
     }, true).catch((error) => { this.recordingError = error instanceof Error ? error.message : String(error); throw error; });
   }
-  end(agentId: string, turnId: string | null, outcome: "completed" | "failed" | "canceled" | "interrupted") {
+  end(agentId: string, turnId: string | null, outcome: "completed" | "failed" | "canceled" | "interrupted", title?: string | null) {
     return this.run((state) => {
       const value = state.intervals.find((entry) => entry.agentId === agentId && entry.endAt === null && entry.turnId === turnId);
-      if (value) { value.endAt = Math.max(value.startAt, this.now()); value.outcome = outcome; if (outcome === "interrupted") value.uncertain = true; }
+      if (value) { value.endAt = Math.max(value.startAt, this.now()); value.outcome = outcome; if (title?.trim() && (!value.title.trim() || value.title === "Untitled agent")) value.title = title.trim(); if (outcome === "interrupted") value.uncertain = true; }
     }, true).catch((error) => { this.recordingError = error instanceof Error ? error.message : String(error); throw error; });
   }
   close(agentId: string) {

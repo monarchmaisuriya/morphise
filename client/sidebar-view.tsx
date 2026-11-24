@@ -54,7 +54,7 @@ import { branchSegments, parentStem } from "../shared/tree-lines";
 import { INDICATORS, type Indicator, type Profile } from "../shared/profile";
 import { stepsOptions } from "../shared/steps";
 import { type AttentionList, waitingChildren } from "./attention";
-import { type ChatListing, chatTree, DEFAULT_CHAT_ROWS, DEFAULT_REMINDER_ROWS, effectiveIndicator, listedSubAgents, listedTopChats, listsChats, MARK_KEY, markApplies, owningRowKey, type RowShows, rowShows, rowTitle } from "../shared/row-meta";
+import { type ChatListing, chatTree, DEFAULT_CHAT_ROWS, DEFAULT_REMINDER_ROWS, effectiveIndicator, listedChatKeys, listedSubAgents, listedTopChats, listsChats, MARK_KEY, markApplies, owningRowKey, type RowShows, rowShows, rowTitle, statusLine } from "../shared/row-meta";
 import { newTaskId } from "./board/card-editor";
 import { isDue, type Reminder } from "../shared/reminders";
 import { formatDue, formatElapsed } from "../shared/time-text";
@@ -862,6 +862,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   const tree = chatTree(agents, parentsOf(byParent));
   const matchingKeys = new Set(matching.map((agent) => agent.key));
   const chats = shared.statuses.length ? tree.top.filter((chat) => matchingKeys.has(chat.key)) : tree.top;
+  const latestChat = useAgent(tree.top[0] ?? "", (agent) => chatName(agent)) ?? null;
   const observed = shared.attentionOf(reference.hostId);
   const reason = workspace?.indicator === "needs_input" ? [...observed.values()].find((item) => item.workspaceId === reference.id && item.reason === "permission")?.permission?.title ?? null
     : workspace?.indicator === "failed" ? [...observed.values()].find((item) => item.workspaceId === reference.id && item.reason === "failed")?.error ?? null : null;
@@ -883,6 +884,8 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   const markedDone = applies && mark.kind === "done" && workspace.indicator !== "done";
   const markedUnread = applies && mark.kind === "unread" && workspace.indicator !== "attention";
   const chatsShown = config.showAgents && ((config.agentsFor ?? "active") === "all" || isOpen) && listsChats(config.singleChat, chats, config.showSubAgents === false ? new Map() : tree.children, shared.listing);
+  const listedKeys = chatsShown ? listedChatKeys(reference.key, { top: chats, children: config.showSubAgents === false ? new Map() : tree.children }, shared.listing) : null;
+  const latestListed = !!listedKeys && !!tree.top[0] && listedKeys.has(tree.top[0].key);
   // Exactly one row is highlighted: the open chat or sub-agent when it is listed here, else the
   // workspace. `openChat` is the listed chat that holds it, and stays listed past the limit.
   const openChat = chatsShown ? owningRowKey({ top: chats, children: tree.children }, props.active.agent?.key ?? null, config.showSubAgents !== false) : null;
@@ -967,7 +970,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   const changes = workspace.diff && workspace.diff.additions + workspace.diff.deletions > 0 ? workspace.diff : null;
   const twoLine = config.rowStyle !== "one-line";
   const meaning = semanticLine(indicator, reason, checkpoint?.fields ?? null);
-  const line = twoLine ? meaning : null;
+  const line = twoLine ? statusLine(indicator, latestChat, workspace.title, latestListed) : null;
 
   // Second-line details, in Paseo's Display order. A row inside its project group never repeats
   // the project's name; the host shows only when there is more than one.
@@ -985,10 +988,13 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   if (shows.services && info?.services.length) details.push(<ServicesMeta key="services" services={info.services} shared={shared} />);
   if (shows.labels && workspace.labels.length) details.push(<LabelsMeta key="labels" labels={workspace.labels} shared={shared} />);
   if (reminder) details.push(<Meta key="reminder" icon="AlarmClock" color={isDue(reminder, now) ? c.statusWarning : undefined} text={formatDue(reminder, now)} shared={shared} />);
+  const fallback = twoLine && !line && details.length === 0 ? (workspace.branch && config.titleSource !== "branch" ? workspace.branch : !underOwnProject(config, workspace.pinned) ? workspace.project : null) : null;
   const lead = line ? (
     <Text key="status" style={[styles.meta, line.tone === "warning" ? { color: c.statusWarning } : line.tone === "danger" ? { color: c.statusDanger } : null]} numberOfLines={1}>
       {line.text}
     </Text>
+  ) : fallback ? (
+    <Meta key="fallback" icon={workspace.branch && config.titleSource !== "branch" ? "GitBranch" : "Folder"} color={workspace.branch && config.titleSource !== "branch" ? branchColor : undefined} text={fallback} shared={shared} />
   ) : null;
   // Pinned rows in their own Pinned section need no icon; elsewhere the icon shows it.
   const pinIcon = workspace.pinned && !(config.pinnedFirst && config.groupBy !== "none") ? <Icon name="Pin" size={11} color={c.foregroundMuted} /> : null;
@@ -1010,16 +1016,16 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
       <View style={styles.lines}>
         <View style={styles.line}>
           {titleText}
+          {pr ? <PullRequestBadge pr={pr} checks={shows.checks} shared={shared} /> : null}
           {indicator === "attention" ? <Text accessibilityLabel="New unread result" style={{ color: c.accent, fontSize: 11, fontWeight: "600", flexShrink: 0 }}>New</Text> : null}
           {pinIcon}
         </View>
-        {lead || pr ? (
+        {lead || details.length ? (
           <View style={styles.subLine}>
-            <View style={{ flex: 1, minWidth: 0 }}>{lead}</View>
-            {pr ? <PullRequestBadge pr={pr} checks={shows.checks} shared={shared} /> : null}
+            {lead}
+            {details}
           </View>
         ) : null}
-        {details.length ? <View style={styles.subLine}>{details.slice(0, 2)}</View> : null}
       </View>
     </>
   ) : (
