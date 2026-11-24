@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.53.0 - 2026-11-24
+
+- **Configurable sidebar status indicators:** Plugins → Morphise → Settings → Look now offers Dot and ring (default) or Paseo default. Starting, Working, Needs input, Failed, Attention/unread and Idle/done each have color and rotation-speed choices, a preview and scoped reset. Rotation only, no provider logos or pulsing. Reduced motion stops plugin rotation. Choices are saved per profile, independent of Restyle Paseo, on desktop/web. Original host indicators remain intact for restoration; hidden host-owned animation clocks may continue. No agent state or sidebar ordering changes.
+
 ## 0.52.0 - 2026-11-23
 
 - **Leaner helpers:** the Claude title helper starts without the user's CLAUDE.md and MCP servers, in `plugin-data/morphise/workers` so Memorise and Computerise leave it bare too; it writes one line from its prompt. Other plugins' helper workers (`plugin-data/<plugin>/workers`) no longer get the HTML page tools and their rules; Quick Chats keep them.
