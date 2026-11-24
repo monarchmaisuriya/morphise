@@ -34,8 +34,5 @@ export function sidebarTime(indicator: Indicator, enteredAt: string | null, acti
   const source = genuineState ? enteredAt : candidates.find(valid) ?? null;
   if (!source) return null;
   const elapsed = formatElapsed(source, now);
-  if (stateTime && !genuineState) return elapsed;
-  if (!stateTime) return elapsed === "now" ? "Active now" : `Active ${elapsed} ago`;
-  const label = indicator === "needs_input" ? "Waiting" : indicator === "running" ? "Working" : indicator === "attention" ? "Unread" : indicator === "failed" ? "Failed" : "Idle";
-  return `${label} ${elapsed === "now" ? "<1m" : elapsed}`;
+  return elapsed;
 }

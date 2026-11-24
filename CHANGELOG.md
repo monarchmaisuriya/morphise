@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.58.0 - 2026-11-24
+
+- **Latest-message sidebar previews:** workspace second lines show the newest user or assistant message from the most recently active top-level chat, not its title. A bounded recent tail and live timeline updates keep previews current; tools/reasoning are excluded. Host-specific routing, readiness, sequence ordering and disposal prevent wrong-host or stale updates. Loading, unavailable and no-recent-message states are explicit. Previews are memory-only and do not rewrite titles.
+- **Compact timestamps:** show only elapsed time, such as 34m, 7h or 2d, without Idle/Active/Working prefixes. Existing valid-source selection and fallback remain.
+
 ## 0.57.1 - 2026-11-24
 
 - **Restore sidebar second-line context:** return to v0.55.0's latest-chat context, configured metadata and branch/project fallback, with pull-request badges on the title row. Current tabs, Calendar grid, indicator positioning and timestamp fixes remain.
