@@ -81,3 +81,35 @@ Morphise’s main sidebar marks are 14px at full opacity; nested chat and subage
 #### Indicator size and alignment
 
 The same Look section includes **Main indicator size** (10–24px, default 14px) and **Indicator vertical alignment** (Top, Center or Bottom; default Center). Alignment uses the full row content, including two-line rows. Nested chats and subagents always derive exactly 80% of the main size and 80% of main opacity; there are no independent nested controls. At the default, nested size is 11.2px. Layout reset restores 14px/Center without changing colors or speeds. The full sidebar-indicator reset restores layout and state appearance together. Layout is saved separately so older readers preserve it without invalidating existing color/speed settings. Paseo default leaves native host appearance unchanged.
+
+### Workspace checkpoints
+
+Open a workspace's **Checkpoint** panel for Goal, Last verified result, Blocked by and Next step. Save is explicit. The card shows its revision, author and timestamp; a conflicting save is rejected without discarding your draft. Reload latest explicitly replaces that draft. This is a user/agent-authored status record, not proof that work was completed and not an automatic summary. Each field is limited to 2,000 characters.
+
+Interactive top-level agents receive a `workspace_checkpoint` tool when their provider session opens. It reads or updates only that agent's verified own workspace; updates require the revision returned by a read. Subagents and background helpers cannot write shared checkpoint cards. Existing sessions may need to reopen to receive the tool. Other workspace Notes and titles are untouched.
+
+### Agent work calendar
+
+**Workbench → Calendar** offers Day/Week, date navigation, provider/workspace/project filtering and links back to chats. Times display in the viewing device's timezone. It records turn-start/end observations from when this plugin version begins observing; there is **no historical backfill** and no claim that an observation covers periods when the plugin was not running. Refresh updates the snapshot; running duration is as of that refresh.
+
+Summed agent time includes each parallel agent separately; elapsed coverage merges overlapping intervals. Neither is human labor time or a bill. Null-ID, interrupted, overlapping/restarted observations are labelled uncertain and excluded from totals. A plugin restart cannot credit downtime: unfinished intervals become uncertain at their last recorded observation. Hidden background helpers are excluded when the host reports them; older hosts may not expose every helper flag. Terminal history older than 90 days is hidden and pruned on the next recorded event; storage caps at 20,000 intervals, preserving active records. The view discloses recording start and pruning. Agent-turn wall time can include waits for tools or user input; it is not pure CPU/model time.
+
+Checkpoints and intervals live on the daemon in `$PASEO_HOME/plugin-data/morphise/work/records.json` (default `~/.paseo`). The store validates records, serializes one plugin process's operations, writes an atomic replacement and publishes memory only after persistence succeeds. Corrupt storage reports an error rather than overwriting it. It is not a secret store, encrypted vault or multiprocess database; only checkpoint text and visible short agent titles/IDs/timestamps are retained, not transcripts or credentials.
+
+### Quota-aware Dispatch
+
+Every Dispatch start/retry/keyboard launch checks the host's provider-reported quota, with a five-second timeout. Fresh, exact-provider percentage windows at **80% used or higher** show a warning and require **Continue anyway**. A reported 100% is labelled exhausted. The confirmation covers the exact model, source/project parameters and prompt batch, expires after at most a minute and is invalidated by changes. Cancel or leaving Dispatch during preflight starts nothing.
+
+Quota is advisory provider-level data, not a guarantee of the account a future session will use or enough capacity for a task. Undated, over-five-minute-old, malformed, unsupported or failed reports show Unavailable and do not block your explicit launch. There is no credential-file read, new provider login, task-cost forecast, automatic account/model substitution or batch resizing. Provider usage lookups use Paseo's existing authenticated host API.
+
+### Workflow clarity and safe editing
+
+Checkpoint drafts are kept by workspace while navigating within the same plugin client session, together with the baseline revision. Save is explicit; status shows Unsaved/Saving/Saved. Dirty Reload and save conflicts show Your draft alongside Latest saved. **Keep my draft** explicitly rebases for the next save; **Use latest and discard draft** explicitly replaces it. An older in-flight save cannot clear a newer navigation draft. Reloading/quitting the plugin client ends session-only protection: save to persist on the host. Draft text is not copied into browser storage.
+
+Calendar groups intervals by local day and splits cross-midnight durations at each boundary. Last refreshed identifies the snapshot time; counts do not advance merely because a filter redraws. Old-range data is hidden while fetching. Empty states distinguish filters with no matches, a range before recording began, no recorded work and errors. Coverage details disclose recording start, pruning and uncertain intervals; a local-day section is not evidence that observation was continuous.
+
+Dispatch shows a selection-time provider quota summary before Start and still performs mandatory preflight at launch. Checking/unavailable remain explicit. High-usage confirmations show the exact immutable model, project/source, destination, mode and selected prompts. Changing choices removes the stale confirmation. The newest preflight replaces older preview data; no model/account change is automatic.
+
+Plugin Settings includes **Search settings** and a topic search/scope summary above existing pages. This searches a curated page/topic directory, not arbitrary current control text, saved values or secrets. Results open the existing settings page and preserve the layout/draft being edited. Mixed-scope pages say so; individual controls retain their existing device/host/profile semantics. Quick Chat includes the same directory.
+
+Morphise sidebar status marks expose one consistent state/reason/time explanation on hover and in accessible labels. Workspace time uses host statusEnteredAt unless a manual mark is in effect. Agent snapshots without a genuine state-entry timestamp say Time in state unavailable; last activity is not substituted. Generic reasons explain the state when no concrete error/permission detail is available. Native host indicators are not relabeled by this feature; touch clients retain the accessibility text rather than a hover interaction.

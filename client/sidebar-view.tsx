@@ -307,8 +307,8 @@ export function RowShell({ selected, checked, child, grandchild, twoLine, label,
 // The height of the line the status mark sits on (a two-line row's title line).
 const STATUS_LINE = 20;
 // One visual owner for main rows and their smaller, less opaque nested rows.
-export function StatusMark({ indicator, branch = false, shared }: { indicator: Indicator; branch?: boolean; shared: Shared }) {
-  return <SidebarStatusMark indicator={indicator} nested={branch} colors={shared.props.theme.colors} />;
+export function StatusMark({ indicator, branch = false, shared, reason, enteredAt }: { indicator: Indicator; branch?: boolean; shared: Shared; reason?: string | null; enteredAt?: string | null }) {
+  return <SidebarStatusMark indicator={indicator} nested={branch} colors={shared.props.theme.colors} now={+shared.now} reason={reason} enteredAt={enteredAt} />;
 }
 
 // Pulsing placeholder rows until the first workspace list arrives.
@@ -398,7 +398,7 @@ function AgentRow({ reference, sub, subs = [], shared }: { reference: AgentRef; 
         showActions={linksTasks(shared, reference.hostId) && shared.chatReminders.has(reference.id)}
         main={
           <>
-            <StatusMark indicator={indicator} branch shared={shared} />
+            <StatusMark indicator={indicator} branch shared={shared} reason={attention.get(reference.id)?.error || attention.get(reference.id)?.permission?.title} />
             <Text style={styles.childLabel} numberOfLines={1}>
               {chat.name}
             </Text>
@@ -988,7 +988,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
       <Icon name={picked ? "SquareCheck" : "Square"} size={14} color={picked ? c.accent : c.foregroundMuted} />
     </View>
   ) : (
-    <StatusMark indicator={indicator} shared={shared} />
+    <StatusMark indicator={indicator} shared={shared} reason={applies ? "User-marked workspace state" : info?.status ?? undefined} enteredAt={applies ? null : workspace.since} />
   );
   const main = twoLine ? (
     <>
@@ -1179,7 +1179,7 @@ function ChatRow({ reference, shared }: { reference: AgentRef; shared: Shared })
         showActions={linksTasks(shared, reference.hostId) && shared.chatReminders.has(reference.id)}
         main={
           <>
-            <StatusMark indicator={indicator} shared={shared} />
+            <StatusMark indicator={indicator} shared={shared} reason={attention.get(reference.id)?.error || attention.get(reference.id)?.permission?.title} />
             <Text style={styles.label} numberOfLines={1}>
               {chat.name}
             </Text>

@@ -19,6 +19,7 @@ import { registerProjectActions } from "./server/project-actions";
 import { registerStats } from "./server/stats/register";
 import { registerActivity } from "./server/activity/register";
 import { registerQuickChat } from "./server/quick-chat/register";
+import { registerWork } from "./server/work.register";
 import { remindersKeeper } from "./shared/reminder-contracts";
 import { showChannel, showResult, showSettings, showUsed } from "./shared/show";
 import { bookmarkSettings } from "./shared/bookmarks";
@@ -28,6 +29,7 @@ import { bookmarksWatch, profileWatch, tasksWatch } from "./shared/watch";
 
 export default function contribute(server: PluginServerContext) {
   const stopQuickChat = registerQuickChat(server);
+  const stopWork = registerWork(server);
   const profile = server.registerSettings(profileSettings);
   server.handle(profileWatch, watchSettings(profile));
   const tasks = server.registerSettings(taskSettings);
@@ -91,6 +93,7 @@ export default function contribute(server: PluginServerContext) {
   const stopShowTool = server.addHook("agent.open.before", createShowHook({ enabled: showOn, tool: createShowTool({ windows, enabled: showOn, log: console.log }) }));
   return () => {
     stopQuickChat();
+    stopWork();
     stopStats();
     stopShowTool();
     windows.stop();

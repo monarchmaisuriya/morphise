@@ -7,6 +7,7 @@ import { dueCount, dueOrDueTodayCount } from "../shared/board";
 import { agentsBoardSettings } from "../shared/agents-board";
 import { activitySettings } from "../shared/activity";
 import { ActivityView } from "./activity/view";
+import { WorkCalendar } from "./work-calendar";
 import { inboxSettings } from "../shared/inbox";
 import { AgentsBoardView } from "./agents-board/board";
 import { TasksBoard } from "./board/board";
@@ -32,8 +33,8 @@ export const WORKBENCH_SCREEN_ID = "workbench";
 export const LEGACY_SCREENS = { tasks: "board", inbox: "waiting" } as const;
 
 // "board" is the Tasks view: its id from before 0.20, so links to it keep working.
-export type WorkbenchView = "agents" | "board" | "bookmarks" | "activity";
-const VIEWS: readonly WorkbenchView[] = ["agents", "board", "bookmarks", "activity"];
+export type WorkbenchView = "agents" | "board" | "bookmarks" | "activity" | "calendar";
+const VIEWS: readonly WorkbenchView[] = ["agents", "board", "bookmarks", "activity", "calendar"];
 // What Tasks shows when it opens: its columns, or the Today or Archived list (views of their own before 0.20.2).
 type TasksStart = "board" | "today" | "archived";
 // Below this width the views sit in a row of tabs instead of a list.
@@ -85,6 +86,7 @@ function useWorkbenchCounts(deps: SurfaceDeps) {
 // One list, without group headings, in this order.
 const ENTRIES: readonly { view: WorkbenchView; label: string; icon: string }[] = [
   { view: "activity", label: "Activity", icon: "Activity" },
+  { view: "calendar", label: "Calendar", icon: "CalendarDays" },
   { view: "agents", label: "Agents", icon: "Bot" },
   { view: "board", label: "Tasks", icon: "SquareKanban" },
   { view: "bookmarks", label: "Bookmarks", icon: "Bookmark" },
@@ -191,7 +193,7 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
     const [lastBoard, saveLastBoard] = useDeviceChoice(railSettings, "boardTab");
     // Picked in Settings, General.
     const [agentsLayout, setAgentsLayout, , agentsLayoutError] = useDeviceChoice(railSettings, "agentsLayout");
-    const lastOpened: WorkbenchView = lastBoard === "bookmarks" ? "bookmarks" : lastBoard === "activity" && activityShown ? "activity" : lastBoard === "agents" && agentsShown ? "agents" : "board";
+    const lastOpened: WorkbenchView = lastBoard === "calendar" ? "calendar" : lastBoard === "bookmarks" ? "bookmarks" : lastBoard === "activity" && activityShown ? "activity" : lastBoard === "agents" && agentsShown ? "agents" : "board";
     const countsReady = counts.waiting !== null && counts.tasksLoaded && railSettings.status !== "loading" && boardSettings.status !== "loading";
     const opening = useRef<WorkbenchView | null>(null);
     const [openOn] = useDeviceChoice(railSettings, "openOn");
@@ -228,7 +230,9 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
     const tasksStart: TasksStart = tasksStartChosen ?? (asked ? startOf(askedName(params)) : openedForDue.current && dueOpensOn === "today" ? "today" : "board");
 
     const content =
-      view === "bookmarks" ? (
+      view === "calendar" ? (
+        <WorkCalendar client={deps.client} theme={theme} compact={layout.compact} workspaces={workspaces} openChat={openChat} />
+      ) : view === "bookmarks" ? (
         <Bookmarks t={t} deps={deps} workspaces={workspaces} open={openChat} />
       ) : view === "activity" ? (
         <ActivityView client={deps.client} theme={theme} compact={layout.compact} workspaces={deps.workspaces} />
