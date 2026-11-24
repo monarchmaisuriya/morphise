@@ -33,6 +33,7 @@ import { presetTitle } from "../../shared/reminders";
 import { useValue } from "../profile-store";
 import { viewPresence } from "../view-presence";
 import { viewStateSettings } from "../../shared/view-state";
+import { SidebarFocusSettings } from "./sidebar-focus";
 import { ActionFields, ChipRow, type Form, ICON_HINT, ListEditor, multiline, NumberField, SelectField, StoredSettingStatus, SwitchField, TextField } from "./fields";
 import { parseMetadataText, uniqueId } from "./form-values";
 import { contrast, PRESETS as POLISH_PRESETS } from "../../shared/polish/theme";
@@ -262,7 +263,7 @@ function viewFields(form: Form): { [Key in keyof ViewConfig]-?: ReactNode } {
       <SwitchField label="Pin button on rows" value={view.rowActions.includes("pin")} onChange={(value) => set("rowActions", value ? ["pin"] : [])} />
     ),
     filterBar: (
-      <SwitchField label="Search, status chips and Next button" value={view.filterBar} onChange={(value) => set("filterBar", value)} />
+      <SwitchField label="Search, filters and Next button" value={view.filterBar} onChange={(value) => set("filterBar", value)} />
     ),
     showAgents: <SwitchField label="Show chats under workspaces" value={view.showAgents} onChange={(value) => set("showAgents", value)} />,
     agentsFor: view.showAgents ? (
@@ -1133,6 +1134,7 @@ export function SidebarTab(form: Form): ReactNode {
         <SettingsCard>{VIEW_SECTIONS.rows.map((key) => view[key])}</SettingsCard>
       </SettingsSection>
       <SidebarLookSetting />
+      <SidebarFocusSettings />
       <GroupOrderSetting />
       <SettingsSection title="Chats" info="Chats listed under their workspace, and sub-agents under their chat. Turn chats off to list workspaces only.">
         <SettingsCard>{VIEW_SECTIONS.chats.map((key) => view[key])}</SettingsCard>

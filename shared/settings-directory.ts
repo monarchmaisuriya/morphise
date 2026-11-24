@@ -1,7 +1,7 @@
 export const SETTINGS_DIRECTORY = [
   { id: "layouts", title: "Layouts", scope: "Host: named profiles shared by connected apps", topics: "profile presets switch layouts" },
   { id: "general", title: "General", scope: "Mixed: profile features, host services and this-device Workbench choices", topics: "workbench activity tasks updates startup" },
-  { id: "sidebar", title: "Sidebar", scope: "Mixed: profile layout; row appearance and filters on this device", topics: "sidebar groups sort filter nesting status rows branch lines" },
+  { id: "sidebar", title: "Sidebar", scope: "Mixed: profile layout; row appearance, focus tabs and filters on this device", topics: "sidebar groups sort filter nesting status rows branch lines tabs all active asking unread" },
   { id: "agents", title: "Agents", scope: "Host configuration with this-device list/display choices", topics: "agents board cards fields conversation search" },
   { id: "chat", title: "Chat", scope: "Mixed: profile chat presentation and host stats/tools", topics: "steps notes stats folding tools" },
   { id: "messages", title: "Messages", scope: "Profile: shared with apps using this profile", topics: "selection quotes commands run output pictures tables" },

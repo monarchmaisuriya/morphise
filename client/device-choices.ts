@@ -44,7 +44,7 @@ export function useDeviceValue<Schema extends ZodType, Key extends keyof z.outpu
   const tried = useRef<unknown>(undefined);
   useEffect(() => {
     if (chosen === null || stored.status !== "ready" || stored.saving) return;
-    if (stored.values[key] === chosen.value) {
+    if (JSON.stringify(stored.values[key]) === JSON.stringify(chosen.value)) {
       setFailed(null);
       return choose(null);
     }

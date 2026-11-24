@@ -13,6 +13,7 @@ import {
   usePaseo,
   useProject,
   useProjects,
+  useRpc,
   useSettings,
   useTerminals,
   useWorkspace,
@@ -47,13 +48,13 @@ import { DecorIcon, DecorPicker } from "./decor-picker";
 import { openChat } from "./stats/session-stats";
 import type { RemoveProjectResult } from "../shared/project-actions";
 import { type DragApi, DragGhost, useBoardDrag, useCardDragHandlers } from "./board/drag";
-import { attentionOrder, NEEDS_ME, needsAttention, needsMeOn, nextAttention } from "../shared/attention";
+import { attentionOrder, needsAttention, nextAttention } from "../shared/attention";
 import { chatGroupKey, chatIndicator, chatMatches, chatName, compareChats, isSidebarChat } from "../shared/chat-status";
 import { branchSegments, parentStem } from "../shared/tree-lines";
 import { INDICATORS, type Indicator, type Profile } from "../shared/profile";
 import { stepsOptions } from "../shared/steps";
 import { type AttentionList, waitingChildren } from "./attention";
-import { type ChatListing, chatTree, DEFAULT_CHAT_ROWS, DEFAULT_REMINDER_ROWS, effectiveIndicator, listedChatKeys, listedSubAgents, listedTopChats, listsChats, MARK_KEY, markApplies, owningRowKey, type RowShows, rowShows, rowTitle, statusLine } from "../shared/row-meta";
+import { type ChatListing, chatTree, DEFAULT_CHAT_ROWS, DEFAULT_REMINDER_ROWS, effectiveIndicator, listedSubAgents, listedTopChats, listsChats, MARK_KEY, markApplies, owningRowKey, type RowShows, rowShows, rowTitle } from "../shared/row-meta";
 import { newTaskId } from "./board/card-editor";
 import { isDue, type Reminder } from "../shared/reminders";
 import { formatDue, formatElapsed } from "../shared/time-text";
@@ -77,6 +78,9 @@ import { viewPresence } from "./view-presence";
 import { createHoverTracker, type HoverTracker, useHovered } from "./hover-tracker";
 import { afterPointerMoves, cannotHover, useFocusWithin } from "./web";
 import { fontSize, radius } from "../shared/design/tokens";
+import { focusStatuses, sidebarSummary, semanticLine, sidebarTime, type FocusTab } from "../shared/sidebar-focus";
+import { checkpointRead, type Checkpoint } from "../shared/work-checkpoints";
+import { SidebarFocusTabs } from "./sidebar-focus";
 
 type ViewConfig = Profile["sidebar"]["view"];
 type Theme = PluginSidebarViewProps["theme"];
@@ -191,9 +195,10 @@ interface Shared {
   t: Tokens;
   config: ViewConfig;
   now: Date;
+  projectSummaries?: ReadonlyMap<string, ReturnType<typeof sidebarSummary>>;
   // The soonest reminder on any chat of each workspace.
   workspaceReminders: ReadonlyMap<string, Reminder>;
-  // The status chips also filter chats listed under a workspace.
+  // Focus-tab states also filter chats listed under a workspace.
   statuses: readonly Indicator[];
   // Each chat's own reminder (on its follow-up task), for the alarm button on chat rows.
   chatReminders: ReadonlyMap<string, Reminder>;
@@ -384,7 +389,7 @@ function AgentRow({ reference, sub, subs = [], shared }: { reference: AgentRef; 
   const waiting = waitingChildren(attention, reference.id);
   if (!chat) return null;
   const indicator = withPermission(chat.indicator, attention, reference.id);
-  const elapsed = shared.shows.lastActivity ? formatElapsed(chat.last, now) : null;
+  const elapsed = shared.shows.lastActivity ? sidebarTime(indicator, null, chat.last, now, false) : null;
   return (
     <View>
       <RowShell
@@ -399,9 +404,10 @@ function AgentRow({ reference, sub, subs = [], shared }: { reference: AgentRef; 
         main={
           <>
             <StatusMark indicator={indicator} branch shared={shared} reason={attention.get(reference.id)?.error || attention.get(reference.id)?.permission?.title} />
-            <Text style={styles.childLabel} numberOfLines={1}>
+            <Text style={[styles.childLabel, indicator === "attention" ? { fontWeight: "600", color: props.theme.colors.foreground } : null]} numberOfLines={1}>
               {chat.name}
             </Text>
+            {indicator === "attention" ? <Text style={{ color: props.theme.colors.accent, fontSize: 11, flexShrink: 0 }}>New</Text> : null}
             {waiting && !sub ? (
               <Text accessibilityLabel={`${waiting} sub-agents waiting on you`} style={[styles.meta, { color: props.theme.colors.statusWarning }]}>
                 {waiting} waiting
@@ -766,7 +772,7 @@ function WorkspaceCard({ title, workspace, info, host, shared }: { title: string
   const ahead = info ? `${info.ahead ? ` ↑${info.ahead}` : ""}${info.behind ? ` ↓${info.behind}` : ""}` : "";
   return (
     <View style={{ padding: 6, gap: 6 }}>
-      <Text style={{ color: c.foreground, fontSize: fontSize.base, fontWeight: "600" }} numberOfLines={2}>
+      <Text selectable style={{ color: c.foreground, fontSize: fontSize.base, fontWeight: "600" }}>
         {title}
       </Text>
       {workspace.diff && workspace.diff.additions + workspace.diff.deletions > 0 ? (
@@ -777,7 +783,7 @@ function WorkspaceCard({ title, workspace, info, host, shared }: { title: string
       ) : null}
       {host ? <Meta icon="Server" text={host} shared={shared} /> : null}
       {workspace.branch ? <Meta icon="GitBranch" text={`${workspace.branch}${info?.dirty ? " ·" : ""}${ahead}`} shared={shared} /> : null}
-      <Meta icon="Folder" text={lastSegment(workspace.directory)} shared={shared} />
+      <Text selectable style={shared.styles.meta}>{workspace.directory}</Text>
       {pr ? <Meta icon={PR_ICON[pr.state]} color={pullRequestColor(c, pr)} text={`${pr.number ? `#${pr.number} ` : ""}${pr.title || pr.state}${pr.checks !== "none" ? ` · ${CHECKS_TEXT[pr.checks]}` : ""}`} shared={shared} /> : null}
       {info?.services.map((service) => (
         <View key={service.name} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
@@ -799,6 +805,11 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   const paseo = usePaseo();
   const toast = useToast();
   const rowRef = useRef<View>(null);
+  const readCheckpoint = useRpc(checkpointRead);
+  const [checkpoint, setCheckpoint] = useState<Checkpoint | null>(null);
+  const [checkpointError, setCheckpointError] = useState<string | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [checkpointRefresh, refreshCheckpoint] = useState(0);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [confirmArchive, setConfirmArchive] = useState(false);
   const [menu, setMenu] = useState<"actions" | "labels" | "colour" | null>(null);
@@ -830,8 +841,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
     projectKey: item.project.key,
     diff: item.diffStat,
     since: item.statusEnteredAt,
-    // A workspace never prompted shows the time it was created, as Paseo's list does.
-    lastPrompt: item.lastPromptAt ?? item.createdAt,
+    lastPrompt: item.lastPromptAt,
     pinned: item.pinnedAt !== null,
     labels: item.labels,
     directory: item.directory,
@@ -846,12 +856,21 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   const inWorkspace = (agent: PluginAgentSnapshot) => agent.workspace.key === reference.key;
   const agents = useAgents({ hosts: [reference.hostId], where: inWorkspace, orderBy: ["lastActivityAt", "desc"] });
   const byParent = useAgents({ hosts: [reference.hostId], where: inWorkspace, groupBy: (agent) => agent.parentAgentId ?? TOP_LEVEL });
-  const matching = useAgents({ hosts: [reference.hostId], where: (agent) => inWorkspace(agent) && chatMatches(agent, { statuses: shared.statuses, search: "" }) });
+  const matching = useAgents({ hosts: [reference.hostId], where: (agent) => inWorkspace(agent) && chatMatches(permissionSnapshot(agent, shared.attentionOf), { statuses: shared.statuses, search: "" }) });
   const running = useAgents({ hosts: [reference.hostId], where: (agent) => inWorkspace(agent) && chatIndicator(agent) === "running" });
   const tree = chatTree(agents, parentsOf(byParent));
   const matchingKeys = new Set(matching.map((agent) => agent.key));
   const chats = shared.statuses.length ? tree.top.filter((chat) => matchingKeys.has(chat.key)) : tree.top;
-  const latestChat = useAgent(tree.top[0] ?? "", (agent) => chatName(agent)) ?? null;
+  const observed = shared.attentionOf(reference.hostId);
+  const reason = workspace?.indicator === "needs_input" ? [...observed.values()].find((item) => item.workspaceId === reference.id && item.reason === "permission")?.permission?.title ?? null
+    : workspace?.indicator === "failed" ? [...observed.values()].find((item) => item.workspaceId === reference.id && item.reason === "failed")?.error ?? null : null;
+  useEffect(() => {
+    let alive = true;
+    setCheckpoint(null); setCheckpointError(null);
+    if (reference.hostId !== shared.taskHost) return;
+    void readCheckpoint({ workspaceId: reference.id }).then((value) => { if (alive) setCheckpoint(value); }, (error) => { if (alive) setCheckpointError(String(error)); });
+    return () => { alive = false; };
+  }, [reference.hostId, reference.id, shared.taskHost, workspace?.since, checkpointRefresh, readCheckpoint]);
   const isOpen = props.active.workspace?.key === reference.key;
   const mark = info?.mark ?? null;
   if (!workspace) return null;
@@ -863,9 +882,6 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   const markedDone = applies && mark.kind === "done" && workspace.indicator !== "done";
   const markedUnread = applies && mark.kind === "unread" && workspace.indicator !== "attention";
   const chatsShown = config.showAgents && ((config.agentsFor ?? "active") === "all" || isOpen) && listsChats(config.singleChat, chats, config.showSubAgents === false ? new Map() : tree.children, shared.listing);
-  // The chats listed under this row; the second line leaves out the latest chat's title only when that chat is among them.
-  const listedKeys = chatsShown ? listedChatKeys(reference.key, { top: chats, children: config.showSubAgents === false ? new Map() : tree.children }, shared.listing) : null;
-  const latestListed = !!listedKeys && !!tree.top[0] && listedKeys.has(tree.top[0].key);
   // Exactly one row is highlighted: the open chat or sub-agent when it is listed here, else the
   // workspace. `openChat` is the listed chat that holds it, and stays listed past the limit.
   const openChat = chatsShown ? owningRowKey({ top: chats, children: tree.children }, props.active.agent?.key ?? null, config.showSubAgents !== false) : null;
@@ -938,8 +954,8 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
         <Field t={t} plain autoFocus value={renaming} onChangeText={setRenaming} onSubmit={rename} onBlur={rename} accessibilityLabel={`New name for ${workspace.name}`} placeholder="Workspace name" />
       </View>
     );
-  // Like Paseo's rows: time since the last prompt, or time in the current status when chosen.
-  const elapsed = shows.lastActivity ? formatElapsed(config.details.timeInStatus ? workspace.since : workspace.lastPrompt, now) : null;
+  // Running/asking states show genuine duration; settled rows label observed activity age.
+  const elapsed = shows.lastActivity ? sidebarTime(indicator, applies ? null : workspace.since, info?.lastActive ?? workspace.lastPrompt, now, config.details.timeInStatus || indicator === "needs_input" || indicator === "running" || indicator === "failed") : null;
   const linked = linksTasks(shared, reference.hostId);
   const reminder = linked ? shared.workspaceReminders.get(reference.id) ?? null : null;
   // The workspace's own reminder (not one of its chats'), which Remind me edits.
@@ -949,7 +965,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   const pr = shows.pullRequest ? info?.pullRequest ?? null : null;
   const changes = workspace.diff && workspace.diff.additions + workspace.diff.deletions > 0 ? workspace.diff : null;
   const twoLine = config.rowStyle !== "one-line";
-  const line = twoLine ? statusLine(indicator, latestChat, workspace.title, latestListed) : null;
+  const line = twoLine ? semanticLine(indicator, reason, checkpoint?.fields ?? null) : null;
 
   // Second-line details, in Paseo's Display order. A row inside its project group never repeats
   // the project's name; the host shows only when there is more than one.
@@ -967,14 +983,10 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   if (shows.services && info?.services.length) details.push(<ServicesMeta key="services" services={info.services} shared={shared} />);
   if (shows.labels && workspace.labels.length) details.push(<LabelsMeta key="labels" labels={workspace.labels} shared={shared} />);
   if (reminder) details.push(<Meta key="reminder" icon="AlarmClock" color={isDue(reminder, now) ? c.statusWarning : undefined} text={formatDue(reminder, now)} shared={shared} />);
-  // A two-line row with nothing else to say names its branch, then its project.
-  const fallback = twoLine && !line && details.length === 0 ? (workspace.branch && config.titleSource !== "branch" ? workspace.branch : !underOwnProject(config, workspace.pinned) ? workspace.project : null) : null;
   const lead = line ? (
     <Text key="status" style={[styles.meta, line.tone === "warning" ? { color: c.statusWarning } : line.tone === "danger" ? { color: c.statusDanger } : null]} numberOfLines={1}>
       {line.text}
     </Text>
-  ) : fallback ? (
-    <Meta key="fallback" icon={workspace.branch && config.titleSource !== "branch" ? "GitBranch" : "Folder"} color={workspace.branch && config.titleSource !== "branch" ? branchColor : undefined} text={fallback} shared={shared} />
   ) : null;
   // Pinned rows in their own Pinned section need no icon; elsewhere the icon shows it.
   const pinIcon = workspace.pinned && !(config.pinnedFirst && config.groupBy !== "none") ? <Icon name="Pin" size={11} color={c.foregroundMuted} /> : null;
@@ -988,7 +1000,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
       <Icon name={picked ? "SquareCheck" : "Square"} size={14} color={picked ? c.accent : c.foregroundMuted} />
     </View>
   ) : (
-    <StatusMark indicator={indicator} shared={shared} reason={applies ? "User-marked workspace state" : info?.status ?? undefined} enteredAt={applies ? null : workspace.since} />
+    <StatusMark indicator={indicator} shared={shared} reason={applies ? "User-marked workspace state" : reason} enteredAt={applies ? null : workspace.since} />
   );
   const main = twoLine ? (
     <>
@@ -996,21 +1008,23 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
       <View style={styles.lines}>
         <View style={styles.line}>
           {titleText}
-          {pr ? <PullRequestBadge pr={pr} checks={shows.checks} shared={shared} /> : null}
+          {indicator === "attention" ? <Text accessibilityLabel="New unread result" style={{ color: c.accent, fontSize: 11, fontWeight: "600", flexShrink: 0 }}>New</Text> : null}
           {pinIcon}
         </View>
         {lead || details.length ? (
           <View style={styles.subLine}>
-            {lead}
-            {details}
+            <View style={{ flex: 1, minWidth: 0 }}>{lead}</View>
+            {pr ? <PullRequestBadge pr={pr} checks={shows.checks} shared={shared} /> : null}
           </View>
         ) : null}
+        {details.length ? <View style={styles.subLine}>{details.slice(0, 2)}</View> : null}
       </View>
     </>
   ) : (
     <>
       {mark0}
       {titleText}
+      {indicator === "attention" ? <Text accessibilityLabel="New unread result" style={{ color: c.accent, fontSize: 11, fontWeight: "600", flexShrink: 0 }}>New</Text> : null}
       {pr ? <PullRequestBadge pr={pr} checks={shows.checks} shared={shared} /> : null}
       {details}
       {pinIcon}
@@ -1048,6 +1062,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
           trailing={time}
           actions={selecting ? undefined : (
             <>
+              <IconButton t={t} size="sm" icon="Info" label={`Details for ${workspace.name}`} onPress={() => { setDetailsOpen(true); refreshCheckpoint((value) => value + 1); }} />
               {config.rowActions.includes("pin") ? <IconButton t={t} size="sm" icon={workspace.pinned ? "PinOff" : "Pin"} tone={workspace.pinned ? c.foreground : undefined} label={workspace.pinned ? `Unpin ${workspace.name}` : `Pin ${workspace.name}`} onPress={togglePin} /> : null}
               {confirmArchive && menu === null ? (
                 <Button t={t} variant="danger" size="sm" {...archiveConfirm(workspace.name, found)} onPress={archive} />
@@ -1060,8 +1075,20 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
           shared={shared}
         />
       )}
-      <Dropdown t={t} open={card && menu === null && renaming === null} onClose={() => setCard(false)} anchor={rowRef} passive width={280}>
+      <Dropdown t={t} open={(detailsOpen || card) && menu === null && renaming === null} onClose={() => { setCard(false); setDetailsOpen(false); }} anchor={rowRef} passive={!detailsOpen} width={360}>
+        <Text style={[t.text.heading, { padding: 6 }]}>{STATUS_TITLES[indicator]} · {sidebarTime(indicator, applies ? null : workspace.since, workspace.lastPrompt, now, true)}</Text>
+        <Text style={[t.text.body, { padding: 6 }]}>{semanticLine(indicator, reason, checkpoint?.fields ?? null).text}</Text>
         <WorkspaceCard title={workspace.title} workspace={workspace} info={info} host={host} shared={shared} />
+        {workspace.branch ? <Text selectable style={{ ...t.text.meta, paddingHorizontal: 6 }}>Branch: {workspace.branch}</Text> : null}
+        {info?.pullRequest ? <Text selectable style={{ ...t.text.meta, paddingHorizontal: 6 }}>Review: {info.pullRequest.title} · {info.pullRequest.state} · {info.pullRequest.checks} checks</Text> : null}
+        <View style={{ padding: 6, gap: 6 }}>
+          <Text style={t.text.heading}>Workspace checkpoint</Text>
+          {reference.hostId !== shared.taskHost ? <Text style={t.text.meta}>Checkpoint unavailable on this host from this installation.</Text> : checkpointError ? <Text accessibilityRole="alert" style={t.text.meta}>Checkpoint unavailable: {checkpointError}</Text> : checkpoint ? <>
+            <Text style={t.text.meta}>{checkpoint.updatedAt ? `Saved ${new Date(checkpoint.updatedAt).toLocaleString()} by ${checkpoint.author} · revision ${checkpoint.revision}` : "No checkpoint saved"}</Text>
+            {([['goal', 'Goal'], ['verified', 'Last verified result'], ['blocked', 'Blocked by'], ['next', 'Next step']] as const).map(([key, label]) => <Text selectable key={key} style={t.text.body}>{label}: {checkpoint.fields[key] || "Not recorded"}</Text>)}
+          </> : <Text style={t.text.meta}>Loading checkpoint…</Text>}
+          {detailsOpen ? <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>{reference.hostId === shared.taskHost ? <Button t={t} size="sm" variant="ghost" label="Refresh checkpoint details" onPress={() => refreshCheckpoint((value) => value + 1)} /> : null}<Button t={t} size="sm" variant="ghost" label="Close workspace details" onPress={() => { setDetailsOpen(false); setCard(false); }} /></View> : null}
+        </View>
       </Dropdown>
       <Dropdown t={t} open={menu !== null} onClose={closeMenu} anchor={rowRef} width={menu === "colour" ? 300 : 250}>
         {menu === "colour" ? (
@@ -1081,6 +1108,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
           </>
         ) : (
           <>
+            <MenuItem t={t} icon="Info" label="Workspace details" onPress={() => { closeMenu(); setDetailsOpen(true); refreshCheckpoint((value) => value + 1); }} />
             <MenuItem t={t} icon="Copy" label="Copy path" onPress={() => copy(workspace.directory, "path")} />
             {workspace.branch ? <MenuItem t={t} icon="GitBranch" label="Copy branch name" onPress={() => copy(workspace.branch ?? "", "branch name")} /> : null}
             <MenuItem t={t} icon="Pencil" label="Rename workspace" onPress={startRename} />
@@ -1167,7 +1195,7 @@ function ChatRow({ reference, shared }: { reference: AgentRef; shared: Shared })
   if (!chat) return null;
   const indicator = withPermission(chat.indicator, attention, reference.id);
   const selected = props.active.agent?.key === reference.key;
-  const elapsed = shared.shows.lastActivity ? formatElapsed(chat.last, now) : null;
+  const elapsed = shared.shows.lastActivity ? sidebarTime(indicator, null, chat.last, now, false) : null;
   const groupedByWorkspace = config.groupBy !== "status" && config.groupBy !== "none";
   return (
     <View>
@@ -1180,9 +1208,10 @@ function ChatRow({ reference, shared }: { reference: AgentRef; shared: Shared })
         main={
           <>
             <StatusMark indicator={indicator} shared={shared} reason={attention.get(reference.id)?.error || attention.get(reference.id)?.permission?.title} />
-            <Text style={styles.label} numberOfLines={1}>
+            <Text style={[styles.label, indicator === "attention" ? { fontWeight: "600" } : null]} numberOfLines={1}>
               {chat.name}
             </Text>
+            {indicator === "attention" ? <Text style={{ color: props.theme.colors.accent, fontSize: 11, flexShrink: 0 }}>New</Text> : null}
             {!groupedByWorkspace && workspace ? <Text style={styles.secondary} numberOfLines={1}>{workspace}</Text> : null}
           </>
         }
@@ -1356,6 +1385,7 @@ function CopyPathItem({ project, onDone, t }: { project: ProjectRef; onDone(): v
 function ProjectHeading({ title, first, projectRef = null, count, collapsed, onToggle, shared }: { title: string; first: WorkspaceRef | null; projectRef?: ProjectRef | null; count: number; collapsed: boolean; onToggle(): void; shared: Shared }) {
   const { styles, config, props, t } = shared;
   const project = useWorkspace(first ?? "", (workspace) => workspace.project) ?? projectRef;
+  const summary = project ? shared.projectSummaries?.get(project.key) : null;
   const key = useId();
   const hovered = useHovered(shared.hover, key);
   const chevron = collapsed || hovered;
@@ -1428,6 +1458,7 @@ function ProjectHeading({ title, first, projectRef = null, count, collapsed, onT
           {title}
         </Text>
         {config.counts && (hovered || collapsed || TOUCH) ? <Text style={styles.count}>{count}</Text> : null}
+        {config.counts && summary ? <Text numberOfLines={1} accessibilityLabel={`${summary.running} running, ${summary.asking} asking, ${summary.unread} unread in this project`} style={{ color: summary.asking ? t.c.statusWarning : t.c.foregroundMuted, fontSize: 11, flexShrink: 1 }}>{[summary.running ? `${summary.running} running` : "", summary.asking ? `${summary.asking} asking` : "", summary.unread ? `${summary.unread} new` : ""].filter(Boolean).join(" · ") || `${summary.total} settled`}</Text> : null}
         <View style={{ flex: 1 }} />
       </Pressable>
       {project && (hovered || focused || TOUCH) ? <IconButton t={t} size="sm" icon="Plus" label={`New workspace in ${title}`} onPress={() => props.navigation.openProject(project)} /> : null}
@@ -1555,31 +1586,16 @@ interface FilterMenuProps {
   shared: Shared;
 }
 
-// The quick toggles' names, shared by the Filter menu and the tags that show them on.
-const TOGGLE_LABELS = { hideDone: "Hide done", changedOnly: "With changed lines", pinnedOnly: "Pinned" } as const;
+// Non-status toggles remain independent of the focus tabs.
+const TOGGLE_LABELS = { changedOnly: "With changed lines", pinnedOnly: "Pinned" } as const;
 
-// Statuses, projects and quick toggles; each choice applies at once and is kept on this device.
+// Projects and non-status toggles remain alongside the separate focus tabs.
 function FilterMenu({ state, save, projects, shared }: FilterMenuProps) {
-  const { t, props, config } = shared;
-  const statuses = state.statusFilter;
-  const needsMe = needsMeOn(statuses);
-  // Statuses add up: picking one while "Needs me" (permission and failed) is on keeps those two and
-  // adds it; picking one of those two takes just that one out.
-  const toggleStatus = (indicator: Indicator) => {
-    const on = statuses.includes(indicator);
-    save({ statusFilter: on ? statuses.filter((item) => item !== indicator) : [...statuses, indicator] });
-  };
+  const { t, config } = shared;
   const toggleProject = (key: string) => save({ projectFilter: state.projectFilter.includes(key) ? state.projectFilter.filter((item) => item !== key) : [...state.projectFilter, key] });
   return (
     <>
-      <MenuSection title="Status" shared={shared}>
-        <MenuItem t={t} role="checkbox" icon="Hand" label="Needs me" hint="Permission or failed" checked={needsMe} onPress={() => save({ statusFilter: needsMe ? [] : [...NEEDS_ME] })} />
-        {INDICATORS.map((indicator) => (
-          <MenuItem key={indicator} t={t} role="checkbox" dot={statusColor(props.theme.colors, indicator)} label={STATUS_TITLES[indicator]} checked={statuses.includes(indicator)} onPress={() => toggleStatus(indicator)} />
-        ))}
-      </MenuSection>
       <MenuSection title="Filter" shared={shared}>
-        <MenuItem t={t} role="checkbox" icon="EyeOff" label={TOGGLE_LABELS.hideDone} checked={state.hideDone} onPress={() => save({ hideDone: !state.hideDone })} />
         {config.list === "workspaces" ? (
           <>
             <MenuItem t={t} role="checkbox" icon="FileDiff" label={TOGGLE_LABELS.changedOnly} checked={state.changedOnly} onPress={() => save({ changedOnly: !state.changedOnly })} />
@@ -1595,7 +1611,7 @@ function FilterMenu({ state, save, projects, shared }: FilterMenuProps) {
         </MenuSection>
       ) : null}
       <View style={{ borderTopWidth: 1, borderTopColor: t.c.border, paddingTop: 4 }}>
-        <MenuItem t={t} icon="X" label="Clear filters" disabled={!(statuses.length || state.projectFilter.length || state.hideDone || state.changedOnly || state.pinnedOnly)} onPress={() => save({ statusFilter: [], projectFilter: [], hideDone: false, changedOnly: false, pinnedOnly: false })} />
+        <MenuItem t={t} icon="X" label="Clear filters" disabled={!(state.projectFilter.length || state.changedOnly || state.pinnedOnly)} onPress={() => save({ statusFilter: [], projectFilter: [], hideDone: false, changedOnly: false, pinnedOnly: false })} />
       </View>
     </>
   );
@@ -1682,6 +1698,10 @@ function withPermission(indicator: Indicator, attention: AttentionList, agentId:
   return attention.get(agentId)?.reason === "permission" ? "needs_input" : indicator;
 }
 
+function permissionSnapshot(chat: PluginAgentSnapshot, attentionOf: Shared["attentionOf"]): PluginAgentSnapshot {
+  return attentionOf(chat.hostId).get(chat.id)?.reason === "permission" ? { ...chat, attentionReason: "permission", requiresAttention: true } : chat;
+}
+
 // The group key for top-level agents when agents are grouped by parent; agent ids are UUIDs, so it
 // cannot clash with a parent id.
 const TOP_LEVEL = "~top-level";
@@ -1723,7 +1743,7 @@ function workspaceRows(config: ViewConfig) {
   // "Your groups" groups workspaces by project first, then places the projects under the user's groups.
   const custom = config.groupBy === "custom";
   const keyConfig: ViewConfig = custom ? { ...config, groupBy: "project" } : config;
-  return function useWorkspaceRows(filter: Filter, props: PluginSidebarViewProps, showBackground: boolean, infoOf: Shared["infoOf"], groups: ProjectGroups): RowSource {
+  return function useWorkspaceRows(filter: Filter, props: PluginSidebarViewProps, showBackground: boolean, infoOf: Shared["infoOf"], groups: ProjectGroups, attentionOf: Shared["attentionOf"]): RowSource {
     const marked = (workspace: PluginWorkspaceSnapshot) => withMark(workspace, infoOf);
     const compare = (left: PluginWorkspaceSnapshot, right: PluginWorkspaceSnapshot) => compareBase(marked(left), marked(right));
     const shown = (workspace: PluginWorkspaceSnapshot) => isVisible(workspace, showBackground) && matchesFilter(marked(workspace), filter);
@@ -1767,7 +1787,7 @@ function chatRows(config: ViewConfig) {
       : (where: Where<PluginAgentSnapshot>) =>
           orderGroups<Group<AgentRef>>(useAgents({ where, orderBy: compare, groupBy: (chat) => chatGroupKey(config, chat) }), config);
   const custom = config.groupBy === "custom";
-  return function useChatRows(filter: Filter, props: PluginSidebarViewProps, showBackground: boolean, infoOf: Shared["infoOf"], groups: ProjectGroups): RowSource {
+  return function useChatRows(filter: Filter, props: PluginSidebarViewProps, showBackground: boolean, infoOf: Shared["infoOf"], groups: ProjectGroups, attentionOf: Shared["attentionOf"]): RowSource {
     // Chats in archived, internal or (unless shown) background workspaces stay out, as their
     // workspaces do. A workspace the list has not loaded yet does not hide its chats.
     const inShownWorkspace = (chat: PluginAgentSnapshot) => {
@@ -1775,17 +1795,20 @@ function chatRows(config: ViewConfig) {
       return !workspace || workspace === "loading" || workspace.open || (showBackground && workspace.background);
     };
     const listed = (chat: PluginAgentSnapshot) => isSidebarChat(chat) && inShownWorkspace(chat);
-    const shown = (chat: PluginAgentSnapshot) => listed(chat) && chatMatches(chat, filter);
-    const grouped = useSections(shown);
+    const normalized = (chat: PluginAgentSnapshot) => permissionSnapshot(chat, attentionOf);
+    const shown = (chat: PluginAgentSnapshot) => listed(chat) && chatMatches(normalized(chat), filter);
+    const groupedBase = useSections(shown);
+    const normalizedStatuses = useAgents({ where: shown, groupBy: (chat) => ({ key: `status:${chatIndicator(normalized(chat))}`, title: STATUS_TITLES[chatIndicator(normalized(chat))] }) });
+    const grouped = config.groupBy === "status" ? orderGroups<Group<AgentRef>>(normalizedStatuses, config) : groupedBase;
     // "Your groups": chats are grouped by workspace, and each workspace goes under its project's group.
     const byProject = useWorkspaces({ groupBy: (workspace) => ({ key: workspace.project.key, title: workspace.projectDisplayName }) });
     const projectOf = new Map(byProject.flatMap((group) => group.items.map((ref) => [ref.key, group.key] as const)));
     const recentProjects = useRecentProjects(showBackground);
     const nested = custom ? orderUserGroups(nestInGroups(grouped.map((group) => ({ key: group.key, title: group.title ?? "", items: group.items, project: projectOf.get(group.key.slice("workspace:".length)) ?? "" })), groups.groups, []), recentProjects) : null;
     const sections = nested ? nested.flatMap((group) => group.sections) : grouped;
-    const isProtectedChat = (chat: PluginAgentSnapshot) => ["needs_input", "failed"].includes(chatIndicator(chat));
+    const isProtectedChat = (chat: PluginAgentSnapshot) => ["needs_input", "failed"].includes(chatIndicator(normalized(chat)));
     const protectedKeys = new Set(useAgents({ where: (chat) => shown(chat) && isProtectedChat(chat) }).map((ref) => ref.key));
-    const waitingRefs = useAgents({ where: (chat) => listed(chat) && needsAttention(chatIndicator(chat)), orderBy: compare });
+    const waitingRefs = useAgents({ where: (chat) => listed(chat) && needsAttention(chatIndicator(normalized(chat))), orderBy: compare });
     const next = nextAttention(withHidden(attentionOrder(sections, new Set(waitingRefs.map((ref) => ref.key))), waitingRefs), props.active.agent?.key ?? null);
     return {
       sections,
@@ -1921,15 +1944,15 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
 
     const on = config.filterBar;
     const filter: Filter = {
-      statuses: on ? state.statusFilter : [],
+      statuses: focusStatuses(state),
       search: on ? search : "",
       // Projects, changed lines and pins exist on workspaces only; the chat list ignores them.
       projects: on && config.list === "workspaces" ? state.projectFilter : [],
-      hideDone: on && state.hideDone,
+      hideDone: false,
       changedOnly: on && config.list === "workspaces" && state.changedOnly,
       pinnedOnly: on && config.list === "workspaces" && state.pinnedOnly,
     };
-    const filters = filter.statuses.length + (filter.projects?.length ?? 0) + Number(filter.hideDone) + Number(filter.changedOnly) + Number(filter.pinnedOnly);
+    const filters = (filter.projects?.length ?? 0) + Number(filter.hideDone) + Number(filter.changedOnly) + Number(filter.pinnedOnly);
     const updateView = (patch: Partial<ViewConfig>) => void deps.updateView(patch).catch(report(toast, "change the view"));
     // The open chat, for the top bar's Stats button (it is told only its workspace).
     const activeAgentId = props.active.agent?.id ?? null;
@@ -1940,7 +1963,26 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     const groupOrder = useSettings(groupOrderSettings);
     const groupsByLastUsed = groupOrder.status !== "ready" || groupOrder.values.lastUsedFirst;
     const projectsByLastUsed = groupOrder.status === "ready" && groupOrder.values.projectsLastUsedFirst;
-    const source = useRows(filter, props, state.showBackground, infoOf, groupsDoc);
+    const source = useRows(filter, props, state.showBackground, infoOf, groupsDoc, attentionOf);
+    const baseFilter = { ...filter, statuses: [] };
+    const workspaceStates = useWorkspaces({ where: (item) => config.list === "workspaces" && isVisible(item, state.showBackground) && matchesFilter(withMark(item, infoOf), baseFilter), groupBy: (item) => ({ key: JSON.stringify([item.project.key, withMark(item, infoOf).indicator]) }) });
+    const chatStates = useAgents({ where: (item) => {
+      const info = infoOf(item.workspace);
+      return config.list === "chats" && isSidebarChat(item) && (!info || info === "loading" || info.open || (state.showBackground && info.background)) && chatMatches(permissionSnapshot(item, attentionOf), baseFilter);
+    }, groupBy: (item) => ({ key: JSON.stringify([item.workspace.key, chatIndicator(permissionSnapshot(item, attentionOf))]) }) });
+    const workspaceProjects = useWorkspaces({ groupBy: (item) => ({ key: item.project.key }) });
+    const projectByWorkspace = new Map(workspaceProjects.flatMap((group) => group.items.map((item) => [item.key, group.key] as const)));
+    const scopedStates: Indicator[] = [];
+    const projectStates = new Map<string, Indicator[]>();
+    for (const group of config.list === "chats" ? chatStates : workspaceStates) {
+      const [key, indicator] = JSON.parse(group.key) as [string, Indicator];
+      const project = config.list === "chats" ? projectByWorkspace.get(key) ?? key : key;
+      const values = group.items.map(() => indicator);
+      scopedStates.push(...values);
+      projectStates.set(project, [...(projectStates.get(project) ?? []), ...values]);
+    }
+    const tabCounts: Record<FocusTab, number> = { all: scopedStates.length, active: scopedStates.filter((value) => state.focusTabs.active.states.includes(value)).length, asking: scopedStates.filter((value) => state.focusTabs.asking.states.includes(value)).length };
+    const projectSummaries = new Map([...projectStates].map(([key, values]) => [key, sidebarSummary(values)]));
     const changeGroups = (operation: (doc: ProjectGroups) => ProjectGroups) => void deps.changeGroups(operation).catch(report(toast, "change your groups"));
     // "Your groups" in the workspace list: projects drag between groups (each group a column, each project a card), and
     // groups drag up and down (one column of groups). Both hooks always run, with no columns otherwise.
@@ -2017,6 +2059,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
       t,
       config,
       now,
+      projectSummaries,
       workspaceReminders,
       statuses: filter.statuses,
       chatReminders,
@@ -2056,9 +2099,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
 
     const searchLabel = config.list === "chats" ? "Search chats" : "Search name, branch or project";
     const activeTags = [
-      ...(needsMeOn(filter.statuses) ? [{ key: "needs", label: "Needs me", color: props.theme.colors.statusWarning, remove: () => saveState({ statusFilter: [] }) }] : filter.statuses.map((indicator) => ({ key: indicator, label: STATUS_TITLES[indicator], color: statusColor(props.theme.colors, indicator), remove: () => saveState({ statusFilter: state.statusFilter.filter((item) => item !== indicator) }) }))),
       ...(filter.projects ?? []).map((key) => ({ key, label: projects.find((project) => project.key === key)?.title ?? "Project", color: tileColor(projects.find((project) => project.key === key)?.title ?? ""), remove: () => saveState({ projectFilter: state.projectFilter.filter((item) => item !== key) }) })),
-      ...(filter.hideDone ? [{ key: "hideDone", label: TOGGLE_LABELS.hideDone, color: undefined, remove: () => saveState({ hideDone: false }) }] : []),
       ...(filter.changedOnly ? [{ key: "changed", label: TOGGLE_LABELS.changedOnly, color: undefined, remove: () => saveState({ changedOnly: false }) }] : []),
       ...(filter.pinnedOnly ? [{ key: "pinned", label: TOGGLE_LABELS.pinnedOnly, color: undefined, remove: () => saveState({ pinnedOnly: false }) }] : []),
     ];
@@ -2102,6 +2143,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
         {on ? (
           <Header menu={menu} setMenu={setMenu} search={search} onSearch={setSearch} searchLabel={searchLabel} filters={filters} onNext={source.onNext} headerRef={headerRef} shared={shared} />
         ) : null}
+        <SidebarFocusTabs state={state} counts={tabCounts} select={(focusTab) => saveState({ focusTab })} t={t} />
         {on && activeTags.length ? (
           <View style={styles.tools}>
             {activeTags.length ? (
@@ -2143,7 +2185,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
           </View>
         ) : null}
         {nothing && !ready ? <LoadingRows shared={shared} /> : null}
-        {nothing && ready ? <Text style={styles.empty}>{filter.search || filters ? `No ${source.noun} match` : `No ${source.noun} yet`}</Text> : null}
+        {nothing && ready ? <Text style={styles.empty}>{filter.search || filters || filter.statuses.length ? `No ${source.noun} match` : `No ${source.noun} yet`}</Text> : null}
         {source.nested ? (
           <>
             {sections.filter((section) => section.key === "pinned").map((section) => renderSection(section))}
