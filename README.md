@@ -141,3 +141,9 @@ Parallel work is laid out side by side. Short and zero-duration uncertain observ
 Workspace second lines again follow v0.55.0: show latest chat context when it is not already listed underneath, retain configured technical metadata on the same second line, and fall back to branch/project where appropriate. Pull-request badges return to the title row. This restores only second-line presentation, not the old tabs, Calendar or time/indicator behavior.
 
 Calendar entries recorded before a chat was named resolve placeholder titles using the current matching chat name, then workspace name, then provider session label. Existing meaningful recorded titles stay unchanged. When a turn completes with a newly available title, its placeholder is filled while timestamps/outcome accounting remain unchanged. No chat titles are rewritten.
+
+### Latest-message sidebar previews
+
+Workspace second lines show the newest nonempty user or assistant message from the most recently active top-level chat, regardless of whether that chat is expanded below. Tools and reasoning are excluded. The sidebar reads at most100recent timeline entries per mounted workspace, then follows live messages; older messages beyond that page are not searched. A one-line240-character excerpt collapses whitespace and remains literal text, not rendered HTML. Loading, preview unavailable and no recent message are distinct. Existing branch/review metadata remains.
+
+Subscriptions are routed to the chat's own host without falling back to another host. Initial reads wait for subscription readiness; sequence numbers reject older message updates, replacements/reconnects refresh the tail, and unmount/target changes dispose observations. Preview text is not persisted or logged. Sidebar timestamps now show just the compact elapsed time, without Idle/Active/Working prefixes; state meaning remains on indicators/details.

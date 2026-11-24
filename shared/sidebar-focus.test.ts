@@ -58,9 +58,9 @@ it("uses meaningful reasons and labelled checkpoint results instead of repeated 
 
 it("labels genuine status time separately from activity and refuses invalid or future times", () => {
   const now = new Date("2026-11-24T12:00:00Z");
-  expect(sidebarTime("needs_input", "2026-11-24T11:48:00Z", "2026-11-24T10:00:00Z", now, true)).toBe("Waiting 12m");
+  expect(sidebarTime("needs_input", "2026-11-24T11:48:00Z", "2026-11-24T10:00:00Z", now, true)).toBe("12m");
   expect(sidebarTime("running", null, "2026-11-24T10:00:00Z", now, true)).toBe("2h");
-  expect(sidebarTime("done", null, "2026-11-24T10:00:00Z", now, false)).toBe("Active 2h ago");
+  expect(sidebarTime("done", null, "2026-11-24T10:00:00Z", now, false)).toBe("2h");
   expect(sidebarTime("done", null, "invalid", now, false)).toBeNull();
   expect(sidebarTime("done", null, "2026-11-25T10:00:00Z", now, false)).toBeNull();
   expect(sidebarTime("running", "invalid", "2026-11-24T10:00:00Z", now, true)).toBe("2h");
