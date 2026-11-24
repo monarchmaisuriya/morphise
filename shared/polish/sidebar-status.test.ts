@@ -6,7 +6,8 @@ import { z } from "zod";
 it("loads bounded layout separately without changing saved state choices", () => {
   const polish = polishSchema.parse({ sidebarStatus: { states: { running: { color: "#123456" } } }, sidebarIndicatorLayout: { size: 24, alignment: "bottom" } });
   expect(polishPrefs({ polish }).sidebarIndicatorLayout).toEqual({ size: 24, alignment: "bottom" });
-  expect(sidebarIndicatorLayout()).toEqual({ size: 14, alignment: "center" });
+  expect(sidebarIndicatorLayout()).toEqual({ size: 14 });
+  expect(sidebarIndicatorLayout({ size: 24, alignment: "bottom" })).toEqual({ size: 24 });
   expect(sidebarStatusSchema.parse(polish.sidebarStatus)).toEqual({ states: { running: { color: "#123456" } } });
 });
 

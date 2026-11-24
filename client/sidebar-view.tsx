@@ -842,6 +842,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
     diff: item.diffStat,
     since: item.statusEnteredAt,
     lastPrompt: item.lastPromptAt,
+    createdAt: item.createdAt,
     pinned: item.pinnedAt !== null,
     labels: item.labels,
     directory: item.directory,
@@ -955,7 +956,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
       </View>
     );
   // Running/asking states show genuine duration; settled rows label observed activity age.
-  const elapsed = shows.lastActivity ? sidebarTime(indicator, applies ? null : workspace.since, info?.lastActive ?? workspace.lastPrompt, now, config.details.timeInStatus || indicator === "needs_input" || indicator === "running" || indicator === "failed") : null;
+  const elapsed = shows.lastActivity ? sidebarTime(indicator, applies ? null : workspace.since, [info?.lastActive ?? null, workspace.lastPrompt, workspace.lastPrompt === null ? workspace.createdAt : null], now, config.details.timeInStatus || indicator === "needs_input" || indicator === "running" || indicator === "failed") : null;
   const linked = linksTasks(shared, reference.hostId);
   const reminder = linked ? shared.workspaceReminders.get(reference.id) ?? null : null;
   // The workspace's own reminder (not one of its chats'), which Remind me edits.
@@ -965,7 +966,8 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   const pr = shows.pullRequest ? info?.pullRequest ?? null : null;
   const changes = workspace.diff && workspace.diff.additions + workspace.diff.deletions > 0 ? workspace.diff : null;
   const twoLine = config.rowStyle !== "one-line";
-  const line = twoLine ? semanticLine(indicator, reason, checkpoint?.fields ?? null) : null;
+  const meaning = semanticLine(indicator, reason, checkpoint?.fields ?? null);
+  const line = twoLine ? meaning : null;
 
   // Second-line details, in Paseo's Display order. A row inside its project group never repeats
   // the project's name; the host shows only when there is more than one.
@@ -1011,7 +1013,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
           {indicator === "attention" ? <Text accessibilityLabel="New unread result" style={{ color: c.accent, fontSize: 11, fontWeight: "600", flexShrink: 0 }}>New</Text> : null}
           {pinIcon}
         </View>
-        {lead || details.length ? (
+        {lead || pr ? (
           <View style={styles.subLine}>
             <View style={{ flex: 1, minWidth: 0 }}>{lead}</View>
             {pr ? <PullRequestBadge pr={pr} checks={shows.checks} shared={shared} /> : null}
@@ -1076,8 +1078,8 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
         />
       )}
       <Dropdown t={t} open={(detailsOpen || card) && menu === null && renaming === null} onClose={() => { setCard(false); setDetailsOpen(false); }} anchor={rowRef} passive={!detailsOpen} width={360}>
-        <Text style={[t.text.heading, { padding: 6 }]}>{STATUS_TITLES[indicator]} · {sidebarTime(indicator, applies ? null : workspace.since, workspace.lastPrompt, now, true)}</Text>
-        <Text style={[t.text.body, { padding: 6 }]}>{semanticLine(indicator, reason, checkpoint?.fields ?? null).text}</Text>
+        <Text style={[t.text.heading, { padding: 6 }]}>{STATUS_TITLES[indicator]}{elapsed ? ` · ${elapsed}` : ""}</Text>
+        {meaning ? <Text style={[t.text.body, { padding: 6 }]}>{meaning.text}</Text> : null}
         <WorkspaceCard title={workspace.title} workspace={workspace} info={info} host={host} shared={shared} />
         {workspace.branch ? <Text selectable style={{ ...t.text.meta, paddingHorizontal: 6 }}>Branch: {workspace.branch}</Text> : null}
         {info?.pullRequest ? <Text selectable style={{ ...t.text.meta, paddingHorizontal: 6 }}>Review: {info.pullRequest.title} · {info.pullRequest.state} · {info.pullRequest.checks} checks</Text> : null}

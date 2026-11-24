@@ -19,19 +19,22 @@ export function focusStatuses(state: FocusState): Indicator[] {
 export function sidebarSummary(states: readonly Indicator[]) {
   return { total: states.length, running: states.filter((value) => value === "running").length, asking: states.filter((value) => value === "needs_input" || value === "failed").length, unread: states.filter((value) => value === "attention").length };
 }
-export function semanticLine(indicator: Indicator, reason: string | null, checkpoint: { blocked: string; verified: string } | null): { text: string; tone: "warning" | "danger" | "muted" } {
+export function semanticLine(indicator: Indicator, reason: string | null, checkpoint: { blocked: string; verified: string } | null): { text: string; tone: "warning" | "danger" | "muted" } | null {
   if (indicator === "needs_input") return { text: `Permission needed${reason ? ` · ${reason}` : ""}`, tone: "warning" };
   if (indicator === "failed") return { text: `Failed${reason ? ` · ${reason}` : ""}`, tone: "danger" };
-  if (indicator === "running") return { text: "Working", tone: "muted" };
+  if (indicator === "running") return null;
   if (checkpoint?.blocked.trim()) return { text: `Checkpoint blocker · ${checkpoint.blocked.trim()}`, tone: "warning" };
   if (checkpoint?.verified.trim()) return { text: `Checkpoint · ${checkpoint.verified.trim()}`, tone: "muted" };
-  return { text: indicator === "attention" ? "New result to review" : "No active work", tone: "muted" };
+  return indicator === "attention" ? { text: "New result to review", tone: "muted" } : null;
 }
-export function sidebarTime(indicator: Indicator, enteredAt: string | null, activity: string | null, now: Date, stateTime: boolean) {
-  const source = stateTime ? enteredAt : activity;
-  const at = source ? Date.parse(source) : NaN;
-  if (!Number.isFinite(at) || at > +now) return stateTime ? "State time unavailable" : "Activity unavailable";
+export function sidebarTime(indicator: Indicator, enteredAt: string | null, activity: string | null | readonly (string | null)[], now: Date, stateTime: boolean) {
+  const valid = (value: string | null) => value !== null && Number.isFinite(Date.parse(value)) && Date.parse(value) <= +now;
+  const genuineState = stateTime && valid(enteredAt);
+  const candidates = typeof activity === "string" || activity === null ? [activity] : activity;
+  const source = genuineState ? enteredAt : candidates.find(valid) ?? null;
+  if (!source) return null;
   const elapsed = formatElapsed(source, now);
+  if (stateTime && !genuineState) return elapsed;
   if (!stateTime) return elapsed === "now" ? "Active now" : `Active ${elapsed} ago`;
   const label = indicator === "needs_input" ? "Waiting" : indicator === "running" ? "Working" : indicator === "attention" ? "Unread" : indicator === "failed" ? "Failed" : "Idle";
   return `${label} ${elapsed === "now" ? "<1m" : elapsed}`;
