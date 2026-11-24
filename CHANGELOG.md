@@ -2,6 +2,13 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.56.0 - 2026-11-24
+
+- **Sidebar focus tabs:** All, Active and Asking replace the status-filter checklist and Hide done. Device settings control visibility, labels, counts and Active/Asking state membership. Counts respect other filters before row limits; hidden tabs cannot leave an invisible status filter active.
+- **More useful rows:** prioritize permission/error reasons and labelled checkpoint context instead of repeated chat titles or URLs; unread rows use stronger text and a New marker. Project headings show running, asking and unread summaries even when collapsed. Times explicitly distinguish state duration from activity age; missing timestamps are unavailable.
+- **Accessible workspace details:** Info and Actions → Workspace details open the existing card with full context, checkpoint attribution, refresh and close actions. Remote same-ID workspaces never fall through to local checkpoint reads. Technical metadata has a separate bounded line.
+- **Device setting stability:** compare structured preference values by content so schema-cloned tab settings do not trigger repeated unchanged saves. Older plugin versions may discard new tab preferences when saving device settings; workspace/checkpoint data is unchanged.
+
 ## 0.55.0 - 2026-11-24
 
 - **Workspace checkpoints:** explicit Goal, Last verified result, Blocked by and Next step cards, revision/author/time, own-workspace agent tool and stale-write rejection. Session drafts survive panel navigation; conflict comparison supports explicit rebase/discard, and older saves cannot erase newer drafts.

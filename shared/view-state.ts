@@ -2,16 +2,21 @@ import { defineSettings } from "@getpaseo/plugin";
 import { z } from "zod";
 import { INDICATORS } from "./profile";
 import { radius } from "./design/tokens";
+import { focusTabsSchema } from "./sidebar-focus";
 
-// How the sidebar view looks on this device only: which groups are folded, which statuses the
-// filter chips keep. Device settings live in the app, not on the daemon.
+// Sidebar appearance and focus tabs on this device; device settings live in the app, not the daemon.
 export const viewStateSettings = defineSettings({
   id: "view-state",
   scope: "device",
   version: 1,
   schema: z.object({
     collapsed: z.array(z.string().max(300)).max(500).default([]),
+    // Legacy filters stay readable for older clients; focus tabs replace them in the current sidebar.
     statusFilter: z.array(z.enum(INDICATORS)).max(INDICATORS.length).default([]),
+    focusTabsEnabled: z.boolean().default(true),
+    focusTabCounts: z.boolean().default(true),
+    focusTab: z.enum(["all", "active", "asking"]).default("all"),
+    focusTabs: focusTabsSchema,
     // Project keys to show; none means every project.
     projectFilter: z.array(z.string().max(300)).max(200).default([]),
     hideDone: z.boolean().default(false),
