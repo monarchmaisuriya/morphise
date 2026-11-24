@@ -6,7 +6,7 @@ import { z } from "zod";
 it("loads bounded layout separately without changing saved state choices", () => {
   const polish = polishSchema.parse({ sidebarStatus: { states: { running: { color: "#123456" } } }, sidebarIndicatorLayout: { size: 24, alignment: "bottom" } });
   expect(polishPrefs({ polish }).sidebarIndicatorLayout).toEqual({ size: 24, alignment: "bottom" });
-  expect(sidebarIndicatorLayout()).toEqual({ size: 14, alignment: "center" });
+  expect(sidebarIndicatorLayout()).toEqual({ size: 14 });
   expect(sidebarStatusSchema.parse(polish.sidebarStatus)).toEqual({ states: { running: { color: "#123456" } } });
 });
 
@@ -47,4 +47,9 @@ it.each([
 ])("rejects invalid saved sidebar configuration %j", (value) => {
   expect(sidebarStatusSchema.safeParse(value).success).toBe(false);
   expect(sidebarStatusOptions(value as never).style).toBe("ring");
+});
+
+
+it.each(["top", "center", "bottom"] as const)("ignores legacy %s alignment while preserving main size", (alignment) => {
+  expect(sidebarIndicatorLayout({ size: 24, alignment })).toEqual({ size: 24 });
 });

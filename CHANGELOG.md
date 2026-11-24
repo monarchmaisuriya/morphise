@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.54.1 - 2026-11-24
+
+- **Restore Paseo indicator alignment:** removed the vertical-alignment selector and its rendering overrides. Sidebar marks center on the first title line in two-line rows and remain vertically centered in single-line rows. Previously saved alignment values are accepted but ignored; custom sizes, colors, speeds and nested 80% size/opacity are preserved. Reset indicator size affects only size preferences. No existing profiles are bulk-rewritten.
+
 ## 0.54.0 - 2026-11-24
 
 - **Sidebar indicator layout:** plugin Look settings now offer main indicator size (10–24px, default 14px) and Top/Center/Bottom alignment against the full row content. Nested chats/subagents derive exactly 80% of the main size and opacity. Main/nested previews and a layout-only reset are included; colors and speeds remain shared. Layout is stored separately to preserve existing state settings in older readers.

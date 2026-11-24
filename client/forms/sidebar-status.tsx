@@ -23,7 +23,7 @@ export function SidebarStatusSettings({ form, value, onChange, layoutValue, onLa
   const saveLayout = (patch: SidebarIndicatorLayout) => {
     const next = { ...layoutValue, ...patch };
     if (next.size === 14) delete next.size;
-    if (next.alignment === "center") delete next.alignment;
+    delete next.alignment;
     onLayoutChange(Object.keys(next).length ? next : undefined);
   };
   const save = (next: SidebarStatusSettings) => {
@@ -44,16 +44,15 @@ export function SidebarStatusSettings({ form, value, onChange, layoutValue, onLa
       <SelectField label="Sidebar indicator style" value={options.style} options={[{ value: "ring", label: "Dot and ring" }, { value: "paseo", label: "Paseo default" }]} onChange={(style) => save({ ...value, style })} />
       {options.style === "ring" ? <>
         <SelectField label="Main indicator size" value={String(layout.size)} options={[10, 12, 14, 16, 18, 20, 22, 24].map((size) => ({ value: String(size), label: `${size} px` }))} onChange={(size) => saveLayout({ size: Number(size) })} hint="Nested chats and subagents always use 80% of this size and 80% of the main indicator opacity." />
-        <SelectField label="Indicator vertical alignment" value={layout.alignment} options={[{ value: "top", label: "Top" }, { value: "center", label: "Center" }, { value: "bottom", label: "Bottom" }]} onChange={(alignment) => saveLayout({ alignment })} hint="Align against the full row content, including two-line rows." />
-        <SettingsAction label="Indicator layout" actionLabel="Reset indicator layout" onPress={() => onLayoutChange(undefined)} />
+        <SettingsAction label="Indicator size" actionLabel="Reset indicator size" onPress={() => onLayoutChange(undefined)} />
       </> : null}
       {options.style === "paseo" ? <Text style={[t.text.meta, { padding: 12 }]}>Paseo draws its original indicators. Your custom colors and speeds are kept for when you choose Dot and ring again.</Text> : SIDEBAR_STATES.map((state) => <View key={state} style={{ paddingVertical: 8 }}>
-        <View style={{ paddingHorizontal: 12, flexDirection: "row", gap: 10, alignItems: "center" }}><Text testID={`morphise-status-preview-${state}`} accessibilityLabel={`${SIDEBAR_STATE_LABELS[state]} indicator preview`} style={{ width: Math.max(24, layout.size), height: 44 }} /><View style={{ gap: 2 }}><Text style={t.text.heading}>{SIDEBAR_STATE_LABELS[state]}</Text><Text style={t.text.meta}>Two-line row preview</Text></View></View>
-        <View style={{ paddingLeft: 28, flexDirection: "row", gap: 10, alignItems: "center" }}><Text testID={`morphise-status-nested-preview-${state}`} accessibilityLabel={`${SIDEBAR_STATE_LABELS[state]} nested indicator preview`} style={{ width: Math.max(24, layout.size), height: 32, opacity: 0.8 }} /><Text style={t.text.meta}>Nested: 80% size and opacity</Text></View>
+        <View style={{ paddingHorizontal: 12, flexDirection: "row", gap: 10, alignItems: "flex-start" }}><Text testID={`morphise-status-preview-${state}`} accessibilityLabel={`${SIDEBAR_STATE_LABELS[state]} indicator preview`} style={{ width: Math.max(24, layout.size), height: 20 }} /><View style={{ gap: 2 }}><Text style={t.text.heading}>{SIDEBAR_STATE_LABELS[state]}</Text><Text style={t.text.meta}>Paseo title-line alignment</Text></View></View>
+        <View style={{ paddingLeft: 28, flexDirection: "row", gap: 10, alignItems: "flex-start" }}><Text testID={`morphise-status-nested-preview-${state}`} accessibilityLabel={`${SIDEBAR_STATE_LABELS[state]} nested indicator preview`} style={{ width: Math.max(24, layout.size), height: 20, opacity: 0.8 }} /><Text style={t.text.meta}>Nested: 80% size and opacity</Text></View>
         <SelectField label={`${SIDEBAR_STATE_LABELS[state]} rotation`} value={options.states[state].speed} options={(Object.keys(SIDEBAR_SPEEDS) as SidebarStatusSpeed[]).map((speed) => ({ value: speed, label: speed === "stopped" ? "Stopped" : `${speed[0]!.toUpperCase()}${speed.slice(1)} (${SIDEBAR_SPEEDS[speed] / 1000} s / revolution)` }))} onChange={(speed) => stateChange(state, { speed })} />
         <StatusColor key={`${form.inputKey}:${resetKey}:${state}:${options.states[state].color ?? "theme"}`} label={`${SIDEBAR_STATE_LABELS[state]} color`} value={options.states[state].color ?? ""} onChange={(color) => stateChange(state, { color })} />
       </View>)}
-      <SettingsAction label="Recommended sidebar indicators" actionLabel="Reset sidebar indicators" hint="Restore Dot and ring with recommended size, alignment, colors and speeds. Other settings are kept." onPress={() => { setResetKey((key) => key + 1); onChange(undefined); onLayoutChange(undefined); }} />
+      <SettingsAction label="Recommended sidebar indicators" actionLabel="Reset sidebar indicators" hint="Restore Dot and ring with recommended size, colors and speeds. Other settings are kept." onPress={() => { setResetKey((key) => key + 1); onChange(undefined); onLayoutChange(undefined); }} />
     </SettingsCard>
   </SettingsSection>;
 }

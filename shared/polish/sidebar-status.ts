@@ -11,12 +11,13 @@ export const sidebarStatusSchema = z.strictObject({
   states: z.strictObject({ loading: stateSchema.optional(), running: stateSchema.optional(), needs_input: stateSchema.optional(), failed: stateSchema.optional(), attention: stateSchema.optional(), done: stateSchema.optional() }).optional(),
 });
 export type SidebarStatusSettings = z.output<typeof sidebarStatusSchema>;
+// Legacy alignment values remain readable but no longer control rendering.
 export const sidebarIndicatorLayoutSchema = z.strictObject({ size: z.number().int().min(10).max(24).optional(), alignment: z.enum(["top", "center", "bottom"]).optional() });
 export type SidebarIndicatorLayout = z.output<typeof sidebarIndicatorLayoutSchema>;
 export function sidebarIndicatorLayout(input?: SidebarIndicatorLayout) {
   const parsed = sidebarIndicatorLayoutSchema.safeParse(input ?? {});
   const value = parsed.success ? parsed.data : {};
-  return { size: value.size ?? 14, alignment: value.alignment ?? "center" };
+  return { size: value.size ?? 14 };
 }
 export const SIDEBAR_DEFAULT_SPEEDS: Record<SidebarStatusState, SidebarStatusSpeed> = { loading: "medium", running: "fast", needs_input: "slow", failed: "stopped", attention: "slow", done: "stopped" };
 
