@@ -16,6 +16,7 @@ import { createDraftStore } from "./client/draft";
 import { createFormScreen, createSeparateScreen } from "./client/forms/fields";
 import { ButtonsTab, ChatTab, CommandsTab, GeneralTab, LayoutsTab, LookTab, PromptsTab, SidebarTab } from "./client/forms/tabs";
 import { MessagesTab, PagesTab } from "./client/forms/polish-tabs";
+import { SettingsDirectory, withSettingsDirectory } from "./client/settings-directory";
 import { AgentsBoardTab } from "./client/forms/agents-tab";
 import { AGENTS_SETTINGS_TAB } from "./client/agents-board/board";
 import { type ActionDeps, EDITOR_SCREEN_ID, JSON_SCREEN_ID } from "./client/run-action";
@@ -332,7 +333,9 @@ export default function contribute(client: PluginClientContext) {
       Component: createProfileEditor({ store, problems, drafts, reconnect: () => profile.reopen() }),
     },
   ];
-  for (const tab of tabs) releases.push(client.addSettingsScreen(tab));
+  const navigateSettings = (id: string) => client.openSettings(id);
+  releases.push(client.addSettingsScreen({ id: "search-settings", title: "Search settings", icon: "Search", Component: (props) => <SettingsDirectory open={navigateSettings} theme={props.theme} /> }));
+  for (const tab of tabs) releases.push(client.addSettingsScreen({ ...tab, Component: withSettingsDirectory(tab.Component, tab.id, navigateSettings) }));
 
   // Owned list subscriptions send a snapshot when they start and again after every reconnect.
   function watch<Snapshot>(

@@ -9,7 +9,7 @@ import { VIEW_LAYOUTS } from "../shared/agents-board";
 // lanes. Kept under the Workbench's settings id, so earlier choices carry over.
 const workbenchSchema = z.object({
   railFolded: z.boolean().default(false),
-  boardTab: z.enum(["tasks", "agents", "bookmarks", "activity"]).catch("agents").default("agents"),
+  boardTab: z.enum(["tasks", "agents", "bookmarks", "activity", "calendar"]).catch("agents").default("agents"),
   agentsLayout: z.enum(VIEW_LAYOUTS).catch("list").default("list"),
   // Tasks keep the board until the user picks the list.
   tasksLayout: z.enum(VIEW_LAYOUTS).catch("board").default("board"),

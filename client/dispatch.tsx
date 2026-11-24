@@ -9,6 +9,8 @@ import { Button, Field, Icon, IconButton, PopoverHost, Segmented, Select, type T
 import type { WorkspaceList } from "./workspaces";
 import { fontSize, radius } from "../shared/design/tokens";
 import { isMac } from "./web";
+import { DispatchQuotaNotice, readDispatchQuota } from "./dispatch-quota";
+import type { DispatchQuota } from "../shared/dispatch-quota";
 
 // Dispatch: several prompts at once, each started as its own new workspace and agent. One row of
 // defaults (project, model, mode, worktree or folder), then numbered prompts that turn into live
@@ -124,6 +126,15 @@ function Dispatch({ t, deps, openWorkspace, header }: { t: Tokens; deps: Dispatc
   // The current (or last) run: how many prompts it started with, and how many it has dealt with.
   const [run, setRun] = useState({ total: 0, done: 0 });
   const runningRef = useRef(false);
+  const [quota, setQuota] = useState<DispatchQuota | null>(null);
+  const [previewQuota, setPreviewQuota] = useState<{ provider: string; value: DispatchQuota } | null>(null);
+  const [checkingQuota, setCheckingQuota] = useState(false);
+  const quotaPreviewId = useRef(0);
+  const [warning, setWarning] = useState<{ key: string; which: "all" | "failed" | number; count: number; expires: number; summary: string[] } | null>(null);
+  const [quotaError, setQuotaError] = useState<string | null>(null);
+  const mounted = useRef(true);
+  const attemptId = useRef(0);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   // Every model Paseo's providers offer, kept current as providers finish loading or change.
   useEffect(() => {
@@ -177,17 +188,55 @@ function Dispatch({ t, deps, openWorkspace, header }: { t: Tokens; deps: Dispatc
   const update = (id: number, patch: Partial<Row>) => setRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch } : row)));
   const pending = rows.filter((row) => (row.status === "draft" || row.status === "failed") && row.text.trim());
   const ready = !!project && !!model && pending.length > 0 && !running;
+  const launchKey = JSON.stringify({ model: model?.value, root: project?.rootPath, project: project?.id, kind: project?.kind, mode, where, rows: rows.filter((row) => row.status === "draft" || row.status === "failed").map(({ id, text }) => ({ id, text })) });
+  const latestLaunchKey = useRef(launchKey);
+  latestLaunchKey.current = launchKey;
+  useEffect(() => {
+    const id = ++quotaPreviewId.current;
+    if (!model) { setPreviewQuota(null); return; }
+    setPreviewQuota(null); setCheckingQuota(true);
+    void readDispatchQuota(paseo.providers, model.provider).then((value) => {
+      if (mounted.current && quotaPreviewId.current === id) { setPreviewQuota({ provider: model.provider, value }); setCheckingQuota(false); }
+    });
+    return () => { quotaPreviewId.current++; };
+  }, [paseo, model?.provider]);
+  useEffect(() => {
+    if (warning && warning.key !== launchKey) { setWarning(null); setQuotaError("Launch choices changed. Nothing was started; check quota again."); }
+  }, [launchKey]);
 
   // One at a time, in order. A failure marks its row and the rest still start; a row is never
   // started twice, because only draft and failed rows are picked and each is marked first.
   // `which`: every draft and failed prompt, only the failed ones, or one row (its Retry).
-  const start = async (which: "all" | "failed" | number = "all") => {
+  const start = async (which: "all" | "failed" | number = "all", confirmedKey?: string) => {
     if (runningRef.current || !project || !model) return;
     const picked = (row: Row) => (which === "all" ? row.status === "draft" || row.status === "failed" : which === "failed" ? row.status === "failed" : row.id === which && (row.status === "draft" || row.status === "failed"));
     const queue = rows.filter((row) => picked(row) && row.text.trim());
     if (!queue.length) return;
     runningRef.current = true;
     setRunning(true);
+    const attempt = ++attemptId.current;
+    setQuotaError(null);
+    const key = launchKey;
+    if (confirmedKey !== key) {
+      setCheckingQuota(true);
+      const reading = await readDispatchQuota(paseo.providers, model.provider);
+      if (mounted.current) setCheckingQuota(false);
+      if (!mounted.current || attempt !== attemptId.current) { if (attempt === attemptId.current) runningRef.current = false; return; }
+      if (latestLaunchKey.current !== key) {
+        runningRef.current = false; setRunning(false); setWarning(null); setQuotaError("Launch choices changed while quota was being checked. Nothing was started; review and launch again."); return;
+      }
+      setQuota(reading);
+      quotaPreviewId.current++;
+      setPreviewQuota({ provider: model.provider, value: reading });
+      if (reading.kind === "available" && reading.used >= 80) {
+        setWarning({ key, which, count: queue.length, expires: Math.min(Date.now() + 60000, reading.fetchedAt + 300000), summary: [
+          `Model: ${model.value}`, `Project: ${project.name} (${project.id})`, `Source: ${project.rootPath}`, `Destination: ${where === "worktree" ? "New isolated worktree" : "Project directory"}`, `Mode: ${mode ?? "Provider default"}`, ...queue.map((row, index) => `Prompt ${index + 1}: ${row.text.trim()}`),
+        ] });
+        runningRef.current = false; setRunning(false); return;
+      }
+    }
+    if (attempt !== attemptId.current || !mounted.current) return;
+    setWarning(null);
     setRun({ total: queue.length, done: 0 });
     // The whole queue is marked first, so none of it can be edited or split while it waits.
     const queued = new Set(queue.map((row) => row.id));
@@ -231,6 +280,13 @@ function Dispatch({ t, deps, openWorkspace, header }: { t: Tokens; deps: Dispatc
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: t.compact ? 12 : 24, paddingTop: t.compact ? 16 : 56, paddingBottom: 32, gap: 16, maxWidth: 760, width: "100%", alignSelf: "center" }} keyboardShouldPersistTaps="handled">
         {header}
+        <Text style={t.text.meta}>Quota preflight: {checkingQuota ? "Checking provider quota…" : previewQuota?.provider === model?.provider && previewQuota ? previewQuota.value.kind === "available" ? `${previewQuota.value.used.toFixed(0)}% used on ${previewQuota.provider}. Launch checks again.` : `Unavailable: ${previewQuota.value.reason}` : "Choose a provider to check quota."}</Text>
+        {warning ? <View style={{ gap: 6, padding: 12, backgroundColor: t.c.surface1, borderRadius: t.radius.row }}><Text style={t.text.heading}>Confirm this exact launch · {warning.count} prompts</Text>{warning.summary.map((line, index) => <Text key={index} selectable style={t.text.body}>{line}</Text>)}<Text style={t.text.meta}>Confirmation expires {new Date(warning.expires).toLocaleTimeString()}. Changes require a fresh check.</Text></View> : null}
+        {quota ? <DispatchQuotaNotice t={t} quota={quota} count={warning?.count} onContinue={warning ? () => {
+          if (latestLaunchKey.current !== warning.key) { setWarning(null); setQuotaError("Launch choices changed. Nothing was started; check quota again."); return; }
+          void start(warning.which, Date.now() < warning.expires ? warning.key : undefined);
+        } : undefined} onCancel={() => { attemptId.current++; runningRef.current = false; setRunning(false); setWarning(null); }} /> : null}
+        {quotaError ? <Text accessibilityRole="alert" style={t.text.danger}>{quotaError}</Text> : null}
         {/* One card, like Paseo's own message box: the prompts, then a toolbar with where and with
             what, and Start. */}
         <View style={{ borderRadius: radius.xl, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1 }}>

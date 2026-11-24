@@ -2,6 +2,13 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.55.0 - 2026-11-24
+
+- **Workspace checkpoints:** explicit Goal, Last verified result, Blocked by and Next step cards, revision/author/time, own-workspace agent tool and stale-write rejection. Session drafts survive panel navigation; conflict comparison supports explicit rebase/discard, and older saves cannot erase newer drafts.
+- **Workbench Calendar:** Day/Week agenda grouped by local day, provider/workspace/project filters, chat links, freshness and coverage details, summed agent runtime versus overlapping elapsed coverage. Forward observation only, no historical backfill; uncertain/interrupted intervals are excluded from totals. Records are bounded and stored on the daemon without transcripts or credentials.
+- **Quota-aware Dispatch:** provider-reported quota appears before Start and is checked again for each launch/retry. Fresh usage at 80% or more requires confirmation tied to exact model/source/mode/prompts. Changed/canceled/unmounted attempts do not launch. Missing quota is explicitly unavailable; no automatic model/account switching.
+- **Settings and status clarity:** indexed plugin-settings topic search and scope descriptions preserve editing context. Morphise status tooltips explain state, reason and genuine state-entry duration where available; missing timestamps are not replaced by last activity.
+
 ## 0.54.0 - 2026-11-24
 
 - **Sidebar indicator layout:** plugin Look settings now offer main indicator size (10–24px, default 14px) and Top/Center/Bottom alignment against the full row content. Nested chats/subagents derive exactly 80% of the main size and opacity. Main/nested previews and a layout-only reset are included; colors and speeds remain shared. Layout is stored separately to preserve existing state settings in older readers.

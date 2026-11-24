@@ -119,3 +119,7 @@ Morphise includes code ported from seven MIT-licensed Paseo plugins. Each ported
 | [Activity](https://github.com/koinzhang/paseo-plugins/tree/main/activity) | koinzhang | The Activity tab (metrics, rankings, insights, terminals) and the Tools counts in Stats: the counting rules, read from logs instead of timelines | MIT |
 
 Packages: pele (MIT) and sharp (Apache-2.0, with LGPL-3.0-or-later libvips) are installed on the daemon; the Hugeicons (MIT) and Untitled UI icon sets are downloaded only when picked; terminal commands use the `node-pty` Paseo ships (MIT).
+
+## Work checkpoints, calendar and Dispatch preflight
+
+Workspace Checkpoint panels keep explicit Goal/Last verified/Blocked/Next fields with revisions and author/time; stale saves retain the draft, and an own-workspace tool permits revisioned top-level agent updates. Workbench Calendar records future turn observations with Day/Week filters and honest uncertainty/coverage labels, not complete history or human hours. Dispatch warns on fresh provider-reported usage at or above 80%, with confirmation bound to the exact launch choices; missing quota is unavailable rather than guessed. See README for storage, retention, permissions and lifecycle limits.

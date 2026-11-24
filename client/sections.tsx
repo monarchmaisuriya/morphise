@@ -16,6 +16,7 @@ import {
   type SurfaceDeps,
 } from "./task-surfaces";
 import { NotesPanel } from "./notes-panel";
+import { createCheckpointPanel } from "./checkpoint-panel";
 import { createPromptPicker } from "./prompt-picker";
 import { createChecksPanel } from "./checks-panel";
 import { createDispatchScreen, DISPATCH_ICON, DISPATCH_SCREEN_ID } from "./dispatch";
@@ -266,6 +267,7 @@ export function createSections(client: PluginClientContext, deps: ActionDeps, ta
         track(client.addWorkspacePanel({ id: "tasks", title: "Tasks", icon: "ListTodo", context: "workspace", Component: createWorkspaceTasksPanel(tasks) }));
         track(client.addWorkspacePanel({ id: DETAILS_PANEL_ID, title: "Details", icon: "PanelRight", context: "workspace", Component: createDetailsPanel(client) }));
         track(client.addWorkspacePanel({ id: "checks", title: "Checks", icon: "GitPullRequest", context: "workspace", Component: createChecksPanel(tasks) }));
+        track(client.addWorkspacePanel({ id: "checkpoint", title: "Checkpoint", icon: "Flag", context: "workspace", Component: createCheckpointPanel(client) }));
         track(
           client.addCommandCenterItem({
             id: "morphise-checks",
