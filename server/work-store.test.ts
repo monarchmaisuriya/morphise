@@ -5,6 +5,18 @@ import { expect, it } from "vitest";
 import { WorkStore } from "./work-store";
 import { EMPTY_CHECKPOINT } from "../shared/work-checkpoints";
 
+it("fills a missing turn-start title at completion without changing runtime", async () => {
+  const root = await mkdtemp(join(tmpdir(), "work-title-"));
+  try {
+    let now = 1000;
+    const store = new WorkStore(join(root, "records.json"), () => now);
+    await store.start({ id: "agent", workspaceId: "workspace", provider: "fake", title: null }, "turn");
+    now = 2000;
+    await store.end("agent", "turn", "completed", "Resolved chat name");
+    expect((await store.calendar(0, 3000)).intervals[0]).toMatchObject({ title: "Resolved chat name", startAt: 1000, endAt: 2000, uncertain: false });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 it("rejects stale checkpoint writers and retains persisted attribution on restart", async () => {
   const root = await mkdtemp(join(tmpdir(), "work-store-"));
   try {

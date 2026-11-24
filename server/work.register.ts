@@ -33,7 +33,7 @@ export function registerWork(server: PluginServerContext) {
   const stops = [
     server.addHook("agent.open.before", async ({ request }) => request.purpose !== "history" && !request.labels?.["paseo.parent-agent-id"] && !(request as unknown as { background?: boolean }).background && !request.metadata?.["morphise.titleHelper"] ? { ...request, tools: [...request.tools, tool] } : undefined),
     server.addHook("agent.turn.before", async ({ agent, turnId }) => { if (visible(agent)) await store.start(agent, turnId); }),
-    server.addHook("agent.turn.after", async ({ agent, turnId, outcome }) => { if (visible(agent)) await store.end(agent.id, turnId, outcome.kind); }),
+    server.addHook("agent.turn.after", async ({ agent, turnId, outcome }) => { if (visible(agent)) await store.end(agent.id, turnId, outcome.kind, agent.title); }),
     server.addHook("agent.close.after", async ({ agent }) => { await store.close(agent.id); }),
     server.addHook("agent.archive.after", async ({ agent }) => { await store.close(agent.id); }),
   ];

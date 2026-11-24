@@ -4,6 +4,11 @@ import { workId } from "./work-checkpoints";
 
 export const intervalSchema = z.object({ id: z.string(), agentId: workId, workspaceId: z.string().nullable(), provider: z.string(), title: z.string(), turnId: z.string().nullable(), startAt: z.number().nonnegative(), endAt: z.number().nullable(), outcome: z.enum(["running", "completed", "failed", "canceled", "interrupted"]), uncertain: z.boolean() });
 export type WorkInterval = z.infer<typeof intervalSchema>;
+export function calendarTitle(interval: Pick<WorkInterval, "title" | "provider">, agentTitle?: string | null, workspaceTitle?: string | null) {
+  const recorded = interval.title.trim();
+  if (recorded && recorded !== "Untitled agent") return recorded;
+  return agentTitle?.trim() || workspaceTitle?.trim() || `${interval.provider} session`;
+}
 export const calendarRead = defineRpc({ name: "work.calendar.read", input: z.object({ from: z.number().nonnegative(), to: z.number().nonnegative() }).refine((v) => v.to > v.from && v.to - v.from <= 32 * 86400000, "Choose a range of at most 32 days"), output: z.object({ recordingSince: z.number(), pruned: z.number(), intervals: z.array(intervalSchema).max(20000) }) });
 
 export function clippedInterval(interval: WorkInterval, from: number, to: number, now: number): { start: number; end: number; ms: number } | null {

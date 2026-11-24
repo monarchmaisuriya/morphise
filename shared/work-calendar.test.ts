@@ -1,5 +1,12 @@
 import { expect, it } from "vitest";
-import { calendarDays, calendarRange, calendarTotals, type WorkInterval } from "./work-calendar";
+import { calendarDays, calendarRange, calendarTotals, calendarTitle, type WorkInterval } from "./work-calendar";
+
+it("resolves placeholder calendar names without overwriting meaningful recorded titles", () => {
+  expect(calendarTitle({ title: "Untitled agent", provider: "fake" }, "Current chat name", "Workspace")).toBe("Current chat name");
+  expect(calendarTitle({ title: "Untitled agent", provider: "fake" }, null, "Workspace")).toBe("Workspace");
+  expect(calendarTitle({ title: " ", provider: "fake" })).toBe("fake session");
+  expect(calendarTitle({ title: "Recorded task", provider: "fake" }, "Renamed chat", "Workspace")).toBe("Recorded task");
+});
 
 it("counts parallel agent time separately from elapsed covered time", () => {
   const base: WorkInterval = { id: "a", agentId: "a", workspaceId: "w", provider: "fake", title: "Task", turnId: "turn", startAt: 100, endAt: 300, outcome: "completed", uncertain: false };

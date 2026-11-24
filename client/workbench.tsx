@@ -223,6 +223,7 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
     }, [shown]);
     const openChat = navigation ? (agentId: string) => navigation.openAgent({ agentId }) : null;
     const workspaces = useValue(deps.workspaces);
+    const calendarChats = useValue(deps.chats);
     // Agents and Tasks wait for the settings and counts, so neither shows for a moment before the opening view is known.
     const ready = countsReady;
     // Tasks starts with no filter (its open cards) unless a link asked for Today or Archived, or it opened for what is due
@@ -231,7 +232,7 @@ export function createWorkbenchScreen(deps: SurfaceDeps, fallback: string | null
 
     const content =
       view === "calendar" ? (
-        <WorkCalendar client={deps.client} theme={theme} compact={layout.compact} workspaces={workspaces} openChat={openChat} />
+        <WorkCalendar client={deps.client} theme={theme} compact={layout.compact} workspaces={workspaces} chats={calendarChats} openChat={openChat} />
       ) : view === "bookmarks" ? (
         <Bookmarks t={t} deps={deps} workspaces={workspaces} open={openChat} />
       ) : view === "activity" ? (
