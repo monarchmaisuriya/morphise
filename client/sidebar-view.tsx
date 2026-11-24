@@ -273,7 +273,7 @@ function useRemindToggle() {
 // `stem`: the x of the line its children hang on (`branch.chat.x` or `branch.sub.x`), when it has children listed; the
 // line then starts under this row's dot (`parentStem`).
 // `checked`: set in selection mode, where the row is a checkbox instead of a button.
-function RowShell({ selected, checked, child, grandchild, twoLine, label, onPress, onLongPress, main, trailing, actions, showActions, disabled, rowRef, onHover, stem, shared }: { selected: boolean; checked?: boolean; child?: boolean; twoLine?: boolean; label: string; onPress(): void; onLongPress?(): void; main: ReactNode; trailing?: ReactNode; actions?: ReactNode; showActions?: boolean; disabled?: boolean; rowRef?: RefObject<View | null>; onHover?(on: boolean): void; grandchild?: boolean; stem?: number; shared: Shared }) {
+export function RowShell({ selected, checked, child, grandchild, twoLine, label, onPress, onLongPress, main, trailing, actions, showActions, disabled, rowRef, onHover, stem, shared }: { selected: boolean; checked?: boolean; child?: boolean; twoLine?: boolean; label: string; onPress(): void; onLongPress?(): void; main: ReactNode; trailing?: ReactNode; actions?: ReactNode; showActions?: boolean; disabled?: boolean; rowRef?: RefObject<View | null>; onHover?(on: boolean): void; grandchild?: boolean; stem?: number; shared: Shared }) {
   const { styles } = shared;
   const key = useId();
   const hovered = useHovered(shared.hover, key);

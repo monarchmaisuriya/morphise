@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ChatSettings } from "../chat-view";
-import { sidebarStatusSchema, type SidebarStatusSettings } from "./sidebar-status";
+import { sidebarStatusSchema, sidebarIndicatorLayoutSchema, type SidebarIndicatorLayout, type SidebarStatusSettings } from "./sidebar-status";
 
 // Chat Polish's preferences (lthieu96/paseo-chat-polish, MIT, see NOTICE.md), kept in Morphise's
 // profile. Options Morphise already had keep their Morphise key (one owner each); the rest live in
@@ -41,6 +41,7 @@ function tolerant<Shape extends z.ZodRawShape>(shape: Shape) {
 // Morphise versions that do not know a key are not handed one by default.
 export const polishSchema = tolerant({
   sidebarStatus: sidebarStatusSchema.optional(),
+  sidebarIndicatorLayout: sidebarIndicatorLayoutSchema.optional(),
   // Thoughts and tool calls between two replies folded into one row.
   merge: z.boolean().optional(),
   rowIcons: z.strictObject({ steps: shown.optional(), tool: shown.optional(), thought: shown.optional() }).optional(),
@@ -121,6 +122,7 @@ export const POLISH_DEFAULTS: Partial<Record<keyof PolishSettings, unknown>> = {
 // Chat Polish's Prefs, as its ported code reads them.
 export interface Prefs {
   sidebarStatus?: SidebarStatusSettings;
+  sidebarIndicatorLayout?: SidebarIndicatorLayout;
   reasoning: "paseo" | "collapsed" | "expanded";
   commandColors: "expanded" | "always";
   diffWrap: "on" | "off";
@@ -185,6 +187,7 @@ export function polishPrefs(chat: ChatSettings | undefined): Prefs {
   const icon = (kind: IconKind) => (chat?.labels === "label" ? "hide" : polish.rowIcons?.[kind] ?? "show");
   return {
     sidebarStatus: polish.sidebarStatus,
+    sidebarIndicatorLayout: polish.sidebarIndicatorLayout,
     reasoning: chat?.reasoning === "fold" ? "collapsed" : chat?.reasoning === "expand" ? "expanded" : "paseo",
     commandColors: chat?.commandColors === false ? "expanded" : "always",
     diffWrap: chat?.wrap === false ? "off" : "on",
