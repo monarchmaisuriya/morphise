@@ -1,6 +1,24 @@
 import { expect, it } from "vitest";
-import { sidebarStatusOptions, sidebarStatusSchema } from "./sidebar-status";
+import { sidebarIndicatorLayout, sidebarIndicatorLayoutSchema, sidebarStatusOptions, sidebarStatusSchema } from "./sidebar-status";
 import { polishPrefs, polishSchema } from "./prefs";
+import { z } from "zod";
+
+it("loads bounded layout separately without changing saved state choices", () => {
+  const polish = polishSchema.parse({ sidebarStatus: { states: { running: { color: "#123456" } } }, sidebarIndicatorLayout: { size: 24, alignment: "bottom" } });
+  expect(polishPrefs({ polish }).sidebarIndicatorLayout).toEqual({ size: 24, alignment: "bottom" });
+  expect(sidebarIndicatorLayout()).toEqual({ size: 14, alignment: "center" });
+  expect(sidebarStatusSchema.parse(polish.sidebarStatus)).toEqual({ states: { running: { color: "#123456" } } });
+});
+
+it("preserves the new sibling layout through an older reader without invalidating state choices", () => {
+  const olderReader = z.object({ sidebarStatus: sidebarStatusSchema.optional().catch(undefined) }).catchall(z.json());
+  const saved = { sidebarStatus: { states: { running: { color: "#123456", speed: "slow" } } }, sidebarIndicatorLayout: { size: 24, alignment: "bottom" } };
+  expect(olderReader.parse(saved)).toEqual(saved);
+});
+
+it.each([{ size: 9 }, { size: 25 }, { size: 14.5 }, { alignment: "left" }])("rejects invalid indicator layout %j", (input) => {
+  expect(sidebarIndicatorLayoutSchema.safeParse(input).success).toBe(false);
+});
 
 it("loads saved sidebar choices through the real profile preference boundary", () => {
   const polish = polishSchema.parse({ sidebarStatus: { style: "paseo", states: { running: { color: "#123456", speed: "slow" } } } });

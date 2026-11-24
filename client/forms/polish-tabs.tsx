@@ -197,7 +197,7 @@ export function PolishLookSettings({ form }: { form: Form }): ReactNode {
           <PreviewWidth theme={form.theme} compact={form.compact}>{(compact) => <LookPreview theme={form.theme} prefs={prefs} profileTheme={form.profile.theme} compact={compact} />}</PreviewWidth>
         </SettingsCard>
       </SettingsSection>
-      <SidebarStatusSettings form={form} value={prefs.sidebarStatus} onChange={(value) => set("sidebarStatus", value)} />
+      <SidebarStatusSettings form={form} value={prefs.sidebarStatus} onChange={(value) => set("sidebarStatus", value)} layoutValue={prefs.sidebarIndicatorLayout} onLayoutChange={(value) => set("sidebarIndicatorLayout", value)} />
       <SettingsSection title="Restyle Paseo (experimental)" info="Chat Polish's design for Paseo's own message box, cards, menus, tool groups and replies, on desktop and web. It works through Paseo's page structure, so a Paseo update can break parts of it.">
         <SettingsCard>
           <SwitchField label="Restyle Paseo's items" value={restyled} onChange={(value) => set("restyle", value)} />

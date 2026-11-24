@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.54.0 - 2026-11-24
+
+- **Sidebar indicator layout:** plugin Look settings now offer main indicator size (10–24px, default 14px) and Top/Center/Bottom alignment against the full row content. Nested chats/subagents derive exactly 80% of the main size and opacity. Main/nested previews and a layout-only reset are included; colors and speeds remain shared. Layout is stored separately to preserve existing state settings in older readers.
+- **Matching dot and ring:** every state's center dot now uses the same color and opacity as its circular track, including custom colors, both sidebar renderers, nested rows and settings previews. The rotating arc stays brighter. The stopped-Done fix remains intact.
+
 ## 0.53.2 - 2026-11-24
 
 - **Clean stopped Done indicator:** hide the bright stationary quarter-arc for Idle/done when its rotation is Stopped, leaving the muted ring and center dot. Choosing a rotation speed still shows the rotating arc. Shared behavior covers native and Morphise sidebars, nested rows and the settings preview; other states are unchanged.

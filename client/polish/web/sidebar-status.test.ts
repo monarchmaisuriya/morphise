@@ -14,4 +14,6 @@ it("scopes preview rules separately from sidebar rules", () => {
   expect(sidebarStatusCss({ states: { running: { speed: "slow", color: "#123456" } } })).toContain("3200ms linear infinite");
   expect(sidebarStatusCss()).toContain("prefers-reduced-motion: reduce");
   expect(sidebarStatusCss()).not.toContain("pulse");
+  expect(sidebarStatusCss()).toContain("radial-gradient(circle, var(--morphise-status-track) 0 20%, transparent 25%)");
+  expect(sidebarStatusCss()).toContain("border-color: var(--morphise-status-track)");
 });
