@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.53.1 - 2026-11-24
+
+- **Fix sidebar indicators reverting to dots:** Morphise's replacement sidebar now consumes the same profile-backed dot-and-ring settings as native-sidebar styling. Preferences stay effective after profile hydration and closing Settings. Main row marks are 14px/full opacity; nested chats and subagents use the same state colors and rotation speeds at 12px/80% opacity. Removed the separate Chat row marks selector and its dashed-circle renderer, while retaining old device data compatibility. No pulsing in ring mode; reduced motion covers both sidebar renderers. Native phones keep a static-dot fallback.
+
 ## 0.53.0 - 2026-11-24
 
 - **Configurable sidebar status indicators:** Plugins → Morphise → Settings → Look now offers Dot and ring (default) or Paseo default. Starting, Working, Needs input, Failed, Attention/unread and Idle/done each have color and rotation-speed choices, a preview and scoped reset. Rotation only, no provider logos or pulsing. Reduced motion stops plugin rotation. Choices are saved per profile, independent of Restyle Paseo, on desktop/web. Original host indicators remain intact for restoration; hidden host-owned animation clocks may continue. No agent state or sidebar ordering changes.

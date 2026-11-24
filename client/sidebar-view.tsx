@@ -53,7 +53,7 @@ import { branchSegments, parentStem } from "../shared/tree-lines";
 import { INDICATORS, type Indicator, type Profile } from "../shared/profile";
 import { stepsOptions } from "../shared/steps";
 import { type AttentionList, waitingChildren } from "./attention";
-import { type ChatListing, chatTree, DEFAULT_CHAT_ROWS, DEFAULT_REMINDER_ROWS, effectiveIndicator, listedChatKeys, listedSubAgents, listedTopChats, listsChats, MARK_KEY, markApplies, owningRowKey, type RowShows, rowShows, rowTitle, runningShownBelow, statusLine } from "../shared/row-meta";
+import { type ChatListing, chatTree, DEFAULT_CHAT_ROWS, DEFAULT_REMINDER_ROWS, effectiveIndicator, listedChatKeys, listedSubAgents, listedTopChats, listsChats, MARK_KEY, markApplies, owningRowKey, type RowShows, rowShows, rowTitle, statusLine } from "../shared/row-meta";
 import { newTaskId } from "./board/card-editor";
 import { isDue, type Reminder } from "../shared/reminders";
 import { formatDue, formatElapsed } from "../shared/time-text";
@@ -66,8 +66,9 @@ import { type PickerDeps, ReminderPicker, type ReminderTarget } from "./reminder
 import { followUpTask, snoozeTime, workspaceTask } from "../shared/task-ops";
 import { type ApplyTaskOperations, type TaskStore, tasksOf } from "./task-store";
 import { Button, Dropdown, Field, Icon, IconButton, MenuItem, PopoverHost, Tag, type Tokens, useTokens } from "./ui/kit";
-import { DONE_OPACITY, isDarkSurface, PURPLE, statusColor, tileColor, withAlpha } from "./ui/hues";
+import { isDarkSurface, PURPLE, statusColor, tileColor, withAlpha } from "./ui/hues";
 import { usePulse } from "./ui/pulse";
+import { SidebarStatusMark } from "./sidebar-status-mark";
 import { StepsCards } from "./steps-card";
 import { DISPATCH_ICON, DISPATCH_SCREEN_ID, screenOpener } from "./dispatch";
 import type { PullRequestInfo, ServiceInfo, WorkspaceInfo } from "./workspaces";
@@ -115,7 +116,7 @@ const toggleSelected = (workspaceKey: string) => {
 function viewStyles(theme: Theme, config: ViewConfig, look: ReturnType<typeof sidebarLook>) {
   const c = theme.colors;
   // "Compact" is Paseo's own 36px row; "comfortable" adds air.
-  const { height, childHeight, textSize, groupGap, rowPad, branchLines, branchRadius, branchMark } = look;
+  const { height, childHeight, textSize, groupGap, rowPad, branchLines, branchRadius } = look;
   // Rows and their chat lines move in by the indent beyond the usual 8.
   const shift = rowPad - 8;
   return {
@@ -158,8 +159,6 @@ function viewStyles(theme: Theme, config: ViewConfig, look: ReturnType<typeof si
       more: TOUCH ? 20 : 14,
       // The "Branch lines" display setting: off, no piece of line is drawn and rows keep their indent.
       shown: branchLines,
-      // The "Chat row marks" setting: chat and sub-agent rows draw a dashed circle, or the filled dot workspaces use.
-      dashed: branchMark === "dashed",
     },
     slot: { width: 16, alignItems: "center" as const, justifyContent: "center" as const },
     child: { paddingLeft: 24 + shift, minHeight: childHeight },
@@ -307,21 +306,9 @@ function RowShell({ selected, checked, child, grandchild, twoLine, label, onPres
 
 // The height of the line the status mark sits on (a two-line row's title line).
 const STATUS_LINE = 20;
-// Dots on rows that hang off a branch (chats, sub-agents) are lighter than their parent's dot.
-const BRANCH_DOT_OPACITY = 0.7;
-
-// The status mark in the same 16px column as project tiles, as Paseo draws it. Running work pulses.
-// `still`: running work drawn by the rows under this one, which pulse instead.
-// `branch`: the row hangs off a tree line; its mark is dimmed on top of the pulse and the done opacity, and is a dashed
-// circle in the same colour unless Chat row marks is set to the dot.
-function StatusMark({ indicator, still = false, branch = false, shared }: { indicator: Indicator; still?: boolean; branch?: boolean; shared: Shared }) {
-  const pulse = usePulse(indicator === "running" && !still);
-  const color = statusColor(shared.props.theme.colors, indicator);
-  return (
-    <View style={[shared.styles.slot, { height: STATUS_LINE, opacity: branch ? BRANCH_DOT_OPACITY : 1 }]}>
-      <Animated.View accessibilityLabel={STATUS_TITLES[indicator]} style={{ width: 7, height: 7, borderRadius: 4, ...(branch && shared.styles.branch.dashed ? { borderWidth: 1.5, borderStyle: "dashed" as const, borderColor: color } : { backgroundColor: color }), opacity: indicator === "done" ? DONE_OPACITY : pulse }} />
-    </View>
-  );
+// One visual owner for main rows and their smaller, less opaque nested rows.
+export function StatusMark({ indicator, branch = false, shared }: { indicator: Indicator; branch?: boolean; shared: Shared }) {
+  return <SidebarStatusMark indicator={indicator} nested={branch} colors={shared.props.theme.colors} />;
 }
 
 // Pulsing placeholder rows until the first workspace list arrives.
@@ -392,9 +379,6 @@ function AgentRow({ reference, sub, subs = [], shared }: { reference: AgentRef; 
   const chat = useAgent(reference, (item) => ({ name: chatName(item), indicator: chatIndicator(item), workspaceId: item.workspaceId, last: item.lastActivityAt }));
   const remind = useRemindToggle();
   const attention = shared.attentionOf(reference.hostId);
-  // Every sub-agent listed under this chat, deeper ones too (chatTree files them under it).
-  const subKeys = new Set(subs.map((agent) => agent.key));
-  const runningSubs = useAgents({ hosts: [reference.hostId], where: (agent) => subKeys.has(agent.ref.key) && chatIndicator(agent) === "running" });
   const listedSubs = new Set(sub ? [] : listedSubAgents(reference.key, subs, shared.listing).rows.map((agent) => agent.key));
   // Sub-agents of this chat blocked on the user (permission or failed).
   const waiting = waitingChildren(attention, reference.id);
@@ -414,7 +398,7 @@ function AgentRow({ reference, sub, subs = [], shared }: { reference: AgentRef; 
         showActions={linksTasks(shared, reference.hostId) && shared.chatReminders.has(reference.id)}
         main={
           <>
-            <StatusMark indicator={indicator} still={runningShownBelow(runningSubs, listedSubs)} branch shared={shared} />
+            <StatusMark indicator={indicator} branch shared={shared} />
             <Text style={styles.childLabel} numberOfLines={1}>
               {chat.name}
             </Text>
@@ -1004,7 +988,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
       <Icon name={picked ? "SquareCheck" : "Square"} size={14} color={picked ? c.accent : c.foregroundMuted} />
     </View>
   ) : (
-    <StatusMark indicator={indicator} still={!!listedKeys && runningShownBelow(running, listedKeys)} shared={shared} />
+    <StatusMark indicator={indicator} shared={shared} />
   );
   const main = twoLine ? (
     <>

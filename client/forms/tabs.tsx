@@ -1002,7 +1002,6 @@ function SidebarLookSetting() {
   const [indent, setIndent, , indentFailed] = useDeviceValue(stored, "indent", "normal");
   const [branchLines, setBranchLines, , branchLinesFailed] = useDeviceValue(stored, "branchLines", true);
   const [branchCorners, setBranchCorners, , branchCornersFailed] = useDeviceValue(stored, "branchCorners", "rounded");
-  const [branchMark, setBranchMark, , branchMarkFailed] = useDeviceValue(stored, "branchMark", "dashed");
   const [showBackground, setShowBackground, , showBackgroundFailed] = useDeviceValue(stored, "showBackground", false);
   const [boldGroupNames, setBoldGroupNames, , boldGroupNamesFailed] = useDeviceValue(stored, "boldGroupNames", false);
   const [showProjectIcons, setShowProjectIcons, , showProjectIconsFailed] = useDeviceValue(stored, "showProjectIcons", true);
@@ -1055,17 +1054,6 @@ function SidebarLookSetting() {
             error={branchCornersFailed}
           />
         ) : null}
-        <SelectField
-          label="Chat row marks"
-          hint="The status mark on chats and sub-agents under a workspace."
-          value={branchMark}
-          options={[
-            { value: "dashed", label: "Dashed circle" },
-            { value: "dot", label: "Dot" },
-          ]}
-          onChange={setBranchMark}
-          error={branchMarkFailed}
-        />
         <SwitchField label="Bold group names" value={boldGroupNames} onChange={setBoldGroupNames} error={boldGroupNamesFailed} />
         <SwitchField label="Folder icons" hint="A coloured project icon beside each project's name." value={showProjectIcons} onChange={setShowProjectIcons} error={showProjectIconsFailed} />
         <SwitchField label="Show background workspaces" hint="Workspaces an agent runs without a tab, as Paseo's Show background." value={showBackground} onChange={setShowBackground} error={showBackgroundFailed} />
