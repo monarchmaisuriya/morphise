@@ -21,9 +21,8 @@ export function SidebarStatusSettings({ form, value, onChange, layoutValue, onLa
   const t = tokens(form.theme, form.compact);
   useEffect(() => Platform.OS === "web" ? applyStyleSheet(sidebarStatusCss(value, "preview", layoutValue)) : undefined, [value, layoutValue]);
   const saveLayout = (patch: SidebarIndicatorLayout) => {
-    const next = { ...layoutValue, ...patch };
+    const next = { size: layoutValue?.size, ...patch };
     if (next.size === 14) delete next.size;
-    if (next.alignment === "center") delete next.alignment;
     onLayoutChange(Object.keys(next).length ? next : undefined);
   };
   const save = (next: SidebarStatusSettings) => {
@@ -44,7 +43,6 @@ export function SidebarStatusSettings({ form, value, onChange, layoutValue, onLa
       <SelectField label="Sidebar indicator style" value={options.style} options={[{ value: "ring", label: "Dot and ring" }, { value: "paseo", label: "Paseo default" }]} onChange={(style) => save({ ...value, style })} />
       {options.style === "ring" ? <>
         <SelectField label="Main indicator size" value={String(layout.size)} options={[10, 12, 14, 16, 18, 20, 22, 24].map((size) => ({ value: String(size), label: `${size} px` }))} onChange={(size) => saveLayout({ size: Number(size) })} hint="Nested chats and subagents always use 80% of this size and 80% of the main indicator opacity." />
-        <SelectField label="Indicator vertical alignment" value={layout.alignment} options={[{ value: "top", label: "Top" }, { value: "center", label: "Center" }, { value: "bottom", label: "Bottom" }]} onChange={(alignment) => saveLayout({ alignment })} hint="Align against the full row content, including two-line rows." />
         <SettingsAction label="Indicator layout" actionLabel="Reset indicator layout" onPress={() => onLayoutChange(undefined)} />
       </> : null}
       {options.style === "paseo" ? <Text style={[t.text.meta, { padding: 12 }]}>Paseo draws its original indicators. Your custom colors and speeds are kept for when you choose Dot and ring again.</Text> : SIDEBAR_STATES.map((state) => <View key={state} style={{ paddingVertical: 8 }}>
@@ -53,7 +51,7 @@ export function SidebarStatusSettings({ form, value, onChange, layoutValue, onLa
         <SelectField label={`${SIDEBAR_STATE_LABELS[state]} rotation`} value={options.states[state].speed} options={(Object.keys(SIDEBAR_SPEEDS) as SidebarStatusSpeed[]).map((speed) => ({ value: speed, label: speed === "stopped" ? "Stopped" : `${speed[0]!.toUpperCase()}${speed.slice(1)} (${SIDEBAR_SPEEDS[speed] / 1000} s / revolution)` }))} onChange={(speed) => stateChange(state, { speed })} />
         <StatusColor key={`${form.inputKey}:${resetKey}:${state}:${options.states[state].color ?? "theme"}`} label={`${SIDEBAR_STATE_LABELS[state]} color`} value={options.states[state].color ?? ""} onChange={(color) => stateChange(state, { color })} />
       </View>)}
-      <SettingsAction label="Recommended sidebar indicators" actionLabel="Reset sidebar indicators" hint="Restore Dot and ring with recommended size, alignment, colors and speeds. Other settings are kept." onPress={() => { setResetKey((key) => key + 1); onChange(undefined); onLayoutChange(undefined); }} />
+      <SettingsAction label="Recommended sidebar indicators" actionLabel="Reset sidebar indicators" hint="Restore Dot and ring with recommended size, colors and speeds. Position follows Paseo's title-line slot. Other settings are kept." onPress={() => { setResetKey((key) => key + 1); onChange(undefined); onLayoutChange(undefined); }} />
     </SettingsCard>
   </SettingsSection>;
 }

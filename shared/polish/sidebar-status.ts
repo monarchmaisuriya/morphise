@@ -16,7 +16,7 @@ export type SidebarIndicatorLayout = z.output<typeof sidebarIndicatorLayoutSchem
 export function sidebarIndicatorLayout(input?: SidebarIndicatorLayout) {
   const parsed = sidebarIndicatorLayoutSchema.safeParse(input ?? {});
   const value = parsed.success ? parsed.data : {};
-  return { size: value.size ?? 14, alignment: value.alignment ?? "center" };
+  return { size: value.size ?? 14 };
 }
 export const SIDEBAR_DEFAULT_SPEEDS: Record<SidebarStatusState, SidebarStatusSpeed> = { loading: "medium", running: "fast", needs_input: "slow", failed: "stopped", attention: "slow", done: "stopped" };
 

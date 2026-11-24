@@ -2,6 +2,14 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.57.0 - 2026-11-24
+
+- **Calendar time grid:** Day/Week views position observed work by time, with side-by-side overlapping events, selectable details, project/workspace/provider context and Open chat. Compact navigation, collapsible filters/coverage, human-readable durations, narrow-screen Day defaults and Show all hours replace oversized agenda cards. Local day boundaries support daylight-saving changes; uncertain markers remain selectable without entering runtime totals.
+- **Quieter sidebar:** remove Working/No active work filler sentences and empty lines. Preserve useful reasons/checkpoint context, including in one-line workspace details. Filled selected pills and equal-width tabs remain, with tighter spacing.
+- **Native indicator placement:** remove vertical-alignment controls and ignore saved alignment while retaining size, colors, speeds and exact 80% nested size/opacity. Indicators use the native title-line slot rather than stretching over row content.
+- **Timestamp fallback:** missing, invalid or future state timestamps use a valid ordinary activity age, checking enriched activity then prompt and eligible creation time. No valid source means no row timestamp; fallback age is never labelled state duration.
+- **Keyboard event details:** opening details transfers focus into them; closing restores the originating event segment. Calendar recording, retention, uncertainty rules and runtime totals remain unchanged.
+
 ## 0.56.0 - 2026-11-24
 
 - **Sidebar focus tabs:** All, Active and Asking replace the status-filter checklist and Hide done. Device settings control visibility, labels, counts and Active/Asking state membership. Counts respect other filters before row limits; hidden tabs cannot leave an invisible status filter active.

@@ -6,6 +6,13 @@ it("leaves host indicators untouched in Paseo mode", () => {
   expect(sidebarStatusCss({ style: "paseo" })).toBe("");
 });
 
+it("preserves native slot alignment even when legacy full-row alignment was saved", () => {
+  const css = sidebarStatusCss({}, "sidebar", { alignment: "bottom", size: 24 });
+  expect(css).not.toContain("align-self: stretch");
+  expect(css).not.toContain("height: auto");
+  expect(css).toContain("top: 50%");
+});
+
 it("scopes preview rules separately from sidebar rules", () => {
   expect(sidebarStatusCss({}, "preview")).toContain('[data-testid="morphise-status-preview-running"]');
   expect(sidebarStatusCss({}, "preview")).not.toContain("sidebar-workspace-row-");
