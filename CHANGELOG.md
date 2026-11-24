@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.58.1 - 2026-11-24
+
+- **Plain-text sidebar previews:** clean heading, emphasis, code-fence, link/image, list/quote and basic HTML formatting before whitespace normalization and truncation. Preserve message words, code content and ordinary underscores/arithmetic. Shared extraction covers history and live updates; original messages remain untouched.
+
 ## 0.58.0 - 2026-11-24
 
 - **Latest-message sidebar previews:** workspace second lines show the newest user or assistant message from the most recently active top-level chat, not its title. A bounded recent tail and live timeline updates keep previews current; tools/reasoning are excluded. Host-specific routing, readiness, sequence ordering and disposal prevent wrong-host or stale updates. Loading, unavailable and no-recent-message states are explicit. Previews are memory-only and do not rewrite titles.
