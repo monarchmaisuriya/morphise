@@ -78,11 +78,11 @@ import { viewPresence } from "./view-presence";
 import { createHoverTracker, type HoverTracker, useHovered } from "./hover-tracker";
 import { afterPointerMoves, cannotHover, useFocusWithin } from "./web";
 import { fontSize, radius } from "../shared/design/tokens";
-import { focusStatuses, sidebarSummary, semanticLine, sidebarTime, type FocusTab } from "../shared/sidebar-focus";
+import { focusStatuses, sidebarSummary, semanticLine, sidebarTime, sidebarTimestamp, type FocusTab } from "../shared/sidebar-focus";
 import { checkpointRead, type Checkpoint } from "../shared/work-checkpoints";
 import { SidebarFocusTabs } from "./sidebar-focus";
 import { useSidebarMessage } from "./use-sidebar-message";
-import { RuntimeStrip, useSidebarRuntime, type SidebarRuntime } from "./sidebar-runtime";
+import { RuntimeDetails, RuntimeStrip, useSidebarRuntime, type SidebarRuntime } from "./sidebar-runtime";
 import { providerIconSvg } from "./provider-icons";
 
 type ViewConfig = Profile["sidebar"]["view"];
@@ -281,7 +281,7 @@ function useRemindToggle() {
 // `stem`: the x of the line its children hang on (`branch.chat.x` or `branch.sub.x`), when it has children listed; the
 // line then starts under this row's dot (`parentStem`).
 // `checked`: set in selection mode, where the row is a checkbox instead of a button.
-export function RowShell({ selected, checked, child, grandchild, twoLine, label, onPress, onLongPress, main, trailing, keepTrailing = false, actions, showActions, disabled, rowRef, onHover, stem, shared }: { selected: boolean; checked?: boolean; child?: boolean; twoLine?: boolean; label: string; onPress(): void; onLongPress?(): void; main: ReactNode; trailing?: ReactNode; keepTrailing?: boolean; actions?: ReactNode; showActions?: boolean; disabled?: boolean; rowRef?: RefObject<View | null>; onHover?(on: boolean): void; grandchild?: boolean; stem?: number; shared: Shared }) {
+export function RowShell({ selected, checked, child, grandchild, twoLine, actionRows = 1, label, onPress, onLongPress, main, trailing, keepTrailing = false, actions, showActions, disabled, rowRef, onHover, stem, shared }: { selected: boolean; checked?: boolean; child?: boolean; twoLine?: boolean; actionRows?: number; label: string; onPress(): void; onLongPress?(): void; main: ReactNode; trailing?: ReactNode; keepTrailing?: boolean; actions?: ReactNode; showActions?: boolean; disabled?: boolean; rowRef?: RefObject<View | null>; onHover?(on: boolean): void; grandchild?: boolean; stem?: number; shared: Shared }) {
   const { styles } = shared;
   const key = useId();
   const hovered = useHovered(shared.hover, key);
@@ -294,18 +294,19 @@ export function RowShell({ selected, checked, child, grandchild, twoLine, label,
   // Keyboard focus inside the row shows its buttons as hover does, so Tab reaches Pin, Archive and the Actions menu.
   const focused = useFocusWithin(root);
   const actionsShown = !!actions && (hovered || focused || showActions || TOUCH);
+  const stableHeight = actionRows > 1 ? actionRows * (TOUCH ? 32 : 24) + 12 : undefined;
   // Right-click opens the same menu as a long press. React Native Web forwards `onContextMenu`
   // but its Pressable never maps a mouse right-click to `onLongPress`, and React Native's types
   // do not list the prop, so it is passed untyped and on the web only.
   const contextMenu = onLongPress && Platform.OS === "web" ? { onContextMenu: (event: { preventDefault(): void }) => (event.preventDefault(), onLongPress()) } : {};
   return (
     // A plain View, not a Pressable: on web a Pressable becomes a Tab stop even when told not to.
-    <View ref={root} onPointerMove={() => shared.hover.mark(key)} style={[styles.row, child ? styles.child : null, grandchild ? styles.grandchild : null, selected ? styles.selected : hovered ? styles.hovered : null]}>
-      <Pressable accessibilityRole={disabled ? "text" : checked !== undefined ? "checkbox" : "button"} accessibilityState={checked !== undefined ? { checked } : { selected }} accessibilityLabel={label} disabled={disabled} onPress={onPress} onLongPress={onLongPress} style={[styles.rowMain, child || grandchild ? styles.childMain : null, twoLine ? styles.twoLine : null]} {...contextMenu}>
+    <View ref={root} onPointerMove={() => shared.hover.mark(key)} style={[styles.row, child ? styles.child : null, grandchild ? styles.grandchild : null, stableHeight ? { minHeight: stableHeight } : null, selected ? styles.selected : hovered ? styles.hovered : null]}>
+      <Pressable accessibilityRole={disabled ? "text" : checked !== undefined ? "checkbox" : "button"} accessibilityState={checked !== undefined ? { checked } : { selected }} accessibilityLabel={label} disabled={disabled} onPress={onPress} onLongPress={onLongPress} style={[styles.rowMain, child || grandchild ? styles.childMain : null, twoLine ? styles.twoLine : null, stableHeight ? { minHeight: stableHeight } : null]} {...contextMenu}>
         {main}
         {actionsShown && !keepTrailing ? null : trailing}
       </Pressable>
-      {actionsShown ? <View style={[styles.actions, twoLine ? styles.actionsTwoLine : null]}>{actions}</View> : null}
+      {actionsShown ? <View style={[styles.actions, twoLine ? styles.actionsTwoLine : null, stableHeight ? { paddingTop: 6, paddingBottom: 6 } : null]}>{actions}</View> : null}
       {stem !== undefined && styles.branch.shown ? <View pointerEvents="none" style={[styles.branchDown, parentStem({ x: stem, inset: styles.row.marginHorizontal, dotFromTop: twoLine ? styles.twoLine.paddingVertical + STATUS_LINE / 2 : null })]} /> : null}
     </View>
   );
@@ -775,19 +776,17 @@ function WorkspaceCard({ title, workspace, info, host, shared }: { title: string
   const ahead = info ? `${info.ahead ? ` ↑${info.ahead}` : ""}${info.behind ? ` ↓${info.behind}` : ""}` : "";
   return (
     <View style={{ padding: 6, gap: 6 }}>
-      <Text selectable style={{ color: c.foreground, fontSize: fontSize.base, fontWeight: "600" }}>
-        {title}
-      </Text>
+      <Text style={shared.t.text.heading}>Workspace</Text>
       {workspace.diff && workspace.diff.additions + workspace.diff.deletions > 0 ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
           <Icon name="FileDiff" size={11} color={c.foregroundMuted} />
           <DiffText diff={workspace.diff} shared={shared} />
         </View>
       ) : null}
-      {host ? <Meta icon="Server" text={host} shared={shared} /> : null}
-      {workspace.branch ? <Meta icon="GitBranch" text={`${workspace.branch}${info?.dirty ? " ·" : ""}${ahead}`} shared={shared} /> : null}
-      <Text selectable style={shared.styles.meta}>{workspace.directory}</Text>
-      {pr ? <Meta icon={PR_ICON[pr.state]} color={pullRequestColor(c, pr)} text={`${pr.number ? `#${pr.number} ` : ""}${pr.title || pr.state}${pr.checks !== "none" ? ` · ${CHECKS_TEXT[pr.checks]}` : ""}`} shared={shared} /> : null}
+      {host ? <Text selectable style={shared.styles.meta}>Host: {host}</Text> : null}
+      <Text selectable style={shared.styles.meta}>Folder: {workspace.directory}</Text>
+      {workspace.branch ? <Text selectable style={shared.styles.meta}>Branch: {workspace.branch}{info?.dirty ? " · uncommitted changes" : ""}{ahead}</Text> : null}
+      {pr ? <Text selectable style={shared.t.text.body}>Review: {pr.number ? `#${pr.number} ` : ""}{pr.title || "Pull request"} · {pr.state}{pr.checks !== "none" ? ` · ${CHECKS_TEXT[pr.checks]}` : ""}</Text> : null}
       {info?.services.map((service) => (
         <View key={service.name} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
           <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: serviceColor(c, service) }} />
@@ -961,7 +960,8 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
       </View>
     );
   // Running/asking states show genuine duration; settled rows label observed activity age.
-  const elapsed = shows.lastActivity ? sidebarTime(indicator, applies ? null : workspace.since, [info?.lastActive ?? null, workspace.lastPrompt, workspace.lastPrompt === null ? workspace.createdAt : null], now, config.details.timeInStatus || indicator === "needs_input" || indicator === "running" || indicator === "failed") : null;
+  const timestamp = sidebarTimestamp(applies ? null : workspace.since, [{ at: info?.lastActive ?? null, label: "Last activity" }, { at: workspace.lastPrompt, label: "Last prompt" }, { at: workspace.lastPrompt === null ? workspace.createdAt : null, label: "Workspace created" }], now, config.details.timeInStatus || indicator === "needs_input" || indicator === "running" || indicator === "failed");
+  const elapsed = shows.lastActivity ? timestamp?.elapsed ?? null : null;
   const linked = linksTasks(shared, reference.hostId);
   const reminder = linked ? shared.workspaceReminders.get(reference.id) ?? null : null;
   // The workspace's own reminder (not one of its chats'), which Remind me edits.
@@ -1063,6 +1063,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
         <RowShell
           rowRef={rowRef}
           twoLine={twoLine}
+          actionRows={twoLine ? 2 : 1}
           selected={selecting ? picked : selected}
           checked={selecting ? picked : undefined}
           label={selecting ? `Select ${workspace.title}` : `Open workspace ${workspace.title}, ${STATUS_TITLES[indicator]}${spoken ? `, ${spoken}` : ""}`}
@@ -1093,19 +1094,21 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
           shared={shared}
         />
       )}
-      <Dropdown t={t} open={(detailsOpen || card) && menu === null && renaming === null} onClose={() => { setCard(false); setDetailsOpen(false); }} anchor={rowRef} passive={!detailsOpen} width={360}>
-        <Text style={[t.text.heading, { padding: 6 }]}>{STATUS_TITLES[indicator]}{elapsed ? ` · ${elapsed}` : ""}</Text>
-        {meaning ? <Text style={[t.text.body, { padding: 6 }]}>{meaning.text}</Text> : null}
+      <Dropdown t={t} open={(detailsOpen || card) && menu === null && renaming === null} onClose={() => { setCard(false); setDetailsOpen(false); }} anchor={rowRef} passive={!detailsOpen} width={360} maxHeight={480} header={<View testID="workspace-details-header" style={{ padding: 8, gap: 6, borderBottomWidth: 1, borderColor: c.border }}><View style={{ flexDirection: "row", gap: 6, alignItems: "flex-start" }}><Text selectable style={[t.text.heading, { flex: 1 }]}>{workspace.title}</Text>{detailsOpen ? <><IconButton t={t} size="sm" icon="RefreshCw" label="Refresh checkpoint details" disabled={reference.hostId !== shared.taskHost} onPress={() => refreshCheckpoint((value) => value + 1)} /><IconButton t={t} size="sm" icon="X" label="Close workspace details" onPress={() => { setDetailsOpen(false); setCard(false); }} /></> : null}</View><Text style={t.text.meta}>Current state: {STATUS_TITLES[indicator]}</Text></View>}>
+        <View style={{ padding: 8, gap: 6 }}>
+          {timestamp ? <><Text style={t.text.body}>{timestamp.label}: {timestamp.elapsed === "now" ? "just now" : `${timestamp.elapsed} ago`}</Text><Text style={t.text.meta}>{new Date(timestamp.at).toLocaleString()}</Text></> : <Text style={t.text.meta}>Activity timestamp unavailable</Text>}
+          {meaning ? <Text style={t.text.meta}>{meaning.text}</Text> : null}
+        </View>
+        <View style={{ padding: 8, gap: 8, borderTopWidth: 1, borderColor: c.border }}><Text style={t.text.heading}>Agent activity · last 24 hours</Text><RuntimeDetails value={shared.runtime} hostId={reference.hostId} workspaceId={reference.id} t={t} interactive={detailsOpen} /></View>
+        <View style={{ borderTopWidth: 1, borderColor: c.border }}>
         <WorkspaceCard title={workspace.title} workspace={workspace} info={info} host={host} shared={shared} />
-        {workspace.branch ? <Text selectable style={{ ...t.text.meta, paddingHorizontal: 6 }}>Branch: {workspace.branch}</Text> : null}
-        {info?.pullRequest ? <Text selectable style={{ ...t.text.meta, paddingHorizontal: 6 }}>Review: {info.pullRequest.title} · {info.pullRequest.state} · {info.pullRequest.checks} checks</Text> : null}
-        <View style={{ padding: 6, gap: 6 }}>
-          <Text style={t.text.heading}>Workspace checkpoint</Text>
+        </View>
+        <View style={{ padding: 8, gap: 6, borderTopWidth: 1, borderColor: c.border }}>
+          <Text style={t.text.heading}>Checkpoint</Text>
           {reference.hostId !== shared.taskHost ? <Text style={t.text.meta}>Checkpoint unavailable on this host from this installation.</Text> : checkpointError ? <Text accessibilityRole="alert" style={t.text.meta}>Checkpoint unavailable: {checkpointError}</Text> : checkpoint ? <>
             <Text style={t.text.meta}>{checkpoint.updatedAt ? `Saved ${new Date(checkpoint.updatedAt).toLocaleString()} by ${checkpoint.author} · revision ${checkpoint.revision}` : "No checkpoint saved"}</Text>
-            {([['goal', 'Goal'], ['verified', 'Last verified result'], ['blocked', 'Blocked by'], ['next', 'Next step']] as const).map(([key, label]) => <Text selectable key={key} style={t.text.body}>{label}: {checkpoint.fields[key] || "Not recorded"}</Text>)}
+            {Object.values(checkpoint.fields).some((value) => value.trim()) ? ([['goal', 'Goal'], ['verified', 'Last verified result'], ['blocked', 'Blocked by'], ['next', 'Next step']] as const).filter(([key]) => checkpoint.fields[key].trim()).map(([key, label]) => <View key={key} style={{ gap: 2 }}><Text style={t.text.label}>{label}</Text><Text selectable style={t.text.body}>{checkpoint.fields[key]}</Text></View>) : <Text style={t.text.meta}>Save a checkpoint in the workspace panel to record its goal, verified result, blocker and next step.</Text>}
           </> : <Text style={t.text.meta}>Loading checkpoint…</Text>}
-          {detailsOpen ? <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>{reference.hostId === shared.taskHost ? <Button t={t} size="sm" variant="ghost" label="Refresh checkpoint details" onPress={() => refreshCheckpoint((value) => value + 1)} /> : null}<Button t={t} size="sm" variant="ghost" label="Close workspace details" onPress={() => { setDetailsOpen(false); setCard(false); }} /></View> : null}
         </View>
       </Dropdown>
       <Dropdown t={t} open={menu !== null} onClose={closeMenu} anchor={rowRef} width={menu === "colour" ? 300 : 250}>

@@ -177,3 +177,11 @@ The runtime chart is replaced by a compact recorded-runtime label such as `18m /
 Tabs have no enclosing border or fill; only the selected segment is filled. Their8pxouter insets align with the Search toolbar. The toolbar has8pxspace above and below; Search and icon buttons use the same control height. Existing outlined-control hover/focus/open behavior remains.
 
 Quick Chat row display now caps at60characters when its content surface is narrower than640px, otherwise120characters. Character-shortened text ends in an ellipsis; a narrower actual row can ellipsize sooner. Full saved title remains in Chat info/accessibility. This is Morphise-only: titles already shortened upstream cannot be recovered, and no Paseo source or stored title is changed.
+
+### Understanding workspace activity details
+
+`~9m / 24h` means nine confirmed recorded agent minutes in this workspace during the rolling24-hour window, with incomplete recording. The tilde is a coverage warning, not an estimated-runtime calculation. The sidebar rounds its compact minutes down; details show a human-readable recorded duration. Parallel agents add separately and can exceed24hours in total. Uncertain/interrupted records are excluded; this is never human work time.
+
+Workspace details separates current state/actual age source, Agent activity, Workspace and Checkpoint. A fixed header keeps the title and checkpoint-only refresh/close controls above the scrolling body. Agent activity explains the total and window, with **How this is counted** revealing partial-recording causes, parallel counting, excluded uncertainty and snapshot cutoff. The cutoff is captured before the read, not its completion; activity updates about once per minute and is not refreshed by Refresh checkpoint details. Workspace facts are grouped without duplicate branch/review lines; populated checkpoint fields retain attribution, while empty ones collapse into one explanation.
+
+Two-line workspace rows reserve the2x2action-grid height even while controls are hidden, so hovering or keyboard-focusing a row does not push the rows below it. The action grid uses the same vertical insets as the resting content; longer actual content can still increase a row normally.
