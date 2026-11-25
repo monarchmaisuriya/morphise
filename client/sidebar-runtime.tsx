@@ -6,6 +6,7 @@ import { recordedRuntimeText, workspaceRuntime } from "../shared/sidebar-runtime
 import { durationText } from "../shared/calendar-layout";
 import { useTooltip } from "./web";
 import { Button, type Tokens } from "./ui/kit";
+import { DetailFact } from "./detail-fact";
 
 export type SidebarRuntime = { status: "loading" } | { status: "failed"; error?: string } | { status: "ready"; hostId: string; at: number; recordingSince: number; pruned: number; workspaces: ReturnType<typeof workspaceRuntime> };
 
@@ -36,9 +37,10 @@ export function RuntimeStrip({ value, hostId, workspaceId, t }: { value: Sidebar
   const label = !available ? "24-hour agent runtime unavailable" : `Last 24 hours: ${durationText(observed?.total ?? 0)} summed recorded agent runtime; parallel agents count separately; ${partial ? "partial coverage; observation gaps may exist" : "observation gaps may exist"}; refreshed ${new Date(value.at).toLocaleTimeString()}`;
   const tooltip = useTooltip(label, t.c);
   if (!available || !observed?.total) return null;
-  const duration = recordedRuntimeText(observed.total);
+  const minutes = Math.floor(observed.total / 60000);
+  const duration = minutes < 1 ? "<1m" : minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h${minutes % 60 ? ` ${minutes % 60}m` : ""}`;
   return <View ref={tooltip} testID={`workspace-runtime-${hostId}-${workspaceId}`} accessibilityLabel={label} style={{ marginTop: 1 }}>
-    <Text numberOfLines={1} style={[t.text.meta, { fontSize: 10, textAlign: "right" }]}>{duration} / 24h{partial ? "*" : ""}</Text>
+    <Text numberOfLines={1} style={[t.text.meta, { fontSize: 10, textAlign: "right" }]}>{partial ? "~" : ""}{duration} / 24h</Text>
   </View>;
 }
 
@@ -55,16 +57,17 @@ export function RuntimeDetails({ value, hostId, workspaceId, t, interactive = fa
     ...(observed?.uncertain ? ["Uncertain or interrupted observations were excluded."] : []),
   ];
   return <View testID="workspace-activity-details" style={{ gap: 6 }}>
-    <Text style={t.text.heading}>{observed?.total ? `${recordedRuntimeText(observed.total)} recorded` : "No confirmed runtime recorded"}</Text>
-    <Text style={t.text.meta}>Across this workspace's agents in the last 24 hours. Not human work time.</Text>
-    {reasons.length ? <Text style={t.text.body}>Partial coverage (*) · actual work may be higher</Text> : null}
-    <Text style={t.text.meta}>Window ends {new Date(value.at).toLocaleString()}</Text>
+    <DetailFact t={t} label="Recorded" value={observed?.total ? recordedRuntimeText(observed.total) : "No confirmed runtime"} />
+    <DetailFact t={t} label="Scope" value="All agents in this workspace · last 24 hours" />
+    <DetailFact t={t} label="Coverage" value={reasons.length ? "Partial (~) · actual work may be higher" : "Recorded observations; gaps may exist"} />
+    <DetailFact t={t} label="Window ends" value={new Date(value.at).toLocaleString()} />
+    <Text style={t.text.meta}>Agent runtime, not human work time.</Text>
     {interactive ? <View style={{ alignSelf: "flex-start" }}><Button t={t} size="sm" variant="ghost" label={expanded ? "Hide activity explanation" : "How this is counted"} onPress={() => setExpanded(!expanded)} /></View> : null}
     {expanded || !interactive ? <View style={{ gap: 6 }}>
-      {reasons.length ? <Text style={t.text.meta}>The * marker means incomplete coverage. The displayed time is recorded, not an estimate of missing work.</Text> : null}
+      {reasons.length ? <Text style={t.text.meta}>The ~ marker means incomplete coverage. The displayed time is recorded, not an estimate of missing work.</Text> : null}
       {reasons.map((reason) => <Text key={reason} style={t.text.meta}>{reason}</Text>)}
       <Text style={t.text.meta}>Parallel agents count separately: two agents working for 5 min add 10 min. Uncertain observations are excluded. This is not human work time.</Text>
-      <Text style={t.text.meta}>Observation gaps may be missing even without the * marker.</Text>
+      <Text style={t.text.meta}>Observation gaps may be missing even without the ~ marker.</Text>
       <Text style={t.text.meta}>Window: {new Date(from).toLocaleString()} to {new Date(value.at).toLocaleString()}</Text>
       <Text style={t.text.meta}>Snapshot cutoff: {new Date(value.at).toLocaleString()}. Updates about once a minute; checkpoint refresh does not refresh activity.</Text>
     </View> : null}

@@ -2,6 +2,12 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.63.0 - 2026-11-25
+
+- **Short hover, full Info:** hover shows only workspace title/state, sourced age and compact activity. Full agents/models, tokens, workspace/checkpoint facts and calculation help appear only after explicitly opening Info. Hover never reads token logs.
+- **Readable full details:** agents and models are always visible without a Show/Hide toggle. Counts, provider/model/state, token counters, activity scope/coverage/window and workspace facts use consistent wrapping label/value rows; information and token-read gates are preserved.
+- **Compact runtime restored:** sidebar rows show minutes/hours with a leading ~ for partial coverage, no seconds or trailing asterisk. Detailed activity retains its existing precision.
+
 ## 0.62.0 - 2026-11-25
 
 - **Agents & usage in workspace Info:** show chats/subagents/working counts, same-host project workspace count and expandable agent/provider/model details. Read latest-chat session-lifetime token usage only when Info opens and Stats is enabled on the installation host; distinguish partial/unavailable readings and avoid adding cache twice.
