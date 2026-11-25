@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { useRpc } from "@getpaseo/plugin/client";
 import { calendarRead } from "../shared/work-calendar";
-import { workspaceRuntime } from "../shared/sidebar-runtime";
+import { recordedRuntimeText, workspaceRuntime } from "../shared/sidebar-runtime";
 import { durationText } from "../shared/calendar-layout";
 import { useTooltip } from "./web";
 import { Button, type Tokens } from "./ui/kit";
@@ -36,10 +36,9 @@ export function RuntimeStrip({ value, hostId, workspaceId, t }: { value: Sidebar
   const label = !available ? "24-hour agent runtime unavailable" : `Last 24 hours: ${durationText(observed?.total ?? 0)} summed recorded agent runtime; parallel agents count separately; ${partial ? "partial coverage; observation gaps may exist" : "observation gaps may exist"}; refreshed ${new Date(value.at).toLocaleTimeString()}`;
   const tooltip = useTooltip(label, t.c);
   if (!available || !observed?.total) return null;
-  const minutes = Math.floor(observed.total / 60000);
-  const duration = minutes < 1 ? "<1m" : minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h${minutes % 60 ? ` ${minutes % 60}m` : ""}`;
+  const duration = recordedRuntimeText(observed.total);
   return <View ref={tooltip} testID={`workspace-runtime-${hostId}-${workspaceId}`} accessibilityLabel={label} style={{ marginTop: 1 }}>
-    <Text numberOfLines={1} style={[t.text.meta, { fontSize: 10, textAlign: "right" }]}>{partial ? "~" : ""}{duration} / 24h</Text>
+    <Text numberOfLines={1} style={[t.text.meta, { fontSize: 10, textAlign: "right" }]}>{duration} / 24h{partial ? "*" : ""}</Text>
   </View>;
 }
 
@@ -56,16 +55,16 @@ export function RuntimeDetails({ value, hostId, workspaceId, t, interactive = fa
     ...(observed?.uncertain ? ["Uncertain or interrupted observations were excluded."] : []),
   ];
   return <View testID="workspace-activity-details" style={{ gap: 6 }}>
-    <Text style={t.text.heading}>{observed?.total ? `${durationText(observed.total)} recorded` : "No confirmed runtime recorded"}</Text>
+    <Text style={t.text.heading}>{observed?.total ? `${recordedRuntimeText(observed.total)} recorded` : "No confirmed runtime recorded"}</Text>
     <Text style={t.text.meta}>Across this workspace's agents in the last 24 hours. Not human work time.</Text>
-    {reasons.length ? <Text style={t.text.body}>Incomplete recording · may undercount work (~)</Text> : null}
+    {reasons.length ? <Text style={t.text.body}>Partial coverage (*) · actual work may be higher</Text> : null}
     <Text style={t.text.meta}>Window ends {new Date(value.at).toLocaleString()}</Text>
     {interactive ? <View style={{ alignSelf: "flex-start" }}><Button t={t} size="sm" variant="ghost" label={expanded ? "Hide activity explanation" : "How this is counted"} onPress={() => setExpanded(!expanded)} /></View> : null}
     {expanded || !interactive ? <View style={{ gap: 6 }}>
-      {reasons.length ? <Text style={t.text.meta}>The ~ marker means incomplete coverage, not an estimated duration.</Text> : null}
+      {reasons.length ? <Text style={t.text.meta}>The * marker means incomplete coverage. The displayed time is recorded, not an estimate of missing work.</Text> : null}
       {reasons.map((reason) => <Text key={reason} style={t.text.meta}>{reason}</Text>)}
       <Text style={t.text.meta}>Parallel agents count separately: two agents working for 5 min add 10 min. Uncertain observations are excluded. This is not human work time.</Text>
-      <Text style={t.text.meta}>Observation gaps may be missing even without the ~ marker.</Text>
+      <Text style={t.text.meta}>Observation gaps may be missing even without the * marker.</Text>
       <Text style={t.text.meta}>Window: {new Date(from).toLocaleString()} to {new Date(value.at).toLocaleString()}</Text>
       <Text style={t.text.meta}>Snapshot cutoff: {new Date(value.at).toLocaleString()}. Updates about once a minute; checkpoint refresh does not refresh activity.</Text>
     </View> : null}

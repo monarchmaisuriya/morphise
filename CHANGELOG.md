@@ -2,6 +2,12 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.62.0 - 2026-11-25
+
+- **Agents & usage in workspace Info:** show chats/subagents/working counts, same-host project workspace count and expandable agent/provider/model details. Read latest-chat session-lifetime token usage only when Info opens and Stats is enabled on the installation host; distinguish partial/unavailable readings and avoid adding cache twice.
+- **Recorded runtime precision:** preserve seconds below one hour instead of dropping them from compact totals. Use a trailing * for partial coverage and explain that recorded runtime is not a complete estimate of unobserved work. Aggregation and stored intervals unchanged.
+- **Tighter stable rows:** reduce desktop action-grid reservation from 60px to 52px without shrinking controls or reintroducing hover/focus height shifts. Retain archive confirmation and following-row stability.
+
 ## 0.61.1 - 2026-11-25
 
 - **Stable workspace row height:** reserve the two-by-two action-grid height before hover/focus, with matching vertical insets, so revealing actions does not move following rows.

@@ -1,5 +1,12 @@
 import { expect, it } from "vitest";
-import { RUNTIME_HOUR as H, runtimePoints, workspaceRuntime } from "./sidebar-runtime";
+import { RUNTIME_HOUR as H, recordedRuntimeText, runtimePoints, workspaceRuntime } from "./sidebar-runtime";
+
+it("shows recorded seconds rather than dropping54seconds from a short total", () => {
+  expect(recordedRuntimeText(594374)).toBe("9m 54s");
+  expect(recordedRuntimeText(35000)).toBe("35s");
+  expect(recordedRuntimeText(0)).toBe("0s");
+  expect(recordedRuntimeText(4800000)).toBe("1h 20m");
+});
 import type { WorkInterval } from "./work-calendar";
 
 const base: WorkInterval = { id: "a", agentId: "a", workspaceId: "w", provider: "fake", title: "Task", turnId: "turn", startAt: 0, endAt: H, uncertain: false, outcome: "completed" };

@@ -84,6 +84,7 @@ import { SidebarFocusTabs } from "./sidebar-focus";
 import { useSidebarMessage } from "./use-sidebar-message";
 import { RuntimeDetails, RuntimeStrip, useSidebarRuntime, type SidebarRuntime } from "./sidebar-runtime";
 import { providerIconSvg } from "./provider-icons";
+import { WorkspaceUsage } from "./workspace-usage";
 
 type ViewConfig = Profile["sidebar"]["view"];
 type Theme = PluginSidebarViewProps["theme"];
@@ -294,7 +295,7 @@ export function RowShell({ selected, checked, child, grandchild, twoLine, action
   // Keyboard focus inside the row shows its buttons as hover does, so Tab reaches Pin, Archive and the Actions menu.
   const focused = useFocusWithin(root);
   const actionsShown = !!actions && (hovered || focused || showActions || TOUCH);
-  const stableHeight = actionRows > 1 ? actionRows * (TOUCH ? 32 : 24) + 12 : undefined;
+  const stableHeight = actionRows > 1 ? actionRows * (TOUCH ? 32 : 24) + 4 : undefined;
   // Right-click opens the same menu as a long press. React Native Web forwards `onContextMenu`
   // but its Pressable never maps a mouse right-click to `onLongPress`, and React Native's types
   // do not list the prop, so it is passed untyped and on the web only.
@@ -306,7 +307,7 @@ export function RowShell({ selected, checked, child, grandchild, twoLine, action
         {main}
         {actionsShown && !keepTrailing ? null : trailing}
       </Pressable>
-      {actionsShown ? <View style={[styles.actions, twoLine ? styles.actionsTwoLine : null, stableHeight ? { paddingTop: 6, paddingBottom: 6 } : null]}>{actions}</View> : null}
+      {actionsShown ? <View style={[styles.actions, twoLine ? styles.actionsTwoLine : null, stableHeight ? { paddingTop: 2, paddingBottom: 2 } : null]}>{actions}</View> : null}
       {stem !== undefined && styles.branch.shown ? <View pointerEvents="none" style={[styles.branchDown, parentStem({ x: stem, inset: styles.row.marginHorizontal, dotFromTop: twoLine ? styles.twoLine.paddingVertical + STATUS_LINE / 2 : null })]} /> : null}
     </View>
   );
@@ -858,6 +859,9 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   // filter; the status filter then picks which chats are listed.
   const inWorkspace = (agent: PluginAgentSnapshot) => agent.workspace.key === reference.key;
   const agents = useAgents({ hosts: [reference.hostId], where: inWorkspace, orderBy: ["lastActivityAt", "desc"] });
+  const rootAgents = useAgents({ hosts: [reference.hostId], where: (agent) => inWorkspace(agent) && agent.parentAgentId === null });
+  const childAgents = useAgents({ hosts: [reference.hostId], where: (agent) => inWorkspace(agent) && agent.parentAgentId !== null });
+  const projectWorkspaces = useWorkspaces({ hosts: [reference.hostId], where: (item) => item.hostId === reference.hostId && item.project.key === workspace?.projectKey && item.archivingAt === null });
   const byParent = useAgents({ hosts: [reference.hostId], where: inWorkspace, groupBy: (agent) => agent.parentAgentId ?? TOP_LEVEL });
   const matching = useAgents({ hosts: [reference.hostId], where: (agent) => inWorkspace(agent) && chatMatches(permissionSnapshot(agent, shared.attentionOf), { statuses: shared.statuses, search: "" }) });
   const running = useAgents({ hosts: [reference.hostId], where: (agent) => inWorkspace(agent) && chatIndicator(agent) === "running" });
@@ -1100,6 +1104,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
           {meaning ? <Text style={t.text.meta}>{meaning.text}</Text> : null}
         </View>
         <View style={{ padding: 8, gap: 8, borderTopWidth: 1, borderColor: c.border }}><Text style={t.text.heading}>Agent activity · last 24 hours</Text><RuntimeDetails value={shared.runtime} hostId={reference.hostId} workspaceId={reference.id} t={t} interactive={detailsOpen} /></View>
+        {detailsOpen ? <WorkspaceUsage agents={agents} rootCount={rootAgents.length} subCount={childAgents.length} runningCount={running.length} projectCount={projectWorkspaces.length} latest={tree.top[0] ?? null} hostId={shared.taskHost} t={t} /> : null}
         <View style={{ borderTopWidth: 1, borderColor: c.border }}>
         <WorkspaceCard title={workspace.title} workspace={workspace} info={info} host={host} shared={shared} />
         </View>
