@@ -209,6 +209,9 @@ export function PolishLookSettings({ form }: { form: Form }): ReactNode {
           </> : null}
         </SettingsCard>
       </SettingsSection>
+      <SettingsSection title="Workspace toolbar" info="The status dropdown and the action buttons beside it in Morphise's sidebar.">
+        <SettingsCard><SelectField label="Workspace toolbar appearance" value={prefs.sidebarToolbarFill} options={[{ value: "empty", label: "Empty" }, { value: "filled", label: "Filled" }]} onChange={(value) => set("sidebarToolbarFill", value === "empty" ? undefined : "filled")} hint="One appearance for the dropdown and all toolbar buttons. Independent of upper navigation styling." /></SettingsCard>
+      </SettingsSection>
       <SettingsSection title="Restyle Paseo (experimental)" info="Chat Polish's design for Paseo's own message box, cards, menus, tool groups and replies, on desktop and web. It works through Paseo's page structure, so a Paseo update can break parts of it.">
         <SettingsCard>
           <SwitchField label="Restyle Paseo's items" value={restyled} onChange={(value) => set("restyle", value)} />

@@ -12,6 +12,12 @@ describe("pagesOn", () => {
 });
 
 describe("Chat Polish preferences from Morphise's profile", () => {
+  it("keeps toolbar appearance independent and defaults to empty", () => {
+    expect(polishPrefs(undefined).sidebarToolbarFill).toBe("empty");
+    expect(polishPrefs(profileSchema.parse({ chat: { polish: { sidebarToolbarFill: "filled", sidebarNavigationFill: "empty" } } }).chat)).toMatchObject({ sidebarToolbarFill: "filled", sidebarNavigationFill: "empty" });
+    expect(polishPrefs(profileSchema.parse({ chat: { polish: { sidebarToolbarFill: "invalid" } } }).chat).sidebarToolbarFill).toBe("empty");
+  });
+
   it("defaults tile height to 48 and preserves supported custom sizes", () => {
     expect(polishPrefs(undefined).sidebarNavigationTileHeight).toBe(48);
     expect(polishPrefs(profileSchema.parse({ chat: { polish: { sidebarNavigationTileHeight: 88 } } }).chat).sidebarNavigationTileHeight).toBe(88);

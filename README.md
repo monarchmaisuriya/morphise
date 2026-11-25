@@ -217,3 +217,7 @@ Split rows and Tiles stretch recognized nested plugin row wrappers to their assi
 Navigation grid slots explicitly establish a box even when Paseo plugin boundaries use `display: contents`; native slot flex direction is preserved for compact-sidebar close controls. Verified with the shipped client on an isolated temporary daemon.
 
 Tiles default to a compact 48px minimum height with 11px labels. Under **Look → Sidebar navigation**, select **Tiles** to reveal **Tile height**: 48 (default), 56, 64, 72 or 88px. Long labels may grow to fit. The first and last full-width rows in Tiles are 36px; tile-height changes do not affect them.
+
+Incomplete tile rows fill the navigation width: one tile spans the row, two share equal halves, and three share equal thirds, with consistent 8px gaps. The final wrapped row follows the same rule. Tile height, centered icon/label layout and full-width edge rows are unchanged.
+
+**Look → Workspace toolbar → Workspace toolbar appearance** controls the lower status dropdown and all adjacent action buttons together: Empty (default) or Filled. This is independent of upper navigation appearance. Filled uses the theme surface, retaining stronger open/active feedback. Hover-only shortcut hints on Search and New workspace are hidden while navigation styling is enabled, avoiding hover-driven resizing and uneven alignment; keyboard shortcuts and plugin counts/actions remain unchanged.
