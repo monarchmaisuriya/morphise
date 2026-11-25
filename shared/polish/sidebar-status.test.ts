@@ -6,8 +6,8 @@ import { z } from "zod";
 it("loads bounded layout separately without changing saved state choices", () => {
   const polish = polishSchema.parse({ sidebarStatus: { states: { running: { color: "#123456" } } }, sidebarIndicatorLayout: { size: 24, alignment: "bottom" } });
   expect(polishPrefs({ polish }).sidebarIndicatorLayout).toEqual({ size: 24, alignment: "bottom" });
-  expect(sidebarIndicatorLayout()).toEqual({ size: 14 });
-  expect(sidebarIndicatorLayout({ size: 24, alignment: "bottom" })).toEqual({ size: 24 });
+  expect(sidebarIndicatorLayout()).toEqual({ size: 12 });
+  expect(sidebarIndicatorLayout({ size: 24, alignment: "bottom" })).toEqual({ size: 12 });
   expect(sidebarStatusSchema.parse(polish.sidebarStatus)).toEqual({ states: { running: { color: "#123456" } } });
 });
 
@@ -28,7 +28,7 @@ it("loads saved sidebar choices through the real profile preference boundary", (
 
 it("uses ring style and a separate recommended speed for every state", () => {
   expect(sidebarStatusOptions()).toEqual({ style: "ring", states: {
-    loading: { color: undefined, speed: "medium" }, running: { color: undefined, speed: "fast" }, needs_input: { color: undefined, speed: "slow" },
+    loading: { color: undefined, speed: "fast" }, running: { color: undefined, speed: "fast" }, needs_input: { color: undefined, speed: "slow" },
     failed: { color: undefined, speed: "stopped" }, attention: { color: undefined, speed: "slow" }, done: { color: undefined, speed: "stopped" },
   } });
 });

@@ -11,14 +11,13 @@ export const sidebarStatusSchema = z.strictObject({
   states: z.strictObject({ loading: stateSchema.optional(), running: stateSchema.optional(), needs_input: stateSchema.optional(), failed: stateSchema.optional(), attention: stateSchema.optional(), done: stateSchema.optional() }).optional(),
 });
 export type SidebarStatusSettings = z.output<typeof sidebarStatusSchema>;
+export const SIDEBAR_INDICATOR_GEOMETRY = { dot: 6, ring: 12, stroke: 1.5 } as const;
 export const sidebarIndicatorLayoutSchema = z.strictObject({ size: z.number().int().min(10).max(24).optional(), alignment: z.enum(["top", "center", "bottom"]).optional() });
 export type SidebarIndicatorLayout = z.output<typeof sidebarIndicatorLayoutSchema>;
 export function sidebarIndicatorLayout(input?: SidebarIndicatorLayout) {
-  const parsed = sidebarIndicatorLayoutSchema.safeParse(input ?? {});
-  const value = parsed.success ? parsed.data : {};
-  return { size: value.size ?? 14 };
+  return { size: SIDEBAR_INDICATOR_GEOMETRY.ring };
 }
-export const SIDEBAR_DEFAULT_SPEEDS: Record<SidebarStatusState, SidebarStatusSpeed> = { loading: "medium", running: "fast", needs_input: "slow", failed: "stopped", attention: "slow", done: "stopped" };
+export const SIDEBAR_DEFAULT_SPEEDS: Record<SidebarStatusState, SidebarStatusSpeed> = { loading: "fast", running: "fast", needs_input: "slow", failed: "stopped", attention: "slow", done: "stopped" };
 
 export function sidebarStatusOptions(input?: SidebarStatusSettings): { style: "ring" | "paseo"; states: Record<SidebarStatusState, { color?: string; speed: SidebarStatusSpeed }> } {
   const parsed = sidebarStatusSchema.safeParse(input ?? {});

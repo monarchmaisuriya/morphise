@@ -10,16 +10,18 @@ it("waits for subscription readiness and does not overwrite live messages with a
   expect(reads).toBe(0);
   ready(); await Promise.resolve();
   expect(reads).toBe(1);
-  listener({ seq: 10, event: { type: "timeline", item: { type: "user_message", text: "New request" } } });
+  listener({ seq: 10, event: { type: "timeline", item: { type: "assistant_message", text: "New request" } } });
   resolve({ entries: [{ seq: 1, item: { type: "assistant_message", text: "Old answer" } }] }); await Promise.resolve();
   expect(states.at(-1)).toEqual({ status: "ready", text: "New request" });
   listener({ seq: 9, event: { type: "timeline", item: { type: "assistant_message", text: "Older edit" } } });
   expect(states.at(-1)?.text).toBe("New request");
-  listener({ seq: 10, event: { type: "timeline", item: { type: "user_message", text: "Updated request" } } });
-  expect(states.at(-1)?.text).toBe("Updated request");
+  listener({ seq: 10, event: { type: "timeline", item: { type: "assistant_message", text: " and continued" } } });
+  expect(states.at(-1)?.text).toBe("New request and continued");
+  listener({ seq: 11, event: { type: "timeline", item: { type: "user_message", text: "?" } } });
+  expect(states.at(-1)?.text).toBe("New request and continued");
   stop(); expect(stopped).toBe(true);
   listener({ seq: 11, event: { type: "timeline", item: { type: "assistant_message", text: "After disposal" } } });
-  expect(states.at(-1)?.text).toBe("Updated request");
+  expect(states.at(-1)?.text).toBe("New request and continued");
 });
 
 it("does not start a history read after disposal while readiness was pending", async () => {

@@ -127,7 +127,6 @@ function viewStyles(theme: Theme, config: ViewConfig, look: ReturnType<typeof si
   return {
     scroll: { flex: 1 },
     header: { flexDirection: "row" as const, alignItems: "center" as const, minHeight: 36, paddingHorizontal: 8, gap: 2 },
-    headerDivider: { width: 1, height: 14, marginHorizontal: 4, backgroundColor: c.border },
     tools: { paddingHorizontal: 8, paddingBottom: 6, gap: 6 },
     // More space above a heading than below it: the heading belongs to the rows that follow.
     heading: { flexDirection: "row" as const, alignItems: "center" as const, gap: 6, minHeight: TOUCH ? 40 : 28, paddingLeft: 16, paddingRight: 12, marginTop: groupGap },
@@ -1244,7 +1243,7 @@ function GroupHeading({ title, count, collapsed, onToggle, shared }: { title: st
       <Text style={styles.headingText} numberOfLines={1}>
         {title}
       </Text>
-      {config.counts ? <Text style={styles.count}>{count}</Text> : null}
+      {config.counts && count > 0 ? <Text style={styles.count}>{count}</Text> : null}
       <View style={{ flex: 1 }} />
       {/* Open or folded, the chevron says the heading folds its group. */}
       <Icon name={collapsed ? "ChevronRight" : "ChevronDown"} size={12} color={props.theme.colors.foregroundMuted} />
@@ -1317,7 +1316,7 @@ function UserGroupHeading({ group, index, count, collapsed, onToggle, shared }: 
           <Text style={styles.headingText} numberOfLines={1}>
             {group.title}
           </Text>
-          {config.counts ? <Text style={styles.count}>{count}</Text> : null}
+          {config.counts && count > 0 ? <Text style={styles.count}>{count}</Text> : null}
           <View style={{ flex: 1 }} />
           <Icon name={collapsed ? "ChevronRight" : "ChevronDown"} size={12} color={props.theme.colors.foregroundMuted} />
         </Pressable>
@@ -1464,8 +1463,8 @@ function ProjectHeading({ title, first, projectRef = null, count, collapsed, onT
         <Text style={styles.projectText} numberOfLines={1}>
           {title}
         </Text>
-        {config.counts && (hovered || collapsed || TOUCH) ? <Text style={styles.count}>{count}</Text> : null}
-        {config.counts && summary ? <Text numberOfLines={1} accessibilityLabel={`${summary.running} running, ${summary.asking} asking, ${summary.unread} unread in this project`} style={{ color: summary.asking ? t.c.statusWarning : t.c.foregroundMuted, fontSize: 11, flexShrink: 1 }}>{[summary.running ? `${summary.running} running` : "", summary.asking ? `${summary.asking} asking` : "", summary.unread ? `${summary.unread} new` : ""].filter(Boolean).join(" · ") || `${summary.total} settled`}</Text> : null}
+        {config.counts && count > 0 && (hovered || collapsed || TOUCH) ? <Text style={styles.count}>{count}</Text> : null}
+        {config.counts && summary && (summary.running || summary.asking || summary.unread) ? <Text numberOfLines={1} accessibilityLabel={`${summary.running} running, ${summary.asking} asking, ${summary.unread} unread in this project`} style={{ color: summary.asking ? t.c.statusWarning : t.c.foregroundMuted, fontSize: 11, flexShrink: 1 }}>{[summary.running ? `${summary.running} running` : "", summary.asking ? `${summary.asking} asking` : "", summary.unread ? `${summary.unread} new` : ""].filter(Boolean).join(" · ") || `${summary.total} settled`}</Text> : null}
         <View style={{ flex: 1 }} />
       </Pressable>
       {project && (hovered || focused || TOUCH) ? <IconButton t={t} size="sm" icon="Plus" label={`New workspace in ${title}`} onPress={() => props.navigation.openProject(project)} /> : null}
@@ -1536,13 +1535,12 @@ interface HeaderProps {
 }
 
 // The view's header, search first: a search box that fills the row, then the tools in groups split
-// by thin dividers: create (Dispatch, New group), view (Filter, Display), and Next on its own.
+// create (Dispatch, New group), view (Filter, Display), and Next.
 // Menus open over the list instead of pushing it down.
 function Header({ menu, setMenu, search, onSearch, searchLabel, filters, onNext, headerRef, shared }: HeaderProps) {
   const { styles, props, t, config } = shared;
   const toggle = (next: Exclude<Menu, null>) => setMenu(menu === next ? null : next);
   const openScreen = useValue(screenOpener);
-  const divider = <View style={styles.headerDivider} />;
   return (
     <View ref={headerRef} style={styles.header}>
       {/* The box takes the space the buttons leave, down to nothing (Field's own `grow` keeps 140). */}
@@ -1564,13 +1562,11 @@ function Header({ menu, setMenu, search, onSearch, searchLabel, filters, onNext,
           }}
         />
       ) : null}
-      {divider}
       <View>
         <IconButton t={t} size="sm" icon="ListFilter" tone={filters || menu === "filter" ? props.theme.colors.foreground : undefined} label={filters ? `Filters, ${filters} on` : "Filter"} onPress={() => toggle("filter")} />
         {filters ? <View pointerEvents="none" style={{ position: "absolute", top: 2, right: 2, width: 6, height: 6, borderRadius: 3, backgroundColor: props.theme.colors.accent }} /> : null}
       </View>
       <IconButton t={t} size="sm" icon="SlidersHorizontal" tone={menu === "view" ? props.theme.colors.foreground : undefined} label="Display: grouping, sorting, what rows show" onPress={() => toggle("view")} />
-      {divider}
       <IconButton t={t} size="sm" icon="SkipForward" label={onNext ? "Open the next one that needs you" : "Nothing needs you"} disabled={onNext === null} onPress={() => onNext?.()} />
     </View>
   );

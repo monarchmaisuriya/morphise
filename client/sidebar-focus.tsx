@@ -7,9 +7,9 @@ export function SidebarFocusTabs({ state, counts, select, t }: { state: ViewStat
   if (!state.focusTabsEnabled) return null;
   const selected = focusSelection(state);
   return <View accessibilityRole="tablist" accessibilityLabel="Sidebar focus" style={{ flexDirection: "row", paddingHorizontal: 12, paddingBottom: 4, gap: 2 }}>
-    {FOCUS_TABS.filter((key) => state.focusTabs[key].enabled).map((key) => <Pressable key={key} accessibilityRole="tab" accessibilityLabel={`${state.focusTabs[key].label}${state.focusTabCounts ? `, ${counts[key]}` : ""}`} accessibilityState={{ selected: selected === key }} onPress={() => select(key)} style={{ flex: 1, minWidth: 0, minHeight: 28, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingHorizontal: 4, borderRadius: t.radius.control, backgroundColor: selected === key ? t.c.surface2 : "transparent" }}>
+    {FOCUS_TABS.filter((key) => state.focusTabs[key].enabled).map((key) => <Pressable key={key} accessibilityRole="tab" accessibilityLabel={`${state.focusTabs[key].label}${state.focusTabCounts && counts[key] > 0 ? `, ${counts[key]}` : ""}`} accessibilityState={{ selected: selected === key }} onPress={() => select(key)} style={{ flex: 1, minWidth: 0, minHeight: 28, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingHorizontal: 4, borderRadius: t.radius.control, backgroundColor: selected === key ? t.c.surface2 : "transparent" }}>
       <Text numberOfLines={1} style={{ flexShrink: 1, color: selected === key ? t.c.foreground : t.c.foregroundMuted, fontSize: 12, fontWeight: selected === key ? "600" : "400" }}>{state.focusTabs[key].label}</Text>
-      {state.focusTabCounts ? <Text style={{ color: t.c.foregroundMuted, fontSize: 11 }}>{counts[key]}</Text> : null}
+      {state.focusTabCounts && counts[key] > 0 ? <Text style={{ color: t.c.foregroundMuted, fontSize: 10, opacity: 0.7 }}>{counts[key]}</Text> : null}
     </Pressable>)}
   </View>;
 }

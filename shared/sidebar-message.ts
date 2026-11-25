@@ -4,7 +4,7 @@ function record(value: unknown): Record<string, unknown> | null {
 
 export function messagePreview(item: unknown): string | null {
   const value = record(item);
-  if (!value || (value.type !== "user_message" && value.type !== "assistant_message") || typeof value.text !== "string") return null;
+  if (!value || value.type !== "assistant_message" || typeof value.text !== "string") return null;
   const text = value.text
     .replace(/^\s*(?:`{3,}|~{3,})[^\n]*$/gm, "")
     .replace(/^\s*(?:[-*_]\s*){3,}$/gm, "")
@@ -21,13 +21,28 @@ export function messagePreview(item: unknown): string | null {
     .replace(/\\([\\`*_{}\[\]()#+.!>~-])/g, "$1")
     .replace(/&(?:amp|lt|gt|quot|apos|nbsp);/g, (entity) => ({ "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'", "&nbsp;": " " })[entity] ?? entity)
     .replace(/\s+/g, " ").trim();
-  return !text ? null : text.length > 240 ? `${text.slice(0, 239)}…` : text;
+  if (!text) return null;
+  if (text.length <= 240) return text;
+  const head = text.slice(0, 239), boundary = head.lastIndexOf(" ");
+  return `${boundary > 0 ? head.slice(0, boundary) : head}…`;
 }
 
 export function lastMessagePreview(entries: readonly unknown[]) {
-  for (let index = entries.length - 1; index >= 0; index--) {
-    const preview = messagePreview(record(entries[index])?.item);
-    if (preview) return preview;
+  const message = lastAssistantMessage(entries);
+  return message ? messagePreview(message) : null;
+}
+
+export function lastAssistantMessage(entries: readonly unknown[]): { type: "assistant_message"; text: string; messageId?: string } | null {
+  let result: { type: "assistant_message"; text: string; messageId?: string } | null = null;
+  let separated = false;
+  for (const entry of entries) {
+    const item = record(record(entry)?.item);
+    if (item?.type === "user_message") { separated = true; continue; }
+    if (item?.type !== "assistant_message" || typeof item.text !== "string") continue;
+    const messageId = typeof item.messageId === "string" ? item.messageId : undefined;
+    if (result && !separated && (messageId === undefined || result.messageId === messageId)) result.text += item.text;
+    else result = { type: "assistant_message", text: item.text, messageId };
+    separated = false;
   }
-  return null;
+  return result;
 }
