@@ -2,6 +2,13 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.67.0 - 2026-11-25
+
+- Add upper navigation icon-and-text alignment (Left / Center / Right) and button appearance (Empty / Filled) in Look > Sidebar navigation. Trailing counts/actions stay fixed; disabling the treatment restores original styling while retaining saved choices.
+- Adapt hover and focus automatically: Empty gains theme fill; Filled uses a stronger theme mix. Add visible keyboard focus and selected-state treatment.
+- Handle the named `sidebar-nav-separator` rendered beside the navigation scroll in the shipped Paseo build. Earlier source-based detection skipped this named separator. Scope removal to a recognized navigation area and restore it on disable/unload.
+- Verify alignment, fill, adaptive interaction states, fixed trailing geometry, named-divider removal/restoration, and profile parsing. Installed-host visual acceptance remains unverified.
+
 ## 0.66.0 - 2026-11-25
 
 - Fix the remaining line below upper navigation: Morphise window styling no longer paints its divider on an outlined navigation group. Footer dividers remain unchanged.

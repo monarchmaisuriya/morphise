@@ -14,6 +14,13 @@ export const SIDEBAR_NAVIGATION_CSS = `
 [data-morphise-nav-group] { border-bottom-width: 0 !important; gap: 4px !important; }
 [data-morphise-nav-row] { border: 1px solid var(--colors-border) !important; border-radius: 8px !important; background-color: transparent !important; }
 [data-morphise-nav-row]:hover, [data-morphise-nav-row]:focus-within, [data-morphise-nav-row]:has(> [aria-selected="true"]) { background-color: var(--colors-surface-sidebar-hover, var(--colors-surface2)) !important; }
+[data-morphise-nav-group="center"] [data-morphise-nav-row] > [data-testid] { justify-content: center !important; }
+[data-morphise-nav-group="right"] [data-morphise-nav-row] > [data-testid] { justify-content: flex-end !important; }
+[data-morphise-nav-group="left"] [data-morphise-nav-row] > [data-testid] { justify-content: flex-start !important; }
+[data-morphise-nav-row="filled"] { background-color: var(--colors-surface-sidebar-hover, var(--colors-surface2)) !important; }
+[data-morphise-nav-row="filled"]:hover, [data-morphise-nav-row="filled"]:focus-within, [data-morphise-nav-row="filled"]:has(> [aria-selected="true"]) { background-color: color-mix(in srgb, var(--colors-foreground) 12%, var(--colors-surface-sidebar-hover, var(--colors-surface2))) !important; }
+[data-morphise-nav-row]:has(> [aria-selected="true"]) { box-shadow: inset 0 0 0 1px var(--colors-foreground-muted, var(--colors-border)); }
+[data-morphise-nav-row]:has(> :focus-visible) { outline: 2px solid var(--colors-foreground); outline-offset: -2px; }
 [data-morphise-nav-separator] { display: none !important; }
 `;
 
@@ -21,12 +28,12 @@ export function installSidebarNavigation() {
   if (Platform.OS !== "web" || typeof document === "undefined") return () => {};
   const tagged = new Map<DomElement, string>();
   let clearStyle: (() => void) | null = null;
-  const mark = (element: DomElement, attribute: string) => {
-    if (element.hasAttribute(attribute)) return;
-    element.setAttribute(attribute, ""); tagged.set(element, attribute);
+  const mark = (element: DomElement, attribute: string, value: string) => {
+    if (element.getAttribute(attribute) !== value) element.setAttribute(attribute, value);
+    tagged.set(element, attribute);
   };
   const sync = () => {
-    const wanted = new Map<DomElement, string>();
+    const wanted = new Map<DomElement, [string, string]>();
     if (!currentPrefs().sidebarNavigation) {
       clearStyle?.(); clearStyle = null;
       for (const [element, attribute] of tagged) element.removeAttribute(attribute);
@@ -40,18 +47,19 @@ export function installSidebarNavigation() {
         if (group.matches(EXCLUDED) || group.querySelector(EXCLUDED)) break;
         const rows = Array.from(group.querySelectorAll(NAV)).filter((element) => element.getAttribute("role") === "button");
         if (group.querySelectorAll(BUILTIN).length >= 2) {
-          wanted.set(group, "data-morphise-nav-group");
-          for (const row of rows) if (row.parentElement) wanted.set(row.parentElement, "data-morphise-nav-row");
+          wanted.set(group, ["data-morphise-nav-group", currentPrefs().sidebarNavigationAlignment]);
+          for (const row of rows) if (row.parentElement) wanted.set(row.parentElement, ["data-morphise-nav-row", currentPrefs().sidebarNavigationFill]);
           const scroll = group.closest('[data-testid="sidebar-nav-scroll"]');
           const separator = scroll?.nextElementSibling;
-          if (separator && !separator.getAttribute("data-testid") && !separator.firstElementChild && !separator.textContent?.trim()) wanted.set(separator, "data-morphise-nav-separator");
+          if (separator?.matches('[data-testid="sidebar-nav-separator"]')) wanted.set(separator, ["data-morphise-nav-separator", ""]);
+          else if (separator && !separator.getAttribute("data-testid") && !separator.firstElementChild && !separator.textContent?.trim()) wanted.set(separator, ["data-morphise-nav-separator", ""]);
           break;
         }
         group = group.parentElement;
       }
     }
     for (const [element, attribute] of tagged) if (!wanted.has(element)) { element.removeAttribute(attribute); tagged.delete(element); }
-    for (const [element, attribute] of wanted) mark(element, attribute);
+    for (const [element, [attribute, value]] of wanted) mark(element, attribute, value);
   };
   sync();
   const unsubscribe = subscribePrefs(sync);
