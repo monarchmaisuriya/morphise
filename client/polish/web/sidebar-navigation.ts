@@ -28,11 +28,17 @@ export const SIDEBAR_NAVIGATION_CSS = `
 [data-morphise-nav-slot] { align-items: stretch !important; min-width: 0 !important; grid-column: span 6; padding-inline: 0 !important; }
 [data-morphise-nav-slot="half"] { grid-column: span 3; }
 [data-morphise-nav-slot="tile"] { grid-column: span 2; }
+[data-morphise-nav-layout="tiles"] [data-morphise-nav-slot="full"] [data-morphise-nav-row] { min-height: 36px !important; }
+[data-morphise-nav-layout="tiles"] [data-morphise-nav-slot="full"] [data-morphise-nav-row] > [data-testid] { min-height: 34px !important; }
 [data-morphise-nav-slot] [data-morphise-nav-row] { min-width: 0; }
 [data-morphise-nav-stretch] { width: 100% !important; min-width: 0 !important; max-width: 100% !important; align-self: stretch !important; box-sizing: border-box !important; padding-inline: 0 !important; }
-[data-morphise-nav-slot="tile"] [data-morphise-nav-row] { position: relative; min-height: 88px; height: 100%; align-items: stretch !important; }
-[data-morphise-nav-slot="tile"] [data-morphise-nav-row] > [data-testid] { flex-direction: column !important; justify-content: center !important; gap: 8px !important; padding: 12px 4px !important; min-width: 0; }
-[data-morphise-nav-slot="tile"] [data-morphise-nav-row] > [data-testid] > :last-child { text-align: center; white-space: normal !important; overflow-wrap: anywhere; }
+[data-morphise-nav-tile-height="56"] { --morphise-nav-tile-height: 56px; }
+[data-morphise-nav-tile-height="64"] { --morphise-nav-tile-height: 64px; }
+[data-morphise-nav-tile-height="72"] { --morphise-nav-tile-height: 72px; }
+[data-morphise-nav-tile-height="88"] { --morphise-nav-tile-height: 88px; }
+[data-morphise-nav-slot="tile"] [data-morphise-nav-row] { position: relative; min-height: var(--morphise-nav-tile-height, 48px); height: 100%; align-items: stretch !important; }
+[data-morphise-nav-slot="tile"] [data-morphise-nav-row] > [data-testid] { flex-direction: column !important; justify-content: center !important; gap: 2px !important; padding: 5px 4px !important; min-width: 0; }
+[data-morphise-nav-slot="tile"] [data-morphise-nav-row] > [data-testid] > :last-child { text-align: center; font-size: 11px !important; line-height: 14px !important; white-space: normal !important; overflow-wrap: anywhere; }
 `;
 
 export function installSidebarNavigation() {
@@ -69,6 +75,7 @@ export function installSidebarNavigation() {
           handled.add(group);
           const visibleRows = rows.filter((row) => !row.closest('[hidden], [aria-hidden="true"]') && getComputedStyle(row).visibility === "visible" && row.getClientRects().length > 0 && row.getBoundingClientRect().height > 0);
           want(group, "data-morphise-nav-group", currentPrefs().sidebarNavigationAlignment);
+          want(group, "data-morphise-nav-tile-height", String(currentPrefs().sidebarNavigationTileHeight));
           for (const row of visibleRows) if (row.parentElement) want(row.parentElement, "data-morphise-nav-row", currentPrefs().sidebarNavigationFill);
           const slots = visibleRows.map((row) => {
             let slot = row.parentElement;
