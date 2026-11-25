@@ -12,6 +12,14 @@ describe("pagesOn", () => {
 });
 
 describe("Chat Polish preferences from Morphise's profile", () => {
+  it("keeps upper navigation styling on by default and preserves an explicit off choice", () => {
+    expect(polishPrefs(undefined).sidebarNavigation).toBe(true);
+    const chat = profileSchema.parse({ chat: { polish: { sidebarNavigation: false } } }).chat;
+    expect(chat?.polish?.sidebarNavigation).toBe(false);
+    expect(polishPrefs(chat).sidebarNavigation).toBe(false);
+    expect(polishPrefs({ polish: { sidebarNavigation: true } }).sidebarNavigation).toBe(true);
+  });
+
   it("leaves Paseo's look by default", () => {
     const prefs = polishPrefs(undefined);
     expect(prefs).toMatchObject({ nativeStyle: "paseo", windowStyle: "paseo", diagrams: "mermaid", html: "on", images: "native", imageStacks: "off", iconSet: "lucide", recap: "off", merge: "on", selection: "on", failedOpen: true });

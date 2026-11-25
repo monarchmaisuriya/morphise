@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 import { applyStyleSheet } from "../../web";
 import { watchDom, type DomElement, type WebDocument } from "./dom";
+import { currentPrefs, subscribePrefs } from "../prefs";
 
 declare const document: WebDocument;
 
@@ -19,12 +20,20 @@ export const SIDEBAR_NAVIGATION_CSS = `
 export function installSidebarNavigation() {
   if (Platform.OS !== "web" || typeof document === "undefined") return () => {};
   const tagged = new Map<DomElement, string>();
+  let clearStyle: (() => void) | null = null;
   const mark = (element: DomElement, attribute: string) => {
     if (element.hasAttribute(attribute)) return;
     element.setAttribute(attribute, ""); tagged.set(element, attribute);
   };
   const sync = () => {
     const wanted = new Map<DomElement, string>();
+    if (!currentPrefs().sidebarNavigation) {
+      clearStyle?.(); clearStyle = null;
+      for (const [element, attribute] of tagged) element.removeAttribute(attribute);
+      tagged.clear();
+      return;
+    }
+    if (!clearStyle) clearStyle = applyStyleSheet(SIDEBAR_NAVIGATION_CSS);
     for (const anchor of Array.from(document.querySelectorAll(BUILTIN))) {
       let group = anchor.parentElement?.parentElement ?? null;
       while (group && group !== document.documentElement) {
@@ -45,6 +54,6 @@ export function installSidebarNavigation() {
     for (const [element, attribute] of wanted) mark(element, attribute);
   };
   sync();
-  const clear = applyStyleSheet(SIDEBAR_NAVIGATION_CSS);
-  return watchDom({ settled: sync }, () => { clear(); for (const [element, attribute] of tagged) element.removeAttribute(attribute); tagged.clear(); });
+  const unsubscribe = subscribePrefs(sync);
+  return watchDom({ settled: sync }, () => { unsubscribe(); clearStyle?.(); for (const [element, attribute] of tagged) element.removeAttribute(attribute); tagged.clear(); });
 }
