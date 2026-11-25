@@ -42,6 +42,7 @@ function tolerant<Shape extends z.ZodRawShape>(shape: Shape) {
 export const polishSchema = tolerant({
   sidebarStatus: sidebarStatusSchema.optional(),
   sidebarIndicatorLayout: sidebarIndicatorLayoutSchema.optional(),
+  sidebarNavigation: z.boolean().optional(),
   // Thoughts and tool calls between two replies folded into one row.
   merge: z.boolean().optional(),
   rowIcons: z.strictObject({ steps: shown.optional(), tool: shown.optional(), thought: shown.optional() }).optional(),
@@ -123,6 +124,7 @@ export const POLISH_DEFAULTS: Partial<Record<keyof PolishSettings, unknown>> = {
 export interface Prefs {
   sidebarStatus?: SidebarStatusSettings;
   sidebarIndicatorLayout?: SidebarIndicatorLayout;
+  sidebarNavigation: boolean;
   reasoning: "paseo" | "collapsed" | "expanded";
   commandColors: "expanded" | "always";
   diffWrap: "on" | "off";
@@ -188,6 +190,7 @@ export function polishPrefs(chat: ChatSettings | undefined): Prefs {
   return {
     sidebarStatus: polish.sidebarStatus,
     sidebarIndicatorLayout: polish.sidebarIndicatorLayout,
+    sidebarNavigation: polish.sidebarNavigation !== false,
     reasoning: chat?.reasoning === "fold" ? "collapsed" : chat?.reasoning === "expand" ? "expanded" : "paseo",
     commandColors: chat?.commandColors === false ? "expanded" : "always",
     diffWrap: chat?.wrap === false ? "off" : "on",

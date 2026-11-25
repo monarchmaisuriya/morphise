@@ -2,6 +2,12 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.66.0 - 2026-11-25
+
+- Fix the remaining line below upper navigation: Morphise window styling no longer paints its divider on an outlined navigation group. Footer dividers remain unchanged.
+- Add Look > Sidebar navigation > Outline navigation and remove divider. This profile setting controls borders and divider removal together, defaults on, and restores existing styling when off.
+- Test against the real window stylesheet, including painted-divider removal, footer preservation, live off/on restoration and persisted preference parsing.
+
 ## 0.65.0 - 2026-11-25
 
 - **Outlined upper navigation:** desktop/web built-in and plugin sidebar navigation rows use rounded theme borders, transparent resting backgrounds and hover/focus/selected fill, matching Morphise toolbar controls. Remove the navigation group's bottom divider without changing button actions, trailing counts, footer, window or workspace-list controls.

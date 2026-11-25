@@ -175,7 +175,7 @@ ${each(W, LEFT_EDGE)} { --colors-border: var(--cp-w-hair); border-right-color: t
 ${each(FLAT + LIGHT, LEFT_EDGE)} { border-right-color: var(--colors-border) !important; }
 ${W} [${WIN}="nav"] [role="button"] > [dir] { font-size: 14px !important; }
 /* The rules under the nav and above the footer stop 10px short of both sides, so they don't run into the edge. */
-${each(W, [`[${WIN}="nav"]`, '[data-testid="sidebar-footer"]'])} { border-color: transparent !important; background-image: linear-gradient(var(--cp-w-hair), var(--cp-w-hair)); background-size: calc(100% - 20px) 1px; background-repeat: no-repeat; }
+${each(W, [`[${WIN}="nav"]:not([data-morphise-nav-group])`, '[data-testid="sidebar-footer"]'])} { border-color: transparent !important; background-image: linear-gradient(var(--cp-w-hair), var(--cp-w-hair)); background-size: calc(100% - 20px) 1px; background-repeat: no-repeat; }
 ${W} [${WIN}="nav"] { background-position: center bottom; }
 ${W} [data-testid="sidebar-footer"] { background-position: center top; }
 ${W} [${WIN}="ws-label"] { font-size: 12px !important; letter-spacing: 0.02em; }

@@ -198,6 +198,9 @@ export function PolishLookSettings({ form }: { form: Form }): ReactNode {
         </SettingsCard>
       </SettingsSection>
       <SidebarStatusSettings form={form} value={prefs.sidebarStatus} onChange={(value) => set("sidebarStatus", value)} layoutValue={prefs.sidebarIndicatorLayout} onLayoutChange={(value) => set("sidebarIndicatorLayout", value)} />
+      <SettingsSection title="Sidebar navigation" info="Desktop and web only. Applies to navigation above the Search toolbar, including built-in and plugin buttons.">
+        <SettingsCard><SwitchField label="Outline navigation and remove divider" value={prefs.sidebarNavigation} onChange={(value) => set("sidebarNavigation", value ? undefined : false)} hint="Rounded button borders and no line below Schedules. Turn off to restore Paseo's original navigation styling, including the divider." /></SettingsCard>
+      </SettingsSection>
       <SettingsSection title="Restyle Paseo (experimental)" info="Chat Polish's design for Paseo's own message box, cards, menus, tool groups and replies, on desktop and web. It works through Paseo's page structure, so a Paseo update can break parts of it.">
         <SettingsCard>
           <SwitchField label="Restyle Paseo's items" value={restyled} onChange={(value) => set("restyle", value)} />
