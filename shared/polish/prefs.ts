@@ -46,6 +46,7 @@ export const polishSchema = tolerant({
   sidebarNavigationAlignment: z.enum(["left", "center", "right"]).optional(),
   sidebarNavigationFill: z.enum(["empty", "filled"]).optional(),
   sidebarNavigationLayout: z.enum(["stacked", "split", "tiles"]).optional(),
+  sidebarNavigationTileHeight: z.union([z.literal(48), z.literal(56), z.literal(64), z.literal(72), z.literal(88)]).optional(),
   // Thoughts and tool calls between two replies folded into one row.
   merge: z.boolean().optional(),
   rowIcons: z.strictObject({ steps: shown.optional(), tool: shown.optional(), thought: shown.optional() }).optional(),
@@ -131,6 +132,7 @@ export interface Prefs {
   sidebarNavigationAlignment: "left" | "center" | "right";
   sidebarNavigationFill: "empty" | "filled";
   sidebarNavigationLayout: "stacked" | "split" | "tiles";
+  sidebarNavigationTileHeight: 48 | 56 | 64 | 72 | 88;
   reasoning: "paseo" | "collapsed" | "expanded";
   commandColors: "expanded" | "always";
   diffWrap: "on" | "off";
@@ -200,6 +202,7 @@ export function polishPrefs(chat: ChatSettings | undefined): Prefs {
     sidebarNavigationAlignment: polish.sidebarNavigationAlignment ?? "left",
     sidebarNavigationFill: polish.sidebarNavigationFill ?? "empty",
     sidebarNavigationLayout: polish.sidebarNavigationLayout ?? "stacked",
+    sidebarNavigationTileHeight: polish.sidebarNavigationTileHeight ?? 48,
     reasoning: chat?.reasoning === "fold" ? "collapsed" : chat?.reasoning === "expand" ? "expanded" : "paseo",
     commandColors: chat?.commandColors === false ? "expanded" : "always",
     diffWrap: chat?.wrap === false ? "off" : "on",

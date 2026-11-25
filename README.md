@@ -215,3 +215,5 @@ The workspace toolbar uses a transparent **All / Active / Asking** dropdown inst
 Split rows and Tiles stretch recognized nested plugin row wrappers to their assigned cell width, including Quick Chat and Workbench. Grid spacing replaces nested horizontal wrapper inset; main-button padding and trailing controls remain intact.
 
 Navigation grid slots explicitly establish a box even when Paseo plugin boundaries use `display: contents`; native slot flex direction is preserved for compact-sidebar close controls. Verified with the shipped client on an isolated temporary daemon.
+
+Tiles default to a compact 48px minimum height with 11px labels. Under **Look → Sidebar navigation**, select **Tiles** to reveal **Tile height**: 48 (default), 56, 64, 72 or 88px. Long labels may grow to fit. The first and last full-width rows in Tiles are 36px; tile-height changes do not affect them.

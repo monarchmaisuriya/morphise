@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.71.0 - 2026-11-25
+
+- Default navigation tiles to the approved compact 48px minimum height, 2px icon-label gap and 11px labels. Add Look > Sidebar navigation > Tile height with 48 (default), 56, 64, 72 and 88px options; long labels can grow to fit.
+- Increase Tiles layout first/last full-width rows to 36px without changing other layouts. Previewed and measured on the shipped client connected to an isolated temporary daemon; spacing approved by M.
+
 ## 0.70.0 - 2026-11-25
 
 - Fix plugin navigation grid slots using the actual shipped client structure: plugin boundary wrappers use display: contents, which discarded their assigned grid spans. Owned layout slots now establish a flex box while preserving the host flex direction.
