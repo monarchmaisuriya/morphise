@@ -128,7 +128,7 @@ function viewStyles(theme: Theme, config: ViewConfig, look: ReturnType<typeof si
   const shift = rowPad - 8;
   return {
     scroll: { flex: 1 },
-    header: { flexDirection: "row" as const, alignItems: "center" as const, minHeight: 36, paddingHorizontal: 8, gap: 6 },
+    header: { flexDirection: "row" as const, alignItems: "center" as const, minHeight: 36, paddingHorizontal: 8, paddingTop: 8, paddingBottom: 8, gap: 6 },
     tools: { paddingHorizontal: 8, paddingBottom: 6, gap: 6 },
     // More space above a heading than below it: the heading belongs to the rows that follow.
     heading: { flexDirection: "row" as const, alignItems: "center" as const, gap: 6, minHeight: TOUCH ? 40 : 28, paddingLeft: 16, paddingRight: 12, marginTop: groupGap },
@@ -1073,18 +1073,22 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
           showActions={confirmArchive || menu !== null}
           main={main}
           trailing={time}
-          keepTrailing={twoLine}
+          keepTrailing={false}
           actions={selecting ? undefined : (
-            <>
-              <IconButton t={t} size="sm" icon="Info" label={`Details for ${workspace.name}`} onPress={() => { setDetailsOpen(true); refreshCheckpoint((value) => value + 1); }} />
-              {config.rowActions.includes("pin") ? <IconButton t={t} size="sm" icon={workspace.pinned ? "PinOff" : "Pin"} tone={workspace.pinned ? c.foreground : undefined} label={workspace.pinned ? `Unpin ${workspace.name}` : `Pin ${workspace.name}`} onPress={togglePin} /> : null}
-              {confirmArchive && menu === null ? (
+            <View testID={`workspace-actions-${reference.key}`} style={twoLine ? { gap: 0 } : { flexDirection: "row" }}>
+              <View style={{ flexDirection: "row" }}>
+              {config.rowActions.includes("pin") ? <IconButton t={t} size="sm" icon={workspace.pinned ? "PinOff" : "Pin"} tone={workspace.pinned ? c.foreground : undefined} label={workspace.pinned ? `Unpin ${workspace.name}` : `Pin ${workspace.name}`} onPress={togglePin} /> : twoLine ? <View style={{ width: TOUCH ? 32 : 24 }} /> : null}
+              {confirmArchive && menu === null && !twoLine ? (
                 <Button t={t} variant="danger" size="sm" {...archiveConfirm(workspace.name, found)} onPress={archive} />
               ) : (
-                <IconButton t={t} size="sm" icon="Archive" label={`Archive ${workspace.name}`} onPress={archive} />
+                <IconButton t={t} size="sm" icon="Archive" tone={confirmArchive ? c.statusDanger : undefined} label={confirmArchive ? archiveConfirm(workspace.name, found).accessibilityLabel : `Archive ${workspace.name}`} onPress={archive} />
               )}
+              </View>
+              <View style={{ flexDirection: "row" }}>
+              <IconButton t={t} size="sm" icon="Info" label={`Details for ${workspace.name}`} onPress={() => { setDetailsOpen(true); refreshCheckpoint((value) => value + 1); }} />
               <IconButton t={t} size="sm" icon="Ellipsis" label={`Actions for ${workspace.name}`} onPress={() => setMenu(menu ? null : "actions")} />
-            </>
+              </View>
+            </View>
           )}
           shared={shared}
         />
@@ -1555,13 +1559,13 @@ function Header({ menu, setMenu, search, onSearch, searchLabel, filters, onNext,
       <View style={{ flex: 1, minWidth: 0 }}>
         <Field t={t} plain outlined icon="Search" value={search} onChangeText={onSearch} placeholder="Search" accessibilityLabel={searchLabel} />
       </View>
-      {search !== "" ? <IconButton outlined t={t} size="sm" icon="X" label="Clear search" onPress={() => onSearch("")} /> : null}
-      {openScreen ? <IconButton outlined t={t} size="sm" icon={DISPATCH_ICON} label="Dispatch: start several agents in new workspaces" onPress={() => openScreen({ screenId: DISPATCH_SCREEN_ID })} /> : null}
+      {search !== "" ? <IconButton outlined t={t} size="md" icon="X" label="Clear search" onPress={() => onSearch("")} /> : null}
+      {openScreen ? <IconButton outlined t={t} size="md" icon={DISPATCH_ICON} label="Dispatch: start several agents in new workspaces" onPress={() => openScreen({ screenId: DISPATCH_SCREEN_ID })} /> : null}
       {config.groupBy === "custom" ? (
         <IconButton
           outlined
           t={t}
-          size="sm"
+          size="md"
           icon="FolderPlus"
           label="New group"
           onPress={() => {
@@ -1571,8 +1575,8 @@ function Header({ menu, setMenu, search, onSearch, searchLabel, filters, onNext,
           }}
         />
       ) : null}
-      <IconButton outlined t={t} size="sm" icon="SlidersHorizontal" selected={menu !== null} tone={menu !== null || filters ? props.theme.colors.foreground : undefined} label={`Settings: grouping, sorting and filters${filters ? `, ${filters} filters on` : ""}`} onPress={() => toggle("view")} />
-      <IconButton outlined t={t} size="sm" icon="SkipForward" label={onNext ? "Open the next one that needs you" : "Nothing needs you"} disabled={onNext === null} onPress={() => onNext?.()} />
+      <IconButton outlined t={t} size="md" icon="SlidersHorizontal" selected={menu !== null} tone={menu !== null || filters ? props.theme.colors.foreground : undefined} label={`Settings: grouping, sorting and filters${filters ? `, ${filters} filters on` : ""}`} onPress={() => toggle("view")} />
+      <IconButton outlined t={t} size="md" icon="SkipForward" label={onNext ? "Open the next one that needs you" : "Nothing needs you"} disabled={onNext === null} onPress={() => onNext?.()} />
     </View>
   );
 }

@@ -2,6 +2,13 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.61.0 - 2026-11-25
+
+- **Compact activity:** replace workspace runtime charts with recorded-duration labels such as 18m / 24h. Hide zero/unavailable values and mark partial coverage with ~; retain source/freshness/coverage tooltips.
+- **Two-by-two workspace actions:** Pin/Archive above Info/Menu on two-line rows. Hover/focus actions replace trailing time/activity rather than competing for title width. Archive still requires two presses and preserves the local-work warning.
+- **Toolbar and tabs:** equal-height Search/buttons, spacing above and below the toolbar, aligned outer edges, borderless transparent tab container and selected-only fill.
+- **Responsive Quick Chat titles:** display at most 60 characters below 640px content width, otherwise 120, with trailing ellipses when shortened. Full titles remain in accessibility and Chat info. Morphise-only; previously shortened upstream titles and saved titles are not rewritten.
+
 ## 0.60.0 - 2026-11-25
 
 - **Workspace context:** show the latest chat's provider beneath the state indicator and a rolling 24-hour recorded-agent-runtime line beneath the time. One shared Calendar read refreshes the sidebar; uncertain observations are excluded, partial coverage disclosed and remote history unavailable rather than confused with a local same-ID workspace.
