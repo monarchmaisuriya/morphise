@@ -2,6 +2,12 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.69.0 - 2026-11-25
+
+- Fix narrow plugin navigation buttons in Split rows and Tiles. Stretch the recognized wrapper chain between each grid slot and bordered row, removing duplicate horizontal wrapper inset while preserving the main button contents and trailing controls.
+- Add a nested intrinsic-width plugin fixture and assert bordered button-frame width equals its assigned full row or tile column. Earlier tests measured only outer slots and missed inner collapse.
+- Stretch attributes reconcile with layout changes, treatment off and unload. Installed-host visual acceptance remains unverified.
+
 ## 0.68.0 - 2026-11-25
 
 - Add dynamic Stacked, Split rows and Tiles navigation layouts. Split pairs the first two visible entries; Tiles keeps first/last full width and wraps middle entries in up to three columns. Global Empty/Filled appearance and adaptive interactions remain shared across all entries.
