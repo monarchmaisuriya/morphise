@@ -2,6 +2,12 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.70.0 - 2026-11-25
+
+- Fix plugin navigation grid slots using the actual shipped client structure: plugin boundary wrappers use display: contents, which discarded their assigned grid spans. Owned layout slots now establish a flex box while preserving the host flex direction.
+- Tested on a temporary isolated Paseo 0.17.4 daemon with the shipped client and Morphise directory plugin. Before: plugin frame 44px, boxless slot 0px; after: full plugin row 304px and tile 96px, matching assigned cells. Normal daemon/install unchanged.
+- Update the regression fixture to include display: contents plugin boundaries, not only intrinsic-width boxed wrappers.
+
 ## 0.69.0 - 2026-11-25
 
 - Fix narrow plugin navigation buttons in Split rows and Tiles. Stretch the recognized wrapper chain between each grid slot and bordered row, removing duplicate horizontal wrapper inset while preserving the main button contents and trailing controls.

@@ -213,3 +213,5 @@ Upper navigation also offers **Icon and text alignment: Left / Center / Right** 
 The workspace toolbar uses a transparent **All / Active / Asking** dropdown instead of its former Search field and tab strip. Existing status labels, counts and enabled choices still apply. Workspace text search is no longer applied; Dispatch, Settings and Next actions remain beside the dropdown.
 
 Split rows and Tiles stretch recognized nested plugin row wrappers to their assigned cell width, including Quick Chat and Workbench. Grid spacing replaces nested horizontal wrapper inset; main-button padding and trailing controls remain intact.
+
+Navigation grid slots explicitly establish a box even when Paseo plugin boundaries use `display: contents`; native slot flex direction is preserved for compact-sidebar close controls. Verified with the shipped client on an isolated temporary daemon.

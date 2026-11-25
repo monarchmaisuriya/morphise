@@ -1,0 +1,25 @@
+# Boxless plugin navigation slots
+
+## Root cause
+
+v0.69.0 stretched plugin descendants but assigned grid placement to the plugin boundary wrapper. Actual shipped Paseo renders that wrapper with inline display: contents. It has no box and its grid-column span does not apply to the descendant boxes. Earlier fixtures used only boxed wrappers, so they modeled a different mechanism.
+
+## Temporary-daemon evidence
+
+- Paseo CLI/server 0.17.4. Fresh isolated home: /private/var/folders/vm/dcb_27hs4t50mktlkq73b7ww0000gn/T/opencode/nav-daemon-YGdtpQ.
+- Actual listener 127.0.0.1:54429, relay disabled, web UI served from /Applications/Paseo.app/Contents/Resources/app-dist. Morphise installed by directory from this checkout in the temporary home only. No agents created or provider prompts sent; normal daemon and installation untouched.
+- Real client inspected via browser, settings changed only on temporary daemon.
+- Split before: builtin full rows 304px; Quick Chat/Workbench frames 44px and slots 0px with computed display contents. Reproduced collapse from actual DOM, not synthetic fixture.
+- After making recognized owned slots display flex: Quick Chat/Workbench full row frame=slot=304px. Tiles: Quick Chat frame=slot=96px; last Workbench row frame=slot=304px.
+- Captured actual render. Initial column override moved compact close control below its row; removed override and reloaded temporary plugin. Host row direction retained; plugin frames still 96/304px.
+- Screenshot: browser export file_6901bde7-b2c8-4acf-b9ca-5a6c223d5b70 (before removing unnecessary flex-direction override). This is a compact web-client check, not macOS desktop certification.
+
+## Fix and prevention
+
+Owner: Morphise navigation layout installer. Establish a real display:flex box only on recognized grid slots, retaining existing flex direction. Existing owned-attribute cleanup restores display:contents on off/stacked/unload. No handlers replaced or DOM reparented. Fixture now explicitly includes boxless plugin boundaries. The original rule cannot allocate their requested spans without the fix; recurrence test is frame-width equality against a nonzero assigned slot.
+
+The first expanded regression timed out when a slot was hidden: unconditional display:flex!important overrode the hidden attribute. Restricting the display override to slots without hidden/aria-hidden preserves host hiding. Final focused test and all five enabled browser suites pass. Typecheck and full suite pass (1,410 passed / 29 skipped), as does git diff --check. Log: /private/var/folders/vm/dcb_27hs4t50mktlkq73b7ww0000gn/T/opencode/boxless-navigation-slots-release-tests.log. Final rule reloaded on temporary daemon: Quick Chat tile frame=slot=95.664px, Workbench full row frame=slot=302.992px. Temporary supervisor PID17129 stopped gracefully via explicit temporary-home daemon stop; worker exited0. Temporary home retained for evidence.
+
+## Limits and delivery
+
+Initial temporary daemon launch was killed by a one-second tool timeout; restarted with adequate lifetime. One optional plugin-data lookup was absent; no production path fallback used. Providers were detected by the host but no agents/prompts were run. M requested fix, temp daemon verification, commit, merge, release and registry PR update. Target v0.70.0. Temp process stopped after verification; retained isolated home for evidence unless M requests deletion.
