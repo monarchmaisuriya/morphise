@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.74.0 - 2026-11-26
+
+- Revise tile height options to38,42,48(default),56,64,72px. Replace36px with38px, add42px, remove88px. Read saved36px choices as38px and88px choices as72px;48px default and36px first/last full rows unchanged.
+
 ## 0.73.0 - 2026-11-26
 
 - Add36px extra-small tile height, retaining48px as default. Use compact icon/padding/line-height only at36px; long labels may grow to fit. Includes the merged0.72.0 row-fill, hidden-hover-hint and toolbar appearance changes below.

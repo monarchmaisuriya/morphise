@@ -216,7 +216,7 @@ Split rows and Tiles stretch recognized nested plugin row wrappers to their assi
 
 Navigation grid slots explicitly establish a box even when Paseo plugin boundaries use `display: contents`; native slot flex direction is preserved for compact-sidebar close controls. Verified with the shipped client on an isolated temporary daemon.
 
-Tiles default to a compact 48px minimum height with 11px labels. Under **Look → Sidebar navigation**, select **Tiles** to reveal **Tile height**: 36, 48 (default), 56, 64, 72 or 88px. Long labels may grow to fit. The first and last full-width rows in Tiles are 36px; tile-height changes do not affect them.
+Tiles default to a compact 48px minimum height with 11px labels. Under **Look → Sidebar navigation**, select **Tiles** to reveal **Tile height**: 38, 42, 48 (default), 56, 64 or 72px. Long labels may grow to fit. The first and last full-width rows in Tiles are 36px; tile-height changes do not affect them.
 
 Incomplete tile rows fill the navigation width: one tile spans the row, two share equal halves, and three share equal thirds, with consistent 8px gaps. The final wrapped row follows the same rule. Tile height, centered icon/label layout and full-width edge rows are unchanged.
 
