@@ -132,7 +132,7 @@ export function Button({
 }
 
 // An icon-only button; `label` is its accessible name and its hover tooltip.
-export function IconButton({ t, icon, label, onPress, tone, size = "md", disabled, outlined = false, selected = false }: { t: Tokens; icon: string; label: string; onPress(): void; tone?: string; size?: "sm" | "md"; disabled?: boolean; outlined?: boolean; selected?: boolean }) {
+export function IconButton({ t, icon, label, onPress, tone, size = "md", disabled, outlined = false, selected = false, filled = false }: { t: Tokens; icon: string; label: string; onPress(): void; tone?: string; size?: "sm" | "md"; disabled?: boolean; outlined?: boolean; selected?: boolean; filled?: boolean }) {
   const hover = useHover();
   const [focused, setFocused] = useState(false);
   const tooltip = useTooltip(label, t.c);
@@ -157,7 +157,7 @@ export function IconButton({ t, icon, label, onPress, tone, size = "md", disable
         borderRadius: t.radius.control,
         borderWidth: outlined ? 1 : 0,
         borderColor: t.c.border,
-        backgroundColor: hover.hovered || pressed || outlined && (focused || selected) ? t.c.surface2 : "transparent",
+        backgroundColor: hover.hovered || pressed || outlined && (focused || selected) ? t.c.surface2 : filled ? t.c.surface1 : "transparent",
         opacity: disabled ? 0.35 : 1,
       })}
     >

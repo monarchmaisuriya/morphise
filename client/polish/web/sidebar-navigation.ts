@@ -22,12 +22,15 @@ export const SIDEBAR_NAVIGATION_CSS = `
 [data-morphise-nav-row="filled"]:hover, [data-morphise-nav-row="filled"]:focus-within, [data-morphise-nav-row="filled"]:has(> [aria-selected="true"]) { background-color: color-mix(in srgb, var(--colors-foreground) 12%, var(--colors-surface-sidebar-hover, var(--colors-surface2))) !important; }
 [data-morphise-nav-row]:has(> [aria-selected="true"]) { box-shadow: inset 0 0 0 1px var(--colors-foreground-muted, var(--colors-border)); }
 [data-morphise-nav-row]:has(> :focus-visible) { outline: 2px solid var(--colors-foreground); outline-offset: -2px; }
+[data-morphise-nav-row]:has(> :is([data-testid="sidebar-search"], [data-testid="sidebar-global-new-workspace"])) > :not([data-testid]) { display: none !important; }
 [data-morphise-nav-separator] { display: none !important; }
 [data-morphise-nav-layout="split"], [data-morphise-nav-layout="tiles"] { display: grid !important; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px !important; padding-inline: 8px; }
 [data-morphise-nav-slot]:not([hidden]):not([aria-hidden="true"]) { display: flex !important; }
 [data-morphise-nav-slot] { align-items: stretch !important; min-width: 0 !important; grid-column: span 6; padding-inline: 0 !important; }
 [data-morphise-nav-slot="half"] { grid-column: span 3; }
 [data-morphise-nav-slot="tile"] { grid-column: span 2; }
+[data-morphise-nav-tile-columns="2"] { grid-column: span 3; }
+[data-morphise-nav-tile-columns="1"] { grid-column: span 6; }
 [data-morphise-nav-layout="tiles"] [data-morphise-nav-slot="full"] [data-morphise-nav-row] { min-height: 36px !important; }
 [data-morphise-nav-layout="tiles"] [data-morphise-nav-slot="full"] [data-morphise-nav-row] > [data-testid] { min-height: 34px !important; }
 [data-morphise-nav-slot] [data-morphise-nav-row] { min-width: 0; }
@@ -92,6 +95,11 @@ export function installSidebarNavigation() {
               if (!slot || layout === "stacked") return;
               const kind = layout === "split" && slots.length >= 2 && index < 2 ? "half" : layout === "tiles" && index > 0 && index < slots.length - 1 ? "tile" : "full";
               want(slot, "data-morphise-nav-slot", kind);
+              if (kind === "tile") {
+                const middleCount = slots.length - 2;
+                const rowStart = Math.floor((index - 1) / 3) * 3;
+                want(slot, "data-morphise-nav-tile-columns", String(Math.min(3, middleCount - rowStart)));
+              }
               // Plugin rows add wrappers between the grid slot and the bordered row frame.
               let frame = visibleRows[index]?.parentElement ?? null;
               while (frame && frame !== slot) {

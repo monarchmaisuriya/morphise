@@ -2,6 +2,12 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.72.0 - 2026-11-25
+
+- Stretch incomplete tile rows across the navigation width: one full width, two equal halves, three equal thirds, including wrapped final rows. Preserve tile height and8px gaps.
+- Hide hover-only shortcut hints on Search/New workspace while navigation styling is enabled. Avoid main-button resizing without uneven reserved padding; actual shortcuts and plugin counts/actions remain unchanged. Temporary-daemon probe confirms301px before/after hover.
+- Add independent Look > Workspace toolbar > Workspace toolbar appearance: Empty(default)/Filled for the lower status dropdown and adjacent buttons. Preserve status counts, actions, sizing and disabled states.
+
 ## 0.71.0 - 2026-11-25
 
 - Default navigation tiles to the approved compact 48px minimum height, 2px icon-label gap and 11px labels. Add Look > Sidebar navigation > Tile height with 48 (default), 56, 64, 72 and 88px options; long labels can grow to fit.

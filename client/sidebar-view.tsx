@@ -81,6 +81,7 @@ import { fontSize, radius } from "../shared/design/tokens";
 import { focusStatuses, sidebarSummary, semanticLine, sidebarTime, sidebarTimestamp, type FocusTab } from "../shared/sidebar-focus";
 import { checkpointRead, type Checkpoint } from "../shared/work-checkpoints";
 import { SidebarFocusDropdown } from "./sidebar-focus";
+import { usePrefs } from "./polish/prefs";
 import { useSidebarMessage } from "./use-sidebar-message";
 import { RuntimeDetails, RuntimeStrip, useSidebarRuntime, type SidebarRuntime } from "./sidebar-runtime";
 import { providerIconSvg } from "./provider-icons";
@@ -1560,19 +1561,21 @@ interface HeaderProps {
 // The status dropdown shares a toolbar with create, settings and Next actions.
 // Menus open over the list instead of pushing it down.
 function Header({ menu, setMenu, focus, filters, onNext, headerRef, shared }: HeaderProps) {
+  const filled = usePrefs().sidebarToolbarFill === "filled";
   const { styles, props, t, config } = shared;
   const toggle = (next: Exclude<Menu, null>) => setMenu(menu === next ? null : next);
   const openScreen = useValue(screenOpener);
   return (
     <View ref={headerRef} style={styles.header}>
       {focus}
-      {openScreen ? <IconButton outlined t={t} size="md" icon={DISPATCH_ICON} label="Dispatch: start several agents in new workspaces" onPress={() => openScreen({ screenId: DISPATCH_SCREEN_ID })} /> : null}
+      {openScreen ? <IconButton outlined filled={filled} t={t} size="md" icon={DISPATCH_ICON} label="Dispatch: start several agents in new workspaces" onPress={() => openScreen({ screenId: DISPATCH_SCREEN_ID })} /> : null}
       {config.groupBy === "custom" ? (
         <IconButton
           outlined
           t={t}
           size="md"
           icon="FolderPlus"
+          filled={filled}
           label="New group"
           onPress={() => {
             const id = newGroupId();
@@ -1581,8 +1584,8 @@ function Header({ menu, setMenu, focus, filters, onNext, headerRef, shared }: He
           }}
         />
       ) : null}
-      <IconButton outlined t={t} size="md" icon="SlidersHorizontal" selected={menu !== null} tone={menu !== null || filters ? props.theme.colors.foreground : undefined} label={`Settings: grouping, sorting and filters${filters ? `, ${filters} filters on` : ""}`} onPress={() => toggle("view")} />
-      <IconButton outlined t={t} size="md" icon="SkipForward" label={onNext ? "Open the next one that needs you" : "Nothing needs you"} disabled={onNext === null} onPress={() => onNext?.()} />
+      <IconButton outlined filled={filled} t={t} size="md" icon="SlidersHorizontal" selected={menu !== null} tone={menu !== null || filters ? props.theme.colors.foreground : undefined} label={`Settings: grouping, sorting and filters${filters ? `, ${filters} filters on` : ""}`} onPress={() => toggle("view")} />
+      <IconButton outlined filled={filled} t={t} size="md" icon="SkipForward" label={onNext ? "Open the next one that needs you" : "Nothing needs you"} disabled={onNext === null} onPress={() => onNext?.()} />
     </View>
   );
 }
