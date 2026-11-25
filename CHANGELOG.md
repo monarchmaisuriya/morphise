@@ -2,6 +2,13 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.59.0 - 2026-11-25
+
+- **Native-sized sidebar indicators:** consistent 6px dot, 12px ring and 1.5px band across states and main/nested rows. Loading/working use Paseo's theme blue; amber/red/green remain for input/failure/unread. Done is always dot-only. Legacy size/color overrides are inert and their controls removed; rotation controls remain. Native working rotation defaults to 900ms and reduced motion stops it.
+- **Quieter counts and toolbar:** hide zero counts, use smaller muted nonzero counts, remove Search-toolbar vertical dividers, retain filled equal-width focus tabs.
+- **Agent-only coherent previews:** ignore user messages, assemble live assistant chunks instead of showing the latest fragment, preserve the response beginning, clean formatting and truncate at word boundaries. Original chat messages and titles remain unchanged.
+- **Deterministic Calendar fixture:** pin the browser fixture clock so sample afternoon events remain in the observed snapshot regardless of when tests run.
+
 ## 0.58.1 - 2026-11-24
 
 - **Plain-text sidebar previews:** clean heading, emphasis, code-fence, link/image, list/quote and basic HTML formatting before whitespace normalization and truncation. Preserve message words, code content and ordinary underscores/arithmetic. Shared extraction covers history and live updates; original messages remain untouched.

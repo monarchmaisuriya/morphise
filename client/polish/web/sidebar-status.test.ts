@@ -21,6 +21,15 @@ it("scopes preview rules separately from sidebar rules", () => {
   expect(sidebarStatusCss({ states: { running: { speed: "slow", color: "#123456" } } })).toContain("3200ms linear infinite");
   expect(sidebarStatusCss()).toContain("prefers-reduced-motion: reduce");
   expect(sidebarStatusCss()).not.toContain("pulse");
-  expect(sidebarStatusCss()).toContain("radial-gradient(circle, var(--morphise-status-track) 0 20%, transparent 25%)");
-  expect(sidebarStatusCss()).toContain("border-color: var(--morphise-status-track)");
+  expect(sidebarStatusCss()).toContain("width: 6px; height: 6px");
+  expect(sidebarStatusCss()).toContain("width: 12px; height: 12px");
+  expect(sidebarStatusCss()).toContain("transparent 4.5px, #000 4.5px");
+  expect(sidebarStatusCss()).toContain("var(--colors-status-dot-running");
+});
+
+it("ignores old size and color choices and always hides Done's ring", () => {
+  const css = sidebarStatusCss({ states: { done: { speed: "fast", color: "#123456" } } }, "sidebar", { size: 24 });
+  expect(css).not.toContain("#123456");
+  expect(css).not.toContain("24px");
+  expect(css).toMatch(/morphise-sidebar-status-done.*::after[^\n]*display: none/);
 });
