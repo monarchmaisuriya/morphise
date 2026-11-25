@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.65.0 - 2026-11-25
+
+- **Outlined upper navigation:** desktop/web built-in and plugin sidebar navigation rows use rounded theme borders, transparent resting backgrounds and hover/focus/selected fill, matching Morphise toolbar controls. Remove the navigation group's bottom divider without changing button actions, trailing counts, footer, window or workspace-list controls.
+- **Scoped, reversible styling:** require at least two built-in navigation anchors; unsupported/reduced layouts remain untouched. Reconcile dynamic rows and stale tags; unloading restores original styling. Morphise-only, no Paseo source changes; native iOS/Android unchanged.
+
 ## 0.64.0 - 2026-11-25
 
 - **Quick Chat sidebar count:** show a live positive count of owned top-level chats in any non-Idle/Done state on the entry's host. Starting, running, permission requests, unseen failures and unread completions count once each; zero, archived chats and subagents are excluded.

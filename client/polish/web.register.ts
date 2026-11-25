@@ -22,6 +22,7 @@ import { watchTables } from "./web/tables";
 import { installRunButtons } from "../run/web/run-buttons";
 import { tagWindow } from "./web/window";
 import { installSidebarStatus } from "./web/sidebar-status";
+import { installSidebarNavigation } from "./web/sidebar-navigation";
 
 // Chat Polish's restyle of Paseo's own page (lthieu96/paseo-chat-polish, MIT, see NOTICE.md), wired
 // as its index.client.tsx wired it. Unlike Chat Polish, everything that changes Paseo's own look
@@ -81,6 +82,7 @@ export const registerWeb: PolishPart = ({ client }) => {
   // Run buttons on shell code blocks (Settings, Messages, Commands); not a Chat Polish part.
   const removeRunButtons = installRunButtons(client);
   const removeSidebarStatus = installSidebarStatus();
+  const removeSidebarNavigation = installSidebarNavigation();
 
   // Only while the restyle is on and Morphise's theme is Paseo's app theme (Settings, Appearance).
   const unpaintSidebar = paintSidebar(
@@ -182,6 +184,7 @@ export const registerWeb: PolishPart = ({ client }) => {
     unwatchTables();
     removeRunButtons();
     removeSidebarStatus();
+    removeSidebarNavigation();
     unsubscribePrefs();
     unsubscribeProviders();
     unsetCompact();
