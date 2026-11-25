@@ -1,5 +1,19 @@
 import { expect, it } from "vitest";
-import { QUICK_CHAT_KEY, filteredQuickChats, quickChatAgentChange, quickChatPreferences, quickChatSettings, quickChatStart, restoredQuickChatModel, visibleQuickChatAgent } from "./quick-chat";
+import { QUICK_CHAT_KEY, countedQuickChat, filteredQuickChats, quickChatAgentChange, quickChatPreferences, quickChatSettings, quickChatStart, restoredQuickChatModel, visibleQuickChatAgent } from "./quick-chat";
+
+it("counts each owned non-idle Quick Chat once on its own host", () => {
+  const base = { hostId: "local", workspaceId: "scratch", parentAgentId: null, metadata: { [QUICK_CHAT_KEY]: true }, status: "idle" as const, requiresAttention: false, attentionReason: null };
+  const agents = [{ ...base, status: "running" as const }, { ...base, requiresAttention: true, attentionReason: "finished" as const }, base];
+  expect(agents.filter((agent) => countedQuickChat(agent, "local"))).toHaveLength(2);
+  expect(countedQuickChat({ ...base, status: "initializing" }, "local")).toBe(true);
+  expect(countedQuickChat({ ...base, status: "running", attentionReason: "permission" }, "local")).toBe(true);
+  expect(countedQuickChat({ ...base, requiresAttention: true, attentionReason: "error" }, "local")).toBe(true);
+  expect(countedQuickChat({ ...base, status: "error" }, "local")).toBe(false);
+  expect(countedQuickChat({ ...base, status: "running", archivedAt: "2026-11-25" }, "local")).toBe(false);
+  expect(countedQuickChat({ ...base, status: "running", parentAgentId: "parent" }, "local")).toBe(false);
+  expect(countedQuickChat({ ...base, status: "running", metadata: {} }, "local")).toBe(false);
+  expect(countedQuickChat({ ...base, status: "running", hostId: "remote" }, "local")).toBe(false);
+});
 
 it("filters archive/provider/title and sorts dates without invalid timestamp instability", () => {
   const chats = [{ id: "b", title: "Beta", workspaceId: "w", provider: "claude", updatedAt: "invalid" }, { id: "a", title: "Alpha", workspaceId: "w", provider: "codex", updatedAt: "2026-01-01" }, { id: "c", title: "Archived", workspaceId: "w", provider: "claude", archivedAt: "2026-01-01" }];

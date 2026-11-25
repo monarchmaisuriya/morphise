@@ -1,13 +1,14 @@
-import type { PluginClientContext, PluginScreenProps } from "@getpaseo/plugin/client";
-import { useSettings } from "@getpaseo/plugin/client";
+import type { PluginClientContext, PluginScreenProps, PluginSidebarItemProps } from "@getpaseo/plugin/client";
+import { useAgents, useSettings } from "@getpaseo/plugin/client";
 import { SidebarRow, useToast } from "@getpaseo/plugin/client/ui";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
-import { QUICK_CHAT_PREFERENCES, filteredQuickChats, quickChatArchive, quickChatContinue, quickChatList, quickChatPreferences, quickChatPrepare, quickChatRecover, quickChatSettings, quickChatStart, quickChatTargets, restoredQuickChatModel } from "../shared/quick-chat";
+import { QUICK_CHAT_PREFERENCES, countedQuickChat, filteredQuickChats, quickChatArchive, quickChatContinue, quickChatList, quickChatPreferences, quickChatPrepare, quickChatRecover, quickChatSettings, quickChatStart, quickChatTargets, restoredQuickChatModel } from "../shared/quick-chat";
 import { Button, Dropdown, Field, Icon, IconButton, PopoverHost, Segmented, Select, type Tokens, useTokens } from "./ui/kit";
 import { quickChatModelChoices, type QuickChatModelChoice } from "./quick-chat-models";
 import { quickChatInfo } from "./quick-chat-info";
 import { quickChatRowTitle } from "../shared/quick-chat-title";
+import { QuickChatState } from "./quick-chat-state";
 import { screenOpener } from "./dispatch";
 import { onRadioActivate, useTooltip } from "./web";
 import { QUICK_CHAT_SETTINGS_PAGE, QuickChatPreferencesScreen } from "./quick-chat-preferences";
@@ -44,7 +45,7 @@ function ModelPicker({ t, value, options, disabled, loading, onChange }: { t: To
   </View>;
 }
 
-export function QuickChatScreen({ client, theme, layout, navigation, params }: PluginScreenProps & { client: PluginClientContext }) {
+export function QuickChatScreen({ client, theme, layout, navigation, params, host }: PluginScreenProps & { client: PluginClientContext }) {
   const [titleWidth, setTitleWidth] = useState(0);
   const t = useTokens(theme, layout.compact);
   const settings = useSettings(quickChatSettings);
@@ -180,7 +181,7 @@ export function QuickChatScreen({ client, theme, layout, navigation, params }: P
           {archiveView === "archived" ? <Text style={t.text.meta}>Unarchive restores the same chat and may initialize its provider or startup hooks. Morphise sends no new prompt; removed command-output logs are not restored.</Text> : null}
           {state?.chats.length ? <Field t={t} plain icon="Search" value={chatSearch} onChangeText={setChatSearch} placeholder="Find a chat by title" accessibilityLabel="Find a Quick Chat" /> : null}
           {listLoading ? <Text style={t.text.meta}>Loading your chats…</Text> : !state ? <Text style={t.text.meta}>The chat list could not be loaded. Use Refresh chats to try again.</Text> : !(archiveView === "archived" ? archivedCount : activeCount) ? <View style={{ paddingVertical: 12, gap: 6 }}><Text style={t.text.heading}>{archiveView === "archived" ? "No archived chats" : "Start your first conversation"}</Text><Text style={t.text.meta}>{archiveView === "archived" ? "Chats you archive will appear here. Unarchive returns the same chat to Active, but does not restore removed command logs." : "Start a Quick Chat above. You can bring the conversation into a project later."}</Text></View> : !visibleChats.length ? <Text style={t.text.meta}>No chats match the current search and provider filter.</Text> : <View style={{ borderWidth: 1, borderColor: t.c.border, borderRadius: t.radius.panel, overflow: "hidden" }}>{visibleChats.map((chat, index) => <View key={chat.id} style={{ padding: personal.density === "compact" ? 10 : 16, borderTopWidth: index ? 1 : 0, borderTopColor: t.c.border, ...actionRow, justifyContent: "space-between" }}>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Open ${chat.title}`} disabled={busy || !navigation} onPress={() => navigation?.openAgent({ agentId: chat.id })} style={{ flex: 1, minWidth: 140, ...(layout.compact ? { flexBasis: "100%" as const } : {}), flexDirection: "row", alignItems: "center", gap: 12 }}><Icon name="MessageSquare" size={18} color={t.c.foregroundMuted} /><View style={{ flex: 1, minWidth: 0, gap: 4 }}><Text testID={`quick-chat-row-title-${chat.id}`} numberOfLines={1} ellipsizeMode="tail" style={[t.text.body, { flexShrink: 1 }]}>{quickChatRowTitle(chat.title, titleWidth)}</Text>{personal.showDescriptions ? <Text style={t.text.meta}>Project-free conversation</Text> : null}</View></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Open ${chat.title}`} disabled={busy || !navigation} onPress={() => navigation?.openAgent({ agentId: chat.id })} style={{ flex: 1, minWidth: 140, ...(layout.compact ? { flexBasis: "100%" as const } : {}), flexDirection: "row", alignItems: "center", gap: 12 }}><Icon name="MessageSquare" size={18} color={t.c.foregroundMuted} /><View style={{ flex: 1, minWidth: 0, gap: 4 }}><Text testID={`quick-chat-row-title-${chat.id}`} numberOfLines={1} ellipsizeMode="tail" style={[t.text.body, { flexShrink: 1 }]}>{quickChatRowTitle(chat.title, titleWidth)}</Text><View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}><QuickChatState agentId={chat.id} hostId={host.id} archivedAt={chat.archivedAt} t={t} />{personal.showDescriptions ? <Text style={t.text.meta}>· Project-free conversation</Text> : null}</View></View></Pressable>
             <View style={{ ...actionRow, maxWidth: "100%", flexShrink: 1 }}>
               <IconButton t={t} icon="Info" label={`Chat info: ${chat.title}`} onPress={() => setLocationChat(locationChat === chat.id ? null : chat.id)} />
               {enabled && !chat.archivedAt ? <IconButton t={t} icon="FolderInput" label={`Continue ${chat.title} in project`} disabled={busy} onPress={() => { resetHandoff(); setSourceId(chat.id); setUtility(null); const request = generation.current; void run(async () => { const value = await client.rpc(quickChatTargets, {}); if (generation.current === request) setTargets(value.targets); }); }} /> : null}
@@ -216,6 +217,11 @@ export function QuickChatScreen({ client, theme, layout, navigation, params }: P
   </ScrollView></PopoverHost>;
 }
 
+export function QuickChatSidebarItem({ openScreen, currentScreen, host, theme }: PluginSidebarItemProps) {
+  const count = useAgents({ hosts: [host.id], where: (agent) => countedQuickChat(agent, host.id) }).length;
+  return <SidebarRow icon="MessageSquarePlus" label="Quick Chat" active={currentScreen?.screenId === SCREEN} onPress={() => openScreen({ screenId: SCREEN })} trailing={count > 0 ? <Text testID="quick-chat-state-count" accessibilityLabel={`${count} Quick Chats active or needing attention`} style={{ color: theme.colors.foregroundMuted, fontSize: 12, paddingRight: 8 }}>{count}</Text> : null} />;
+}
+
 export function registerQuickChatClient(client: PluginClientContext) {
   const pills = new Map<string, { remove(): void }>();
   let stopped = false;
@@ -233,7 +239,7 @@ export function registerQuickChatClient(client: PluginClientContext) {
   const cleanups = [
     client.addSettingsScreen({ id: QUICK_CHAT_SETTINGS_PAGE, title: "Quick Chat", icon: "MessageSquarePlus", Component: (props) => <QuickChatPreferencesScreen {...props} client={client} /> }),
     client.addScreen({ id: SCREEN, title: "Quick Chat", Component: (props) => <QuickChatScreen {...props} client={client} /> }),
-    client.addSidebarHeaderItem({ id: "quick-chat", title: "Quick Chat", Component: ({ openScreen, currentScreen }) => <SidebarRow icon="MessageSquarePlus" active={currentScreen?.screenId === SCREEN} onPress={() => openScreen({ screenId: SCREEN })} /> }),
+    client.addSidebarHeaderItem({ id: "quick-chat", title: "Quick Chat", Component: QuickChatSidebarItem }),
     client.addCommandCenterItem({ id: "quick-chat", title: "Open Quick Chat", icon: "MessageSquarePlus", context: "global", onSelect: ({ openScreen }) => openScreen({ screenId: SCREEN }) }),
     client.addCommandCenterItem({ id: "quick-chat-continue", title: "Continue Quick Chat in project", icon: "FolderInput", context: "agent", onSelect: ({ openScreen, agent }) => openScreen({ screenId: SCREEN, params: { agentId: agent.id } }) }),
   ];
