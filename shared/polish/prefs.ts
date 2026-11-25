@@ -47,7 +47,7 @@ export const polishSchema = tolerant({
   sidebarNavigationFill: z.enum(["empty", "filled"]).optional(),
   sidebarToolbarFill: z.enum(["empty", "filled"]).optional(),
   sidebarNavigationLayout: z.enum(["stacked", "split", "tiles"]).optional(),
-  sidebarNavigationTileHeight: z.union([z.literal(48), z.literal(56), z.literal(64), z.literal(72), z.literal(88)]).optional(),
+  sidebarNavigationTileHeight: z.union([z.literal(36), z.literal(48), z.literal(56), z.literal(64), z.literal(72), z.literal(88)]).optional(),
   // Thoughts and tool calls between two replies folded into one row.
   merge: z.boolean().optional(),
   rowIcons: z.strictObject({ steps: shown.optional(), tool: shown.optional(), thought: shown.optional() }).optional(),
@@ -134,7 +134,7 @@ export interface Prefs {
   sidebarNavigationFill: "empty" | "filled";
   sidebarToolbarFill: "empty" | "filled";
   sidebarNavigationLayout: "stacked" | "split" | "tiles";
-  sidebarNavigationTileHeight: 48 | 56 | 64 | 72 | 88;
+  sidebarNavigationTileHeight: 36 | 48 | 56 | 64 | 72 | 88;
   reasoning: "paseo" | "collapsed" | "expanded";
   commandColors: "expanded" | "always";
   diffWrap: "on" | "off";
