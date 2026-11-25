@@ -28,6 +28,7 @@ export const SIDEBAR_NAVIGATION_CSS = `
 [data-morphise-nav-slot="half"] { grid-column: span 3; }
 [data-morphise-nav-slot="tile"] { grid-column: span 2; }
 [data-morphise-nav-slot] [data-morphise-nav-row] { min-width: 0; }
+[data-morphise-nav-stretch] { width: 100% !important; min-width: 0 !important; max-width: 100% !important; align-self: stretch !important; box-sizing: border-box !important; padding-inline: 0 !important; }
 [data-morphise-nav-slot="tile"] [data-morphise-nav-row] { position: relative; min-height: 88px; height: 100%; align-items: stretch !important; }
 [data-morphise-nav-slot="tile"] [data-morphise-nav-row] > [data-testid] { flex-direction: column !important; justify-content: center !important; gap: 8px !important; padding: 12px 4px !important; min-width: 0; }
 [data-morphise-nav-slot="tile"] [data-morphise-nav-row] > [data-testid] > :last-child { text-align: center; white-space: normal !important; overflow-wrap: anywhere; }
@@ -83,6 +84,12 @@ export function installSidebarNavigation() {
               if (!slot || layout === "stacked") return;
               const kind = layout === "split" && slots.length >= 2 && index < 2 ? "half" : layout === "tiles" && index > 0 && index < slots.length - 1 ? "tile" : "full";
               want(slot, "data-morphise-nav-slot", kind);
+              // Plugin rows add wrappers between the grid slot and the bordered row frame.
+              let frame = visibleRows[index]?.parentElement ?? null;
+              while (frame && frame !== slot) {
+                want(frame, "data-morphise-nav-stretch", "");
+                frame = frame.parentElement;
+              }
             });
           }
           const separator = scroll?.nextElementSibling;

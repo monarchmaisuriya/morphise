@@ -211,3 +211,5 @@ Upper navigation also offers **Icon and text alignment: Left / Center / Right** 
 **Navigation layout** offers Stacked (full-width rows), Split rows (first two visible entries share equal columns, remaining entries full width), and Tiles (first and last visible entries full width, middle entries in up to three columns). Placement follows visible order, not entry names. One Filled/Empty choice applies to all entries. A single entry stays full width; two entries in Tiles are both full width. Unsupported multirow plugin slots retain ordinary rows rather than flattening custom content.
 
 The workspace toolbar uses a transparent **All / Active / Asking** dropdown instead of its former Search field and tab strip. Existing status labels, counts and enabled choices still apply. Workspace text search is no longer applied; Dispatch, Settings and Next actions remain beside the dropdown.
+
+Split rows and Tiles stretch recognized nested plugin row wrappers to their assigned cell width, including Quick Chat and Workbench. Grid spacing replaces nested horizontal wrapper inset; main-button padding and trailing controls remain intact.
