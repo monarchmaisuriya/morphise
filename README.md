@@ -169,3 +169,11 @@ One shared Calendar read refreshes per minute while the sidebar is mounted; rows
 Quick Chat list titles use a single line with a trailing ellipsis only when the available width truncates them. The stored title and accessible Open label remain complete; Chat info continues to show the full title.
 
 Sidebar focus tabs use a full-width segmented surface with equal-width segments, inset filled selection and positive-only `· count` labels. Each Search-toolbar control has a rounded border with transparent resting background; hover, keyboard focus and open/selected state add fill. The separate Filter button remains removed. These outlined styles are opt-in so other plugin controls retain their existing appearance.
+
+### Compact sidebar activity and hover controls
+
+The runtime chart is replaced by a compact recorded-runtime label such as `18m / 24h` or `2h 10m / 24h`, with `~` for partial coverage. Zero, loading, failed and unavailable totals allocate no inline activity mark. Hover text retains runtime/parallel-agent/freshness/coverage context. On two-line workspace rows, hover and keyboard focus replace the time/activity area with a two-by-two action grid: Pin and Archive above Info and Menu. Archive still requires two presses and retains the local-work warning; a hidden Pin preference leaves the upper-left slot empty.
+
+Tabs have no enclosing border or fill; only the selected segment is filled. Their8pxouter insets align with the Search toolbar. The toolbar has8pxspace above and below; Search and icon buttons use the same control height. Existing outlined-control hover/focus/open behavior remains.
+
+Quick Chat row display now caps at60characters when its content surface is narrower than640px, otherwise120characters. Character-shortened text ends in an ellipsis; a narrower actual row can ellipsize sooner. Full saved title remains in Chat info/accessibility. This is Morphise-only: titles already shortened upstream cannot be recovered, and no Paseo source or stored title is changed.

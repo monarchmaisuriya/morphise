@@ -7,6 +7,7 @@ import { QUICK_CHAT_PREFERENCES, filteredQuickChats, quickChatArchive, quickChat
 import { Button, Dropdown, Field, Icon, IconButton, PopoverHost, Segmented, Select, type Tokens, useTokens } from "./ui/kit";
 import { quickChatModelChoices, type QuickChatModelChoice } from "./quick-chat-models";
 import { quickChatInfo } from "./quick-chat-info";
+import { quickChatRowTitle } from "../shared/quick-chat-title";
 import { screenOpener } from "./dispatch";
 import { onRadioActivate, useTooltip } from "./web";
 import { QUICK_CHAT_SETTINGS_PAGE, QuickChatPreferencesScreen } from "./quick-chat-preferences";
@@ -44,6 +45,7 @@ function ModelPicker({ t, value, options, disabled, loading, onChange }: { t: To
 }
 
 export function QuickChatScreen({ client, theme, layout, navigation, params }: PluginScreenProps & { client: PluginClientContext }) {
+  const [titleWidth, setTitleWidth] = useState(0);
   const t = useTokens(theme, layout.compact);
   const settings = useSettings(quickChatSettings);
   const preferences = useSettings(quickChatPreferences);
@@ -125,7 +127,7 @@ export function QuickChatScreen({ client, theme, layout, navigation, params }: P
   const actionRow = { flexDirection: "row" as const, flexWrap: "wrap" as const, alignItems: "center" as const, gap: 8 };
   const panelStyle = { padding: layout.compact ? 16 : 20, gap: 16, borderRadius: t.radius.panel, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1 };
   return <PopoverHost><ScrollView style={{ flex: 1, backgroundColor: t.c.surface0 }} contentContainerStyle={{ padding: layout.compact ? 16 : 32, alignItems: "center" }}>
-    <View style={{ width: "100%", maxWidth: personal.width === "wide" ? 1200 : 880, gap: 20 }}>
+    <View onLayout={(event) => setTitleWidth(event.nativeEvent.layout.width)} style={{ width: "100%", maxWidth: personal.width === "wide" ? 1200 : 880, gap: 20 }}>
       <View style={{ ...actionRow, justifyContent: "space-between", alignItems: "flex-start" }}>
         <View style={{ flex: 1, minWidth: 180, gap: 6 }}><Text style={t.text.title}>Quick Chat</Text><Text style={t.text.meta}>A place for questions and ideas, before they become a project.</Text></View>
         <View style={actionRow}>
@@ -178,7 +180,7 @@ export function QuickChatScreen({ client, theme, layout, navigation, params }: P
           {archiveView === "archived" ? <Text style={t.text.meta}>Unarchive restores the same chat and may initialize its provider or startup hooks. Morphise sends no new prompt; removed command-output logs are not restored.</Text> : null}
           {state?.chats.length ? <Field t={t} plain icon="Search" value={chatSearch} onChangeText={setChatSearch} placeholder="Find a chat by title" accessibilityLabel="Find a Quick Chat" /> : null}
           {listLoading ? <Text style={t.text.meta}>Loading your chats…</Text> : !state ? <Text style={t.text.meta}>The chat list could not be loaded. Use Refresh chats to try again.</Text> : !(archiveView === "archived" ? archivedCount : activeCount) ? <View style={{ paddingVertical: 12, gap: 6 }}><Text style={t.text.heading}>{archiveView === "archived" ? "No archived chats" : "Start your first conversation"}</Text><Text style={t.text.meta}>{archiveView === "archived" ? "Chats you archive will appear here. Unarchive returns the same chat to Active, but does not restore removed command logs." : "Start a Quick Chat above. You can bring the conversation into a project later."}</Text></View> : !visibleChats.length ? <Text style={t.text.meta}>No chats match the current search and provider filter.</Text> : <View style={{ borderWidth: 1, borderColor: t.c.border, borderRadius: t.radius.panel, overflow: "hidden" }}>{visibleChats.map((chat, index) => <View key={chat.id} style={{ padding: personal.density === "compact" ? 10 : 16, borderTopWidth: index ? 1 : 0, borderTopColor: t.c.border, ...actionRow, justifyContent: "space-between" }}>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Open ${chat.title}`} disabled={busy || !navigation} onPress={() => navigation?.openAgent({ agentId: chat.id })} style={{ flex: 1, minWidth: 140, ...(layout.compact ? { flexBasis: "100%" as const } : {}), flexDirection: "row", alignItems: "center", gap: 12 }}><Icon name="MessageSquare" size={18} color={t.c.foregroundMuted} /><View style={{ flex: 1, minWidth: 0, gap: 4 }}><Text numberOfLines={1} ellipsizeMode="tail" style={[t.text.body, { flexShrink: 1 }]}>{chat.title}</Text>{personal.showDescriptions ? <Text style={t.text.meta}>Project-free conversation</Text> : null}</View></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Open ${chat.title}`} disabled={busy || !navigation} onPress={() => navigation?.openAgent({ agentId: chat.id })} style={{ flex: 1, minWidth: 140, ...(layout.compact ? { flexBasis: "100%" as const } : {}), flexDirection: "row", alignItems: "center", gap: 12 }}><Icon name="MessageSquare" size={18} color={t.c.foregroundMuted} /><View style={{ flex: 1, minWidth: 0, gap: 4 }}><Text testID={`quick-chat-row-title-${chat.id}`} numberOfLines={1} ellipsizeMode="tail" style={[t.text.body, { flexShrink: 1 }]}>{quickChatRowTitle(chat.title, titleWidth)}</Text>{personal.showDescriptions ? <Text style={t.text.meta}>Project-free conversation</Text> : null}</View></Pressable>
             <View style={{ ...actionRow, maxWidth: "100%", flexShrink: 1 }}>
               <IconButton t={t} icon="Info" label={`Chat info: ${chat.title}`} onPress={() => setLocationChat(locationChat === chat.id ? null : chat.id)} />
               {enabled && !chat.archivedAt ? <IconButton t={t} icon="FolderInput" label={`Continue ${chat.title} in project`} disabled={busy} onPress={() => { resetHandoff(); setSourceId(chat.id); setUtility(null); const request = generation.current; void run(async () => { const value = await client.rpc(quickChatTargets, {}); if (generation.current === request) setTargets(value.targets); }); }} /> : null}
