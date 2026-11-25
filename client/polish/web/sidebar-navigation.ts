@@ -4,6 +4,7 @@ import { watchDom, type DomElement, type WebDocument } from "./dom";
 import { currentPrefs, subscribePrefs } from "../prefs";
 
 declare const document: WebDocument;
+declare function getComputedStyle(element: DomElement): { visibility: string; display: string };
 
 const BUILTIN = '[data-testid="sidebar-search"], [data-testid="sidebar-global-new-workspace"], [data-testid="sidebar-schedules"], [data-testid="sidebar-sessions"]';
 const PLUGIN = '[data-testid^="plugin-sidebar-"]:not([data-testid^="plugin-sidebar-footer-"]):not([data-testid$="-popover"])';
@@ -22,46 +23,82 @@ export const SIDEBAR_NAVIGATION_CSS = `
 [data-morphise-nav-row]:has(> [aria-selected="true"]) { box-shadow: inset 0 0 0 1px var(--colors-foreground-muted, var(--colors-border)); }
 [data-morphise-nav-row]:has(> :focus-visible) { outline: 2px solid var(--colors-foreground); outline-offset: -2px; }
 [data-morphise-nav-separator] { display: none !important; }
+[data-morphise-nav-layout="split"], [data-morphise-nav-layout="tiles"] { display: grid !important; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px !important; padding-inline: 8px; }
+[data-morphise-nav-slot] { min-width: 0 !important; grid-column: span 6; padding-inline: 0 !important; }
+[data-morphise-nav-slot="half"] { grid-column: span 3; }
+[data-morphise-nav-slot="tile"] { grid-column: span 2; }
+[data-morphise-nav-slot] [data-morphise-nav-row] { min-width: 0; }
+[data-morphise-nav-slot="tile"] [data-morphise-nav-row] { position: relative; min-height: 88px; height: 100%; align-items: stretch !important; }
+[data-morphise-nav-slot="tile"] [data-morphise-nav-row] > [data-testid] { flex-direction: column !important; justify-content: center !important; gap: 8px !important; padding: 12px 4px !important; min-width: 0; }
+[data-morphise-nav-slot="tile"] [data-morphise-nav-row] > [data-testid] > :last-child { text-align: center; white-space: normal !important; overflow-wrap: anywhere; }
 `;
 
 export function installSidebarNavigation() {
   if (Platform.OS !== "web" || typeof document === "undefined") return () => {};
-  const tagged = new Map<DomElement, string>();
+  const tagged = new Map<DomElement, Map<string, string>>();
   let clearStyle: (() => void) | null = null;
-  const mark = (element: DomElement, attribute: string, value: string) => {
-    if (element.getAttribute(attribute) !== value) element.setAttribute(attribute, value);
-    tagged.set(element, attribute);
+  const clearTags = () => {
+    for (const [element, attributes] of tagged) for (const attribute of attributes.keys()) element.removeAttribute(attribute);
+    tagged.clear();
   };
   const sync = () => {
-    const wanted = new Map<DomElement, [string, string]>();
+    const wanted = new Map<DomElement, Map<string, string>>();
+    const want = (element: DomElement, attribute: string, value: string) => {
+      const attributes = wanted.get(element) ?? new Map<string, string>();
+      attributes.set(attribute, value); wanted.set(element, attributes);
+    };
     if (!currentPrefs().sidebarNavigation) {
       clearStyle?.(); clearStyle = null;
-      for (const [element, attribute] of tagged) element.removeAttribute(attribute);
-      tagged.clear();
+      clearTags();
       return;
     }
     if (!clearStyle) clearStyle = applyStyleSheet(SIDEBAR_NAVIGATION_CSS);
-    for (const anchor of Array.from(document.querySelectorAll(BUILTIN))) {
+    const handled = new Set<DomElement>();
+    for (const anchor of Array.from(document.querySelectorAll(NAV))) {
       let group = anchor.parentElement?.parentElement ?? null;
       while (group && group !== document.documentElement) {
         if (group.matches(EXCLUDED) || group.querySelector(EXCLUDED)) break;
         const rows = Array.from(group.querySelectorAll(NAV)).filter((element) => element.getAttribute("role") === "button");
-        if (group.querySelectorAll(BUILTIN).length >= 2) {
-          wanted.set(group, ["data-morphise-nav-group", currentPrefs().sidebarNavigationAlignment]);
-          for (const row of rows) if (row.parentElement) wanted.set(row.parentElement, ["data-morphise-nav-row", currentPrefs().sidebarNavigationFill]);
-          const scroll = group.closest('[data-testid="sidebar-nav-scroll"]');
+        const scroll = group.closest('[data-testid="sidebar-nav-scroll"]');
+        const namedBoundary = scroll?.nextElementSibling?.matches('[data-testid="sidebar-nav-separator"]');
+        const knownGroup = group.matches('[data-cp-win="nav"]') || (namedBoundary && group === scroll?.firstElementChild);
+        if (group.querySelectorAll(BUILTIN).length >= 2 || knownGroup) {
+          if (handled.has(group)) break;
+          handled.add(group);
+          const visibleRows = rows.filter((row) => !row.closest('[hidden], [aria-hidden="true"]') && getComputedStyle(row).visibility === "visible" && row.getClientRects().length > 0 && row.getBoundingClientRect().height > 0);
+          want(group, "data-morphise-nav-group", currentPrefs().sidebarNavigationAlignment);
+          for (const row of visibleRows) if (row.parentElement) want(row.parentElement, "data-morphise-nav-row", currentPrefs().sidebarNavigationFill);
+          const slots = visibleRows.map((row) => {
+            let slot = row.parentElement;
+            while (slot && slot.parentElement !== group) slot = slot.parentElement;
+            return slot;
+          });
+          // Every displayed direct child participates in grid placement, even when its button is hidden.
+          const managedChildren = Array.from(group.children).every((child) => slots.includes(child) || getComputedStyle(child).display === "none");
+          const simpleSlots = managedChildren && slots.every((slot) => slot && slot.querySelectorAll(NAV).length === 1) && new Set(slots).size === slots.length;
+          if (simpleSlots) {
+            const layout = currentPrefs().sidebarNavigationLayout;
+            want(group, "data-morphise-nav-layout", layout);
+            slots.forEach((slot, index) => {
+              if (!slot || layout === "stacked") return;
+              const kind = layout === "split" && slots.length >= 2 && index < 2 ? "half" : layout === "tiles" && index > 0 && index < slots.length - 1 ? "tile" : "full";
+              want(slot, "data-morphise-nav-slot", kind);
+            });
+          }
           const separator = scroll?.nextElementSibling;
-          if (separator?.matches('[data-testid="sidebar-nav-separator"]')) wanted.set(separator, ["data-morphise-nav-separator", ""]);
-          else if (separator && !separator.getAttribute("data-testid") && !separator.firstElementChild && !separator.textContent?.trim()) wanted.set(separator, ["data-morphise-nav-separator", ""]);
+          if (separator?.matches('[data-testid="sidebar-nav-separator"]')) want(separator, "data-morphise-nav-separator", "");
+          else if (separator && !separator.getAttribute("data-testid") && !separator.firstElementChild && !separator.textContent?.trim()) want(separator, "data-morphise-nav-separator", "");
           break;
         }
         group = group.parentElement;
       }
     }
-    for (const [element, attribute] of tagged) if (!wanted.has(element)) { element.removeAttribute(attribute); tagged.delete(element); }
-    for (const [element, [attribute, value]] of wanted) mark(element, attribute, value);
+    for (const [element, attributes] of tagged) for (const attribute of attributes.keys()) if (!wanted.get(element)?.has(attribute)) element.removeAttribute(attribute);
+    for (const [element, attributes] of wanted) for (const [attribute, value] of attributes) if (element.getAttribute(attribute) !== value) element.setAttribute(attribute, value);
+    tagged.clear();
+    for (const [element, attributes] of wanted) tagged.set(element, attributes);
   };
   sync();
   const unsubscribe = subscribePrefs(sync);
-  return watchDom({ settled: sync }, () => { unsubscribe(); clearStyle?.(); for (const [element, attribute] of tagged) element.removeAttribute(attribute); tagged.clear(); });
+  return watchDom({ settled: sync }, () => { unsubscribe(); clearStyle?.(); clearTags(); });
 }

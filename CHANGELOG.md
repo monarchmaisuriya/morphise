@@ -2,6 +2,13 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.68.0 - 2026-11-25
+
+- Add dynamic Stacked, Split rows and Tiles navigation layouts. Split pairs the first two visible entries; Tiles keeps first/last full width and wraps middle entries in up to three columns. Global Empty/Filled appearance and adaptive interactions remain shared across all entries.
+- Preserve existing navigation elements, native actions and counts. Handle small groups and nested wrappers; conservatively retain ordinary rows when unmanaged displayed children or multirow plugin slots make grid ownership ambiguous. Check computed visibility and reconcile every owned attribute on layout changes/off/unload.
+- Replace the lower sidebar Search field and focus tab strip with a transparent All / Active / Asking dropdown. Preserve configurable labels, enabled choices, counts and adjacent toolbar actions; remove the obsolete text filter.
+- Verify geometry, hidden-inner-wrapper fallback/recovery, main/trailing actions, status filtering and lifecycle. Installed-host visual acceptance remains unverified.
+
 ## 0.67.0 - 2026-11-25
 
 - Add upper navigation icon-and-text alignment (Left / Center / Right) and button appearance (Empty / Filled) in Look > Sidebar navigation. Trailing counts/actions stay fixed; disabling the treatment restores original styling while retaining saved choices.

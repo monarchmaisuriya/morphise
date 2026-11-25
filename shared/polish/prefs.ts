@@ -45,6 +45,7 @@ export const polishSchema = tolerant({
   sidebarNavigation: z.boolean().optional(),
   sidebarNavigationAlignment: z.enum(["left", "center", "right"]).optional(),
   sidebarNavigationFill: z.enum(["empty", "filled"]).optional(),
+  sidebarNavigationLayout: z.enum(["stacked", "split", "tiles"]).optional(),
   // Thoughts and tool calls between two replies folded into one row.
   merge: z.boolean().optional(),
   rowIcons: z.strictObject({ steps: shown.optional(), tool: shown.optional(), thought: shown.optional() }).optional(),
@@ -129,6 +130,7 @@ export interface Prefs {
   sidebarNavigation: boolean;
   sidebarNavigationAlignment: "left" | "center" | "right";
   sidebarNavigationFill: "empty" | "filled";
+  sidebarNavigationLayout: "stacked" | "split" | "tiles";
   reasoning: "paseo" | "collapsed" | "expanded";
   commandColors: "expanded" | "always";
   diffWrap: "on" | "off";
@@ -197,6 +199,7 @@ export function polishPrefs(chat: ChatSettings | undefined): Prefs {
     sidebarNavigation: polish.sidebarNavigation !== false,
     sidebarNavigationAlignment: polish.sidebarNavigationAlignment ?? "left",
     sidebarNavigationFill: polish.sidebarNavigationFill ?? "empty",
+    sidebarNavigationLayout: polish.sidebarNavigationLayout ?? "stacked",
     reasoning: chat?.reasoning === "fold" ? "collapsed" : chat?.reasoning === "expand" ? "expanded" : "paseo",
     commandColors: chat?.commandColors === false ? "expanded" : "always",
     diffWrap: chat?.wrap === false ? "off" : "on",

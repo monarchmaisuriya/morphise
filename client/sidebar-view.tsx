@@ -80,7 +80,7 @@ import { afterPointerMoves, cannotHover, useFocusWithin } from "./web";
 import { fontSize, radius } from "../shared/design/tokens";
 import { focusStatuses, sidebarSummary, semanticLine, sidebarTime, sidebarTimestamp, type FocusTab } from "../shared/sidebar-focus";
 import { checkpointRead, type Checkpoint } from "../shared/work-checkpoints";
-import { SidebarFocusTabs } from "./sidebar-focus";
+import { SidebarFocusDropdown } from "./sidebar-focus";
 import { useSidebarMessage } from "./use-sidebar-message";
 import { RuntimeDetails, RuntimeStrip, useSidebarRuntime, type SidebarRuntime } from "./sidebar-runtime";
 import { providerIconSvg } from "./provider-icons";
@@ -98,12 +98,11 @@ const DEFAULT_VIEW_STATE: ViewState = viewStateSettings.schema.parse({});
 const TOUCH = cannotHover();
 const REMINDERS_GROUP = "reminders";
 
-// Search text, the open menu and expanded groups live outside the view, so they survive the view
+// The open menu and expanded groups live outside the view, so they survive the view
 // being rebuilt when its options change.
 // Selection mode (bulk actions) lives here too: workspace keys, so it survives a rebuild and each
 // action goes to the workspace's own host.
-const viewUi = createValueStore<{ search: string; menu: "filter" | "view" | null; expanded: readonly string[]; selecting: boolean; selected: readonly string[] }>({
-  search: "",
+const viewUi = createValueStore<{ menu: "filter" | "view" | null; expanded: readonly string[]; selecting: boolean; selected: readonly string[] }>({
   menu: null,
   expanded: [],
   selecting: false,
@@ -1549,10 +1548,7 @@ type Menu = "filter" | "view" | null;
 interface HeaderProps {
   menu: Menu;
   setMenu(menu: Menu): void;
-  search: string;
-  onSearch(text: string): void;
-  // What screen readers say for the search box.
-  searchLabel: string;
+  focus: ReactNode;
   filters: number;
   // Opens the next item that needs the user; null when nothing does.
   onNext: (() => void) | null;
@@ -1561,20 +1557,15 @@ interface HeaderProps {
   shared: Shared;
 }
 
-// The view's header, search first: a search box that fills the row, then the tools in groups split
-// create (Dispatch, New group), view (Filter, Display), and Next.
+// The status dropdown shares a toolbar with create, settings and Next actions.
 // Menus open over the list instead of pushing it down.
-function Header({ menu, setMenu, search, onSearch, searchLabel, filters, onNext, headerRef, shared }: HeaderProps) {
+function Header({ menu, setMenu, focus, filters, onNext, headerRef, shared }: HeaderProps) {
   const { styles, props, t, config } = shared;
   const toggle = (next: Exclude<Menu, null>) => setMenu(menu === next ? null : next);
   const openScreen = useValue(screenOpener);
   return (
     <View ref={headerRef} style={styles.header}>
-      {/* The box takes the space the buttons leave, down to nothing (Field's own `grow` keeps 140). */}
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Field t={t} plain outlined icon="Search" value={search} onChangeText={onSearch} placeholder="Search" accessibilityLabel={searchLabel} />
-      </View>
-      {search !== "" ? <IconButton outlined t={t} size="md" icon="X" label="Clear search" onPress={() => onSearch("")} /> : null}
+      {focus}
       {openScreen ? <IconButton outlined t={t} size="md" icon={DISPATCH_ICON} label="Dispatch: start several agents in new workspaces" onPress={() => openScreen({ screenId: DISPATCH_SCREEN_ID })} /> : null}
       {config.groupBy === "custom" ? (
         <IconButton
@@ -1905,9 +1896,8 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     const styles = useMemo(() => viewStyles(props.theme, config, look), [props.theme, ...Object.values(look)]);
     const ui = useValue(viewUi);
     const setUi = (patch: Partial<typeof ui>) => viewUi.set({ ...viewUi.get(), ...patch });
-    const { search, menu } = ui;
+    const { menu } = ui;
     const expanded = new Set(ui.expanded);
-    const setSearch = (text: string) => setUi({ search: text });
     const setMenu = (next: Menu) => setUi({ menu: next });
     const setExpanded = (next: ReadonlySet<string>) => setUi({ expanded: [...next] });
     // Project names for the Projects filter, from the same visible workspaces.
@@ -1972,7 +1962,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     const on = config.filterBar;
     const filter: Filter = {
       statuses: focusStatuses(state),
-      search: on ? search : "",
+      search: "",
       // Projects, changed lines and pins exist on workspaces only; the chat list ignores them.
       projects: on && config.list === "workspaces" ? state.projectFilter : [],
       hideDone: false,
@@ -2126,7 +2116,6 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     const reminderLimit = config.reminderRows ?? DEFAULT_REMINDER_ROWS;
     const shownReminders = expanded.has(REMINDERS_GROUP) ? dueEntries : dueEntries.slice(0, reminderLimit);
 
-    const searchLabel = config.list === "chats" ? "Search chats" : "Search name, branch or project";
     const activeTags = [
       ...(filter.projects ?? []).map((key) => ({ key, label: projects.find((project) => project.key === key)?.title ?? "Project", color: tileColor(projects.find((project) => project.key === key)?.title ?? ""), remove: () => saveState({ projectFilter: state.projectFilter.filter((item) => item !== key) }) })),
       ...(filter.changedOnly ? [{ key: "changed", label: TOGGLE_LABELS.changedOnly, color: undefined, remove: () => saveState({ changedOnly: false }) }] : []),
@@ -2170,9 +2159,9 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
         <ShowTargets navigation={props.navigation} />
         <PopoverHost bounds={viewRef}>
         {on ? (
-          <Header menu={menu} setMenu={setMenu} search={search} onSearch={setSearch} searchLabel={searchLabel} filters={filters} onNext={source.onNext} headerRef={headerRef} shared={shared} />
+          <Header menu={menu} setMenu={setMenu} focus={<SidebarFocusDropdown state={state} counts={tabCounts} select={(focusTab) => saveState({ focusTab })} t={t} />} filters={filters} onNext={source.onNext} headerRef={headerRef} shared={shared} />
         ) : null}
-        <SidebarFocusTabs state={state} counts={tabCounts} select={(focusTab) => saveState({ focusTab })} t={t} />
+        {!on ? <View style={{ marginHorizontal: 8 }}><SidebarFocusDropdown state={state} counts={tabCounts} select={(focusTab) => saveState({ focusTab })} t={t} /></View> : null}
         {on && activeTags.length ? (
           <View style={styles.tools}>
             {activeTags.length ? (

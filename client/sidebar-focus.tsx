@@ -1,15 +1,22 @@
+import { useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { FOCUS_TABS, focusSelection, type FocusTab } from "../shared/sidebar-focus";
 import type { ViewState } from "../shared/view-state";
-import type { Tokens } from "./ui/kit";
+import { Dropdown, Icon, MenuItem, type Tokens } from "./ui/kit";
 
-export function SidebarFocusTabs({ state, counts, select, t }: { state: ViewState; counts: Record<FocusTab, number>; select(tab: FocusTab): void; t: Tokens }) {
+export function SidebarFocusDropdown({ state, counts, select, t }: { state: ViewState; counts: Record<FocusTab, number>; select(tab: FocusTab): void; t: Tokens }) {
+  const [open, setOpen] = useState(false);
+  const anchor = useRef<View>(null);
   if (!state.focusTabsEnabled) return null;
   const selected = focusSelection(state);
-  return <View accessibilityRole="tablist" accessibilityLabel="Sidebar focus" style={{ flexDirection: "row", marginHorizontal: 8, marginBottom: 4, gap: 2 }}>
-    {FOCUS_TABS.filter((key) => state.focusTabs[key].enabled).map((key) => <Pressable key={key} accessibilityRole="tab" accessibilityLabel={`${state.focusTabs[key].label}${state.focusTabCounts && counts[key] > 0 ? `, ${counts[key]}` : ""}`} accessibilityState={{ selected: selected === key }} onPress={() => select(key)} style={{ flex: 1, minWidth: 0, minHeight: 28, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingHorizontal: 8, borderRadius: t.radius.control, backgroundColor: selected === key ? t.c.surface2 : "transparent" }}>
-      <Text numberOfLines={1} style={{ flexShrink: 1, color: selected === key ? t.c.foreground : t.c.foregroundMuted, fontSize: 12, fontWeight: selected === key ? "600" : "400" }}>{state.focusTabs[key].label}</Text>
-      {state.focusTabCounts && counts[key] > 0 ? <Text style={{ color: selected === key ? t.c.foreground : t.c.foregroundMuted, fontSize: 12, fontWeight: selected === key ? "600" : "400" }}>· {counts[key]}</Text> : null}
-    </Pressable>)}
+  const label = (key: FocusTab) => `${state.focusTabs[key].label}${state.focusTabCounts && counts[key] > 0 ? ` · ${counts[key]}` : ""}`;
+  return <View style={{ flex: 1, minWidth: 0 }}>
+    <Pressable ref={anchor} accessibilityRole="button" accessibilityLabel={`Sidebar status: ${label(selected)}`} accessibilityState={{ expanded: open }} onPress={() => setOpen(!open)} style={{ height: t.control, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, paddingHorizontal: 10, borderRadius: t.radius.control, borderWidth: 1, borderColor: t.c.border, backgroundColor: "transparent" }}>
+      <Text numberOfLines={1} style={{ flexShrink: 1, color: t.c.foreground, fontSize: 12 }}>{label(selected)}</Text>
+      <Icon name="ChevronDown" size={14} color={t.c.foregroundMuted} />
+    </Pressable>
+    <Dropdown t={t} open={open} onClose={() => setOpen(false)} anchor={anchor} width={220}>
+      {FOCUS_TABS.filter((key) => state.focusTabs[key].enabled).map((key) => <MenuItem key={key} t={t} role="radio" checked={selected === key} label={label(key)} onPress={() => { select(key); setOpen(false); }} />)}
+    </Dropdown>
   </View>;
 }
