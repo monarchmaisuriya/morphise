@@ -2,6 +2,10 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.73.0 - 2026-11-26
+
+- Add36px extra-small tile height, retaining48px as default. Use compact icon/padding/line-height only at36px; long labels may grow to fit. Includes the merged0.72.0 row-fill, hidden-hover-hint and toolbar appearance changes below.
+
 ## 0.72.0 - 2026-11-25
 
 - Stretch incomplete tile rows across the navigation width: one full width, two equal halves, three equal thirds, including wrapped final rows. Preserve tile height and8px gaps.

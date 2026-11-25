@@ -19,6 +19,7 @@ describe("Chat Polish preferences from Morphise's profile", () => {
   });
 
   it("defaults tile height to 48 and preserves supported custom sizes", () => {
+    expect(polishPrefs(profileSchema.parse({ chat: { polish: { sidebarNavigationTileHeight: 36 } } }).chat).sidebarNavigationTileHeight).toBe(36);
     expect(polishPrefs(undefined).sidebarNavigationTileHeight).toBe(48);
     expect(polishPrefs(profileSchema.parse({ chat: { polish: { sidebarNavigationTileHeight: 88 } } }).chat).sidebarNavigationTileHeight).toBe(88);
     expect(polishPrefs(profileSchema.parse({ chat: { polish: { sidebarNavigationTileHeight: 0 } } }).chat).sidebarNavigationTileHeight).toBe(48);

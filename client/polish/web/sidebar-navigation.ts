@@ -36,12 +36,16 @@ export const SIDEBAR_NAVIGATION_CSS = `
 [data-morphise-nav-slot] [data-morphise-nav-row] { min-width: 0; }
 [data-morphise-nav-stretch] { width: 100% !important; min-width: 0 !important; max-width: 100% !important; align-self: stretch !important; box-sizing: border-box !important; padding-inline: 0 !important; }
 [data-morphise-nav-tile-height="56"] { --morphise-nav-tile-height: 56px; }
+[data-morphise-nav-tile-height="36"] { --morphise-nav-tile-height: 36px; }
 [data-morphise-nav-tile-height="64"] { --morphise-nav-tile-height: 64px; }
 [data-morphise-nav-tile-height="72"] { --morphise-nav-tile-height: 72px; }
 [data-morphise-nav-tile-height="88"] { --morphise-nav-tile-height: 88px; }
 [data-morphise-nav-slot="tile"] [data-morphise-nav-row] { position: relative; min-height: var(--morphise-nav-tile-height, 48px); height: 100%; align-items: stretch !important; }
 [data-morphise-nav-slot="tile"] [data-morphise-nav-row] > [data-testid] { flex-direction: column !important; justify-content: center !important; gap: 2px !important; padding: 5px 4px !important; min-width: 0; }
 [data-morphise-nav-slot="tile"] [data-morphise-nav-row] > [data-testid] > :last-child { text-align: center; font-size: 11px !important; line-height: 14px !important; white-space: normal !important; overflow-wrap: anywhere; }
+[data-morphise-nav-tile-height="36"] [data-morphise-nav-slot="tile"] [data-morphise-nav-row] > [data-testid] { padding-block: 2px !important; }
+[data-morphise-nav-tile-height="36"] [data-morphise-nav-slot="tile"] [data-morphise-nav-row] > [data-testid] svg { width: 14px !important; height: 14px !important; }
+[data-morphise-nav-tile-height="36"] [data-morphise-nav-slot="tile"] [data-morphise-nav-row] > [data-testid] > :last-child { line-height: 12px !important; }
 `;
 
 export function installSidebarNavigation() {
