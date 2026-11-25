@@ -15,7 +15,7 @@ export function SidebarStatusMark({ indicator, nested = false, colors, reason, e
   const tooltip = useTooltip(explanation, colors);
   return <View ref={tooltip} style={{ width: Math.max(16, size), height: 20, alignItems: "center", justifyContent: "center", opacity: nested ? 0.8 : 1, flexShrink: 0 }}>
     <View testID={`morphise-sidebar-status-${indicator}`} accessibilityLabel={explanation} style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
-      <View style={{ width: SIDEBAR_INDICATOR_GEOMETRY.dot, height: SIDEBAR_INDICATOR_GEOMETRY.dot, borderRadius: 3, backgroundColor: statusColor(colors, indicator), opacity: ring ? 0 : indicator === "done" ? 0.6 : 1 }} />
+      <View style={{ width: SIDEBAR_INDICATOR_GEOMETRY.dot, height: SIDEBAR_INDICATOR_GEOMETRY.dot, borderRadius: 3, backgroundColor: statusColor(colors, indicator), opacity: ring ? 0 : 1 }} />
     </View>
   </View>;
 }

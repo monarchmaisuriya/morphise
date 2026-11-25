@@ -132,8 +132,9 @@ export function Button({
 }
 
 // An icon-only button; `label` is its accessible name and its hover tooltip.
-export function IconButton({ t, icon, label, onPress, tone, size = "md", disabled }: { t: Tokens; icon: string; label: string; onPress(): void; tone?: string; size?: "sm" | "md"; disabled?: boolean }) {
+export function IconButton({ t, icon, label, onPress, tone, size = "md", disabled, outlined = false, selected = false }: { t: Tokens; icon: string; label: string; onPress(): void; tone?: string; size?: "sm" | "md"; disabled?: boolean; outlined?: boolean; selected?: boolean }) {
   const hover = useHover();
+  const [focused, setFocused] = useState(false);
   const tooltip = useTooltip(label, t.c);
   const box = size === "sm" ? (t.compact ? 32 : 24) : t.control;
   return (
@@ -144,6 +145,8 @@ export function IconButton({ t, icon, label, onPress, tone, size = "md", disable
       accessibilityState={{ disabled: !!disabled }}
       disabled={disabled}
       onPress={onPress}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
       onHoverIn={hover.onHoverIn}
       onHoverOut={hover.onHoverOut}
       style={({ pressed }) => ({
@@ -152,7 +155,9 @@ export function IconButton({ t, icon, label, onPress, tone, size = "md", disable
         alignItems: "center",
         justifyContent: "center",
         borderRadius: t.radius.control,
-        backgroundColor: hover.hovered || pressed ? t.c.surface2 : "transparent",
+        borderWidth: outlined ? 1 : 0,
+        borderColor: t.c.border,
+        backgroundColor: hover.hovered || pressed || outlined && (focused || selected) ? t.c.surface2 : "transparent",
         opacity: disabled ? 0.35 : 1,
       })}
     >
@@ -212,6 +217,7 @@ export function Field({
   plain,
   onCommand,
   disabled,
+  outlined,
 }: {
   t: Tokens;
   value: string;
@@ -239,10 +245,14 @@ export function Field({
   // Cmd+Enter (Ctrl+Enter off macOS) on a hardware keyboard, for "send" in multi-line fields.
   onCommand?(): void;
   disabled?: boolean;
+  outlined?: boolean;
 }) {
   const [focused, setFocused] = useState(false);
+  const hover = useHover();
   const { c } = t;
-  const box: ViewStyle = quiet
+  const box: ViewStyle = outlined
+    ? { borderRadius: t.radius.control, borderWidth: 1, borderColor: focused ? c.accent : c.border, backgroundColor: focused || hover.hovered ? c.surface2 : "transparent" }
+    : quiet
     ? { borderWidth: 1, borderColor: "transparent", backgroundColor: "transparent" }
     : bare
     ? { borderRadius: t.radius.control, borderWidth: 1, borderColor: focused ? c.border : "transparent", backgroundColor: focused ? c.surface1 : "transparent" }
@@ -250,7 +260,7 @@ export function Field({
   return (
     <View style={[{ gap: 4 }, grow ? { flex: 1, minWidth: 140 } : null]}>
       {label ? <Text style={t.text.label}>{label}</Text> : null}
-      <View style={[box, { flexDirection: "row", alignItems: multiline ? "flex-start" : "center", minHeight: multiline ? (bare ? 52 : 88) : t.control, paddingHorizontal: bare || quiet ? 6 : 10, gap: 8 }]}>
+      <View onPointerEnter={hover.onHoverIn} onPointerLeave={hover.onHoverOut} style={[box, { flexDirection: "row", alignItems: multiline ? "flex-start" : "center", minHeight: multiline ? (bare ? 52 : 88) : t.control, paddingHorizontal: bare || quiet ? 6 : 10, gap: 8 }]}>
         {/* A quiet field has no box, so its icon brightens to show focus. */}
         {icon ? <Icon name={icon} size={14} color={quiet && focused ? c.foreground : c.foregroundMuted} /> : null}
         <TextInput

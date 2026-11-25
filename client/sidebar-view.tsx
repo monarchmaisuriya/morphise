@@ -82,6 +82,8 @@ import { focusStatuses, sidebarSummary, semanticLine, sidebarTime, type FocusTab
 import { checkpointRead, type Checkpoint } from "../shared/work-checkpoints";
 import { SidebarFocusTabs } from "./sidebar-focus";
 import { useSidebarMessage } from "./use-sidebar-message";
+import { RuntimeStrip, useSidebarRuntime, type SidebarRuntime } from "./sidebar-runtime";
+import { providerIconSvg } from "./provider-icons";
 
 type ViewConfig = Profile["sidebar"]["view"];
 type Theme = PluginSidebarViewProps["theme"];
@@ -126,7 +128,7 @@ function viewStyles(theme: Theme, config: ViewConfig, look: ReturnType<typeof si
   const shift = rowPad - 8;
   return {
     scroll: { flex: 1 },
-    header: { flexDirection: "row" as const, alignItems: "center" as const, minHeight: 36, paddingHorizontal: 8, gap: 2 },
+    header: { flexDirection: "row" as const, alignItems: "center" as const, minHeight: 36, paddingHorizontal: 8, gap: 6 },
     tools: { paddingHorizontal: 8, paddingBottom: 6, gap: 6 },
     // More space above a heading than below it: the heading belongs to the rows that follow.
     heading: { flexDirection: "row" as const, alignItems: "center" as const, gap: 6, minHeight: TOUCH ? 40 : 28, paddingLeft: 16, paddingRight: 12, marginTop: groupGap },
@@ -195,6 +197,7 @@ interface Shared {
   t: Tokens;
   config: ViewConfig;
   now: Date;
+  runtime: SidebarRuntime;
   projectSummaries?: ReadonlyMap<string, ReturnType<typeof sidebarSummary>>;
   // The soonest reminder on any chat of each workspace.
   workspaceReminders: ReadonlyMap<string, Reminder>;
@@ -278,7 +281,7 @@ function useRemindToggle() {
 // `stem`: the x of the line its children hang on (`branch.chat.x` or `branch.sub.x`), when it has children listed; the
 // line then starts under this row's dot (`parentStem`).
 // `checked`: set in selection mode, where the row is a checkbox instead of a button.
-export function RowShell({ selected, checked, child, grandchild, twoLine, label, onPress, onLongPress, main, trailing, actions, showActions, disabled, rowRef, onHover, stem, shared }: { selected: boolean; checked?: boolean; child?: boolean; twoLine?: boolean; label: string; onPress(): void; onLongPress?(): void; main: ReactNode; trailing?: ReactNode; actions?: ReactNode; showActions?: boolean; disabled?: boolean; rowRef?: RefObject<View | null>; onHover?(on: boolean): void; grandchild?: boolean; stem?: number; shared: Shared }) {
+export function RowShell({ selected, checked, child, grandchild, twoLine, label, onPress, onLongPress, main, trailing, keepTrailing = false, actions, showActions, disabled, rowRef, onHover, stem, shared }: { selected: boolean; checked?: boolean; child?: boolean; twoLine?: boolean; label: string; onPress(): void; onLongPress?(): void; main: ReactNode; trailing?: ReactNode; keepTrailing?: boolean; actions?: ReactNode; showActions?: boolean; disabled?: boolean; rowRef?: RefObject<View | null>; onHover?(on: boolean): void; grandchild?: boolean; stem?: number; shared: Shared }) {
   const { styles } = shared;
   const key = useId();
   const hovered = useHovered(shared.hover, key);
@@ -300,7 +303,7 @@ export function RowShell({ selected, checked, child, grandchild, twoLine, label,
     <View ref={root} onPointerMove={() => shared.hover.mark(key)} style={[styles.row, child ? styles.child : null, grandchild ? styles.grandchild : null, selected ? styles.selected : hovered ? styles.hovered : null]}>
       <Pressable accessibilityRole={disabled ? "text" : checked !== undefined ? "checkbox" : "button"} accessibilityState={checked !== undefined ? { checked } : { selected }} accessibilityLabel={label} disabled={disabled} onPress={onPress} onLongPress={onLongPress} style={[styles.rowMain, child || grandchild ? styles.childMain : null, twoLine ? styles.twoLine : null]} {...contextMenu}>
         {main}
-        {actionsShown ? null : trailing}
+        {actionsShown && !keepTrailing ? null : trailing}
       </Pressable>
       {actionsShown ? <View style={[styles.actions, twoLine ? styles.actionsTwoLine : null]}>{actions}</View> : null}
       {stem !== undefined && styles.branch.shown ? <View pointerEvents="none" style={[styles.branchDown, parentStem({ x: stem, inset: styles.row.marginHorizontal, dotFromTop: twoLine ? styles.twoLine.paddingVertical + STATUS_LINE / 2 : null })]} /> : null}
@@ -860,6 +863,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   const matching = useAgents({ hosts: [reference.hostId], where: (agent) => inWorkspace(agent) && chatMatches(permissionSnapshot(agent, shared.attentionOf), { statuses: shared.statuses, search: "" }) });
   const running = useAgents({ hosts: [reference.hostId], where: (agent) => inWorkspace(agent) && chatIndicator(agent) === "running" });
   const tree = chatTree(agents, parentsOf(byParent));
+  const latestProvider = useAgent(tree.top[0] ?? "", (agent) => agent.provider) ?? null;
   const matchingKeys = new Set(matching.map((agent) => agent.key));
   const chats = shared.statuses.length ? tree.top.filter((chat) => matchingKeys.has(chat.key)) : tree.top;
   const preview = useSidebarMessage(config.rowStyle === "one-line" ? null : tree.top[0] ?? null);
@@ -1001,13 +1005,15 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
       {workspace.title}
     </Text>
   );
-  const mark0 = selecting ? (
+  const stateMark = selecting ? (
     <View style={[styles.slot, { height: 20 }]}>
       <Icon name={picked ? "SquareCheck" : "Square"} size={14} color={picked ? c.accent : c.foregroundMuted} />
     </View>
   ) : (
     <StatusMark indicator={indicator} shared={shared} reason={applies ? "User-marked workspace state" : reason} enteredAt={applies ? null : workspace.since} />
   );
+  const providerSvg = latestProvider ? providerIconSvg(latestProvider) : undefined;
+  const mark0 = <View style={{ alignItems: "center", width: 16, gap: 2 }}>{stateMark}{twoLine && latestProvider && !selecting ? <View accessibilityLabel={`Latest agent provider: ${latestProvider}`} testID={`workspace-provider-${reference.key}`} style={{ height: 16, justifyContent: "center" }}>{providerSvg ? <Icon icon={{ svg: providerSvg }} size={12} color={c.foregroundMuted} /> : <Icon name="Cpu" size={12} color={c.foregroundMuted} />}</View> : null}</View>;
   const main = twoLine ? (
     <>
       {mark0}
@@ -1044,9 +1050,10 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
   ]
     .filter(Boolean)
     .join(", ");
-  const time = elapsed ? (
-    <View style={{ marginLeft: "auto", height: 20, justifyContent: "center" }}>
-      <Text style={[styles.time, { marginLeft: 0 }]}>{elapsed}</Text>
+  const time = elapsed || twoLine ? (
+    <View style={{ marginLeft: "auto", alignItems: "flex-end", flexShrink: 0 }}>
+      {elapsed ? <Text style={[styles.time, { marginLeft: 0, height: 20 }]}>{elapsed}</Text> : null}
+      {twoLine ? <RuntimeStrip value={shared.runtime} hostId={reference.hostId} workspaceId={reference.id} t={t} /> : null}
     </View>
   ) : null;
 
@@ -1066,6 +1073,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
           showActions={confirmArchive || menu !== null}
           main={main}
           trailing={time}
+          keepTrailing={twoLine}
           actions={selecting ? undefined : (
             <>
               <IconButton t={t} size="sm" icon="Info" label={`Details for ${workspace.name}`} onPress={() => { setDetailsOpen(true); refreshCheckpoint((value) => value + 1); }} />
@@ -1545,12 +1553,13 @@ function Header({ menu, setMenu, search, onSearch, searchLabel, filters, onNext,
     <View ref={headerRef} style={styles.header}>
       {/* The box takes the space the buttons leave, down to nothing (Field's own `grow` keeps 140). */}
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Field t={t} plain quiet icon="Search" value={search} onChangeText={onSearch} placeholder="Search" accessibilityLabel={searchLabel} />
+        <Field t={t} plain outlined icon="Search" value={search} onChangeText={onSearch} placeholder="Search" accessibilityLabel={searchLabel} />
       </View>
-      {search !== "" ? <IconButton t={t} size="sm" icon="X" label="Clear search" onPress={() => onSearch("")} /> : null}
-      {openScreen ? <IconButton t={t} size="sm" icon={DISPATCH_ICON} label="Dispatch: start several agents in new workspaces" onPress={() => openScreen({ screenId: DISPATCH_SCREEN_ID })} /> : null}
+      {search !== "" ? <IconButton outlined t={t} size="sm" icon="X" label="Clear search" onPress={() => onSearch("")} /> : null}
+      {openScreen ? <IconButton outlined t={t} size="sm" icon={DISPATCH_ICON} label="Dispatch: start several agents in new workspaces" onPress={() => openScreen({ screenId: DISPATCH_SCREEN_ID })} /> : null}
       {config.groupBy === "custom" ? (
         <IconButton
+          outlined
           t={t}
           size="sm"
           icon="FolderPlus"
@@ -1562,12 +1571,8 @@ function Header({ menu, setMenu, search, onSearch, searchLabel, filters, onNext,
           }}
         />
       ) : null}
-      <View>
-        <IconButton t={t} size="sm" icon="ListFilter" tone={filters || menu === "filter" ? props.theme.colors.foreground : undefined} label={filters ? `Filters, ${filters} on` : "Filter"} onPress={() => toggle("filter")} />
-        {filters ? <View pointerEvents="none" style={{ position: "absolute", top: 2, right: 2, width: 6, height: 6, borderRadius: 3, backgroundColor: props.theme.colors.accent }} /> : null}
-      </View>
-      <IconButton t={t} size="sm" icon="SlidersHorizontal" tone={menu === "view" ? props.theme.colors.foreground : undefined} label="Display: grouping, sorting, what rows show" onPress={() => toggle("view")} />
-      <IconButton t={t} size="sm" icon="SkipForward" label={onNext ? "Open the next one that needs you" : "Nothing needs you"} disabled={onNext === null} onPress={() => onNext?.()} />
+      <IconButton outlined t={t} size="sm" icon="SlidersHorizontal" selected={menu !== null} tone={menu !== null || filters ? props.theme.colors.foreground : undefined} label={`Settings: grouping, sorting and filters${filters ? `, ${filters} filters on` : ""}`} onPress={() => toggle("view")} />
+      <IconButton outlined t={t} size="sm" icon="SkipForward" label={onNext ? "Open the next one that needs you" : "Nothing needs you"} disabled={onNext === null} onPress={() => onNext?.()} />
     </View>
   );
 }
@@ -2029,6 +2034,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
     const groupTarget = groupDrag.value.state?.target ?? null;
     const ready = useValue(deps.workspacesReady);
     const taskHost = useValue(deps.taskHost);
+    const runtime = useSidebarRuntime(taskHost, now);
     const { sections, protectedKeys } = source;
 
     const dueEntries = reminders.filter((entry) => isDue(entry.reminder, now));
@@ -2062,6 +2068,7 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
       t,
       config,
       now,
+      runtime,
       projectSummaries,
       workspaceReminders,
       statuses: filter.statuses,
@@ -2225,7 +2232,8 @@ export function createSidebarView(config: ViewConfig, deps: ViewDeps) {
           {stepsCards && steps.position === "bottom" ? stepsCards : null}
           {ui.selecting && config.list === "workspaces" ? <BulkBar shown={new Map(sections.flatMap((section) => section.items.map((item) => [item.key, item as WorkspaceRef] as const)))} shared={shared} /> : null}
           <Dropdown t={t} open={menu !== null} onClose={() => setMenu(null)} anchor={headerRef} width={420} maxHeight={560} header={menu === "view" ? <ViewMenuHeader t={t} openSettings={() => (setMenu(null), deps.openSidebarSettings())} /> : undefined}>
-            {menu === "filter" ? <FilterMenu state={state} save={saveState} projects={projects} shared={shared} /> : <ViewMenu update={updateView} shared={shared} />}
+            <ViewMenu update={updateView} shared={shared} />
+            <FilterMenu state={state} save={saveState} projects={projects} shared={shared} />
           </Dropdown>
         </View>
         </PopoverHost>

@@ -21,7 +21,7 @@ ${target === "sidebar" ? `${native} { min-width: ${layout.size}px; }
 [data-testid="morphise-sidebar-status-${state}"] { --morphise-status-size: 100%; }` : ""}
 ${target === "sidebar" ? `${host.split(", ").map((s) => `${s} > *`).join(", ")} { visibility: hidden !important; }` : ""}
 ${selector.split(", ").flatMap((s) => [`${s}::before`, `${s}::after`]).join(", ")} { content: ""; pointer-events: none; position: absolute; left: 50%; top: 50%; box-sizing: border-box; border-radius: 50%; }
-${selector.split(", ").map((s) => `${s}::before`).join(", ")} { width: 6px; height: 6px; margin-left: -3px; margin-top: -3px; background-color: currentColor; opacity: ${state === "done" ? "0.6" : "1"}; }
+${selector.split(", ").map((s) => `${s}::before`).join(", ")} { width: 6px; height: 6px; margin-left: -3px; margin-top: -3px; background-color: currentColor; opacity: 1; }
 ${selector.split(", ").map((s) => `${s}::after`).join(", ")} { width: 12px; height: 12px; margin-left: -6px; margin-top: -6px; background: conic-gradient(${choice.speed === "stopped" ? "color-mix(in srgb, currentColor 30%, transparent) 0deg 360deg" : "color-mix(in srgb, currentColor 90%, transparent) 0deg 90deg, color-mix(in srgb, currentColor 30%, transparent) 90deg 360deg"}); mask-image: radial-gradient(circle, transparent 4.5px, #000 4.5px); display: ${state === "done" ? "none" : "block"}; animation: ${state === "done" || choice.speed === "stopped" ? "none" : `morphise-status-turn ${choice.speed === "fast" ? 900 : SIDEBAR_SPEEDS[choice.speed]}ms linear infinite`}; }`;
   });
   return `@keyframes morphise-status-turn { to { transform: rotate(360deg); } }
