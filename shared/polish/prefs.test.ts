@@ -12,6 +12,14 @@ describe("pagesOn", () => {
 });
 
 describe("Chat Polish preferences from Morphise's profile", () => {
+  it("validates navigation alignment and fill with left and empty defaults", () => {
+    expect(polishPrefs(undefined)).toMatchObject({ sidebarNavigationAlignment: "left", sidebarNavigationFill: "empty" });
+    const chat = profileSchema.parse({ chat: { polish: { sidebarNavigationAlignment: "right", sidebarNavigationFill: "filled" } } }).chat;
+    expect(polishPrefs(chat)).toMatchObject({ sidebarNavigationAlignment: "right", sidebarNavigationFill: "filled" });
+    expect(polishPrefs(profileSchema.parse({ chat: { polish: { sidebarNavigationAlignment: "center" } } }).chat).sidebarNavigationAlignment).toBe("center");
+    expect(polishPrefs(profileSchema.parse({ chat: { polish: { sidebarNavigationAlignment: "", sidebarNavigationFill: null } } }).chat)).toMatchObject({ sidebarNavigationAlignment: "left", sidebarNavigationFill: "empty" });
+  });
+
   it("keeps upper navigation styling on by default and preserves an explicit off choice", () => {
     expect(polishPrefs(undefined).sidebarNavigation).toBe(true);
     const chat = profileSchema.parse({ chat: { polish: { sidebarNavigation: false } } }).chat;
