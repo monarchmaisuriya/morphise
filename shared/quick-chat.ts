@@ -1,7 +1,11 @@
 import { defineRpc, defineSettings } from "@getpaseo/plugin";
 import { z } from "zod";
+import { chatIndicator, type ChatStatusFields } from "./chat-status";
 
 export const QUICK_CHAT_KEY = "morphise.quick-chat";
+export function countedQuickChat(agent: ChatStatusFields & { hostId: string; workspaceId: string | null; parentAgentId: string | null; metadata: Readonly<Record<string, unknown>>; internal?: boolean; archivedAt?: string | null }, hostId: string) {
+  return agent.hostId === hostId && !!agent.workspaceId && agent.parentAgentId === null && agent.metadata[QUICK_CHAT_KEY] === true && !agent.internal && !agent.archivedAt && chatIndicator(agent) !== "done";
+}
 export const quickChatSettings = defineSettings({ id: "quick-chat", scope: "host", version: 1, schema: z.object({ enabled: z.boolean().default(false) }) });
 export const quickChatPreferences = defineSettings({ id: "quick-chat-preferences", scope: "device", version: 1, schema: z.object({
   rememberModel: z.boolean().default(true),

@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.64.0 - 2026-11-25
+
+- **Quick Chat sidebar count:** show a live positive count of owned top-level chats in any non-Idle/Done state on the entry's host. Starting, running, permission requests, unseen failures and unread completions count once each; zero, archived chats and subagents are excluded.
+- **Quick Chat row states:** show each chat's live state with the shared status indicator beneath its title, independently of optional descriptions. Archived and unavailable states are explicit. Existing navigation, titles, handoff and archive behavior remain unchanged; no new polling or transcript reads.
+
 ## 0.63.0 - 2026-11-25
 
 - **Short hover, full Info:** hover shows only workspace title/state, sourced age and compact activity. Full agents/models, tokens, workspace/checkpoint facts and calculation help appear only after explicitly opening Info. Hover never reads token logs.
