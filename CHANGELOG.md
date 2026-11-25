@@ -2,6 +2,14 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.60.0 - 2026-11-25
+
+- **Workspace context:** show the latest chat's provider beneath the state indicator and a rolling 24-hour recorded-agent-runtime line beneath the time. One shared Calendar read refreshes the sidebar; uncertain observations are excluded, partial coverage disclosed and remote history unavailable rather than confused with a local same-ID workspace.
+- **Unified sidebar settings:** move filters into the grouping/sorting Settings menu and remove the separate Filter button. Search and toolbar controls use rounded borders, transparent resting backgrounds and fill on hover, focus or open state.
+- **Segmented focus tabs:** full-width enclosing surface with equal segments, inset filled selection and positive-only dot-separated counts.
+- **Consistent center dots:** remove Done's extra fading so all 6px center dots have full opacity; Done remains ringless with a muted theme color.
+- **Quick Chat title ellipsis:** long list titles truncate at the end with an ellipsis; saved titles, accessible Open labels and Chat info remain complete.
+
 ## 0.59.0 - 2026-11-25
 
 - **Native-sized sidebar indicators:** consistent 6px dot, 12px ring and 1.5px band across states and main/nested rows. Loading/working use Paseo's theme blue; amber/red/green remain for input/failure/unread. Done is always dot-only. Legacy size/color overrides are inert and their controls removed; rotation controls remain. Native working rotation defaults to 900ms and reduced motion stops it.
