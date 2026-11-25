@@ -28,11 +28,11 @@ export function semanticLine(indicator: Indicator, reason: string | null, checkp
   return indicator === "attention" ? { text: "New result to review", tone: "muted" } : null;
 }
 export function sidebarTime(indicator: Indicator, enteredAt: string | null, activity: string | null | readonly (string | null)[], now: Date, stateTime: boolean) {
+  return sidebarTimestamp(enteredAt, (typeof activity === "string" || activity === null ? [activity] : activity).map((at) => ({ at, label: "Last activity" })), now, stateTime)?.elapsed ?? null;
+}
+
+export function sidebarTimestamp(enteredAt: string | null, activity: readonly { at: string | null; label: string }[], now: Date, stateTime: boolean) {
   const valid = (value: string | null) => value !== null && Number.isFinite(Date.parse(value)) && Date.parse(value) <= +now;
-  const genuineState = stateTime && valid(enteredAt);
-  const candidates = typeof activity === "string" || activity === null ? [activity] : activity;
-  const source = genuineState ? enteredAt : candidates.find(valid) ?? null;
-  if (!source) return null;
-  const elapsed = formatElapsed(source, now);
-  return elapsed;
+  const source = stateTime && valid(enteredAt) ? { at: enteredAt, label: "Current state began" } : activity.find((value) => valid(value.at));
+  return source?.at ? { at: source.at, label: source.label, elapsed: formatElapsed(source.at, now) } : null;
 }

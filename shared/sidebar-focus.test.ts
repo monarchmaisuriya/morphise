@@ -1,6 +1,14 @@
 import { expect, it } from "vitest";
 import { viewStateSettings } from "./view-state";
-import { focusSelection, focusStatuses, sidebarTime, sidebarSummary, semanticLine } from "./sidebar-focus";
+import { focusSelection, focusStatuses, sidebarTime, sidebarTimestamp, sidebarSummary, semanticLine } from "./sidebar-focus";
+
+it("retains the actual timestamp source for details when state time is invalid", () => {
+  const now = new Date("2026-11-25T12:00:00Z");
+  expect(sidebarTimestamp("invalid", [{ at: "future", label: "Last activity" }, { at: "2026-11-25T11:00:00Z", label: "Last prompt" }], now, true)).toEqual({ at: "2026-11-25T11:00:00Z", elapsed: "1h", label: "Last prompt" });
+  expect(sidebarTimestamp("2026-11-25T11:30:00Z", [], now, true)?.label).toBe("Current state began");
+  expect(sidebarTimestamp(null, [{ at: "2026-11-25T10:00:00Z", label: "Workspace created" }], now, false)?.label).toBe("Workspace created");
+  expect(sidebarTimestamp(null, [], now, true)).toBeNull();
+});
 import { performance } from "node:perf_hooks";
 
 it("replaces legacy status filters with default and configurable focus tabs", () => {

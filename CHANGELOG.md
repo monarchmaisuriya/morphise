@@ -2,6 +2,12 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.61.1 - 2026-11-25
+
+- **Stable workspace row height:** reserve the two-by-two action-grid height before hover/focus, with matching vertical insets, so revealing actions does not move following rows.
+- **Clear workspace details:** fixed title/checkpoint-refresh/close header; separate current state, explicitly sourced age, recorded activity, workspace facts and checkpoint. Remove duplicate branch/review lines and replace empty checkpoint fields with one helpful state.
+- **Explain activity:** distinguish recorded runtime from elapsed age, expand ~ as incomplete recording rather than estimated duration, show the rolling window/cutoff and explain parallel counting, excluded uncertainty and coverage gaps behind How this is counted. Runtime calculations unchanged.
+
 ## 0.61.0 - 2026-11-25
 
 - **Compact activity:** replace workspace runtime charts with recorded-duration labels such as 18m / 24h. Hide zero/unavailable values and mark partial coverage with ~; retain source/freshness/coverage tooltips.

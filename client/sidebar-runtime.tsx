@@ -5,9 +5,9 @@ import { calendarRead } from "../shared/work-calendar";
 import { workspaceRuntime } from "../shared/sidebar-runtime";
 import { durationText } from "../shared/calendar-layout";
 import { useTooltip } from "./web";
-import type { Tokens } from "./ui/kit";
+import { Button, type Tokens } from "./ui/kit";
 
-export type SidebarRuntime = { status: "loading" | "failed"; error?: string } | { status: "ready"; hostId: string; at: number; recordingSince: number; pruned: number; workspaces: ReturnType<typeof workspaceRuntime> };
+export type SidebarRuntime = { status: "loading" } | { status: "failed"; error?: string } | { status: "ready"; hostId: string; at: number; recordingSince: number; pruned: number; workspaces: ReturnType<typeof workspaceRuntime> };
 
 export function useSidebarRuntime(hostId: string | null, now: Date): SidebarRuntime {
   const read = useRpc(calendarRead);
@@ -40,5 +40,34 @@ export function RuntimeStrip({ value, hostId, workspaceId, t }: { value: Sidebar
   const duration = minutes < 1 ? "<1m" : minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h${minutes % 60 ? ` ${minutes % 60}m` : ""}`;
   return <View ref={tooltip} testID={`workspace-runtime-${hostId}-${workspaceId}`} accessibilityLabel={label} style={{ marginTop: 1 }}>
     <Text numberOfLines={1} style={[t.text.meta, { fontSize: 10, textAlign: "right" }]}>{partial ? "~" : ""}{duration} / 24h</Text>
+  </View>;
+}
+
+export function RuntimeDetails({ value, hostId, workspaceId, t, interactive = false }: { value: SidebarRuntime; hostId: string; workspaceId: string; t: Tokens; interactive?: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  if (value.status === "loading") return <Text style={t.text.meta}>Loading recorded activity…</Text>;
+  if (value.status === "failed") return <View style={{ gap: 4 }}><Text style={t.text.meta}>Recorded activity is unavailable.</Text><Text style={t.text.meta}>{value.error}</Text></View>;
+  if (value.hostId !== hostId) return <Text style={t.text.meta}>Activity is unavailable for this host. No local history is substituted.</Text>;
+  const observed = value.workspaces.get(workspaceId);
+  const from = value.at - 86400000;
+  const reasons = [
+    ...(value.recordingSince > from ? [`Recording began ${new Date(value.recordingSince).toLocaleString()}, after this window started.`] : []),
+    ...(value.pruned > 0 ? ["Older records have been removed. This workspace's total may be incomplete."] : []),
+    ...(observed?.uncertain ? ["Uncertain or interrupted observations were excluded."] : []),
+  ];
+  return <View testID="workspace-activity-details" style={{ gap: 6 }}>
+    <Text style={t.text.heading}>{observed?.total ? `${durationText(observed.total)} recorded` : "No confirmed runtime recorded"}</Text>
+    <Text style={t.text.meta}>Across this workspace's agents in the last 24 hours. Not human work time.</Text>
+    {reasons.length ? <Text style={t.text.body}>Incomplete recording · may undercount work (~)</Text> : null}
+    <Text style={t.text.meta}>Window ends {new Date(value.at).toLocaleString()}</Text>
+    {interactive ? <View style={{ alignSelf: "flex-start" }}><Button t={t} size="sm" variant="ghost" label={expanded ? "Hide activity explanation" : "How this is counted"} onPress={() => setExpanded(!expanded)} /></View> : null}
+    {expanded || !interactive ? <View style={{ gap: 6 }}>
+      {reasons.length ? <Text style={t.text.meta}>The ~ marker means incomplete coverage, not an estimated duration.</Text> : null}
+      {reasons.map((reason) => <Text key={reason} style={t.text.meta}>{reason}</Text>)}
+      <Text style={t.text.meta}>Parallel agents count separately: two agents working for 5 min add 10 min. Uncertain observations are excluded. This is not human work time.</Text>
+      <Text style={t.text.meta}>Observation gaps may be missing even without the ~ marker.</Text>
+      <Text style={t.text.meta}>Window: {new Date(from).toLocaleString()} to {new Date(value.at).toLocaleString()}</Text>
+      <Text style={t.text.meta}>Snapshot cutoff: {new Date(value.at).toLocaleString()}. Updates about once a minute; checkpoint refresh does not refresh activity.</Text>
+    </View> : null}
   </View>;
 }
