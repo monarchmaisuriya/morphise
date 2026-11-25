@@ -85,6 +85,7 @@ import { useSidebarMessage } from "./use-sidebar-message";
 import { RuntimeDetails, RuntimeStrip, useSidebarRuntime, type SidebarRuntime } from "./sidebar-runtime";
 import { providerIconSvg } from "./provider-icons";
 import { WorkspaceUsage } from "./workspace-usage";
+import { DetailFact } from "./detail-fact";
 
 type ViewConfig = Profile["sidebar"]["view"];
 type Theme = PluginSidebarViewProps["theme"];
@@ -704,7 +705,7 @@ function LabelsMeta({ labels, shared }: { labels: readonly string[]; shared: Sha
       {shown.map((label) => (
         <View key={label} style={{ flexDirection: "row", alignItems: "center", gap: 3, flexShrink: 1, minWidth: 0 }}>
           <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tileColor(label) }} />
-          <Text style={shared.styles.meta} numberOfLines={1}>
+          <Text selectable style={[shared.styles.meta, { flex: 1, minWidth: 0 }]}>
             {label}
           </Text>
         </View>
@@ -784,10 +785,10 @@ function WorkspaceCard({ title, workspace, info, host, shared }: { title: string
           <DiffText diff={workspace.diff} shared={shared} />
         </View>
       ) : null}
-      {host ? <Text selectable style={shared.styles.meta}>Host: {host}</Text> : null}
-      <Text selectable style={shared.styles.meta}>Folder: {workspace.directory}</Text>
-      {workspace.branch ? <Text selectable style={shared.styles.meta}>Branch: {workspace.branch}{info?.dirty ? " · uncommitted changes" : ""}{ahead}</Text> : null}
-      {pr ? <Text selectable style={shared.t.text.body}>Review: {pr.number ? `#${pr.number} ` : ""}{pr.title || "Pull request"} · {pr.state}{pr.checks !== "none" ? ` · ${CHECKS_TEXT[pr.checks]}` : ""}</Text> : null}
+      {host ? <DetailFact t={shared.t} label="Host" value={host} /> : null}
+      <DetailFact t={shared.t} label="Folder" value={workspace.directory} />
+      {workspace.branch ? <DetailFact t={shared.t} label="Branch" value={`${workspace.branch}${info?.dirty ? " · uncommitted changes" : ""}${ahead}`} /> : null}
+      {pr ? <DetailFact t={shared.t} label="Review" value={`${pr.number ? `#${pr.number} ` : ""}${pr.title || "Pull request"} · ${pr.state}${pr.checks !== "none" ? ` · ${CHECKS_TEXT[pr.checks]}` : ""}`} /> : null}
       {info?.services.map((service) => (
         <View key={service.name} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
           <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: serviceColor(c, service) }} />
@@ -797,7 +798,7 @@ function WorkspaceCard({ title, workspace, info, host, shared }: { title: string
           </Text>
         </View>
       ))}
-      {workspace.labels.length ? <Meta icon="Tag" text={workspace.labels.join(", ")} shared={shared} /> : null}
+      {workspace.labels.length ? <DetailFact t={shared.t} label="Labels" value={workspace.labels.join(", ")} /> : null}
     </View>
   );
 }
@@ -1098,9 +1099,14 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
           shared={shared}
         />
       )}
-      <Dropdown t={t} open={(detailsOpen || card) && menu === null && renaming === null} onClose={() => { setCard(false); setDetailsOpen(false); }} anchor={rowRef} passive={!detailsOpen} width={360} maxHeight={480} header={<View testID="workspace-details-header" style={{ padding: 8, gap: 6, borderBottomWidth: 1, borderColor: c.border }}><View style={{ flexDirection: "row", gap: 6, alignItems: "flex-start" }}><Text selectable style={[t.text.heading, { flex: 1 }]}>{workspace.title}</Text>{detailsOpen ? <><IconButton t={t} size="sm" icon="RefreshCw" label="Refresh checkpoint details" disabled={reference.hostId !== shared.taskHost} onPress={() => refreshCheckpoint((value) => value + 1)} /><IconButton t={t} size="sm" icon="X" label="Close workspace details" onPress={() => { setDetailsOpen(false); setCard(false); }} /></> : null}</View><Text style={t.text.meta}>Current state: {STATUS_TITLES[indicator]}</Text></View>}>
-        <View style={{ padding: 8, gap: 6 }}>
-          {timestamp ? <><Text style={t.text.body}>{timestamp.label}: {timestamp.elapsed === "now" ? "just now" : `${timestamp.elapsed} ago`}</Text><Text style={t.text.meta}>{new Date(timestamp.at).toLocaleString()}</Text></> : <Text style={t.text.meta}>Activity timestamp unavailable</Text>}
+      <Dropdown t={t} open={(detailsOpen || card) && menu === null && renaming === null} onClose={() => { setCard(false); setDetailsOpen(false); }} anchor={rowRef} passive={!detailsOpen} width={360} maxHeight={detailsOpen ? 520 : 180} header={<View testID="workspace-details-header" style={{ padding: 10, gap: 6, borderBottomWidth: 1, borderColor: c.border }}><View style={{ flexDirection: "row", gap: 6, alignItems: "flex-start" }}><Text selectable style={[t.text.heading, { flex: 1 }]}>{workspace.title}</Text>{detailsOpen ? <><IconButton t={t} size="sm" icon="RefreshCw" label="Refresh checkpoint details" disabled={reference.hostId !== shared.taskHost} onPress={() => refreshCheckpoint((value) => value + 1)} /><IconButton t={t} size="sm" icon="X" label="Close workspace details" onPress={() => { setDetailsOpen(false); setCard(false); }} /></> : null}</View><Text style={t.text.meta}>Current state: {STATUS_TITLES[indicator]}</Text></View>}>
+        {!detailsOpen ? <View testID="workspace-hover-summary" style={{ padding: 10, gap: 6 }}>
+          {timestamp ? <Text style={t.text.meta}>{timestamp.label}: {timestamp.elapsed === "now" ? "just now" : `${timestamp.elapsed} ago`}</Text> : null}
+          <RuntimeStrip value={shared.runtime} hostId={reference.hostId} workspaceId={reference.id} t={t} />
+          <Text style={t.text.meta}>Click Info for agents, usage and workspace details.</Text>
+        </View> : <>
+        <View style={{ padding: 10, gap: 6 }}>
+          {timestamp ? <><DetailFact t={t} label={timestamp.label} value={timestamp.elapsed === "now" ? "just now" : `${timestamp.elapsed} ago`} /><DetailFact t={t} label="At" value={new Date(timestamp.at).toLocaleString()} /></> : <Text style={t.text.meta}>Activity timestamp unavailable</Text>}
           {meaning ? <Text style={t.text.meta}>{meaning.text}</Text> : null}
         </View>
         <View style={{ padding: 8, gap: 8, borderTopWidth: 1, borderColor: c.border }}><Text style={t.text.heading}>Agent activity · last 24 hours</Text><RuntimeDetails value={shared.runtime} hostId={reference.hostId} workspaceId={reference.id} t={t} interactive={detailsOpen} /></View>
@@ -1115,6 +1121,7 @@ function WorkspaceRow({ reference, shared }: { reference: WorkspaceRef; shared: 
             {Object.values(checkpoint.fields).some((value) => value.trim()) ? ([['goal', 'Goal'], ['verified', 'Last verified result'], ['blocked', 'Blocked by'], ['next', 'Next step']] as const).filter(([key]) => checkpoint.fields[key].trim()).map(([key, label]) => <View key={key} style={{ gap: 2 }}><Text style={t.text.label}>{label}</Text><Text selectable style={t.text.body}>{checkpoint.fields[key]}</Text></View>) : <Text style={t.text.meta}>Save a checkpoint in the workspace panel to record its goal, verified result, blocker and next step.</Text>}
           </> : <Text style={t.text.meta}>Loading checkpoint…</Text>}
         </View>
+        </>}
       </Dropdown>
       <Dropdown t={t} open={menu !== null} onClose={closeMenu} anchor={rowRef} width={menu === "colour" ? 300 : 250}>
         {menu === "colour" ? (
