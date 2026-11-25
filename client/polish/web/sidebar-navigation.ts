@@ -24,7 +24,8 @@ export const SIDEBAR_NAVIGATION_CSS = `
 [data-morphise-nav-row]:has(> :focus-visible) { outline: 2px solid var(--colors-foreground); outline-offset: -2px; }
 [data-morphise-nav-separator] { display: none !important; }
 [data-morphise-nav-layout="split"], [data-morphise-nav-layout="tiles"] { display: grid !important; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px !important; padding-inline: 8px; }
-[data-morphise-nav-slot] { min-width: 0 !important; grid-column: span 6; padding-inline: 0 !important; }
+[data-morphise-nav-slot]:not([hidden]):not([aria-hidden="true"]) { display: flex !important; }
+[data-morphise-nav-slot] { align-items: stretch !important; min-width: 0 !important; grid-column: span 6; padding-inline: 0 !important; }
 [data-morphise-nav-slot="half"] { grid-column: span 3; }
 [data-morphise-nav-slot="tile"] { grid-column: span 2; }
 [data-morphise-nav-slot] [data-morphise-nav-row] { min-width: 0; }
