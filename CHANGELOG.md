@@ -2,6 +2,12 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.76.0 - 2026-11-26
+
+- Fix Quick Chat handoff search by carrying project name/root with each destination and matching normalized words across project identity and workspace title/path. Show the project name in results; preserve pagination and existing eligibility exclusions.
+- Explain source readiness before preparation. Disable destination preparation while the source is active, starting, archived or awaiting permission; provide Open source Quick Chat and Refresh destinations and readiness. Preserve server ownership, activity, permission and race-time rechecks.
+- Verify project search, pagination, blocker reasons and refresh recovery with unit/service/browser tests. Real-client temporary-daemon acceptance for these handoff changes remains unperformed.
+
 ## 0.75.0 - 2026-11-26
 
 - Align Quick Chat/Workbench tile counts beside the icon as minimal10px numbers, keeping the main label centered. Limit positioning to recognized Morphise count slots in Tiles; other layouts/actions stay unchanged.
