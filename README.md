@@ -221,3 +221,5 @@ Tiles default to a compact 48px minimum height with 11px labels. Under **Look �
 Incomplete tile rows fill the navigation width: one tile spans the row, two share equal halves, and three share equal thirds, with consistent 8px gaps. The final wrapped row follows the same rule. Tile height, centered icon/label layout and full-width edge rows are unchanged.
 
 **Look → Workspace toolbar → Workspace toolbar appearance** controls the lower status dropdown and all adjacent action buttons together: Empty (default) or Filled. This is independent of upper navigation appearance. Filled uses the theme surface, retaining stronger open/active feedback. Hover-only shortcut hints on Search and New workspace are hidden while navigation styling is enabled, avoiding hover-driven resizing and uneven alignment; keyboard shortcuts and plugin counts/actions remain unchanged.
+
+In Tiles, positive Quick Chat/Workbench counts appear as minimal numbers beside the icon, with the label centered below. Other layouts retain their normal trailing count placement.

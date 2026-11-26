@@ -43,6 +43,8 @@ export const SIDEBAR_NAVIGATION_CSS = `
 [data-morphise-nav-slot="tile"] [data-morphise-nav-row] { position: relative; min-height: var(--morphise-nav-tile-height, 48px); height: 100%; align-items: stretch !important; }
 [data-morphise-nav-slot="tile"] [data-morphise-nav-row] > [data-testid] { flex-direction: column !important; justify-content: center !important; gap: 2px !important; padding: 5px 4px !important; min-width: 0; }
 [data-morphise-nav-slot="tile"] [data-morphise-nav-row] > [data-testid] > :last-child { text-align: center; font-size: 11px !important; line-height: 14px !important; white-space: normal !important; overflow-wrap: anywhere; }
+[data-morphise-nav-slot="tile"] [data-morphise-nav-row] > :has(> :is([data-testid="quick-chat-state-count"], [data-testid="workbench-state-count"])) { position: absolute !important; display: flex !important; flex-direction: row !important; left: calc(50% + 12px); top: 0; bottom: 0; padding: 0 !important; align-items: center !important; justify-content: center; pointer-events: auto; }
+[data-morphise-nav-slot="tile"] :is([data-testid="quick-chat-state-count"], [data-testid="workbench-state-count"]) { font-size: 10px !important; line-height: 14px !important; padding: 0 !important; transform: translateY(-8px); font-variant-numeric: tabular-nums; }
 [data-morphise-nav-tile-height="38"] [data-morphise-nav-slot="tile"] [data-morphise-nav-row] > [data-testid] { padding-block: 2px !important; }
 [data-morphise-nav-tile-height="38"] [data-morphise-nav-slot="tile"] [data-morphise-nav-row] > [data-testid] svg { width: 14px !important; height: 14px !important; }
 [data-morphise-nav-tile-height="38"] [data-morphise-nav-slot="tile"] [data-morphise-nav-row] > [data-testid] > :last-child { line-height: 12px !important; }

@@ -300,7 +300,7 @@ export function createWorkbenchSidebarItem(deps: SurfaceDeps) {
           label={counts.due ? `Workbench · ${counts.due} due` : "Workbench"}
           active={active}
           onPress={() => openScreen({ screenId: WORKBENCH_SCREEN_ID })}
-          trailing={counts.waiting ? <Text style={{ fontSize: fontSize.sm, color: counts.permission ? theme.colors.statusWarning : theme.colors.foregroundMuted, paddingRight: 8 }}>{counts.waiting}</Text> : null}
+          trailing={counts.waiting ? <Text testID="workbench-state-count" style={{ fontSize: fontSize.sm, color: counts.permission ? theme.colors.statusWarning : theme.colors.foregroundMuted, paddingRight: 8 }}>{counts.waiting}</Text> : null}
         />
         {/* Always mounted with this row, so it shows the viewer for image stacks in Paseo's own replies. */}
         <StackViewerHost />
