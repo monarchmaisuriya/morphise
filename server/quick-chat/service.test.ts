@@ -26,6 +26,13 @@ async function fixture() {
 }
 
 describe("independent Quick Chat handoff", () => {
+  it("retains project identity across destination pages and excludes unavailable workspaces", async () => {
+    const f = await fixture();
+    const base = { title: "Unrelated task", name: "task", projectDisplayName: "pushowl-support-agent", workspaceDirectory: "/synthetic/worktrees/fox", projectRootPath: "/synthetic/pushowl-support-agent", background: false, internal: false, archivingAt: null };
+    const api = { workspaces: { list: async (input: { page: { cursor?: string } }) => input.page.cursor ? { entries: [{ ...base, id: "second" }, { ...base, id: "hidden", internal: true }], pageInfo: { hasMore: false } } : { entries: [{ ...base, id: "first" }], pageInfo: { hasMore: true, nextCursor: "next" } } } } as unknown as PluginHandlerContext["paseo"];
+    expect(await f.service.targets(api)).toEqual([{ id: "first", title: "Unrelated task", directory: base.workspaceDirectory, projectName: base.projectDisplayName, projectRoot: base.projectRootPath }, { id: "second", title: "Unrelated task", directory: base.workspaceDirectory, projectName: base.projectDisplayName, projectRoot: base.projectRootPath }]);
+    expect(await f.service.readiness(f.api, "source")).toBeNull();
+  });
   it("leaves new agent titles to Paseo and names exact save locations", async () => {
     const f = await fixture();
     let input: Record<string, unknown> = {};

@@ -3,7 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, realpath, writeFile, rename } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, relative, isAbsolute } from "node:path";
-import { QUICK_CHAT_KEY, visibleQuickChatAgent } from "../../shared/quick-chat";
+import { QUICK_CHAT_KEY, quickChatHandoffBlock, visibleQuickChatAgent } from "../../shared/quick-chat";
 import { transcriptText } from "./transcript";
 
 type Paseo = PluginHandlerContext["paseo"];
@@ -45,7 +45,8 @@ export class QuickChatService {
   async source(paseo: Paseo, id: string): Promise<Agent> {
     const agent = (await paseo.agents.ref(id).refresh())?.agent;
     if (!agent || !(await this.owned(agent))) throw new Error("Select a Morphise Quick Chat owned by this daemon.");
-    if (agent.archivedAt || agent.activeTurn || ["running", "initializing"].includes(agent.status) || agent.pendingPermissions.length) throw new Error("Finish the reply and resolve permissions before continuing in a project.");
+    const blocked = quickChatHandoffBlock(agent);
+    if (blocked) throw new Error(blocked);
     return agent;
   }
   async setArchived(paseo: Paseo, agentId: string, archived: boolean) {
@@ -102,16 +103,21 @@ export class QuickChatService {
     });
   }
   async targets(paseo: Paseo) {
-    const targets: { id: string; title: string; directory: string }[] = [];
+    const targets: { id: string; title: string; directory: string; projectName: string; projectRoot: string }[] = [];
     let cursor: string | undefined;
     for (let page = 0; page < 20; page++) {
       const result = await paseo.workspaces.list({ page: { limit: 200, ...(cursor ? { cursor } : {}) } });
-      for (const workspace of result.entries) if (!workspace.archivingAt && !workspace.background && !workspace.internal) targets.push({ id: workspace.id, title: workspace.title || workspace.name || workspace.projectDisplayName, directory: workspace.workspaceDirectory || workspace.projectRootPath });
+      for (const workspace of result.entries) if (!workspace.archivingAt && !workspace.background && !workspace.internal) targets.push({ id: workspace.id, title: workspace.title || workspace.name || workspace.projectDisplayName, directory: workspace.workspaceDirectory || workspace.projectRootPath, projectName: workspace.projectDisplayName, projectRoot: workspace.projectRootPath });
       if (!result.pageInfo.hasMore) return targets;
       cursor = result.pageInfo.nextCursor ?? undefined;
       if (!cursor) throw new Error("Paseo returned an incomplete project page.");
     }
     throw new Error("Too many open workspace pages. Close some workspaces and try again.");
+  }
+  async readiness(paseo: Paseo, id: string): Promise<string | null> {
+    const agent = (await paseo.agents.ref(id).refresh())?.agent;
+    if (!agent || !(await this.owned(agent))) throw new Error("Select a Morphise Quick Chat owned by this daemon.");
+    return quickChatHandoffBlock(agent);
   }
   async prepare(paseo: Paseo, agentId: string, workspaceId: string) {
     const source = await this.source(paseo, agentId);

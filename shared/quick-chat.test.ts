@@ -1,5 +1,21 @@
 import { expect, it } from "vitest";
-import { QUICK_CHAT_KEY, countedQuickChat, filteredQuickChats, quickChatAgentChange, quickChatPreferences, quickChatSettings, quickChatStart, restoredQuickChatModel, visibleQuickChatAgent } from "./quick-chat";
+import { QUICK_CHAT_KEY, countedQuickChat, filteredQuickChats, quickChatAgentChange, quickChatHandoffBlock, quickChatTargetMatches, quickChatPreferences, quickChatSettings, quickChatStart, restoredQuickChatModel, visibleQuickChatAgent } from "./quick-chat";
+
+it("finds project workspaces independently of generated worktree names", () => {
+  const target = { title: "Scan Slack alert", directory: "/synthetic/worktrees/bright-fox", projectName: "pushowl-support-agent", projectRoot: "/synthetic/pushowl-support-agent" };
+  expect(quickChatTargetMatches(target, "support agent")).toBe(true);
+  expect(quickChatTargetMatches(target, " SUPPORT-agent ")).toBe(true);
+  expect(quickChatTargetMatches(target, "support absent")).toBe(false);
+  expect(quickChatTargetMatches(target, "")).toBe(true);
+});
+it("explains blocked handoffs without relaxing source safety", () => {
+  const source = { status: "idle", activeTurn: null, pendingPermissions: [] };
+  expect(quickChatHandoffBlock(source)).toBeNull();
+  expect(quickChatHandoffBlock({ ...source, status: "running" })).toContain("still replying");
+  expect(quickChatHandoffBlock({ ...source, activeTurn: { turnId: "active" } })).toContain("still replying");
+  expect(quickChatHandoffBlock({ ...source, pendingPermissions: [{}] })).toContain("permission");
+  expect(quickChatHandoffBlock({ ...source, archivedAt: "2026-11-26" })).toContain("Restore");
+});
 
 it("counts each owned non-idle Quick Chat once on its own host", () => {
   const base = { hostId: "local", workspaceId: "scratch", parentAgentId: null, metadata: { [QUICK_CHAT_KEY]: true }, status: "idle" as const, requiresAttention: false, attentionReason: null };

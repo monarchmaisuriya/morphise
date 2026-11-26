@@ -35,7 +35,18 @@ export function filteredQuickChats(chats: readonly QuickChatListItem[], options:
   });
 }
 export const quickChatStart = defineRpc({ name: "quick-chat.start", input: z.object({ operationId: z.string().min(8).max(100).regex(/^[a-zA-Z0-9_-]+$/), provider: z.string().min(3).max(300).regex(/^[^\s/]+\/.+$/) }), output: z.object({ agentId: z.string(), workspaceId: z.string(), directory: z.string() }) });
-export const quickChatTargets = defineRpc({ name: "quick-chat.targets", input: z.object({}), output: z.object({ targets: z.array(z.object({ id: z.string(), title: z.string(), directory: z.string() })) }) });
+export function quickChatTargetMatches(target: { title: string; directory: string; projectName?: string; projectRoot?: string }, query: string): boolean {
+  const words = (text: string) => text.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  const searchable = words(`${target.title} ${target.directory} ${target.projectName ?? ""} ${target.projectRoot ?? ""}`);
+  return words(query).split(/\s+/).filter(Boolean).every((word) => searchable.includes(word));
+}
+export function quickChatHandoffBlock(agent: { archivedAt?: string | null; activeTurn?: unknown; status: string; pendingPermissions: readonly unknown[] }): string | null {
+  if (agent.archivedAt) return "Restore this Quick Chat before continuing in a project.";
+  if (agent.pendingPermissions.length) return "Resolve the pending permission request in the source Quick Chat, then refresh readiness.";
+  if (agent.activeTurn || ["running", "initializing"].includes(agent.status)) return "The source Quick Chat is still replying or starting. Wait for it to finish, then refresh readiness.";
+  return null;
+}
+export const quickChatTargets = defineRpc({ name: "quick-chat.targets", input: z.object({ agentId: z.string().min(1).max(200).optional() }), output: z.object({ blockedReason: z.string().nullable().optional(), targets: z.array(z.object({ id: z.string(), title: z.string(), directory: z.string(), projectName: z.string().optional(), projectRoot: z.string().optional() })) }) });
 export const quickChatPrepare = defineRpc({ name: "quick-chat.prepare", input: z.object({ agentId: z.string().min(1).max(200), workspaceId: z.string().min(1).max(200) }), output: z.object({ previewId: id, text: z.string(), provider: z.string(), directory: z.string(), entries: z.number(), partial: z.boolean(), files: z.array(z.string()), filesPartial: z.boolean() }) });
 export const quickChatContinue = defineRpc({ name: "quick-chat.continue", input: z.object({ previewId: id, text: z.string().trim().min(1).max(40000) }), output: destination });
 export const quickChatRecover = defineRpc({ name: "quick-chat.recover", input: z.object({ operationId: id }), output: destination });
