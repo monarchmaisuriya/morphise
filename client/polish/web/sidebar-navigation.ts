@@ -12,7 +12,7 @@ const NAV = `${BUILTIN}, ${PLUGIN}`;
 const EXCLUDED = '[data-testid="sidebar-footer"], [data-testid="workspace-explorer-sidebar"], [data-testid^="sidebar-workspace-row-"], [data-testid="left-sidebar-resize-handle"]';
 
 export const SIDEBAR_NAVIGATION_CSS = `
-[data-morphise-nav-group] { border-bottom-width: 0 !important; gap: 4px !important; }
+[data-morphise-nav-group] { border-bottom-width: 0 !important; padding-bottom: 0 !important; gap: 8px !important; }
 [data-morphise-nav-row] { border: 1px solid var(--colors-border) !important; border-radius: 8px !important; background-color: transparent !important; }
 [data-morphise-nav-row]:hover, [data-morphise-nav-row]:focus-within, [data-morphise-nav-row]:has(> [aria-selected="true"]) { background-color: var(--colors-surface-sidebar-hover, var(--colors-surface2)) !important; }
 [data-morphise-nav-group="center"] [data-morphise-nav-row] > [data-testid] { justify-content: center !important; }

@@ -130,7 +130,7 @@ function viewStyles(theme: Theme, config: ViewConfig, look: ReturnType<typeof si
   const shift = rowPad - 8;
   return {
     scroll: { flex: 1 },
-    header: { flexDirection: "row" as const, alignItems: "center" as const, minHeight: 36, paddingHorizontal: 8, paddingTop: 8, paddingBottom: 8, gap: 6 },
+    header: { flexDirection: "row" as const, alignItems: "center" as const, minHeight: 36, paddingHorizontal: 8, paddingTop: 8, paddingBottom: 8, gap: 8 },
     tools: { paddingHorizontal: 8, paddingBottom: 6, gap: 6 },
     // More space above a heading than below it: the heading belongs to the rows that follow.
     heading: { flexDirection: "row" as const, alignItems: "center" as const, gap: 6, minHeight: TOUCH ? 40 : 28, paddingLeft: 16, paddingRight: 12, marginTop: groupGap },

@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.79.0 - 2026-11-26
+
+- Use consistent8px upper-navigation gaps and workspace-toolbar control gaps. Remove duplicate navigation bottom padding so the toolbar owns the boundary spacing. Preserve selected tile/row heights, appearance and actions.
+- Navigation spacing checked on shipped client with isolated temporary daemon; full regression suite passed.
+
 ## 0.78.0 - 2026-11-26
 
 - Simplify Quick Chat handoff into separate Existing workspace/New workspace choices, one searchable bounded list of compact destination rows, one configuration area and one Review context action. Remove oversized per-project cards and repeated nested buttons/headings.
