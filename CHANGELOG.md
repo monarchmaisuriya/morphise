@@ -2,6 +2,11 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.75.0 - 2026-11-26
+
+- Align Quick Chat/Workbench tile counts beside the icon as minimal10px numbers, keeping the main label centered. Limit positioning to recognized Morphise count slots in Tiles; other layouts/actions stay unchanged.
+- Add browser geometry regression for icon/count alignment and label centering. Fixture verified; real-client preview for this count change remains unperformed.
+
 ## 0.74.0 - 2026-11-26
 
 - Revise tile height options to38,42,48(default),56,64,72px. Replace36px with38px, add42px, remove88px. Read saved36px choices as38px and88px choices as72px;48px default and36px first/last full rows unchanged.
