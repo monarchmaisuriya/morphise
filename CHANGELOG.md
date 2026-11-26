@@ -2,6 +2,12 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.78.0 - 2026-11-26
+
+- Simplify Quick Chat handoff into separate Existing workspace/New workspace choices, one searchable bounded list of compact destination rows, one configuration area and one Review context action. Remove oversized per-project cards and repeated nested buttons/headings.
+- Clear selected destinations on search, refresh and destination-type changes; reset project mode/base defaults on project selection and prevent selection changes during preparation. Server creation/readiness/recovery behavior unchanged.
+- Verify compact row height, hidden-selection clearing, zero preparation on selection, both destination modes and existing handoff regressions. Rendered browser fixture inspected; installed-client visual verification not performed.
+
 ## 0.77.0 - 2026-11-26
 
 - Create a new project workspace from Quick Chat, including registered projects without open workspaces. Choose an isolated Git worktree (default for Git, editable base ref) or the same project folder (clearly shared files). Existing destinations remain available.

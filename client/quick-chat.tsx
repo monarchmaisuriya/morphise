@@ -15,6 +15,15 @@ import { QUICK_CHAT_SETTINGS_PAGE, QuickChatPreferencesScreen } from "./quick-ch
 
 const SCREEN = "quick-chat";
 const describe = (error: unknown) => error instanceof Error ? error.message : String(error);
+function DestinationRow({ t, title, detail, label, selected, disabled, icon, onPress }: { t: Tokens; title: string; detail: string; label: string; selected: boolean; disabled: boolean; icon: string; onPress(): void }) {
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected, disabled }} disabled={disabled} onPress={onPress} onHoverIn={() => setHovered(true)} onHoverOut={() => setHovered(false)} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} style={({ pressed }) => ({ minHeight: 60, paddingHorizontal: 12, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: selected || hovered || focused || pressed ? t.c.surface2 : "transparent", opacity: disabled ? 0.5 : 1 })}>
+    <Icon name={icon} size={16} color={t.c.foregroundMuted} />
+    <View style={{ flex: 1, minWidth: 0, gap: 3 }}><Text numberOfLines={1} style={t.text.body}>{title}</Text><Text numberOfLines={1} style={t.text.meta}>{detail}</Text></View>
+    <Icon name={selected ? "Check" : "ChevronRight"} size={14} color={selected ? t.c.foreground : t.c.foregroundMuted} />
+  </Pressable>;
+}
 // Workspace operation IDs use Morphise's existing cross-platform draft-ID source.
 import { useDraftId } from "./board/card-editor";
 
@@ -73,6 +82,8 @@ export function QuickChatScreen({ client, theme, layout, navigation, params, hos
   const generation = useRef(0);
   const [targets, setTargets] = useState<{ id: string; title: string; directory: string; projectName?: string; projectRoot?: string }[]>([]);
   const [projects, setProjects] = useState<{ id: string; name: string; root: string; kind: "git" | "non_git" | "directory" }[]>([]);
+  const [destinationType, setDestinationType] = useState<"existing" | "new">("existing");
+  const [selectedWorkspace, setSelectedWorkspace] = useState<string | null>(null);
   const [newProject, setNewProject] = useState<string | null>(null);
   const [workspaceMode, setWorkspaceMode] = useState<"worktree" | "directory">("worktree");
   const [baseRef, setBaseRef] = useState("HEAD");
@@ -98,7 +109,7 @@ export function QuickChatScreen({ client, theme, layout, navigation, params, hos
   const prepare = (agentId: string, workspaceId: string) => client.rpc(quickChatPrepare, { agentId, workspaceId });
   const resetHandoff = () => {
     generation.current++;
-    setSourceId(null); setTargets([]); setProjects([]); setNewProject(null); setWorkspaceMode("worktree"); setBaseRef("HEAD"); setBlockedReason(null); setPreview(null); setText(""); setSearch(""); setResult(null); setAttempted(false); setShowFiles(false); setError(null);
+    setSourceId(null); setTargets([]); setProjects([]); setNewProject(null); setDestinationType("existing"); setSelectedWorkspace(null); setWorkspaceMode("worktree"); setBaseRef("HEAD"); setBlockedReason(null); setPreview(null); setText(""); setSearch(""); setResult(null); setAttempted(false); setShowFiles(false); setError(null);
   };
   const run = async (action: () => Promise<void>) => {
     if (pending.current) return;
@@ -121,7 +132,7 @@ export function QuickChatScreen({ client, theme, layout, navigation, params, hos
     resetHandoff();
     const request = generation.current;
     setSourceId(params.agentId!); setUtility(null); setBusy(true); pending.current = true;
-    client.rpc(quickChatTargets, { agentId: params.agentId }).then((value) => { if (mounted.current && generation.current === request) { setTargets(value.targets); setProjects(value.projects ?? []); setBlockedReason(value.blockedReason ?? null); } }, (error) => mounted.current && generation.current === request && setError(describe(error))).finally(() => { if (generation.current === request) { pending.current = false; if (mounted.current) setBusy(false); } });
+    client.rpc(quickChatTargets, { agentId: params.agentId }).then((value) => { if (mounted.current && generation.current === request) { setTargets(value.targets); setProjects(value.projects ?? []); setSelectedWorkspace(null); setNewProject(null); setBlockedReason(value.blockedReason ?? null); } }, (error) => mounted.current && generation.current === request && setError(describe(error))).finally(() => { if (generation.current === request) { pending.current = false; if (mounted.current) setBusy(false); } });
   }, [client, params.agentId]);
   const enabled = settings.status === "ready" && settings.values.enabled;
   const selectedModel = models.find((item) => item.value === model);
@@ -129,13 +140,16 @@ export function QuickChatScreen({ client, theme, layout, navigation, params, hos
   const activeCount = state?.chats.filter((chat) => !chat.archivedAt).length ?? 0;
   const archivedCount = state?.chats.filter((chat) => !!chat.archivedAt).length ?? 0;
   const visibleChats = filteredQuickChats(state?.chats ?? [], { archived: archiveView === "archived", query: chatSearch, provider: providerFilter, sort });
+  const selectedProject = projects.find((project) => project.id === newProject);
+  const selectedTarget = targets.find((target) => target.id === selectedWorkspace);
+  const destinationRows = destinationType === "new" ? projects.filter((project) => quickChatTargetMatches({ title: project.name, directory: project.root }, search)).map((project) => ({ id: project.id, title: project.name, detail: project.root })) : targets.filter((target) => quickChatTargetMatches(target, search)).map((target) => ({ id: target.id, title: target.title, detail: `${target.projectName ? `${target.projectName} · ` : ""}${target.directory}` }));
   const providers = [...new Set(state?.chats.map((chat) => chat.provider).filter((value): value is string => !!value) ?? [])].sort();
   const actionRow = { flexDirection: "row" as const, flexWrap: "wrap" as const, alignItems: "center" as const, gap: 8 };
   const panelStyle = { padding: layout.compact ? 16 : 20, gap: 16, borderRadius: t.radius.panel, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface1 };
   return <PopoverHost><ScrollView style={{ flex: 1, backgroundColor: t.c.surface0 }} contentContainerStyle={{ padding: layout.compact ? 16 : 32, alignItems: "center" }}>
     <View onLayout={(event) => setTitleWidth(event.nativeEvent.layout.width)} style={{ width: "100%", maxWidth: personal.width === "wide" ? 1200 : 880, gap: 20 }}>
       <View style={{ ...actionRow, justifyContent: "space-between", alignItems: "flex-start" }}>
-        <View style={{ flex: 1, minWidth: 180, gap: 6 }}><Text style={t.text.title}>Quick Chat</Text><Text style={t.text.meta}>A place for questions and ideas, before they become a project.</Text></View>
+        <View style={{ flex: 1, minWidth: 180, gap: 6 }}><Text style={t.text.title}>{sourceId ? result ? "Handoff complete" : preview ? "Review context" : "Continue in a project" : "Quick Chat"}</Text><Text numberOfLines={1} style={t.text.meta}>{sourceId ? `From: ${sourceTitle}` : "A place for questions and ideas, before they become a project."}</Text></View>
         <View style={actionRow}>
           <Button t={t} variant={utility === "recovery" ? "secondary" : "ghost"} icon="RotateCcw" label="Recover handoff" disabled={busy} onPress={() => setUtility(utility === "recovery" ? null : "recovery")} />
         </View>
@@ -189,7 +203,7 @@ export function QuickChatScreen({ client, theme, layout, navigation, params, hos
             <Pressable accessibilityRole="button" accessibilityLabel={`Open ${chat.title}`} disabled={busy || !navigation} onPress={() => navigation?.openAgent({ agentId: chat.id })} style={{ flex: 1, minWidth: 140, ...(layout.compact ? { flexBasis: "100%" as const } : {}), flexDirection: "row", alignItems: "center", gap: 12 }}><Icon name="MessageSquare" size={18} color={t.c.foregroundMuted} /><View style={{ flex: 1, minWidth: 0, gap: 4 }}><Text testID={`quick-chat-row-title-${chat.id}`} numberOfLines={1} ellipsizeMode="tail" style={[t.text.body, { flexShrink: 1 }]}>{quickChatRowTitle(chat.title, titleWidth)}</Text><View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}><QuickChatState agentId={chat.id} hostId={host.id} archivedAt={chat.archivedAt} t={t} />{personal.showDescriptions ? <Text style={t.text.meta}>· Project-free conversation</Text> : null}</View></View></Pressable>
             <View style={{ ...actionRow, maxWidth: "100%", flexShrink: 1 }}>
               <IconButton t={t} icon="Info" label={`Chat info: ${chat.title}`} onPress={() => setLocationChat(locationChat === chat.id ? null : chat.id)} />
-              {enabled && !chat.archivedAt ? <IconButton t={t} icon="FolderInput" label={`Continue ${chat.title} in project`} disabled={busy} onPress={() => { resetHandoff(); setSourceId(chat.id); setUtility(null); const request = generation.current; void run(async () => { const value = await client.rpc(quickChatTargets, { agentId: chat.id }); if (generation.current === request) { setTargets(value.targets); setProjects(value.projects ?? []); setBlockedReason(value.blockedReason ?? null); } }); }} /> : null}
+              {enabled && !chat.archivedAt ? <IconButton t={t} icon="FolderInput" label={`Continue ${chat.title} in project`} disabled={busy} onPress={() => { resetHandoff(); setSourceId(chat.id); setUtility(null); const request = generation.current; void run(async () => { const value = await client.rpc(quickChatTargets, { agentId: chat.id }); if (generation.current === request) { setTargets(value.targets); setProjects(value.projects ?? []); setSelectedWorkspace(null); setNewProject(null); setBlockedReason(value.blockedReason ?? null); } }); }} /> : null}
               {state.archiveSupported ? chat.archivedAt ? <IconButton t={t} icon="ArchiveRestore" label={`Unarchive ${chat.title}`} disabled={busy} onPress={() => changeArchive(chat.id, false)} /> : enabled ? <IconButton t={t} icon="Archive" label={`Archive ${chat.title}`} disabled={busy} onPress={() => setArchiveConfirm(archiveConfirm === chat.id ? null : chat.id)} /> : null : null}
             </View>
             {archiveConfirm === chat.id ? <View style={{ width: "100%", gap: 10, padding: 12, borderWidth: 1, borderColor: t.c.statusDanger, borderRadius: t.radius.control }}><Text style={t.text.heading}>Archive “{chat.title}”?</Text><Text style={t.text.body}>This closes the agent and stops its work and running Morphise commands. Saved command-output logs are removed by the existing archive policy. The conversation and scratch files stay; unarchiving may initialize the provider but cannot restore removed logs.</Text><View style={actionRow}><Button t={t} variant="danger" label="Archive chat" disabled={busy} onPress={() => changeArchive(chat.id, true)} /><Button t={t} variant="ghost" label="Cancel archive" disabled={busy} onPress={() => setArchiveConfirm(null)} /></View></View> : null}
@@ -198,24 +212,29 @@ export function QuickChatScreen({ client, theme, layout, navigation, params, hos
         </View>
       </> : <View style={{ gap: 20 }}>
         <View style={{ ...actionRow, justifyContent: "space-between" }}><Button t={t} variant="ghost" icon="ArrowLeft" label="Back to chats" disabled={busy} onPress={resetHandoff} /><Text style={t.text.meta}>{result ? "Destination → Review → Result" : preview ? "Destination → Review" : "Destination"}</Text></View>
-        <View style={{ gap: 6 }}><Text style={t.text.title}>{result ? "Your idea has a project" : preview ? "Review your handoff" : "Continue in a project"}</Text><Text style={t.text.meta}>From: {sourceTitle}</Text></View>
         {result ? <View style={panelStyle}><Text style={t.text.body}>{result.warning || "Project chat created. The original Quick Chat is unchanged."}</Text><View style={actionRow}><Button t={t} variant="primary" icon="SquareArrowRight" label="Open project chat" disabled={!navigation} onPress={() => navigation?.openAgent({ agentId: result.agentId })} /><Button t={t} variant="ghost" label="Back to chats" onPress={resetHandoff} /></View>{preview ? <Text selectable style={t.text.meta}>Recovery ID: {preview.previewId}</Text> : null}</View> : !preview ? <View style={{ gap: 12 }}>
-          <View style={actionRow}><Button t={t} variant="ghost" icon="RefreshCw" label="Refresh destinations and readiness" disabled={busy} onPress={() => { const request = generation.current; void run(async () => { const value = await client.rpc(quickChatTargets, { agentId: sourceId }); if (generation.current === request) { setTargets(value.targets); setProjects(value.projects ?? []); setBlockedReason(value.blockedReason ?? null); } }); }} />{navigation ? <Button t={t} variant="ghost" icon="MessageSquare" label="Open source Quick Chat" onPress={() => navigation.openAgent({ agentId: sourceId })} /> : null}</View>
+          <View style={{ ...actionRow, justifyContent: "space-between" }}>
+            <Segmented t={t} label="Destination type" value={destinationType} options={[{ value: "existing", label: "Existing workspace" }, ...(projects.length ? [{ value: "new" as const, label: "New workspace" }] : [])]} onChange={(value) => { if (busy) return; setDestinationType(value); setSelectedWorkspace(null); setNewProject(null); }} />
+            <View style={actionRow}><Button t={t} size="sm" variant="ghost" icon="RefreshCw" label="Refresh" accessibilityLabel="Refresh destinations and readiness" disabled={busy} onPress={() => { const request = generation.current; void run(async () => { const value = await client.rpc(quickChatTargets, { agentId: sourceId }); if (generation.current === request) { setTargets(value.targets); setProjects(value.projects ?? []); setSelectedWorkspace(null); setNewProject(null); setBlockedReason(value.blockedReason ?? null); } }); }} />{navigation ? <Button t={t} size="sm" variant="ghost" icon="MessageSquare" label="Open source" accessibilityLabel="Open source Quick Chat" onPress={() => navigation.openAgent({ agentId: sourceId })} /> : null}</View>
+          </View>
           {blockedReason ? <Text accessibilityRole="alert" style={t.text.meta}>{blockedReason}</Text> : null}
-          <Field t={t} plain icon="Search" value={search} onChangeText={setSearch} placeholder="Find a project or workspace" />
-          <Text style={t.text.meta}>Search all open workspaces by project name, project root, workspace title or path. Archived, background and internal workspaces are excluded. No disk-wide search is performed.</Text>
-          {projects.filter((project) => quickChatTargetMatches({ title: project.name, directory: project.root }, search)).map((project) => <View key={project.id} style={panelStyle}>
-            <Text style={t.text.heading}>{project.name}</Text><Text style={t.text.meta}>{project.root}</Text>
-            <Button t={t} icon="FolderPlus" label={`New workspace in ${project.name}`} disabled={busy || blockedReason !== null} onPress={() => { setNewProject(project.id); setWorkspaceMode(project.kind === "git" ? "worktree" : "directory"); setBaseRef("HEAD"); }} />
-            {newProject === project.id ? <>
-              <Select t={t} label="Workspace mode" value={workspaceMode} options={[...(project.kind === "git" ? [{ value: "worktree", label: "New Git worktree (isolated checkout)" }] : []), { value: "directory", label: "Same project folder (shared files)" }]} onChange={(value) => setWorkspaceMode(value as "worktree" | "directory")} />
-              {workspaceMode === "worktree" ? <Field t={t} label="Base Git ref" value={baseRef} onChangeText={setBaseRef} accessibilityLabel="Base Git ref" /> : <Text style={t.text.meta}>Files are shared with every workspace using this project folder. This does not create an isolated checkout.</Text>}
-              <Button t={t} icon="FileText" label="Prepare new workspace context" disabled={busy || blockedReason !== null || workspaceMode === "worktree" && !baseRef.trim()} onPress={() => { const request = generation.current; void run(async () => { const value = await client.rpc(quickChatPrepare, { agentId: sourceId, newWorkspace: { projectId: project.id, mode: workspaceMode, ...(workspaceMode === "worktree" ? { baseRef: baseRef.trim() } : {}) } }); if (generation.current === request) { setPreview(value); setText(value.text); setAttempted(false); } }); }} />
-              <Text style={t.text.meta}>Preparation creates nothing. Review the context before confirming the workspace and its first agent.</Text>
-            </> : null}
-          </View>)}
-          {busy ? <Text style={t.text.meta}>Loading project context…</Text> : !targets.length && !projects.length ? <Text style={t.text.body}>No open project workspaces are available.</Text> : !targets.some((target) => quickChatTargetMatches(target, search)) && !projects.some((project) => quickChatTargetMatches({ title: project.name, directory: project.root }, search)) ? <Text style={t.text.meta}>No workspaces match “{search}”. Try another project name or path.</Text> : null}
-          {targets.filter((target) => quickChatTargetMatches(target, search)).map((target) => <Pressable key={target.id} accessibilityRole="button" accessibilityLabel={`Prepare context for ${target.title}, ${target.directory}`} disabled={busy || blockedReason !== null} onPress={() => { const request = generation.current; void run(async () => { const value = await prepare(sourceId, target.id); if (generation.current === request) { setPreview(value); setText(value.text); setAttempted(false); } }); }} style={{ padding: 16, borderWidth: 1, borderColor: t.c.border, borderRadius: t.radius.control, flexDirection: "row", alignItems: "center", gap: 12 }}><Icon name="FolderGit2" size={18} color={t.c.foregroundMuted} /><View style={{ flex: 1, minWidth: 0, gap: 4 }}><Text style={t.text.body}>{target.title}</Text>{target.projectName ? <Text style={t.text.meta}>Project: {target.projectName}</Text> : null}<Text numberOfLines={2} style={t.text.meta}>{target.directory}</Text></View><Icon name="ChevronRight" size={16} color={t.c.foregroundMuted} /></Pressable>)}
+          <Field t={t} plain outlined icon="Search" value={search} onChangeText={(value) => { if (busy) return; setSearch(value); setSelectedWorkspace(null); setNewProject(null); }} placeholder={destinationType === "new" ? "Find a project" : "Find a project or workspace"} accessibilityLabel="Find a project or workspace" />
+          <Text style={t.text.meta}>{destinationType === "new" ? "Choose a project for the new workspace." : "Choose an open workspace to receive a new chat."}</Text>
+          <View style={{ borderWidth: 1, borderColor: t.c.border, borderRadius: t.radius.control, overflow: "hidden" }}>
+            <ScrollView style={{ maxHeight: 320 }} nestedScrollEnabled>
+              {destinationRows.map((item) => {
+                const selected = destinationType === "new" ? newProject === item.id : selectedWorkspace === item.id;
+                return <DestinationRow key={item.id} t={t} title={item.title} detail={item.detail} label={destinationType === "new" ? `Select project ${item.title}, ${item.detail}` : `Select workspace ${item.title}, ${item.detail}`} selected={selected} disabled={busy || blockedReason !== null} icon={destinationType === "new" ? "Folder" : "FolderGit2"} onPress={() => { if (destinationType === "new") { const project = projects.find((project) => project.id === item.id)!; setNewProject(item.id); setWorkspaceMode(project.kind === "git" ? "worktree" : "directory"); setBaseRef("HEAD"); } else setSelectedWorkspace(item.id); }} />;
+              })}
+              {!destinationRows.length ? <Text style={[t.text.meta, { padding: 16 }]}>{busy ? "Loading destinations…" : search ? `No destinations match “${search}”.` : "No destinations available. Add a project in Paseo, then refresh."}</Text> : null}
+            </ScrollView>
+          </View>
+          {destinationType === "new" && selectedProject ? <View style={{ gap: 12, paddingTop: 4 }}>
+            <Select t={t} label="Workspace mode" value={workspaceMode} options={[...(selectedProject.kind === "git" ? [{ value: "worktree", label: "New Git worktree (isolated checkout)" }] : []), { value: "directory", label: "Same project folder (shared files)" }]} onChange={(value) => { if (!busy) setWorkspaceMode(value as "worktree" | "directory"); }} />
+            {workspaceMode === "worktree" ? <Field t={t} label="Base Git ref" value={baseRef} disabled={busy} onChangeText={setBaseRef} accessibilityLabel="Base Git ref" /> : <Text style={t.text.meta}>Files are shared with other workspaces using this project folder.</Text>}
+          </View> : null}
+          <View style={{ alignSelf: "flex-start", paddingTop: 4 }}><Button t={t} variant="primary" label="Review context" disabled={busy || blockedReason !== null || (destinationType === "new" ? !selectedProject || workspaceMode === "worktree" && !baseRef.trim() : !selectedTarget)} onPress={() => { const request = generation.current; void run(async () => { const value = destinationType === "new" && selectedProject ? await client.rpc(quickChatPrepare, { agentId: sourceId, newWorkspace: { projectId: selectedProject.id, mode: workspaceMode, ...(workspaceMode === "worktree" ? { baseRef: baseRef.trim() } : {}) } }) : await prepare(sourceId, selectedTarget!.id); if (generation.current === request) { setPreview(value); setText(value.text); setAttempted(false); } }); }} /></View>
+          <Text style={t.text.meta}>Nothing is created or sent until you confirm the reviewed context.</Text>
           <View style={actionRow}><Button t={t} variant="ghost" label="Cancel handoff" disabled={busy} onPress={resetHandoff} /></View>
         </View> : <View style={{ gap: 16 }}>
           <View style={panelStyle}><Text selectable style={t.text.body}>{preview.newWorkspace?.mode === "worktree" ? "Project root (new worktree path assigned by Paseo on creation)" : "Destination"}: {preview.directory}</Text>{preview.newWorkspace ? <><Text style={t.text.heading}>New workspace in {preview.newWorkspace.projectName}</Text><Text style={t.text.meta}>{preview.newWorkspace.mode === "worktree" ? `Isolated Git worktree · base ${preview.newWorkspace.baseRef} · branch ${preview.newWorkspace.branchName}` : "Shared project folder: files are shared with other workspaces."}</Text></> : null}<Text style={t.text.meta}>Provider/model: {preview.provider} · {preview.entries} history entries read</Text><Text style={preview.partial ? t.text.danger : t.text.meta}>{preview.partial ? "Partial history: earlier or oversized content was omitted. Review the context carefully." : "Visible message history prepared."}</Text></View>
