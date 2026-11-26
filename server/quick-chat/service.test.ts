@@ -26,6 +26,47 @@ async function fixture() {
 }
 
 describe("independent Quick Chat handoff", () => {
+  it("prepares a new project workspace without writes and recovers combined creation without replay", async () => {
+    const f = await fixture();
+    const project = { projectId: "registered", projectDisplayName: "Support", projectRootPath: "/synthetic/support", projectKind: "git" };
+    let workspace: Record<string, unknown> | null = null;
+    let agent: Record<string, unknown> | null = null;
+    const creates: Record<string, unknown>[] = [];
+    const api = { ...f.api, projects: { list: async () => ({ projects: [project] }) }, agents: { ...f.api.agents, ref: (id: string) => agent?.id === id ? { refresh: async () => ({ agent }) } : f.api.agents.ref(id) }, workspaces: { ...f.api.workspaces, create: async (input: Record<string, unknown>) => { creates.push(input); const initial = input.agent as Record<string, unknown>; agent = { id: initial.agentId, workspaceId: input.workspaceId, metadata: initial.metadata }; workspace = { id: input.workspaceId, projectId: "registered", metadata: input.metadata }; throw new Error("Synthetic combined response lost"); }, ref: () => ({ refresh: async () => workspace }) } } as unknown as PluginHandlerContext["paseo"];
+    const preview = await f.service.prepare(api, "source", undefined, { projectId: "registered", mode: "worktree", baseRef: "main" });
+    expect(creates).toHaveLength(0);
+    expect(preview.newWorkspace).toMatchObject({ mode: "worktree", baseRef: "main", projectRoot: "/synthetic/support" });
+    await expect(f.service.continue(api, preview.previewId, "Reviewed context")).rejects.toThrow("Synthetic combined response lost");
+    expect(creates).toHaveLength(1);
+    expect(creates[0]).toMatchObject({ background: false, source: { kind: "worktree", action: "branch-off", projectId: "registered", cwd: "/synthetic/support", refName: "main" }, agent: { cwd: "/synthetic/support", prompt: "Reviewed context" } });
+    expect(await new QuickChatService(f.root).recover(api, preview.previewId)).toMatchObject({ workspaceId: creates[0].workspaceId });
+    expect(creates).toHaveLength(1);
+    workspace = { id: creates[0].workspaceId, projectId: "wrong-project", metadata: creates[0].metadata };
+    await expect(new QuickChatService(f.root).recover(api, preview.previewId)).rejects.toThrow("workspace identity");
+    workspace = { id: creates[0].workspaceId, projectId: "registered", metadata: {} };
+    await expect(new QuickChatService(f.root).recover(api, preview.previewId)).rejects.toThrow("workspace identity");
+    agent = { id: (creates[0].agent as Record<string, unknown>).agentId, workspaceId: creates[0].workspaceId, metadata: {} };
+    await expect(new QuickChatService(f.root).recover(api, preview.previewId)).rejects.toThrow("destination identity");
+    agent = null;
+    await expect(new QuickChatService(f.root).recover(api, preview.previewId)).rejects.toThrow("may have been created");
+    expect(creates).toHaveLength(1);
+  });
+  it("creates shared-folder workspaces only after review and rejects invalid project choices", async () => {
+    const f = await fixture();
+    let root = "/synthetic/directory";
+    const creates: Record<string, unknown>[] = [];
+    const api = { ...f.api, projects: { list: async () => ({ projects: [{ projectId: "directory", projectDisplayName: "Notes", projectRootPath: root, projectKind: "directory" }] }) }, workspaces: { ...f.api.workspaces, create: async (input: Record<string, unknown>) => { creates.push(input); return { id: input.workspaceId }; } } } as unknown as PluginHandlerContext["paseo"];
+    await expect(f.service.prepare(api, "source", undefined, { projectId: "missing", mode: "directory" })).rejects.toThrow("no longer registered");
+    await expect(f.service.prepare(api, "source", undefined, { projectId: "directory", mode: "worktree" })).rejects.toThrow("requires a Git project");
+    const preview = await f.service.prepare(api, "source", undefined, { projectId: "directory", mode: "directory" });
+    expect(creates).toHaveLength(0);
+    await f.service.continue(api, preview.previewId, "Reviewed directory context");
+    expect(creates[0]).toMatchObject({ source: { kind: "directory", projectId: "directory", path: root }, agent: { cwd: root, prompt: "Reviewed directory context" } });
+    const stale = await f.service.prepare(api, "source", undefined, { projectId: "directory", mode: "directory" });
+    root = "/synthetic/changed";
+    await expect(f.service.continue(api, stale.previewId, "Do not send")).rejects.toThrow("root or kind changed");
+    expect(creates).toHaveLength(1);
+  });
   it("retains project identity across destination pages and excludes unavailable workspaces", async () => {
     const f = await fixture();
     const base = { title: "Unrelated task", name: "task", projectDisplayName: "pushowl-support-agent", workspaceDirectory: "/synthetic/worktrees/fox", projectRootPath: "/synthetic/pushowl-support-agent", background: false, internal: false, archivingAt: null };

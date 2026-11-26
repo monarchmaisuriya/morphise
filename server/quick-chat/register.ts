@@ -13,8 +13,8 @@ export function registerQuickChat(server: PluginServerContext) {
   server.handle(quickChatList, async ({ includeArchived }, { paseo }) => ({ enabled: await enabled(), directory: service.root, archiveSupported: true, chats: await service.list(paseo, includeArchived) }));
   server.handle(quickChatArchive, async ({ agentId, archived }, { paseo }) => { if (archived) await requireEnabled(); return service.setArchived(paseo, agentId, archived); });
   server.handle(quickChatStart, async ({ operationId, provider }, { paseo }) => { await requireEnabled(); return service.start(paseo, operationId, provider); });
-  server.handle(quickChatTargets, async ({ agentId }, { paseo }) => { await requireEnabled(); return { targets: await service.targets(paseo), ...(agentId ? { blockedReason: await service.readiness(paseo, agentId) } : {}) }; });
-  server.handle(quickChatPrepare, async ({ agentId, workspaceId }, { paseo }) => { await requireEnabled(); return service.prepare(paseo, agentId, workspaceId); });
+  server.handle(quickChatTargets, async ({ agentId }, { paseo }) => { await requireEnabled(); return { targets: await service.targets(paseo), projects: await service.projects(paseo), ...(agentId ? { blockedReason: await service.readiness(paseo, agentId) } : {}) }; });
+  server.handle(quickChatPrepare, async ({ agentId, workspaceId, newWorkspace }, { paseo }) => { await requireEnabled(); return service.prepare(paseo, agentId, workspaceId, newWorkspace); });
   server.handle(quickChatContinue, async ({ previewId, text }, { paseo }) => { await requireEnabled(); return service.continue(paseo, previewId, text); });
   server.handle(quickChatRecover, async ({ operationId }, { paseo }) => service.recover(paseo, operationId));
   return () => {};
