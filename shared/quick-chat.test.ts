@@ -1,5 +1,12 @@
 import { expect, it } from "vitest";
-import { QUICK_CHAT_KEY, countedQuickChat, filteredQuickChats, quickChatAgentChange, quickChatHandoffBlock, quickChatTargetMatches, quickChatPreferences, quickChatSettings, quickChatStart, restoredQuickChatModel, visibleQuickChatAgent } from "./quick-chat";
+import { QUICK_CHAT_KEY, countedQuickChat, filteredQuickChats, quickChatAgentChange, quickChatHandoffBlock, quickChatTargetMatches, quickChatPreferences, quickChatPrepare, quickChatSettings, quickChatStart, restoredQuickChatModel, visibleQuickChatAgent } from "./quick-chat";
+
+it("requires exactly one existing or new workspace destination", () => {
+  expect(quickChatPrepare.input.safeParse({ agentId: "source", workspaceId: "existing" }).success).toBe(true);
+  expect(quickChatPrepare.input.safeParse({ agentId: "source", newWorkspace: { projectId: "project", mode: "worktree", baseRef: "main" } }).success).toBe(true);
+  expect(quickChatPrepare.input.safeParse({ agentId: "source" }).success).toBe(false);
+  expect(quickChatPrepare.input.safeParse({ agentId: "source", workspaceId: "existing", newWorkspace: { projectId: "project", mode: "directory" } }).success).toBe(false);
+});
 
 it("finds project workspaces independently of generated worktree names", () => {
   const target = { title: "Scan Slack alert", directory: "/synthetic/worktrees/bright-fox", projectName: "pushowl-support-agent", projectRoot: "/synthetic/pushowl-support-agent" };

@@ -2,6 +2,13 @@
 
 This project follows [semantic versioning](https://semver.org).
 
+## 0.77.0 - 2026-11-26
+
+- Create a new project workspace from Quick Chat, including registered projects without open workspaces. Choose an isolated Git worktree (default for Git, editable base ref) or the same project folder (clearly shared files). Existing destinations remain available.
+- Preparation creates nothing. Review context and planned project/mode/branch, then confirm one combined workspace-and-agent creation. Keep the original Quick Chat/files; recheck source readiness and project root/kind.
+- Journal allocated workspace/agent identities before creation; uncertain results recover read-only, without blind replay or deletion. Check operation metadata and project identity; report partial workspace creation explicitly.
+- Verified both modes and working directories on an isolated packaged daemon with synthetic provider; browser covers worktree, Git shared-folder and non-Git flows. No normal installation writes.
+
 ## 0.76.0 - 2026-11-26
 
 - Fix Quick Chat handoff search by carrying project name/root with each destination and matching normalized words across project identity and workspace title/path. Show the project name in results; preserve pagination and existing eligibility exclusions.

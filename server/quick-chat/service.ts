@@ -3,12 +3,13 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, realpath, writeFile, rename } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, relative, isAbsolute } from "node:path";
-import { QUICK_CHAT_KEY, quickChatHandoffBlock, visibleQuickChatAgent } from "../../shared/quick-chat";
+import { QUICK_CHAT_KEY, quickChatHandoffBlock, quickChatNewWorkspace, quickChatWorkspacePreview, visibleQuickChatAgent } from "../../shared/quick-chat";
+import type { z } from "zod";
 import { transcriptText } from "./transcript";
 
 type Paseo = PluginHandlerContext["paseo"];
 type Agent = NonNullable<Awaited<ReturnType<ReturnType<Paseo["agents"]["ref"]>["refresh"]>>>["agent"];
-interface Operation { version: 1; sourceId: string; workspaceId: string; directory: string; agentId: string; provider: string; fingerprint: string; stage: "prepared" | "creating" | "complete"; }
+interface Operation { version: 1; sourceId: string; workspaceId: string; directory: string; agentId: string; provider: string; fingerprint: string; newWorkspace?: z.infer<typeof quickChatWorkspacePreview>; stage: "prepared" | "creating" | "complete"; }
 const note = "This workspace is for general conversation and idea capture, not a selected project. Its directory is temporary working space, not a sandbox. Do not inspect unrelated folders unless the user asks. The user can choose Continue in project when ready.";
 const fingerprint = (agent: Agent) => createHash("sha256").update(JSON.stringify([agent.id, agent.updatedAt, agent.activeTurn, agent.pendingPermissions, agent.model, agent.provider])).digest("hex");
 
@@ -33,6 +34,11 @@ export class QuickChatService {
   private async read(id: string): Promise<Operation> {
     const value = JSON.parse(await readFile(join(this.root, "operations", `${id}.json`), "utf8")) as Operation;
     if (!value || value.version !== 1 || typeof value.agentId !== "string" || typeof value.workspaceId !== "string" || typeof value.directory !== "string" || typeof value.sourceId !== "string" || typeof value.provider !== "string" || typeof value.fingerprint !== "string" || !["prepared", "creating", "complete"].includes(value.stage)) throw new Error("The saved handoff record is invalid; no action was taken.");
+    if (value.newWorkspace !== undefined) {
+      const parsed = quickChatWorkspacePreview.safeParse(value.newWorkspace);
+      if (!parsed.success || !/^wks_[a-f0-9]{16}$/.test(value.workspaceId) || (parsed.data.mode === "worktree" && (!parsed.data.baseRef || !parsed.data.branchName))) throw new Error("The saved new-workspace handoff record is invalid; no action was taken.");
+      value.newWorkspace = parsed.data;
+    }
     return value;
   }
   async owned(agent: Agent): Promise<boolean> {
@@ -119,9 +125,21 @@ export class QuickChatService {
     if (!agent || !(await this.owned(agent))) throw new Error("Select a Morphise Quick Chat owned by this daemon.");
     return quickChatHandoffBlock(agent);
   }
-  async prepare(paseo: Paseo, agentId: string, workspaceId: string) {
+  async projects(paseo: Paseo) {
+    const result = await paseo.projects.list();
+    return result.projects.map((project) => ({ id: project.projectId, name: project.projectDisplayName, root: project.projectRootPath, kind: project.projectKind }));
+  }
+  private async project(paseo: Paseo, input: z.infer<typeof quickChatNewWorkspace>) {
+    const project = (await this.projects(paseo)).find((item) => item.id === input.projectId);
+    if (!project) throw new Error("The selected project is no longer registered on this host. Refresh destinations.");
+    if (input.mode === "worktree" && project.kind !== "git") throw new Error("A Git worktree requires a Git project. Choose the shared project folder instead.");
+    return project;
+  }
+  async prepare(paseo: Paseo, agentId: string, workspaceId?: string, newWorkspace?: z.infer<typeof quickChatNewWorkspace>) {
+    if (!!workspaceId === !!newWorkspace) throw new Error("Choose exactly one existing workspace or new project workspace.");
     const source = await this.source(paseo, agentId);
-    const target = (await this.targets(paseo)).find((item) => item.id === workspaceId);
+    const project = newWorkspace ? await this.project(paseo, quickChatNewWorkspace.parse(newWorkspace)) : null;
+    const target = project ? { directory: project.root } : (await this.targets(paseo)).find((item) => item.id === workspaceId);
     if (!target) throw new Error("The destination is no longer an open project workspace.");
     const before = fingerprint(source);
     const items: unknown[][] = [];
@@ -153,13 +171,14 @@ export class QuickChatService {
     if (!provider) throw new Error("This chat's model is unknown. Open the chat and choose a model first.");
     const context = transcriptText(items.flat(), partial);
     const previewId = randomUUID();
-    const operation: Operation = { version: 1, sourceId: agentId, workspaceId, directory: target.directory, agentId: randomUUID(), provider: `${source.provider}/${provider}`, fingerprint: before, stage: "prepared" };
+    const planned = newWorkspace && project ? { ...newWorkspace, projectName: project.name, projectRoot: project.root, projectKind: project.kind, ...(newWorkspace.mode === "worktree" ? { baseRef: newWorkspace.baseRef ?? "HEAD", branchName: `quick-chat/${previewId}` } : {}) } : undefined;
+    const operation: Operation = { version: 1, sourceId: agentId, workspaceId: workspaceId ?? `wks_${randomUUID().replace(/-/g, "").slice(0, 16)}`, directory: target.directory, agentId: randomUUID(), provider: `${source.provider}/${provider}`, fingerprint: before, ...(planned ? { newWorkspace: planned } : {}), stage: "prepared" };
     // A bounded in-memory preview stores identifiers, never transcript content. Restart requires a fresh preview.
     for (const [id, preview] of this.previews) if (preview.expires < Date.now()) this.previews.delete(id);
     if (this.previews.size >= 32) throw new Error("Too many open previews. Close an older preview and try again.");
     this.previews.set(previewId, { operation, expires: Date.now() + 10 * 60000 });
     const files = await readdir(source.cwd, { withFileTypes: true });
-    return { previewId, text: context.text, provider: operation.provider, directory: target.directory, entries: count, partial: context.partial, files: files.filter((entry) => entry.isFile()).slice(0, 50).map((entry) => entry.name), filesPartial: files.length > 50 || files.some((entry) => !entry.isFile()) };
+    return { previewId, text: context.text, provider: operation.provider, directory: target.directory, ...(planned ? { newWorkspace: planned } : {}), entries: count, partial: context.partial, files: files.filter((entry) => entry.isFile()).slice(0, 50).map((entry) => entry.name), filesPartial: files.length > 50 || files.some((entry) => !entry.isFile()) };
   }
   async recover(paseo: Paseo, operationId: string) {
     if (!/^[0-9a-f-]{36}$/i.test(operationId)) throw new Error("Invalid handoff recovery ID.");
@@ -167,8 +186,16 @@ export class QuickChatService {
     const source = (await paseo.agents.ref(operation.sourceId).refresh())?.agent;
     if (!source || !(await this.owned(source))) throw new Error("The original Quick Chat is no longer available for recovery.");
     const existing = (await paseo.agents.ref(operation.agentId).refresh())?.agent;
-    if (!existing) throw new Error("Creation may still be pending or failed. No request was replayed. Keep the original chat and check the destination before preparing another handoff.");
+    if (!existing) {
+      const partial = operation.newWorkspace ? await paseo.workspaces.ref(operation.workspaceId).refresh() : null;
+      if (partial) throw new Error(`Workspace ${operation.workspaceId} may have been created, but its agent is not confirmed. No request was replayed. Check that workspace before preparing another handoff.`);
+      throw new Error("Creation may still be pending or failed. No request was replayed. Keep the original chat and check the destination before preparing another handoff.");
+    }
     if (existing.workspaceId !== operation.workspaceId || existing.metadata?.["morphise.quick-chat.operation"] !== operationId) throw new Error("The destination identity did not match this handoff; no request was replayed.");
+    if (operation.newWorkspace) {
+      const workspace = await paseo.workspaces.ref(operation.workspaceId).refresh();
+      if (!workspace || workspace.projectId !== operation.newWorkspace.projectId || workspace.metadata?.["morphise.quick-chat.operation"] !== operationId) throw new Error("The new workspace identity did not match this handoff; no request was replayed.");
+    }
     return { agentId: existing.id, workspaceId: operation.workspaceId, warning: operation.stage === "complete" ? null : "Destination exists. Check its first message before doing further work; the creation response was not confirmed." };
   }
   async continue(paseo: Paseo, previewId: string, text: string) {
@@ -180,15 +207,25 @@ export class QuickChatService {
       if (preview.expires < Date.now()) throw new Error("This unused preview expired. Prepare again; this preview has not sent context.");
       const source = await this.source(paseo, operation.sourceId);
       if (fingerprint(source) !== operation.fingerprint) throw new Error("The source changed. Prepare again before sending context.");
-      if (!(await this.targets(paseo)).some((item) => item.id === operation.workspaceId && item.directory === operation.directory)) throw new Error("The destination changed or is no longer available. Prepare again.");
+      if (operation.newWorkspace) {
+        const current = await this.project(paseo, operation.newWorkspace);
+        if (current.root !== operation.newWorkspace.projectRoot || current.kind !== operation.newWorkspace.projectKind) throw new Error("The project root or kind changed. Prepare again.");
+      } else if (!(await this.targets(paseo)).some((item) => item.id === operation.workspaceId && item.directory === operation.directory)) throw new Error("The destination changed or is no longer available. Prepare again.");
       operation.stage = "creating";
       await this.save(previewId, operation);
       const latest = await this.source(paseo, operation.sourceId);
       if (fingerprint(latest) !== operation.fingerprint) throw new Error("The source changed before creation. No creation request was sent; prepare again.");
-      const agent = await paseo.workspaces.ref(operation.workspaceId).agents.create({ agentId: operation.agentId, idempotencyKey: `morphise.quick-chat.handoff.${previewId}`, config: { provider: operation.provider }, title: source.title || "Quick Chat idea", prompt: text, metadata: { "morphise.quick-chat.operation": previewId, "morphise.quick-chat.source": source.id } });
+      const agentInput = { agentId: operation.agentId, config: { provider: operation.provider }, title: source.title || "Quick Chat idea", prompt: text, metadata: { "morphise.quick-chat.operation": previewId, "morphise.quick-chat.source": source.id } };
+      if (operation.newWorkspace) {
+        const planned = operation.newWorkspace;
+        const workspace = await paseo.workspaces.create({ workspaceId: operation.workspaceId, idempotencyKey: `morphise.quick-chat.handoff.${previewId}`, background: false, title: source.title || "Quick Chat idea", metadata: agentInput.metadata, source: planned.mode === "worktree" ? { kind: "worktree", projectId: planned.projectId, cwd: planned.projectRoot, action: "branch-off", refName: planned.baseRef, branchName: planned.branchName } : { kind: "directory", projectId: planned.projectId, path: planned.projectRoot }, agent: { ...agentInput, cwd: planned.projectRoot } });
+        if (workspace.id !== operation.workspaceId) throw new Error("Paseo returned a different workspace identity. Keep the recovery ID and check the result; do not resend.");
+      } else {
+        await paseo.workspaces.ref(operation.workspaceId).agents.create({ ...agentInput, idempotencyKey: `morphise.quick-chat.handoff.${previewId}` });
+      }
       operation.stage = "complete";
       await this.save(previewId, operation);
-      return { agentId: agent.id, workspaceId: operation.workspaceId, warning: null };
+      return { agentId: operation.agentId, workspaceId: operation.workspaceId, warning: null };
     });
   }
   async decorate(cwd: string) {
